@@ -453,10 +453,6 @@ func NewRouter(cfg config.Config, db *gorm.DB, jwtSecret string) *gin.Engine {
 
 	user.RegisterRoutes(publicGroup, optionalAuthGroup, authGroup, adminGroup, db, cfg.FnOSApp, strconv.Itoa(cfg.Port))
 
-	// 赞赏支持计数：需要登录（前端入口仅对管理员显示），
-	// 复用匿名统计通道发送一次 donate_support 事件。
-	stats.RegisterRoutes(authGroup, db)
-
 	// Admin operation log (browse + CSV export).
 	audit.RegisterRoutes(adminGroup, db)
 

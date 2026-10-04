@@ -1,28 +1,30 @@
-appname                    = techfunway-reminders
-version                   = 0.3.0
-display_name               = 提醒事项
+appname                    = workordernote
+version                    = 0.0.1
+display_name               = 工作序记
 desc                       = """
-简洁可靠的多渠道提醒应用，支持清单管理、定时提醒、站内消息、电子邮件、短信、飞书机器人和 QQ 机器人通知。
+任务、记事与日历一体的提醒应用：清单管理、定时提醒、记事归档、月历总览，支持站内消息、电子邮件、短信、飞书机器人和 QQ 机器人通知。
+本应用基于开源项目 TechFunWay/reminders（MIT 许可）衍生开发，原项目著作权与出处均予保留。
 """
 source                     = thirdparty
 platform                   = x86
-maintainer                 = 科技智趣坊
+maintainer                 = 科技智趣坊（原项目）
 maintainer_url             = https://github.com/TechFunWay/reminders
-distributor                = 科技智趣坊
-distributor_url            = https://techfunway.wycto.cn
+distributor                = 工作序记（WorkOrderNote）
+distributor_url            = https://github.com/TechFunWay/reminders
 os_min_version             = 1.0.0
 ctl_stop                   = true
 desktop_uidir              = ui
-desktop_applaunchname      = techfunway-reminders.main
+desktop_applaunchname      = workordernote.main
 service_port               = 8906
 checkport                  = false
 disable_authorization_path = false
 changelog                  = """
-v0.3.0 更新：
-1. 提醒跨设备自动同步：手机与电脑任意一端改动，其它设备自动刷新
-2. 到点提醒改为屏幕中央弹窗（完成 / 稍后提醒 / 知道了），并修复到点没有弹窗的问题
-3. 新增「再次提醒」：到点未完成可按设定间隔反复催办
-4. 新增农历每年 / 每月重复提醒，日期选择升级为公农历双页签日历
-5. 邮件通知支持绑定多个接收邮箱，每条提醒可单独指定收件邮箱
-6. 飞牛登录优化：登录后可独立退出、弹窗内切换账号，修复刷新掉登录态等问题
+v0.0.1 更新：
+1. 更名为「工作序记」（WorkOrderNote），版本号从 0.0.1 起算
+2. 新增「记事」类型：任务需确认完成，记事保存即归档、不发送通知
+3. 「已完成」支持按时间段查看，并接入重复提醒的完整完成历史
+4. 新增全屏日历视图，顶栏可切换「列表 / 日历」
+5. 新增默认清单设定
+6. 移除赞赏/付费提示，保留原项目信息与 MIT 许可声明
+功能基线：上游 v0.3.0
 """

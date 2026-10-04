@@ -40,28 +40,23 @@
       <p v-else class="mt-3 text-xs text-muted-foreground">还没有清单。</p>
     </div>
 
-    <!-- 支持作者（仅管理员可见，赞赏完全自愿） -->
-    <div v-if="authStore.isAdmin" class="surface rounded-2xl p-4 sm:p-6">
-      <div class="flex flex-wrap items-center justify-between gap-4">
-        <div class="flex items-start gap-3">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-500">
-            <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-          </div>
-          <div>
-            <h3 class="text-sm font-bold text-foreground">支持作者</h3>
-            <p class="mt-1 text-sm leading-relaxed text-muted-foreground">
-              这个应用免费、无广告，数据完全保存在你自己的设备上。
-              如果它帮到了你，欢迎请作者喝杯咖啡——金额随意，1 元也是心意；
-              <strong class="text-foreground">不赞赏不影响任何功能</strong>。
-            </p>
-            <p v-if="supportStore.donateSupported" class="mt-2 text-xs text-emerald-500">
-              ❤ 感谢你的支持，这也太暖了{{ supportStore.supportedVersion ? `（版本 ${supportStore.supportedVersion}）` : '' }}
-            </p>
-          </div>
+    <!-- 原项目信息：本应用是上游开源项目的衍生作品，按 MIT 许可保留出处与著作权 -->
+    <div class="surface mt-4 rounded-2xl p-4 sm:p-6">
+      <div class="flex items-start gap-3">
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-500/12 text-slate-500">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3 3 7.5 12 12l9-4.5L12 3ZM3 16.5 12 21l9-4.5M3 12l9 4.5 9-4.5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
-        <button class="btn-brand flex-1 sm:flex-none" @click="supportStore.open()">
-          {{ supportStore.donateSupported ? '再次赞赏' : '去赞赏' }}
-        </button>
+        <div class="min-w-0">
+          <h3 class="text-sm font-bold text-foreground">原项目信息</h3>
+          <p class="mt-1 text-sm leading-relaxed text-muted-foreground">
+            本应用（工作序记 / WorkOrderNote）基于开源项目
+            <a class="font-semibold text-brand-600 hover:underline dark:text-brand-300" href="https://github.com/TechFunWay/reminders" target="_blank" rel="noreferrer">TechFunWay/reminders</a>
+            衍生开发，遵循其 MIT 许可，原项目的著作权与出处均予保留。
+          </p>
+          <p class="mt-2 text-xs text-muted-foreground">
+            上游项目：TechFunWay/reminders &nbsp;·&nbsp; 许可：MIT &nbsp;·&nbsp; 本项目：WorkOrderNote（工作序记）
+          </p>
+        </div>
       </div>
     </div>
   </div>
@@ -75,11 +70,7 @@ import { getUserConfigMeta, updateConfig } from '../api/config'
 import type { ConfigMeta } from '../api/config'
 import { getLists, updateList, type ReminderList } from '../api/reminder'
 import { useThemeStore } from '../stores/theme'
-import { useAuthStore } from '../stores/auth'
-import { useSupportStore } from '../stores/support'
 
-const authStore = useAuthStore()
-const supportStore = useSupportStore()
 const items = ref<ConfigMeta[]>([])
 const loading = ref(false)
 const errorMsg = ref('')

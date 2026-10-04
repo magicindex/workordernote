@@ -2,15 +2,14 @@ package version
 
 import "time"
 
-// startedAt 进程启动时间：前端用它区分「本次运行」与「重启后」，
-// 例如赞赏提示弹窗在应用重启后才会再次出现。
+// startedAt 进程启动时间：前端用它区分「本次运行」与「重启后」。
 var startedAt = time.Now()
 
 var (
 	Version   = "dev"
 	BuildTime = "unknown"
 	GitCommit = "unknown"
-	AppName   = "提醒事项"
+	AppName   = "工作序记"
 )
 
 // AppID 是匿名统计上报使用的应用标识（应用目录名），与面向用户的

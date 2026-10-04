@@ -29,7 +29,7 @@ export const useAuthStore = defineStore('auth', () => {
   const requireLogin = ref(true)
   const allowRegister = ref(true)
   const setupRequired = ref(false)
-  const siteTitle = ref('提醒事项')
+  const siteTitle = ref('工作序记')
   // 飞牛部署下授权登录要用的两个信息，随启动引导一起取回，登录/注册页不再
   // 单独查一次版本信息（弱网下这一次往返就够用户点两次按钮了）。
   const servicePort = ref('')

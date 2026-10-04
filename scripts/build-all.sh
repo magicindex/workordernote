@@ -22,7 +22,7 @@ PACKAGE_PREFIX="techfunway-reminders"
 VERSION=$(cat VERSION | tr -d '\n')
 BUILD_TIME=$(date +%Y-%m-%dT%H:%M:%S)
 GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-LDFLAGS="-X smallgo/server/version.Version=${VERSION} -X smallgo/server/version.BuildTime=${BUILD_TIME} -X smallgo/server/version.GitCommit=${GIT_COMMIT} -X smallgo/server/version.AppName=提醒事项"
+LDFLAGS="-X smallgo/server/version.Version=${VERSION} -X smallgo/server/version.BuildTime=${BUILD_TIME} -X smallgo/server/version.GitCommit=${GIT_COMMIT} -X smallgo/server/version.AppName=工作序记"
 
 echo "Building frontend..."
 if [ ! -d web/node_modules ]; then

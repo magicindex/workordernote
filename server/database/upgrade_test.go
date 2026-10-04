@@ -121,3 +121,59 @@ func TestRunUpgradesNoTx(t *testing.T) {
 		t.Fatalf("NoTx upgrade did not create table (count=%d)", count)
 	}
 }
+
+// 本分支从 0.0.1 起版，而继承自上游的升级记录是 0.1.x / 0.3.x —— 数值上更大。
+// 如果不豁免，「数据库比程序新」的保护会在切到本分支后的第一次启动直接拒绝服务。
+func TestRunUpgradesToleratesInheritedUpstreamVersions(t *testing.T) {
+	db := freshDB(t)
+	// 模拟一个从上游迁过来的库：已经跑过 0.1.2 与 0.3.0。
+	db.Create(&UpgradeRecord{Version: "0.1.2", Name: "rename_default_site_title"})
+	db.Create(&UpgradeRecord{Version: "0.3.0", Name: "allow_multiple_email_bindings"})
+
+	inheritedRan := false
+	branchRan := false
+	upgrades := []Upgrade{
+		// 尚未执行的继承升级仍应被执行，不能因为编号比 0.0.1 大就被跳过。
+		{Version: "0.3.2", Name: "normalize_lunar_calendar_column", Upgrade: func(db *gorm.DB) error {
+			inheritedRan = true
+			return nil
+		}},
+		{Version: "0.0.1", Name: "rename_default_site_title_to_workordernote", Upgrade: func(db *gorm.DB) error {
+			branchRan = true
+			return nil
+		}},
+	}
+
+	if err := RunUpgrades(db, "0.0.1", upgrades); err != nil {
+		t.Fatalf("切到 0.0.1 不应因继承记录而拒绝启动: %v", err)
+	}
+	if !inheritedRan {
+		t.Fatal("未执行的继承升级 0.3.2 应被执行")
+	}
+	if !branchRan {
+		t.Fatal("本分支的 0.0.1 升级应被执行")
+	}
+
+	var rec UpgradeRecord
+	if err := db.Where("version = ?", "0.0.1").First(&rec).Error; err != nil {
+		t.Fatalf("0.0.1 未记录: %v", err)
+	}
+
+	// 幂等：再跑一次不应重复执行。
+	branchRan = false
+	if err := RunUpgrades(db, "0.0.1", upgrades); err != nil {
+		t.Fatalf("重复调用 RunUpgrades: %v", err)
+	}
+	if branchRan {
+		t.Fatal("已执行的 0.0.1 不应重复运行")
+	}
+}
+
+// 豁免只针对已知的继承编号；本分支自己的降级保护必须照常生效。
+func TestInheritedExemptionDoesNotWeakenDowngradeGuard(t *testing.T) {
+	db := freshDB(t)
+	db.Create(&UpgradeRecord{Version: "0.0.5"})
+	if err := RunUpgrades(db, "0.0.1", []Upgrade{}); err == nil {
+		t.Fatal("本分支编号的降级仍应被拒绝")
+	}
+}

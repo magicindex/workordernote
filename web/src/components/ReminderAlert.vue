@@ -19,7 +19,7 @@
               </svg>
             </span>
             <div class="min-w-0 flex-1">
-              <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">提醒事项</p>
+              <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">工作序记</p>
               <p class="truncate text-sm font-bold text-foreground">{{ timeLabel }}</p>
             </div>
             <span

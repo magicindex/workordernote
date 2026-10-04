@@ -45,6 +45,20 @@ func init() {
 		},
 	})
 
+	// 以下进入本分支（WorkOrderNote / 工作序记）自己的版本序列：从 0.0.1 起，
+	// 按 major.minor.patch 递增。继承自上游的 0.1.2 / 0.3.0 / 0.3.2 三条仍保留
+	// 原编号，它们由 database.isInheritedUpgrade 豁免版本比较（见 upgrade.go）。
+	database.Upgrades = append(database.Upgrades, database.Upgrade{
+		Version: "0.0.1", Name: "rename_default_site_title_to_workordernote",
+		// 本分支把默认站点名从「提醒事项」改为「工作序记」。只改仍是旧默认值的
+		// 那条记录：管理员自己起过名字的站点保持不动。
+		Upgrade: func(db *gorm.DB) error {
+			return db.Model(&database.SystemConfig{}).
+				Where("user_id = ? AND key = ? AND value = ?", 0, "site_title", "提醒事项").
+				Update("value", "工作序记").Error
+		},
+	})
+
 	database.RegisterModels(
 		&List{}, &Reminder{}, &ReminderChannel{}, &Completion{},
 		&ChannelBinding{}, &ProviderConfig{}, &QQBindCode{}, &DeliveryJob{}, &DeliveryAttempt{}, &Notification{},
@@ -63,7 +77,7 @@ func init() {
 
 	apps.Register(apps.App{
 		Name:        "reminder",
-		DisplayName: "提醒事项",
+		DisplayName: "工作序记",
 		Icon:        "check-circle",
 		RoutePrefix: "/reminders",
 		NavPosition: 10,

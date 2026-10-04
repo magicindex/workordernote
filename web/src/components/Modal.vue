@@ -3,7 +3,10 @@
     <Transition name="modal">
       <div v-if="modelValue" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="handleClose">
         <div class="absolute inset-0 bg-black bg-opacity-50"></div>
-        <div class="relative bg-surface text-foreground rounded-2xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-auto">
+        <div
+          class="relative bg-surface text-foreground rounded-2xl shadow-xl p-6 w-full mx-4 max-h-[90vh] overflow-auto"
+          :class="size === 'lg' ? 'max-w-2xl' : 'max-w-lg'"
+        >
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-bold text-foreground">{{ title }}</h3>
             <button @click="handleClose" class="text-muted-foreground hover:text-foreground transition-colors">
@@ -24,6 +27,8 @@ const props = defineProps<{
   modelValue: boolean
   title?: string
   closable?: boolean
+  /** 弹窗宽度：md = max-w-lg（默认），lg = max-w-2xl（迭代说明这类长内容用） */
+  size?: 'md' | 'lg'
 }>()
 
 const emit = defineEmits<{

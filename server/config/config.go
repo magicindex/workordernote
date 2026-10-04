@@ -56,7 +56,7 @@ func Parse() Config {
 	flag.BoolVar(&C.LogConsole, "log-console", false, "同时将运行日志输出到终端（默认 false，环境变量 LOG_CONSOLE）")
 	flag.BoolVar(&C.FnOSApp, "fnos-app", false, "以飞牛 fnOS 统一网关应用模式运行")
 	flag.StringVar(&C.GatewaySocket, "gateway-socket", "", "飞牛统一网关 Unix Socket 路径（仅 -fnos-app）")
-	flag.StringVar(&C.GatewayPrefix, "gateway-prefix", "/app/techfunway-reminders", "飞牛统一网关路径前缀（仅 -fnos-app）")
+	flag.StringVar(&C.GatewayPrefix, "gateway-prefix", "/app/workordernote", "飞牛统一网关路径前缀（仅 -fnos-app）")
 	flag.StringVar(&C.DeviceType, "device-type", "", "部署形态标识（fnos/docker，仅用于匿名统计的平台分布，环境变量 DEVICE_TYPE）")
 	flag.BoolVar(&C.DisableStats, "disable-stats", false, "禁用匿名使用统计上报（也可设置环境变量 DISABLE_STATS=1）")
 	flag.Usage = PrintHelp
@@ -133,7 +133,7 @@ func Parse() Config {
 // PrintHelp prints a user-facing guide to the startup parameters. It is wired
 // as flag.Usage so it also shows on invalid flags.
 func PrintHelp() {
-	fmt.Print(`提醒事项 — 简洁可靠的多渠道提醒应用
+	fmt.Print(`工作序记 — 简洁可靠的多渠道提醒应用
 
 用法:
   reminder [选项]
@@ -164,7 +164,7 @@ func PrintHelp() {
   -gateway-socket string
         飞牛统一网关 Unix Socket 路径（仅 -fnos-app）
   -gateway-prefix string
-        飞牛统一网关路径前缀（默认 "/app/techfunway-reminders"，仅 -fnos-app）
+        飞牛统一网关路径前缀（默认 "/app/workordernote"，仅 -fnos-app）
   -device-type string
         部署形态标识（fnos/docker，仅用于匿名统计的平台分布，环境变量 DEVICE_TYPE）
   -disable-stats

@@ -1,176 +1,139 @@
-# Reminder
+# 工作序记 · WorkOrderNote
 
-面向中国大陆用户的轻量多渠道提醒应用。界面借鉴移动端提醒工具的低学习成本，支持清单、
-今天/计划/全部/已完成视图、重复提醒、稍后提醒，以及站内、邮件、短信、飞书、QQ 和钉钉通知。
+任务、记事与日历一体的提醒应用。清单管理、定时提醒、记事归档、月历总览，
+支持站内消息、电子邮件、短信、飞书机器人和 QQ 机器人通知。
 
-版本功能与修复记录见 [CHANGELOG.md](./CHANGELOG.md)。
+> **本项目是衍生作品。** 基于开源项目
+> [TechFunWay/reminders](https://github.com/TechFunWay/reminders)（MIT 许可）衍生开发，
+> 原项目的著作权与出处均予保留。详见文末「原项目信息」。
+>
+> 版本：`0.0.1`（版本号规则：主版本号.小版本号.修正号，本分支从 0.0.1 起）
 
-如果这个项目对你有帮助，欢迎[支持作者](#支持作者)，微信收款码见文末。
+---
 
-## 界面预览
+## 与上游的差异
 
-| PC 端：计划视图 | PC 端：通知方式 |
+本分支在上游 `v0.3.0` 的基础上做以下改造：
+
+| 功能 | 说明 |
 | --- | --- |
-| ![PC 端计划视图](images/screenshots/reminders-pc-planned.jpg) | ![PC 端通知方式](images/screenshots/reminders-pc-channels.jpg) |
+| **任务 / 记事** | 任务需要确认完成；记事只作记录，保存即归入「已完成」，且不会发出任何通知 |
+| **已完成按时间段查看** | 全部 / 今天 / 一周 / 一月 / 一年 / 自定义起止日期；并接入重复提醒的完整完成历史 |
+| **全屏日历** | 顶栏主题按钮旁可切换「列表 / 日历」；月历同时显示公历、农历、节气与节日 |
+| **默认清单设定** | 「偏好设置」里可指定默认清单，侧栏对应清单带星标 |
+| **版本信息入口** | 侧栏「系统管理」下方，点开是迭代说明与原项目信息 |
+| **移除赞赏/付费提示** | 上游的赞赏弹窗、顶部横幅与设置页入口全部移除，保留原项目信息与 MIT 许可声明 |
 
-| 手机端：计划视图 | 手机端：通知方式 |
-| --- | --- |
-| ![手机端计划视图](images/screenshots/reminders-mobile-planned.jpg) | ![手机端通知方式](images/screenshots/reminders-mobile-channels.jpg) |
+上游自带的能力（跨设备自动同步、到点催办、农历重复、多邮箱通知、飞牛一键登录等）全部保留。
+
+---
 
 ## 技术栈
 
-- Go + Gin + GORM + SQLite（WAL）
-- Vue 3 + TypeScript + Pinia + Vue Router
-- Tailwind CSS + Vite
+- 后端：Go 1.26 + Gin + GORM + SQLite（CGO）
+- 前端：Vue 3 + TypeScript + Vite + Tailwind CSS
+- 部署：单二进制或 Docker；数据全部落在本地数据目录
 
 ## 本地开发
-
-要求 Go 1.26+、Node.js 20+、CGO 和本地 C 编译器。
 
 ```bash
 # 构建 Vue 前端、复制到后端静态目录、构建并启动 Go 后端
 make dev
+
+# 仅构建
+make build
+
+# 跑测试
+cd server && go test ./...
 ```
 
-浏览器访问 `http://localhost:8906`。开发模式只启动 Go 后端一个服务，API 和前端页面
-共用 8906 端口；首次运行会自动安装前端依赖。可通过 `PORT=9000 make dev` 临时改端口。
+## 构建 Docker 镜像
 
-需要邮件、短信、飞书或 QQ 时，先复制 `.env.example` 为 `.env`，填入相应服务端凭证，再运行
-`make dev`。`.env` 会在本地启动时自动读取，且不会覆盖已经设置的系统环境变量。
-
-仅构建或启动已构建产物：
+上游的 `Dockerfile` 在部分内网环境拉不到 `alpine:3.20`、`npm`/`go` 官方源也不通，
+因此本仓库提供了 `Dockerfile.custom`：改用本地可用的 `alpine:latest`（与
+`golang:1.26-alpine` 同为 3.24.x，musl ABI 匹配），并把包源换成国内镜像
+（apk → mirrors.aliyun.com，npm → registry.npmmirror.com，go → goproxy.cn），
+运行阶段的 ca-certificates 与 tzdata 从已有镜像 COPY。
 
 ```bash
-make build
-make start
+docker build -f Dockerfile.custom \
+  --build-arg VERSION=$(cat VERSION) \
+  --build-arg BUILD_TIME=$(date +%Y-%m-%dT%H:%M:%S) \
+  --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) \
+  -t workordernote:$(cat VERSION) .
 ```
 
-首次注册的用户自动成为管理员。
+> tzdata 不是可选项：服务端多处调用 `time.LoadLocation("Asia/Shanghai")`，
+> 缺失时返回 `nil`，紧接着的 `now.In(loc)` 会 panic。
 
-## 核心能力
+## docker compose 部署
 
-- 默认清单和自定义清单；
-- 今天、计划、全部、已完成智能视图；
-- 快捷新增、编辑、删除、完成、恢复；
-- 每天、每周、每月、每年重复；
-- 稍后 10 分钟提醒；
-- 持久化投递任务、幂等领取、失败分类和最多三次重试；
-- 站内通知中心；
-- SMTP 邮件；
-- 可配置短信 HTTP 网关；
-- 飞书企业自建应用机器人单聊；
-- QQ 机器人主动单聊；
-- 钉钉个人群自定义机器人；
-- 浅色/深色主题和响应式手机界面。
-
-## 外部渠道配置
-
-```text
-# 邮件
-SMTP_HOST
-SMTP_PORT
-SMTP_USERNAME
-SMTP_PASSWORD
-SMTP_FROM_NAME
-SMTP_FROM_ADDRESS
-
-# 短信 HTTP 网关
-SMS_WEBHOOK_URL
-SMS_WEBHOOK_TOKEN
-
-# 飞书
-FEISHU_APP_ID
-FEISHU_APP_SECRET
-FEISHU_BASE_URL
-
-# QQ
-QQ_BOT_APP_ID
-QQ_BOT_APP_SECRET
-QQ_BOT_API_BASE
-
-# 可选：单独的数据加密密钥
-REMINDER_DATA_KEY
+```yaml
+services:
+  workordernote:
+    image: workordernote:0.0.1
+    container_name: workordernote
+    # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
+    user: "1000:1001"
+    ports:
+      - "8906:8906"
+    volumes:
+      - ./data:/app/data
+      # 镜像内时区数据齐全，但挂上本机 localtime 更稳妥
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - ENV=release
+      - DATA_DIR=/app/data
+      - TZ=Asia/Shanghai
+    command: ["-data-dir", "/app/data", "-web-dir", "./static/dist", "-log-console"]
+    restart: unless-stopped
+    # 若本机跑着 watchtower，建议加这一条，避免自建镜像被上游原版覆盖
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
 ```
 
-渠道接收目标在数据库中使用 AES-GCM 加密。未设置 `REMINDER_DATA_KEY` 时，会从安装实例的
-内部 JWT 密钥派生独立加密密钥。
+## 版本号规则
 
-## 在线统计与赞赏支持
+- **软件版本**：根目录 `VERSION` 文件，格式 `主版本号.小版本号.修正号`，本分支从 `0.0.1` 起。
+  对外展示与 `web/src/data/release-notes.ts` 里的迭代说明保持同步。
+- **数据库结构版本**：`server/database/Upgrades` 与 `server/reminder/register.go` 里注册的升级条目，
+  同样从 `0.0.1` 起递增，**只增不改**。继承自上游的 `0.1.2 / 0.3.0 / 0.3.2` 三条保留原编号，
+  由 `database.inheritedUpstreamUpgrades` 豁免版本比较——否则切换到本分支后，
+  启动时会因「数据库 schema 比程序新」而拒绝服务。
 
-应用内置与家族其他应用一致的「匿名使用统计 + 赞赏支持」能力（上报地址
-`https://techfunway.wycto.cn/api/apps.online/refresh`）：
-
-- **匿名透明**：每 60 分钟一次心跳，只上报设备级信息——哈希后的设备标识
-  （`data/device.id`，卸载重装应用不变、重装系统才变）、操作系统、架构、部署形态
-  与应用版本。不含用户名、主机名、提醒内容或 IP 明文。
-- **赞赏完全自愿**：管理员在控制台的弹窗、顶部横幅与「偏好设置」卡片可看到赞赏入口；
-  点击「已支持」后在弹窗内填写金额（可选，仅接收端统计用、不做支付核验），随后向统计
-  端点发送一次匿名 `donate_support` 计数（携带 `amount` 金额字段）；**不支付不影响任何功能**。
-  支持记录按版本号记忆，应用升级到新版本后会再次提示。
-- **可退出**：以下任一方式可完全关闭统计上报：
-  - 启动参数 `-disable-stats`；
-  - 环境变量 `DISABLE_STATS=1`；
-  - 管理员在「系统配置」中关闭 `stats_enabled`（运行时生效）。
-
-`DEVICE_TYPE`（`-device-type`）用于标识部署形态（`fnos`/`docker`），仅参与统计的平台
-分布；`STATS_ENDPOINT` 环境变量可覆盖上报地址（本地测试用）。
-
-如果应用帮到了你，欢迎微信扫码请作者喝杯咖啡——金额随意，1 元也是心意，收款码见文末
-[支持作者](#支持作者)。
-
-### 钉钉个人提醒
-
-无需创建钉钉应用，也无需配置服务器环境变量。请使用 Windows 或 Mac 的钉钉电脑端操作；手机端不能
-创建或配置此机器人：
-
-1. 新建一个专用提醒群，或打开一个现有群。
-2. 如果不希望其他人看到提醒，请让群内只保留自己：可新建个人群，或将其他成员移出。
-3. 打开群设置，进入“群机器人 / 机器人”，添加“自定义机器人”。
-4. 安全设置选择“自定义关键词”，填写 `提醒`，复制 Webhook 地址。
-5. 在应用的“通知方式 → 钉钉群机器人”粘贴 Webhook，并发送测试。
-
-提醒会发送给该群的所有当前成员；群内只有你一人时，只有你能收到。每位用户的 Webhook 独立加密保存；
-应用只接受钉钉官方机器人地址。
+发新版时：改 `VERSION` → 在 `release-notes.ts` 最前面加一条迭代说明 → 如有表结构变更，
+在 `register.go` 追加一条 `database.Upgrade`。
 
 ## 运行日志
 
-运行日志默认仅写入 `<data-dir>/logs/`，按日期和级别分为 `info-YYYY-MM-DD.log`、
-`warn-YYYY-MM-DD.log`、`error-YYYY-MM-DD.log` 与 `audit-YYYY-MM-DD.log`，默认保留 30 天。
-这避免通知通道或后台任务的重复错误刷屏终端；需要排查时可直接查看对应文件。仅本地调试时可使用
-`-log-console` 或 `LOG_CONSOLE=true` 同时输出到终端。
-
-## 构建与测试
-
 ```bash
-cd server && go test ./...
-cd web && npm run build
-make build
+docker compose logs -f          # 需要 -log-console（compose 示例里已带）
+./verify-data.sh                # 数据体检：表数量、行数、integrity_check
 ```
 
-### 发布打包
+## 在线统计
 
-```bash
-# 仅编译并打包飞牛 fnOS：生成 x86、ARM 两份 .fpk，不构建 Docker 镜像
-make package PACKAGE_TARGET=fnos
+应用内置匿名使用统计上报（仅设备级哈希标识/系统/架构/版本，不含任何用户数据）。
+本分支已移除上游的赞赏计数，只保留心跳。
 
-# 所有桌面/服务器平台压缩包
-make package PACKAGE_TARGET=apps
+关闭方式（任选其一）：
 
-# 仅构建本地 Docker 镜像（按需执行）
-make package PACKAGE_TARGET=docker
-```
+- 启动参数 `-disable-stats`
+- 环境变量 `DISABLE_STATS=1`
+- 系统配置里的 `stats_enabled` 运行时开关
 
-`PACKAGE_TARGET=fnos` 会使用临时 Linux 编译容器生成 SQLite/CGO 二进制，但不会执行
-`docker build`、不会创建镜像标签，也不会推送镜像。
+上报地址可用环境变量 `STATS_ENDPOINT` 覆盖。
 
-完整产品与技术设计见 [docs/README.md](./docs/README.md)，接口见 [API.md](./API.md)。
+---
 
-## 支持作者
+## 原项目信息
 
-如果 Reminder 帮到了你，欢迎微信扫码请作者喝杯咖啡——金额随意，1 元也是心意：
+| 项目 | 内容 |
+| --- | --- |
+| 上游项目 | [TechFunWay/reminders](https://github.com/TechFunWay/reminders) |
+| 上游作者 | 科技智趣坊（TechFunWay） |
+| 许可 | MIT License，见 [LICENSE](LICENSE) |
+| 本项目 | WorkOrderNote（工作序记），基于上游衍生开发 |
 
-<p align="center">
-  <img src="web/src/assets/donate-wechat.png" alt="微信赞赏收款码" width="240" />
-</p>
-
-收款码也可以在应用内「弹窗、顶部横幅或偏好设置的赞赏入口」查看；支持完全自愿，不影响任何功能。
+本衍生作品遵循上游的 MIT 许可，保留原始版权声明；上游项目名称、作者与链接
+均如实标注，未作删改。上游的能力与设计成果归原作者所有。

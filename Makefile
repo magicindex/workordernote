@@ -6,7 +6,7 @@ DEV_DATA_DIR ?= ./data
 VERSION := $(shell cat VERSION | tr -d '\n')
 BUILD_TIME := $(shell date +%Y-%m-%dT%H:%M:%S)
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-LDFLAGS := -X smallgo/server/version.Version=$(VERSION) -X smallgo/server/version.BuildTime=$(BUILD_TIME) -X smallgo/server/version.GitCommit=$(GIT_COMMIT) -X smallgo/server/version.AppName=提醒事项
+LDFLAGS := -X smallgo/server/version.Version=$(VERSION) -X smallgo/server/version.BuildTime=$(BUILD_TIME) -X smallgo/server/version.GitCommit=$(GIT_COMMIT) -X smallgo/server/version.AppName=工作序记
 
 .PHONY: help dev start build frontend-deps build-frontend build-backend build-linux build-docker build-docker-multi build-all package package-fnos fnpack clean
 
@@ -30,7 +30,7 @@ help:
 	@echo "  clean           Clean build artifacts"
 
 dev: build
-	@echo "Starting 提醒事项 at http://localhost:$(PORT)"
+	@echo "Starting 工作序记 at http://localhost:$(PORT)"
 	./build/$(APP_NAME) -port=$(PORT) -data-dir="$(DEV_DATA_DIR)" -web-dir=./server/static/dist
 
 start: build-backend

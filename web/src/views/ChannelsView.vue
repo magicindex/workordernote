@@ -215,7 +215,7 @@ const channels = ref<(ChannelStatus & { last_error_code?: string })[]>([])
 const targets = reactive<Record<string, string>>({})
 const feishuConfig = reactive({ app_id: '', app_secret: '' })
 const qqBindCode = ref('')
-const notificationBrand = ref('提醒事项')
+const notificationBrand = ref('工作序记')
 const botSetupChannel = ref<'' | 'feishu' | 'qq'>('')
 const editingProvider = ref('')
 const confirmChannel = ref<ChannelStatus | null>(null)
@@ -254,7 +254,7 @@ async function loadBrand() {
   if (!authStore.isAdmin) return
   try {
     const res = await getNotificationBrand()
-    notificationBrand.value = res.data?.data?.name || '提醒事项'
+    notificationBrand.value = res.data?.data?.name || '工作序记'
   } catch { /* channel setup stays usable if this optional preference is unavailable */ }
 }
 async function saveBrand() {

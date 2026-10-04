@@ -1,4 +1,7 @@
-// Package stats 提供匿名使用统计上报与「赞赏支持」计数。
+// Package stats 提供匿名使用统计上报。
+//
+// 注：本分支（工作序记 / WorkOrderNote）已移除上游的「赞赏支持」功能，
+// 这里只保留心跳上报。
 //
 // 设计原则（与《应用支持功能与在线统计接入指南》一致，不可妥协）：
 //  1. 匿名透明：只上报设备级信息（哈希标识/系统/架构/版本），不含任何用户数据；
@@ -26,10 +29,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"smallgo/server/response"
 	"smallgo/server/sysconfig"
 )
 
@@ -41,17 +42,9 @@ type Request struct {
 	DeviceID   string `json:"device_id"`   // 32 位 md5 哈希，永远不含原文
 	OS         string `json:"os"`
 	Arch       string `json:"arch"`
-	// Event 区分上报类型：心跳不携带，赞赏点击为 "donate_support"
-	Event string `json:"event,omitempty"`
-	// Amount 赞赏金额（元），仅 donate_support 事件携带，用于接收端统计
-	// 赞赏流水（app_support_log.amount）。心跳不携带。
-	Amount float64 `json:"amount,omitempty"`
 }
 
-const (
-	heartbeatInterval = 60 * time.Minute
-	donateEvent       = "donate_support"
-)
+const heartbeatInterval = 60 * time.Minute
 
 var (
 	httpClient = &http.Client{Timeout: 5 * time.Second}
@@ -223,44 +216,6 @@ func enabled(db *gorm.DB) bool {
 	return v != "false"
 }
 
-// RegisterRoutes 挂载需要登录的赞赏支持端点。不要求管理员，但前端入口
-// 只对管理员显示。
-func RegisterRoutes(auth *gin.RouterGroup, db *gorm.DB) {
-	auth.POST("/donate/support", func(c *gin.Context) {
-		if !enabled(db) {
-			response.ErrorForbidden(c, "统计上报已被管理员禁用")
-			return
-		}
-		// 支持金额（元）：可选字段，缺省为 0（不校验支付，仅作金额标注）
-		var payload struct {
-			Amount float64 `json:"amount"`
-		}
-		_ = c.ShouldBindJSON(&payload)
-		if payload.Amount < 0 {
-			payload.Amount = 0
-		}
-
-		mu.Lock()
-		req := base
-		mu.Unlock()
-		req.Event = donateEvent
-		req.Amount = payload.Amount
-		body, _ := json.Marshal(req)
-		resp, err := httpClient.Post(Endpoint(), "application/json", bytes.NewReader(body))
-		if err != nil {
-			response.ErrorInternal(c, "支持计数发送失败，请稍后再试")
-			return
-		}
-		resp.Body.Close()
-		// 统计服务返回非 2xx 视为发送失败（http.Post 不把 4xx/5xx 当作 err）
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			response.ErrorInternal(c, "支持计数发送失败，请稍后再试")
-			return
-		}
-		response.Success(c, gin.H{"ok": true})
-	})
-}
-
 func init() {
 	sysconfig.RegisterConfig(sysconfig.ConfigDef{
 		Key:         "stats_enabled",
@@ -270,6 +225,6 @@ func init() {
 		Public:      false,
 		Group:       "stats",
 		Label:       "匿名使用统计",
-		Description: "仅上报设备级信息（哈希标识/系统/架构/版本），不含任何用户数据；关闭后心跳与赞赏计数均停止",
+		Description: "仅上报设备级信息（哈希标识/系统/架构/版本），不含任何用户数据；关闭后心跳上报停止",
 	})
 }

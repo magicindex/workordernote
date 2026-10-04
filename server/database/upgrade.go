@@ -31,11 +31,34 @@ type Upgrade struct {
 //	})
 var Upgrades []Upgrade
 
+// inheritedUpstreamUpgrades 是本分支从上游继承、且可能已经写进 upgrade_records
+// 的升级版本号。
+//
+// 本分支（WorkOrderNote / 工作序记）从 0.0.1 起版并按 major.minor.patch 递增，
+// 而继承自上游的升级用的是 0.1.x / 0.3.x 编号 —— 数值上比 0.0.1 大。如果不豁免，
+// 下面「数据库 schema 比程序新」的保护会在切到本分支后的第一次启动直接拒绝服务；
+// 未执行的继承升级也会因为「版本号大于程序版本」而被跳过。
+//
+// 这些记录代表上游血统的 schema 历史，只判断「跑过没有」，不参与新编号体系的
+// 版本比较。本分支自己的升级从 0.0.1 起算。
+var inheritedUpstreamUpgrades = map[string]bool{
+	"0.1.2": true, // rename_default_site_title
+	"0.3.0": true, // allow_multiple_email_bindings
+	"0.3.2": true, // normalize_lunar_calendar_column
+}
+
+func isInheritedUpgrade(version string) bool {
+	return inheritedUpstreamUpgrades[version]
+}
+
 // RunUpgrades applies every upgrade whose Version has not yet been recorded,
 // in ascending version order, each inside its own transaction (unless NoTx
 // is set). It refuses to start if an already-applied DB version is higher
 // than the supplied appVersion, which protects against running an older
 // binary against a newer schema.
+//
+// 继承自上游的升级编号（见 inheritedUpstreamUpgrades）不参与这个版本比较：
+// 它们比本分支的起版号 0.0.1 大，但仍是「没跑过就该跑」的迁移。
 //
 // It is safe to call on every startup and is idempotent.
 func RunUpgrades(db *gorm.DB, appVersion string, upgrades []Upgrade) error {
@@ -46,6 +69,9 @@ func RunUpgrades(db *gorm.DB, appVersion string, upgrades []Upgrade) error {
 	applied := make(map[string]bool, len(records))
 	for _, r := range records {
 		applied[r.Version] = true
+		if isInheritedUpgrade(r.Version) {
+			continue
+		}
 		if compareVersions(r.Version, appVersion) > 0 {
 			return fmt.Errorf("database schema (%s) is newer than this binary (%s); refusing to start to avoid corruption", r.Version, appVersion)
 		}
@@ -53,9 +79,13 @@ func RunUpgrades(db *gorm.DB, appVersion string, upgrades []Upgrade) error {
 
 	pending := make([]Upgrade, 0, len(upgrades))
 	for _, u := range upgrades {
-		if !applied[u.Version] && compareVersions(u.Version, appVersion) <= 0 {
-			pending = append(pending, u)
+		if applied[u.Version] {
+			continue
 		}
+		if !isInheritedUpgrade(u.Version) && compareVersions(u.Version, appVersion) > 0 {
+			continue
+		}
+		pending = append(pending, u)
 	}
 
 	sort.Slice(pending, func(i, j int) bool {

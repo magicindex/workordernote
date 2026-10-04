@@ -46,7 +46,7 @@
               {{ fnosConfirmUsername.slice(0, 1) || '飞' }}
             </div>
             <h2 id="fnos-confirm-title" class="mt-5 text-center text-2xl font-bold">确认使用飞牛 NAS 登录</h2>
-            <p class="mt-2 text-center text-sm leading-6 text-white/65">“提醒事项”正在请求使用下面的飞牛 NAS 账号登录</p>
+            <p class="mt-2 text-center text-sm leading-6 text-white/65">“工作序记”正在请求使用下面的飞牛 NAS 账号登录</p>
             <div class="mt-6 flex items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-4">
               <span class="flex h-10 w-10 items-center justify-center rounded-full bg-brand-400/25 font-semibold text-brand-100">{{ fnosConfirmUsername.slice(0, 1) || '飞' }}</span>
               <span class="font-semibold">{{ fnosConfirmUsername || '当前飞牛 NAS 用户' }}</span>

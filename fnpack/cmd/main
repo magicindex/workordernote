@@ -34,7 +34,7 @@ start_process() {
     [ -n "${wizard_cors_origin}" ] && extra_args+=(-cors-origin "${wizard_cors_origin}")
     [ -n "${wizard_log_retention_days}" ] && extra_args+=(-log-retention-days "${wizard_log_retention_days}")
 
-    log_msg "Starting 提醒事项 through the fnOS unified gateway and port ${PORT} ..."
+    log_msg "Starting 工作序记 through the fnOS unified gateway and port ${PORT} ..."
 
     cd "${APP_DIR}"
     ./reminder \
@@ -43,17 +43,17 @@ start_process() {
         -port "${PORT}" \
         -device-type fnos \
         -fnos-app \
-        -gateway-prefix "/app/techfunway-reminders" \
+        -gateway-prefix "/app/workordernote" \
         -gateway-socket "${APP_DIR}/app.sock" \
         -logmode release "${extra_args[@]}" >> /dev/null 2>&1 &
 
     printf "%s" "$!" > ${PID_FILE}
-    log_msg "提醒事项 started with pid $!"
+    log_msg "工作序记 started with pid $!"
     return 0
 }
 
 stop_process() {
-    log_msg "Stopping 提醒事项 ..."
+    log_msg "Stopping 工作序记 ..."
 
     if [ -r "${PID_FILE}" ]; then
         pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')

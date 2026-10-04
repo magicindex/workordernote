@@ -350,7 +350,7 @@ const view = computed(() => String(route.meta.reminderView || 'today'))
 const selectedListID = computed(() => route.name === 'ReminderList' ? Number(route.params.id) : undefined)
 const selectedList = computed(() => lists.value.find(x => x.id === selectedListID.value))
 const pageTitle = computed(() => selectedList.value?.name || String(route.meta.title || '今天'))
-const eyebrow = computed(() => selectedList.value ? '我的清单' : view.value === 'today' ? '此刻最重要' : '提醒事项')
+const eyebrow = computed(() => selectedList.value ? '我的清单' : view.value === 'today' ? '此刻最重要' : '工作序记')
 const accentColor = computed(() => selectedList.value ? listColor(selectedList.value.color) : view.value === 'completed' ? '#10b981' : '#3182f6')
 const subtitle = computed(() => {
   if (selectedList.value) return `${selectedList.value.open_count || 0} 件事情正在等你`

@@ -16,7 +16,7 @@
             </span>
             <span>
               <span class="flex items-center gap-2">
-                <span class="font-display text-lg font-extrabold tracking-tight">{{ authStore.siteTitle || '提醒事项' }}</span>
+                <span class="font-display text-lg font-extrabold tracking-tight">{{ authStore.siteTitle || '工作序记' }}</span>
                 <span v-if="appVersion" class="version-badge" :title="appBuildTime ? `构建时间：${appBuildTime}` : ''">{{ appVersion }}</span>
               </span>
               <span class="block text-[11px] font-medium text-muted-foreground">把重要的事，放心交给我</span>
@@ -114,6 +114,16 @@
               <span class="flex-1">{{ item.label }}</span>
             </RouterLink>
           </template>
+
+          <!-- 版本信息：放在系统管理下方，点开是迭代说明与原项目信息 -->
+          <p class="nav-caption mt-3">关于</p>
+          <button type="button" class="nav-row w-full text-left" @click="versionOpen = true" title="查看版本信息与迭代说明">
+            <span class="nav-symbol bg-brand-500/12 text-brand-500">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 11v5.5M12 7.6v.01" stroke-width="2" stroke-linecap="round"/></svg>
+            </span>
+            <span class="flex-1">版本信息</span>
+            <span v-if="appVersion" class="version-badge">{{ appVersion }}</span>
+          </button>
         </div>
       </div>
     </aside>
@@ -173,15 +183,6 @@
       </header>
 
       <main class="px-4 pb-[calc(4.25rem+env(safe-area-inset-bottom))] pt-2.5 sm:px-6 sm:pt-6 lg:px-8 lg:pb-10 xl:px-10">
-        <!-- 赞赏横幅：管理员可见；关闭不持久化，刷新后再次出现；
-             支持过当前版本后隐藏，应用升级到新版本后再次出现 -->
-        <div v-if="supportStore.bannerVisible" class="mb-3 flex items-center justify-between gap-2 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs sm:mb-3 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm">
-          <span class="min-w-0 truncate text-foreground">
-            ❤ <button class="font-semibold text-brand-600 hover:underline dark:text-brand-300" @click="supportStore.open()">请作者喝杯咖啡</button><span class="hidden sm:inline"> 如果这个应用对你有帮助，欢迎（不赞赏不影响任何功能）。</span>
-          </span>
-          <button class="shrink-0 px-1 text-lg leading-none text-muted-foreground hover:text-foreground" title="关闭" aria-label="关闭赞赏横幅" @click="supportStore.dismissBanner()">×</button>
-        </div>
-
         <RouterView v-slot="{ Component }">
           <Transition name="page" mode="out-in">
             <component :is="Component" />
@@ -214,8 +215,8 @@
       @dismiss="dismissCurrentAlert"
     />
 
-    <!-- 赞赏支持弹窗 -->
-    <SupportModal />
+    <!-- 版本信息与迭代说明 -->
+    <VersionDialog v-model="versionOpen" :version="appVersion" :build-time="appBuildTime" />
   </div>
 </template>
 
@@ -223,11 +224,10 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
-import SupportModal from '../components/SupportModal.vue'
+import VersionDialog from '../components/VersionDialog.vue'
 import UiThemeToggle from '../components/ui/ThemeToggle.vue'
 import ReminderAlert from '../components/ReminderAlert.vue'
 import { useAuthStore } from '../stores/auth'
-import { useSupportStore } from '../stores/support'
 import {
   completeReminder,
   createList,
@@ -246,7 +246,6 @@ import { onFnOSGatewayOrigin } from '../utils/gateway'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
-const supportStore = useSupportStore()
 const mobileOpen = ref(false)
 const lists = ref<ReminderList[]>([])
 const summary = ref<Record<string, number>>({})
@@ -256,6 +255,7 @@ const listInput = ref<HTMLInputElement | null>(null)
 const realtimeToast = ref('')
 const appVersion = ref('')
 const appBuildTime = ref('')
+const versionOpen = ref(false)
 
 const icons = {
   today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="5" width="16" height="15" rx="3" stroke-width="1.8"/><path d="M8 3v4m8-4v4M4 10h16" stroke-width="1.8" stroke-linecap="round"/><path d="M9 15h6" stroke-width="2" stroke-linecap="round"/></svg>',
@@ -333,11 +333,8 @@ async function loadVersion() {
     const info = res.data?.data
     appVersion.value = info?.version || ''
     appBuildTime.value = info?.buildTime || ''
-    // 赞赏提示需要版本号与本次运行标识，复用这次请求避免重复拉取。
-    if (authStore.isAdmin) await supportStore.init(true, info)
   } catch {
     /* a version label must never block the main application */
-    if (authStore.isAdmin) await supportStore.init(true)
   }
 }
 function logout() {

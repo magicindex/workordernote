@@ -672,7 +672,7 @@ func sendEmail(db *gorm.DB, recipients []string, item Reminder) (sendResult, err
 	from := values["from_address"]
 	name := values["from_name"]
 	if name == "" {
-		name = "提醒事项"
+		name = "工作序记"
 	}
 	subject := "提醒：" + item.Title
 	body := notificationBody(item)
@@ -958,7 +958,7 @@ func notificationBrand(db *gorm.DB) string {
 	if err == nil && strings.TrimSpace(values["name"]) != "" {
 		return strings.TrimSpace(values["name"])
 	}
-	return "提醒事项"
+	return "工作序记"
 }
 
 func robotNotificationText(db *gorm.DB, item Reminder) string {

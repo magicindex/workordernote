@@ -1,6 +1,6 @@
 {
-  "name": "提醒事项",
-  "short_name": "提醒事项",
+  "name": "工作序记",
+  "short_name": "工作序记",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

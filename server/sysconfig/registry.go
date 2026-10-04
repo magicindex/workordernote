@@ -105,7 +105,7 @@ func Validate(def ConfigDef, value string) error {
 func init() {
 	RegisterConfig(ConfigDef{
 		Key: "site_title", Scope: ScopeSystem, Type: TypeString,
-		Default: "提醒事项", Public: true,
+		Default: "工作序记", Public: true,
 		Group: "general", Label: "站点标题",
 		Description: "显示在浏览器标题和页面头部的站点名称",
 	})
