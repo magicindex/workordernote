@@ -31,11 +31,6 @@ type Config struct {
 	FnOSApp       bool
 	GatewaySocket string
 	GatewayPrefix string
-	// DeviceType 标识部署形态（fnos|docker|空），仅用于匿名统计上报的
-	// 平台分布；不参与任何业务逻辑。
-	DeviceType string
-	// DisableStats 关闭匿名使用统计上报（也可用环境变量 DISABLE_STATS=1）。
-	DisableStats bool
 }
 
 var C Config
@@ -57,8 +52,6 @@ func Parse() Config {
 	flag.BoolVar(&C.FnOSApp, "fnos-app", false, "以飞牛 fnOS 统一网关应用模式运行")
 	flag.StringVar(&C.GatewaySocket, "gateway-socket", "", "飞牛统一网关 Unix Socket 路径（仅 -fnos-app）")
 	flag.StringVar(&C.GatewayPrefix, "gateway-prefix", "/app/workordernote", "飞牛统一网关路径前缀（仅 -fnos-app）")
-	flag.StringVar(&C.DeviceType, "device-type", "", "部署形态标识（fnos/docker，仅用于匿名统计的平台分布，环境变量 DEVICE_TYPE）")
-	flag.BoolVar(&C.DisableStats, "disable-stats", false, "禁用匿名使用统计上报（也可设置环境变量 DISABLE_STATS=1）")
 	flag.Usage = PrintHelp
 	flag.Parse()
 
@@ -103,12 +96,6 @@ func Parse() Config {
 		if enabled, err := strconv.ParseBool(v); err == nil {
 			C.LogConsole = enabled
 		}
-	}
-	if v := os.Getenv("DEVICE_TYPE"); v != "" {
-		C.DeviceType = v
-	}
-	if os.Getenv("DISABLE_STATS") == "1" || os.Getenv("DISABLE_STATS") == "true" {
-		C.DisableStats = true
 	}
 
 	if C.UploadDir == "" {
@@ -165,10 +152,6 @@ func PrintHelp() {
         飞牛统一网关 Unix Socket 路径（仅 -fnos-app）
   -gateway-prefix string
         飞牛统一网关路径前缀（默认 "/app/workordernote"，仅 -fnos-app）
-  -device-type string
-        部署形态标识（fnos/docker，仅用于匿名统计的平台分布，环境变量 DEVICE_TYPE）
-  -disable-stats
-        禁用匿名使用统计上报（默认 false，也可设置环境变量 DISABLE_STATS=1）
   -reset-admin-password
         将管理员密码重置为 admin123 后退出
   -version
@@ -178,7 +161,7 @@ func PrintHelp() {
 
 环境变量:
   PORT、DATA_DIR、DB_PATH、ENV、RATE_LIMIT、CORS_ORIGIN、LOG_RETENTION_DAYS、
-  LOG_CONSOLE、DEVICE_TYPE、DISABLE_STATS
+  LOG_CONSOLE
   环境变量的优先级高于启动参数。
 
 示例:

@@ -139,6 +139,12 @@ const selectOptionLabelMap: Record<string, Record<string, string>> = {
     light: '浅色',
     dark: '深色',
   },
+  calendar_font_size: {
+    small: '小',
+    medium: '标准',
+    large: '大',
+    xlarge: '特大',
+  },
 }
 
 function groupTitle(key: string): string {

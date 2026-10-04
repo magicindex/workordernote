@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container animate-fade-in flex min-h-[calc(100vh-7.5rem)] flex-col">
+  <div class="page-container animate-fade-in flex min-h-[calc(100vh-7.5rem)] flex-col" :style="{ '--cal-task-font': calendarFontPx + 'px' }">
     <PageHeader title="日历" description="按月查看所有到期提醒，含农历、节气与节日" />
 
     <div v-if="errorMsg" class="surface mb-3 rounded-2xl px-5 py-3 text-sm text-destructive">
@@ -46,7 +46,7 @@
             v-for="cell in cells"
             :key="cellKey(cell)"
             type="button"
-            class="group flex min-h-[4.25rem] flex-col rounded-xl border p-1 text-left transition sm:min-h-[5.25rem] sm:p-1.5"
+            class="cal-cell group flex flex-col rounded-xl border p-1 text-left transition sm:p-1.5"
             :class="cellClass(cell)"
             @click="selectedDate = cellKey(cell)"
           >
@@ -67,14 +67,14 @@
               <span
                 v-for="item in visibleItems(cell)"
                 :key="item.id"
-                class="flex min-w-0 items-center gap-1 rounded-md px-1 py-[1px] text-[10px] font-semibold leading-tight"
+                class="cal-task flex min-w-0 items-center gap-1 rounded-md px-1 py-[1px] font-semibold leading-tight"
                 :class="{ 'opacity-55 line-through': item.completed }"
                 :style="{ background: tint(item.list_color), color: ink(item.list_color) }"
               >
                 <i class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ background: dot(item.list_color) }"></i>
                 <span class="truncate">{{ item.title }}</span>
               </span>
-              <span v-if="extraCount(cell) > 0" class="px-1 text-[10px] font-bold text-muted-foreground">+{{ extraCount(cell) }}</span>
+              <span v-if="extraCount(cell) > 0" class="cal-task px-1 font-bold text-muted-foreground">+{{ extraCount(cell) }}</span>
             </div>
             <div class="mt-auto flex flex-wrap gap-0.5 pt-0.5 sm:hidden">
               <i
@@ -117,9 +117,9 @@
             >
               <svg viewBox="0 0 24 24" class="h-3 w-3" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-            <button class="min-w-0 flex-1 text-left" @click="openInList(item)">
+            <button class="min-w-0 flex-1 text-left" @click="openEditor(item)">
               <div class="flex items-center gap-1.5">
-                <h4 class="truncate text-sm font-bold" :class="{ 'line-through opacity-60': item.completed }">{{ item.title }}</h4>
+                <h4 class="cal-task-lg truncate font-bold" :class="{ 'line-through opacity-60': item.completed }">{{ item.title }}</h4>
                 <span v-if="item.priority" class="shrink-0 text-[10px] font-black text-rose-500">{{ '!'.repeat(item.priority) }}</span>
               </div>
               <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
@@ -131,7 +131,7 @@
                 <span class="truncate">{{ item.list_name }}</span>
               </div>
             </button>
-            <span class="row-action !opacity-100" title="在列表中编辑" @click="openInList(item)">
+            <span class="row-action !opacity-100" title="在列表中编辑" @click="openEditor(item)">
               <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </span>
           </article>
@@ -140,10 +140,19 @@
         <p v-else class="mt-4 flex-1 text-sm text-muted-foreground">这天没有安排。</p>
 
         <p class="mt-3 border-t border-border/60 pt-2.5 text-[11px] leading-4 text-muted-foreground">
-          点标题可到列表中编辑；勾选即完成，重复提醒会自动排到下一次。
+          点标题就地编辑；勾选即完成，重复提醒会自动排到下一次。
         </p>
       </aside>
     </div>
+
+    <!-- 与列表页共用同一个提醒编辑器，改一处两边同时生效 -->
+    <ReminderEditor
+      v-model="editorOpen"
+      :reminder-id="editingId"
+      :lists="lists"
+      :channels="channels"
+      @saved="onEditorSaved"
+    />
 
     <Toast :message="toast.message" :type="toast.type" />
   </div>
@@ -151,15 +160,15 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import PageHeader from '../components/PageHeader.vue'
+import ReminderEditor from '../components/ReminderEditor.vue'
 import Toast from '../components/Toast.vue'
+import { getAllConfigs } from '../api/config'
 import {
-  completeReminder, getCalendarItems, getLunarCalendar, restoreReminder,
-  type CalendarItem, type LunarDayInfo,
+  completeReminder, getCalendarItems, getChannelStatuses, getLists, getLunarCalendar, restoreReminder,
+  type CalendarItem, type ChannelStatus, type LunarDayInfo, type ReminderList,
 } from '../api/reminder'
 
-const router = useRouter()
 const toast = reactive<{ message: string; type: 'success' | 'error' }>({ message: '', type: 'success' })
 function showToast(message: string, type: 'success' | 'error' = 'success') {
   toast.message = ''
@@ -178,6 +187,18 @@ const selectedDate = ref(keyOf(now.getFullYear(), now.getMonth() + 1, now.getDat
 const loading = ref(false)
 const errorMsg = ref('')
 const saving = ref(false)
+
+// 编码器需要清单与通知渠道列表
+const lists = ref<ReminderList[]>([])
+const channels = ref<ChannelStatus[]>([])
+const editorOpen = ref(false)
+const editingId = ref<number | null>(null)
+
+// 日历任务字号：读「偏好设置 → 日历任务字号」，映射成像素后用 CSS 变量下发，
+// 格子里的小字、详情面板的标题、格子最小高度都跟着它走。
+const FONT_SIZES: Record<string, number> = { small: 9, medium: 10, large: 12, xlarge: 13 }
+const fontSizeKey = ref('medium')
+const calendarFontPx = computed(() => FONT_SIZES[fontSizeKey.value] ?? FONT_SIZES.medium)
 
 const monthTitle = computed(() => `${cursor.value.year} 年 ${cursor.value.month} 月`)
 const lunarYearName = computed(() => cells.value.find(c => c.lunar_year_name)?.lunar_year_name || '')
@@ -330,10 +351,45 @@ async function toggle(item: CalendarItem) {
   }
 }
 
-// 完整编辑仍在列表页：带 ?edit=<id> 过去，HomeView 会自动打开那条提醒的编辑面板。
-function openInList(item: CalendarItem) {
-  router.push({ path: '/admin/all', query: { edit: String(item.id) } })
+// 就地打开编辑器：与列表页共用同一个组件，不再跳走。
+// 编辑器保存后重新拉一次日历，改动立刻反映在格子里。
+function openEditor(item: CalendarItem) {
+  editingId.value = item.id
+  editorOpen.value = true
+}
+async function onEditorSaved() {
+  await load()
 }
 
-onMounted(load)
+// 清单与通知渠道是编辑器需要的，字号设置来自「偏好设置」。三者都只拉一次，
+// 失败也不该挡住日历本身，所以单独 try 掉。
+async function loadEditorContext() {
+  try {
+    const [listRes, channelRes, configRes] = await Promise.all([
+      getLists(), getChannelStatuses(), getAllConfigs(),
+    ])
+    lists.value = listRes.data?.data || []
+    channels.value = channelRes.data?.data || []
+    const key = configRes.data?.data?.calendar_font_size
+    if (key && FONT_SIZES[key]) fontSizeKey.value = key
+  } catch {
+    /* 读不到就用默认字号、空清单，日历照常可用 */
+  }
+}
+
+onMounted(() => {
+  loadEditorContext()
+  load()
+})
 </script>
+
+<style scoped>
+/* 字号由根元素上的 --cal-task-font 变量驱动（见 calendarFontPx），
+   格子最小高度也跟着缩放，字号调大时不会把任务条挤没。 */
+.cal-task { font-size: var(--cal-task-font, 10px); }
+.cal-task-lg { font-size: calc(var(--cal-task-font, 10px) + 4px); }
+.cal-cell { min-height: calc(var(--cal-task-font, 10px) * 6.8); }
+@media (min-width: 640px) {
+  .cal-cell { min-height: calc(var(--cal-task-font, 10px) * 8.4); }
+}
+</style>

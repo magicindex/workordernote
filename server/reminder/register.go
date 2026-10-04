@@ -59,6 +59,16 @@ func init() {
 		},
 	})
 
+	database.Upgrades = append(database.Upgrades, database.Upgrade{
+		Version: "0.0.2", Name: "drop_stats_config",
+		// 本分支移除了向上游统计端点上报的匿名使用统计，stats_enabled 这个
+		// 配置项已不存在，把库里遗留的那一行删掉——否则系统配置里会永远挂着
+		// 一个怎么点都不生效的开关。
+		Upgrade: func(db *gorm.DB) error {
+			return db.Where("key = ?", "stats_enabled").Delete(&database.SystemConfig{}).Error
+		},
+	})
+
 	database.RegisterModels(
 		&List{}, &Reminder{}, &ReminderChannel{}, &Completion{},
 		&ChannelBinding{}, &ProviderConfig{}, &QQBindCode{}, &DeliveryJob{}, &DeliveryAttempt{}, &Notification{},

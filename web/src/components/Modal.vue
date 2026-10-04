@@ -1,8 +1,10 @@
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="modelValue" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="handleClose">
-        <div class="absolute inset-0 bg-black bg-opacity-50"></div>
+      <div v-if="modelValue" class="fixed inset-0 z-50 flex items-center justify-center">
+        <!-- 遮罩上直接挂关闭：它是一层独立子元素，父层的 @click.self 永远收不到
+             （点它时 event.target 是这层，不是父层），所以必须挂在这里。 -->
+        <div class="absolute inset-0 bg-black bg-opacity-50" @click="handleClose"></div>
         <div
           class="relative bg-surface text-foreground rounded-2xl shadow-xl p-6 w-full mx-4 max-h-[90vh] overflow-auto"
           :class="size === 'lg' ? 'max-w-2xl' : 'max-w-lg'"
@@ -23,13 +25,21 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: boolean
   title?: string
+  /**
+   * 是否允许关闭。必须给默认值 true：Boolean 类型的 prop 在父组件没传时，
+   * Vue 会把它设成 false（不是 undefined），于是 `props.closable !== false`
+   * 永远为假，关闭按钮和遮罩点击都会失效。
+   */
   closable?: boolean
   /** 弹窗宽度：md = max-w-lg（默认），lg = max-w-2xl（迭代说明这类长内容用） */
   size?: 'md' | 'lg'
-}>()
+}>(), {
+  closable: true,
+  size: 'md',
+})
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]

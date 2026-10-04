@@ -24,7 +24,6 @@ import (
 	"smallgo/server/response"
 	"smallgo/server/scheduler"
 	"smallgo/server/security"
-	"smallgo/server/stats"
 	"smallgo/server/sysconfig"
 	"smallgo/server/upload"
 	"smallgo/server/user"
@@ -151,13 +150,6 @@ func Start() {
 	}
 
 	r := NewRouter(cfg, db, jwtSecret)
-
-	// 匿名使用统计心跳：-disable-stats / DISABLE_STATS=1 可完全退出，
-	// 运行时也可由管理员通过 stats_enabled 配置关闭。
-	if !cfg.DisableStats {
-		stats.Start(version.AppID, version.Version, cfg.DeviceType, cfg.DataDir)
-		defer stats.Stop()
-	}
 
 	// Start background jobs registered by the framework or apps.
 	sched := scheduler.Start()

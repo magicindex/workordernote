@@ -111,19 +111,6 @@ docker compose logs -f          # 需要 -log-console（compose 示例里已带�
 ./verify-data.sh                # 数据体检：表数量、行数、integrity_check
 ```
 
-## 在线统计
-
-应用内置匿名使用统计上报（仅设备级哈希标识/系统/架构/版本，不含任何用户数据）。
-本分支已移除上游的赞赏计数，只保留心跳。
-
-关闭方式（任选其一）：
-
-- 启动参数 `-disable-stats`
-- 环境变量 `DISABLE_STATS=1`
-- 系统配置里的 `stats_enabled` 运行时开关
-
-上报地址可用环境变量 `STATS_ENDPOINT` 覆盖。
-
 ---
 
 ## 原项目信息

@@ -218,75 +218,14 @@
       <button v-if="view !== 'completed'" class="btn-primary mt-5" @click="focusQuickAdd">添加第一条提醒</button>
     </section>
 
-    <Transition name="drawer">
-      <div v-if="editorOpen" class="fixed inset-0 z-[70] flex justify-end">
-        <div class="absolute inset-0 bg-slate-950/25 backdrop-blur-sm" @click="closeEditor"></div>
-        <aside class="editor-panel">
-          <div class="flex items-center justify-between border-b border-border px-4 py-3 sm:px-6 sm:py-5">
-            <div>
-              <p class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">提醒详情</p>
-              <h2 class="mt-0.5 text-base font-extrabold sm:mt-1 sm:text-lg">{{ editing.id ? (editing.kind === 'note' ? '编辑记事' : '编辑提醒') : '新提醒' }}</h2>
-            </div>
-            <button class="row-action !opacity-100" aria-label="关闭" @click="closeEditor"><svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18" stroke-width="2" stroke-linecap="round"/></svg></button>
-          </div>
-          <form class="flex min-h-0 flex-1 flex-col" @submit.prevent="saveEditor">
-            <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:space-y-6 sm:p-6">
-              <label class="editor-field"><span>标题</span><input v-model="editing.title" autofocus maxlength="200" :placeholder="editing.kind === 'note' ? '记点什么…' : '要提醒什么？'" /></label>
-              <div class="editor-field">
-                <span>类型</span>
-                <div class="mt-1.5 flex gap-2">
-                  <button type="button" class="channel-pill flex-1" :class="{ selected: editing.kind !== 'note' }" @click="setEditingKind('task')">任务（需确认完成）</button>
-                  <button type="button" class="channel-pill flex-1" :class="{ selected: editing.kind === 'note' }" @click="setEditingKind('note')">记事（仅作记录）</button>
-                </div>
-              </div>
-              <label class="editor-field"><span>备注</span><textarea v-model="editing.notes" rows="4" maxlength="5000" placeholder="补充一些细节…"></textarea></label>
-              <div v-if="editing.kind !== 'note'" class="grid grid-cols-2 gap-3">
-                <div class="editor-field relative">
-                  <span>日期时间</span>
-                  <button ref="editingDateAnchor" type="button" class="mt-1.5 flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-medium sm:mt-2 sm:rounded-2xl sm:px-4 sm:py-3" :class="editingDateOpen ? 'border-brand-500/45 ring-4 ring-brand-500/10' : 'border-border'" @click="editingDateOpen = !editingDateOpen">
-                    <span :class="{ 'text-muted-foreground/55': !editing.due_at }">{{ editing.due_at ? formatFullDue(editing.due_at) : '选择日期' }}</span>
-                    <svg viewBox="0 0 24 24" class="h-4 w-4 text-muted-foreground" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2" stroke-width="1.8"/><path d="M8 3v4m8-4v4M3 10h18" stroke-width="1.8" stroke-linecap="round"/></svg>
-                  </button>
-                  <LunarDatePicker v-if="editingDateOpen" v-model="editingDatePicked" with-time :anchor-el="editingDateAnchor" @commit="editingDateOpen = false" />
-                </div>
-                <label class="editor-field"><span>清单</span><select v-model.number="editing.list_id"><option v-for="list in lists" :key="list.id" :value="list.id">{{ list.name }}</option></select></label>
-                <label class="editor-field"><span>优先级</span><select v-model.number="editing.priority"><option :value="0">无</option><option :value="1">低</option><option :value="2">中</option><option :value="3">高</option></select></label>
-                <label class="editor-field"><span>重复</span><select v-model="editing.repeat_rule"><option value="none">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option></select></label>
-                <label class="editor-field"><span>按农历循环</span><select v-model="editing.calendar" @change="upgradeCalendarToYearly(editing)"><option value="solar">公历</option><option value="lunar">农历</option></select></label>
-                <label class="editor-field"><span>过期提醒频率</span><RepeatNotifySelect :model-value="editing.repeat_notify_minutes ?? 0" @update:model-value="editing.repeat_notify_minutes = $event" /></label>
-                <p class="col-span-2 mt-1 text-[10px] leading-4 text-muted-foreground">“过期提醒频率”在到点未完成时按所选间隔重复通知，点击完成后停止；配合“每天”等重复规则可实现固定时间的每日催办。</p>
-                <p v-if="editing.calendar === 'lunar'" class="col-span-2 -mt-3 text-[10px] leading-4 text-muted-foreground">“按农历循环”按所选日期对应的农历月/日重复，适合农历生日等纪念日期；腊月三十遇小年自动改为除夕当天，闰月日期遇无闰月年份自动用对应平月。</p>
-              </div>
-              <p v-else class="rounded-2xl bg-muted/65 p-3 text-xs leading-5 text-muted-foreground">记事只作记录：不需要日期、重复和通知，保存后直接归入「已完成」。</p>
-              <div v-if="editing.kind !== 'note'">
-                <p class="mb-3 text-xs font-bold text-muted-foreground">通知方式</p>
-                <div class="grid grid-cols-2 gap-2">
-                  <button v-for="channel in selectableChannels" :key="channel.channel" type="button" class="channel-option" :class="{ selected: isEditingChannelSelected(channel.channel) }" :disabled="channel.channel !== 'inapp' && (!channel.bound || channel.status !== 'active')" @click="toggleEditingChannel(channel.channel)">
-                    <span class="channel-check"><svg v-if="isEditingChannelSelected(channel.channel)" viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.5" stroke-linecap="round"/></svg></span>
-                    <span class="text-left"><strong>{{ channel.label }}</strong><small>{{ channel.bound || channel.channel === 'inapp' ? '可用' : '未绑定' }}</small></span>
-                  </button>
-                </div>
-                <RouterLink to="/admin/channels" class="mt-3 inline-flex text-xs font-semibold text-brand-600 hover:underline dark:text-brand-300">管理通知方式 →</RouterLink>
-                <div v-if="isEditingChannelSelected('email') && emailBindings.length > 1" class="mt-4 rounded-2xl bg-muted/65 p-3">
-                  <p class="mb-2 text-xs font-bold text-muted-foreground">这个提醒发送到</p>
-                  <div class="flex flex-wrap gap-2">
-                    <button type="button" class="channel-pill" :class="{ selected: editingEmailTargets.length === 0 }" @click="clearEditingEmailTargets">全部接收邮箱</button>
-                    <button v-for="binding in emailBindings" :key="binding.id" type="button" class="channel-pill" :class="{ selected: editingEmailTargets.includes(binding.id) }" @click="toggleEditingEmailTarget(binding.id)">
-                      {{ binding.target_masked }}
-                    </button>
-                  </div>
-                  <p class="mt-2 text-[10px] leading-4 text-muted-foreground">选择“全部接收邮箱”时不指定具体邮箱；所选邮箱被删除后会自动改发全部已启用的邮箱。</p>
-                </div>
-              </div>
-            </div>
-            <div class="flex items-center gap-3 border-t border-border bg-surface/80 p-3.5 backdrop-blur sm:p-5">
-              <button type="button" class="btn-secondary flex-1" @click="closeEditor">取消</button>
-              <button class="btn-primary flex-1" :disabled="saving || !editing.title.trim()">{{ saving ? '保存中…' : editing.kind === 'note' ? '保存记事' : '保存提醒' }}</button>
-            </div>
-          </form>
-        </aside>
-      </div>
-    </Transition>
+    <!-- 提醒编辑器：与日历视图共用同一个组件，改一处两边同时生效 -->
+    <ReminderEditor
+      v-model="editorOpen"
+      :reminder-id="editingId"
+      :lists="lists"
+      :channels="selectableChannels"
+      @saved="onEditorSaved"
+    />
 
     <Toast :message="toast.message" :type="toast.type" />
 
@@ -343,7 +282,7 @@ const blankInput = (): SaveReminderInput => ({
   all_day: false, repeat_rule: 'none', calendar: 'solar', repeat_notify_minutes: 0, channels: ['inapp'],
 })
 const quick = reactive<SaveReminderInput>(blankInput())
-const editing = reactive<SaveReminderInput & { id?: number }>(blankInput())
+const editingId = ref<number | null>(null)
 let quickChannelsTouched = false
 
 const view = computed(() => String(route.meta.reminderView || 'today'))
@@ -368,9 +307,7 @@ const emptyText = computed(() => view.value === 'completed'
   : '把脑海里惦记的事情记下来，剩下的交给 Reminder。')
 
 const quickDateOpen = ref(false)
-const editingDateOpen = ref(false)
 const quickDateAnchor = ref<HTMLElement | null>(null)
-const editingDateAnchor = ref<HTMLElement | null>(null)
 
 const quickDatePicked = computed({
   get: () => (quick.due_at ? new Date(quick.due_at) : null),
@@ -378,10 +315,6 @@ const quickDatePicked = computed({
     quick.due_at = value ? toLocalIso(value) : null
     preset.value = ''
   },
-})
-const editingDatePicked = computed({
-  get: () => (editing.due_at ? new Date(editing.due_at) : null),
-  set: value => { editing.due_at = value ? toLocalIso(value) : null },
 })
 
 // toLocalIso 序列化为带本地时区偏移的 RFC3339 串（后端 time.Time 只认
@@ -523,16 +456,6 @@ function setQuickKind(kind: ReminderKind) {
     quickExpanded.value = false
   }
 }
-function setEditingKind(kind: ReminderKind) {
-  editing.kind = kind
-  if (kind === 'note') {
-    editing.due_at = null
-    editing.priority = 0
-    editing.repeat_rule = 'none'
-    editing.calendar = 'solar'
-    editing.repeat_notify_minutes = 0
-  }
-}
 // 已完成页的时间段选项。「全部」放第一个并作为默认，这样角标数字和列表条数
 // 从一开始就是一致的；自定义需要选完起止日期再点查询。
 const rangeOptions: { value: CompletedRangeOption; label: string }[] = [
@@ -585,22 +508,6 @@ function toggleQuickChannel(channel: ReminderChannel) {
   if (!quick.channels.length) quick.channels = ['inapp']
 }
 function isQuickChannelSelected(channel: ReminderChannel) { return (quick.channels || []).includes(channel) }
-function toggleEditingChannel(channel: ReminderChannel) {
-  const list = editing.channels || []
-  editing.channels = list.includes(channel) ? list.filter(x => x !== channel) : [...list, channel]
-  if (!editing.channels.length) editing.channels = ['inapp']
-  if (!editing.channels.includes('email')) editing.channel_targets = undefined
-}
-function isEditingChannelSelected(channel: ReminderChannel) { return (editing.channels || []).includes(channel) }
-const emailBindings = computed(() => selectableChannels.value.find(channel => channel.channel === 'email')?.bindings || [])
-const editingEmailTargets = computed(() => editing.channel_targets?.email || [])
-function toggleEditingEmailTarget(id: number) {
-  const picked = new Set(editing.channel_targets?.email || [])
-  if (picked.has(id)) picked.delete(id)
-  else picked.add(id)
-  editing.channel_targets = picked.size ? { email: [...picked] } : undefined
-}
-function clearEditingEmailTargets() { editing.channel_targets = undefined }
 
 // 农历循环只对每月/每年重复生效（后端会拒绝其余组合）。用户直接选农历时
 // 自动把重复规则升到每年（农历生日等纪念日的默认用法）；反之把重复规则
@@ -613,36 +520,16 @@ function upgradeCalendarToYearly(target: SaveReminderInput) {
 watch(() => quick.repeat_rule, rule => {
   if (rule !== 'monthly' && rule !== 'yearly') quick.calendar = 'solar'
 })
-watch(() => editing.repeat_rule, rule => {
-  if (rule !== 'monthly' && rule !== 'yearly') editing.calendar = 'solar'
-})
 
 function editItem(item: ReminderItem) {
-  Object.assign(editing, {
-    id: item.id, title: item.title, notes: item.notes, kind: item.kind || 'task', list_id: item.list_id,
-    priority: item.priority, due_at: item.due_at, all_day: item.all_day,
-    repeat_rule: item.repeat_rule, calendar: item.calendar || 'solar',
-    repeat_notify_minutes: item.repeat_notify_minutes || 0,
-    channels: [...(item.channels || [])], version: item.version,
-    lunar_anchor: item.lunar_anchor || '',
-    channel_targets: item.channel_targets ? { ...item.channel_targets } : undefined,
-  })
+  editingId.value = item.id
   editorOpen.value = true
 }
-function closeEditor() { editorOpen.value = false }
-async function saveEditor() {
-  if (!editing.id || !editing.title?.trim()) return
-  saving.value = true
-  try {
-    const { id, ...payload } = editing
-    await updateReminder(id, payload)
-    editorOpen.value = false
-    await loadItems()
-    changed()
-    showToast('提醒已保存')
-  } catch (err: any) {
-    showToast(err.response?.data?.message || '保存失败', 'error')
-  } finally { saving.value = false }
+// ReminderEditor 保存成功后回调：刷新列表并通知其它视图。
+async function onEditorSaved() {
+  await loadItems()
+  changed()
+  showToast('提醒已保存')
 }
 async function toggleComplete(item: ReminderItem) {
   // 记事默认就是完成，没有「完成 / 恢复」这回事：恢复会把它变成一个没有
@@ -758,12 +645,7 @@ function onShortcut(e: KeyboardEvent) {
 .search-box input { @apply min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/65; }
 .quick-card { @apply relative overflow-hidden rounded-[24px] border border-border/70 bg-surface/90 p-3 shadow-[0_20px_50px_-30px_rgba(15,23,42,.35)] backdrop-blur-xl transition-all sm:p-5; }
 .quick-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: linear-gradient(#3b82f6, #6366f1); opacity: .75; }
-.quick-chip { @apply inline-flex h-7 items-center gap-1.5 rounded-lg border border-border/70 bg-surface px-2.5 text-[11px] font-semibold text-muted-foreground transition hover:border-brand-500/30 hover:text-brand-600 disabled:opacity-40 sm:h-8 sm:rounded-xl sm:px-3 sm:text-xs; }
-.quick-chip.active { @apply border-brand-500/25 bg-brand-500/10 text-brand-600 dark:text-brand-300; }
 .field-label { @apply block text-[11px] font-bold text-muted-foreground; }
-.compact-input { @apply mt-1.5 h-9 w-full rounded-xl border border-border bg-surface px-3 text-xs font-medium text-foreground outline-none focus:border-brand-500/50; }
-.channel-pill { @apply rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-muted-foreground transition disabled:cursor-not-allowed disabled:opacity-35; }
-.channel-pill.selected { @apply border-brand-500/30 bg-brand-500/10 text-brand-600 dark:text-brand-300; }
 .reminder-row { @apply relative flex min-h-0 items-center gap-2.5 overflow-hidden rounded-2xl border border-border/65 bg-surface/85 px-3 py-2.5 shadow-[0_6px_24px_-20px_rgba(15,23,42,.5)] backdrop-blur transition-all hover:-translate-y-0.5 hover:border-brand-500/20 hover:shadow-[0_16px_36px_-26px_rgba(15,23,42,.65)] sm:gap-3 sm:px-4 sm:py-3.5; content-visibility: auto; contain-intrinsic-size: 64px; }
 .reminder-row::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 2px; background: transparent; }
 .reminder-overdue::before { background: #f43f5e; }
@@ -773,24 +655,11 @@ function onShortcut(e: KeyboardEvent) {
 .reminder-completed .complete-button { @apply border-emerald-500 bg-emerald-500; }
 .priority-mark { @apply text-[11px] font-black tracking-[-.12em]; }
 .priority-1 { @apply text-blue-500; }.priority-2 { @apply text-amber-500; }.priority-3 { @apply text-rose-500; }
-.tiny-badge { @apply rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-extrabold text-violet-500; }
-.row-actions { @apply flex shrink-0 items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100; }
-.row-action { @apply flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-muted hover:text-foreground; }
 .empty-state { @apply mt-4 flex min-h-[230px] flex-col items-center justify-center rounded-[28px] border border-dashed border-border bg-surface/35 px-6 text-center sm:min-h-[280px]; }
 .empty-art { @apply relative h-28 w-28; }
 .empty-ring { @apply absolute inset-2 rounded-full border border-brand-500/20 bg-brand-500/5; }
 .empty-check { @apply absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_16px_35px_-12px_rgba(59,130,246,.65)]; }
 .empty-dot { @apply absolute h-2.5 w-2.5 rounded-full; }.dot-one { @apply left-0 top-5 bg-amber-400; }.dot-two { @apply right-1 top-1 bg-violet-400; }.dot-three { @apply bottom-0 right-6 bg-emerald-400; }
-.editor-panel { @apply relative z-10 flex h-full w-full max-w-[510px] flex-col border-l border-border bg-background/95 shadow-2xl backdrop-blur-2xl; }
-.editor-field { @apply block text-xs font-bold text-muted-foreground; }
-.editor-field input, .editor-field textarea, .editor-field select { @apply mt-1.5 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground outline-none transition placeholder:text-muted-foreground/55 focus:border-brand-500/45 focus:ring-4 focus:ring-brand-500/10 sm:mt-2 sm:rounded-2xl sm:px-4 sm:py-3; }
-.editor-field textarea { @apply resize-none leading-6; }
-.channel-option { @apply flex items-center gap-3 rounded-2xl border border-border bg-surface p-2.5 text-muted-foreground transition disabled:opacity-35 sm:p-3; }
-.channel-option.selected { @apply border-brand-500/30 bg-brand-500/10 text-brand-600 dark:text-brand-300; }
-.channel-option strong { @apply block text-xs; }.channel-option small { @apply mt-0.5 block text-[10px] opacity-70; }
 .channel-check { @apply flex h-5 w-5 items-center justify-center rounded-full border border-current; }
-.btn-primary { @apply inline-flex h-10 items-center justify-center rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-500 px-5 text-sm font-bold text-white shadow-[0_12px_25px_-12px_rgba(59,130,246,.75)] transition hover:-translate-y-0.5 hover:brightness-105 disabled:opacity-50 sm:h-11; }
-.btn-secondary { @apply inline-flex h-10 items-center justify-center rounded-2xl border border-border bg-surface px-5 text-sm font-bold text-foreground transition hover:bg-muted sm:h-11; }
 .expand-enter-active, .expand-leave-active { transition: all .2s ease; }.expand-enter-from, .expand-leave-to { opacity: 0; transform: translateY(-6px); }
-.drawer-enter-active, .drawer-leave-active { transition: opacity .22s ease; }.drawer-enter-active .editor-panel, .drawer-leave-active .editor-panel { transition: transform .28s cubic-bezier(.2,.8,.2,1); }.drawer-enter-from, .drawer-leave-to { opacity: 0; }.drawer-enter-from .editor-panel, .drawer-leave-to .editor-panel { transform: translateX(100%); }
 </style>

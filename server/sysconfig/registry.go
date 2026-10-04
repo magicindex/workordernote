@@ -140,6 +140,12 @@ func init() {
 		Description: "界面配色方案",
 	})
 	RegisterConfig(ConfigDef{
+		Key: "calendar_font_size", Scope: ScopeUser, Type: TypeSelect,
+		Default: "medium", Options: []string{"small", "medium", "large", "xlarge"},
+		Group: "appearance", Label: "日历任务字号",
+		Description: "日历视图里每天那些任务文字的字体大小",
+	})
+	RegisterConfig(ConfigDef{
 		Key: "log_retention_days", Scope: ScopeSystem, Type: TypeInt,
 		Default: "30",
 		Group:   "system", Label: "日志与操作记录保留天数",

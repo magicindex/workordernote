@@ -129,4 +129,52 @@ textarea {
   .btn-premium:hover::after {
     left: 130%;
   }
+
+  /* ---- 共用 UI 原子类 ----
+     原先这些类定义在 HomeView / MainLayout 的 <style scoped> 里，只有本组件能用；
+     而 LunarDatePicker（btn-primary）、ChannelsView（icon-button）、CalendarView
+     （quick-chip / compact-input / tiny-badge / row-action / btn-secondary）以及
+     SettingsView（compact-input）都在别的组件里用它们，结果样式全部没生效。
+     这里是应用级设计原子，统一放到全局，与 btn-brand / btn-ghost / input-field 一致。 */
+
+  .btn-primary {
+    @apply inline-flex h-10 items-center justify-center rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-500 px-5 text-sm font-bold text-white shadow-[0_12px_25px_-12px_rgba(59,130,246,.75)] transition hover:-translate-y-0.5 hover:brightness-105 disabled:opacity-50 sm:h-11;
+  }
+
+  .btn-secondary {
+    @apply inline-flex h-10 items-center justify-center rounded-2xl border border-border bg-surface px-5 text-sm font-bold text-foreground transition hover:bg-muted sm:h-11;
+  }
+
+  .icon-button {
+    @apply flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-muted hover:text-foreground sm:h-10 sm:w-10;
+  }
+
+  .quick-chip {
+    @apply inline-flex h-7 items-center gap-1.5 rounded-lg border border-border/70 bg-surface px-2.5 text-[11px] font-semibold text-muted-foreground transition hover:border-brand-500/30 hover:text-brand-600 disabled:opacity-40 sm:h-8 sm:rounded-xl sm:px-3 sm:text-xs;
+  }
+  .quick-chip.active {
+    @apply border-brand-500/25 bg-brand-500/10 text-brand-600 dark:text-brand-300;
+  }
+
+  .compact-input {
+    @apply mt-1.5 h-9 w-full rounded-xl border border-border bg-surface px-3 text-xs font-medium text-foreground outline-none focus:border-brand-500/50;
+  }
+
+  .channel-pill {
+    @apply rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-muted-foreground transition disabled:cursor-not-allowed disabled:opacity-35;
+  }
+  .channel-pill.selected {
+    @apply border-brand-500/30 bg-brand-500/10 text-brand-600 dark:text-brand-300;
+  }
+
+  .tiny-badge {
+    @apply rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-extrabold text-violet-500;
+  }
+
+  .row-actions {
+    @apply flex shrink-0 items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100;
+  }
+  .row-action {
+    @apply flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-muted hover:text-foreground;
+  }
 }
