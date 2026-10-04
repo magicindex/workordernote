@@ -736,6 +736,9 @@ type CompletedRange struct {
 
 // ParseCompletedRange 把前端传来的时间段选项换算成上海时区的时间区间。
 // 空值与 "all" 表示不限时间，这样老客户端不传参数时行为与改动前一致。
+//
+// 选项：all / today（今天）/ yesterday（昨天）/ week（本周，从周一起）/
+// month（本月至今）/ lastmonth（上个月整月）/ year（今年至今）/ custom。
 func ParseCompletedRange(option, from, to string) (CompletedRange, error) {
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
@@ -749,6 +752,9 @@ func ParseCompletedRange(option, from, to string) (CompletedRange, error) {
 		return CompletedRange{}, nil
 	case "today":
 		return CompletedRange{Start: &startOfToday, End: &endOfToday}, nil
+	case "yesterday":
+		start := startOfToday.AddDate(0, 0, -1)
+		return CompletedRange{Start: &start, End: &startOfToday}, nil
 	case "week":
 		// 国内习惯以周一为一周的开始；Go 的 Weekday 里 Sunday 是 0。
 		offset := (int(now.Weekday()) + 6) % 7
@@ -757,6 +763,12 @@ func ParseCompletedRange(option, from, to string) (CompletedRange, error) {
 	case "month":
 		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
 		return CompletedRange{Start: &start, End: &endOfToday}, nil
+	case "lastmonth":
+		// 上个月整月：从本月 1 号往前一个月，到本月 1 号为止（左闭右开）。
+		// 与「本月」不同——「本月」是「到今天的此刻为止」，上个月是个封闭区间。
+		startOfThisMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+		start := startOfThisMonth.AddDate(0, -1, 0)
+		return CompletedRange{Start: &start, End: &startOfThisMonth}, nil
 	case "year":
 		start := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, loc)
 		return CompletedRange{Start: &start, End: &endOfToday}, nil

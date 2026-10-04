@@ -523,13 +523,15 @@ function setQuickKind(kind: ReminderKind) {
   }
 }
 // 已完成页的时间段选项。「全部」放第一个并作为默认，这样角标数字和列表条数
-// 从一开始就是一致的；自定义需要选完起止日期再点查询。
+// 从一开始就是一致的；其余按时间由近到远排；自定义需要选完起止日期再点查询。
 const rangeOptions: { value: CompletedRangeOption; label: string }[] = [
   { value: 'all', label: '全部' },
   { value: 'today', label: '今天' },
+  { value: 'yesterday', label: '昨天' },
   { value: 'week', label: '本周' },
   { value: 'month', label: '本月' },
-  { value: 'year', label: '本年' },
+  { value: 'lastmonth', label: '上月' },
+  { value: 'year', label: '今年' },
   { value: 'custom', label: '自定义' },
 ]
 function setCompletedRange(option: CompletedRangeOption) {

@@ -549,8 +549,8 @@ func handleLunarConvert(db *gorm.DB) gin.HandlerFunc {
 
 // handleCompletedHistory 返回「已完成」记录，支持按时间段筛选。
 //
-// 参数：range = all | today | week | month | year | custom（默认 all 表示不限时间），
-// custom 时另需 from / to（YYYY-MM-DD，按上海时区解释，含当天）；
+// 参数：range = all | today | yesterday | week | month | lastmonth | year | custom
+// （默认 all 表示不限时间），custom 时另需 from / to（YYYY-MM-DD，按上海时区解释，含当天）；
 // 另支持 list_id 与 q（标题模糊搜索）。
 func handleCompletedHistory(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {

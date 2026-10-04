@@ -156,6 +156,18 @@ func TestParseCompletedRange(t *testing.T) {
 		t.Fatalf("today 终点应为明天 0 点，实际 %v", today.End)
 	}
 
+	// 昨天：昨天 0 点到今天 0 点，左闭右开，和今天正好首尾相接不重叠。
+	yesterday, err := ParseCompletedRange("yesterday", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if yesterday.Start == nil || !yesterday.Start.Equal(startOfToday.AddDate(0, 0, -1)) {
+		t.Fatalf("yesterday 起点应为昨天 0 点，实际 %v", yesterday.Start)
+	}
+	if yesterday.End == nil || !yesterday.End.Equal(startOfToday) {
+		t.Fatalf("yesterday 终点应为今天 0 点，实际 %v", yesterday.End)
+	}
+
 	// 一周从周一算起（国内习惯）。
 	week, err := ParseCompletedRange("week", "", "")
 	if err != nil {
@@ -174,6 +186,23 @@ func TestParseCompletedRange(t *testing.T) {
 	}
 	if month.Start == nil || month.Start.Day() != 1 || month.Start.Month() != now.Month() {
 		t.Fatalf("month 起点应是本月 1 日，实际 %v", month.Start)
+	}
+
+	// 上月是「整月闭区间」：从本月 1 号往前一个月，到本月 1 号为止。
+	// 跨年（1 月时上个月是去年 12 月）也必须对，所以直接和 Start 做月份差比较。
+	lastMonth, err := ParseCompletedRange("lastmonth", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	startOfThisMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+	if lastMonth.Start == nil || !lastMonth.Start.Equal(startOfThisMonth.AddDate(0, -1, 0)) {
+		t.Fatalf("lastmonth 起点应是上个月 1 日，实际 %v", lastMonth.Start)
+	}
+	if lastMonth.End == nil || !lastMonth.End.Equal(startOfThisMonth) {
+		t.Fatalf("lastmonth 终点应是本月 1 日，实际 %v", lastMonth.End)
+	}
+	if lastMonth.Start.Day() != 1 || !lastMonth.End.After(*lastMonth.Start) {
+		t.Fatalf("lastmonth 区间不合法：%v ~ %v", lastMonth.Start, lastMonth.End)
 	}
 
 	year, err := ParseCompletedRange("year", "", "")
