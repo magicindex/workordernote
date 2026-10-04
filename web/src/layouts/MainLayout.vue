@@ -86,6 +86,10 @@
           >
             <span class="h-2.5 w-2.5 rounded-full ring-4 ring-current/10" :style="{ color: listColor(list.color), background: listColor(list.color) }"></span>
             <span class="flex-1 truncate">{{ list.name }}</span>
+            <!-- 默认清单标识；改默认清单在「偏好设置」里操作 -->
+            <span v-if="list.is_default" class="shrink-0 text-amber-400" title="默认清单" aria-label="默认清单">
+              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor"><path d="m12 3.6 2.6 5.27 5.82.85-4.21 4.1.99 5.8L12 16.87l-5.2 2.75.99-5.8-4.21-4.1 5.82-.85L12 3.6Z"/></svg>
+            </span>
             <span v-if="list.open_count" class="nav-count">{{ list.open_count }}</span>
           </RouterLink>
         </nav>

@@ -194,6 +194,31 @@ type ListDTO struct {
 	OpenCount int64 `json:"open_count"`
 }
 
+// CompletedItemDTO 是「已完成」视图的一行。它有两个来源：
+//
+//   - Source "history"：completions 历史表，即重复提醒的每一次完成。
+//     提醒之后被删除，这条记录依然在（靠 TitleSnapshot 展示）。
+//   - Source "reminder"：reminders.completed_at，即非重复提醒的完成，以及全部记事。
+//
+// 必须合并两个来源：重复提醒完成时不会写 completed_at，而是把 due_at 滚到下一次、
+// 往 completions 插一条历史，所以只读 completed_at 的「已完成」会漏掉绝大部分记录
+// （本机实测只读 completed_at 得到 2 条，而历史表里有 14 条）。
+type CompletedItemDTO struct {
+	ID           uint       `json:"id"`
+	Source       string     `json:"source"` // history | reminder
+	ReminderID   uint       `json:"reminder_id"`
+	Title        string     `json:"title"`
+	CompletedAt  time.Time  `json:"completed_at"`
+	ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
+	ListID       uint       `json:"list_id"`
+	ListName     string     `json:"list_name"`
+	Kind         string     `json:"kind"`
+	RepeatRule   string     `json:"repeat_rule"`
+	// ReminderExists 表示底层提醒是否还在（未被删除）。前端据此决定这一行能否编辑/删除：
+	// 历史记录本身是既成事实，没有可删的东西。
+	ReminderExists bool `json:"reminder_exists"`
+}
+
 type ChannelStatus struct {
 	Channel      string `json:"channel"`
 	Label        string `json:"label"`

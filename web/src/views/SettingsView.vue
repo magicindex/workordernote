@@ -17,6 +17,29 @@
       @save="handleSave"
     />
 
+    <!-- 默认清单：新建提醒不带清单时落在这里，删除清单后其提醒也归到这里 -->
+    <div class="surface mt-4 rounded-2xl p-4 sm:p-6">
+      <h3 class="text-sm font-bold text-foreground">默认清单</h3>
+      <p class="mt-1 text-sm leading-relaxed text-muted-foreground">
+        新建提醒没有指定清单时会放进默认清单；删除某个清单后，里面的提醒也会归到这里。
+        默认清单不能删除，想换一个直接在这里选。
+      </p>
+      <div v-if="lists.length" class="mt-3 flex flex-wrap items-center gap-3">
+        <select
+          v-model.number="defaultListId"
+          class="compact-input !w-auto min-w-[9rem]"
+          :disabled="savingDefault"
+          aria-label="默认清单"
+          @change="applyDefaultList"
+        >
+          <option v-for="list in lists" :key="list.id" :value="list.id">{{ list.name }}</option>
+        </select>
+        <span v-if="savingDefault" class="text-xs font-semibold text-muted-foreground">保存中…</span>
+        <span v-else-if="defaultSaved" class="text-xs font-semibold text-emerald-500">已设为默认</span>
+      </div>
+      <p v-else class="mt-3 text-xs text-muted-foreground">还没有清单。</p>
+    </div>
+
     <!-- 支持作者（仅管理员可见，赞赏完全自愿） -->
     <div v-if="authStore.isAdmin" class="surface rounded-2xl p-4 sm:p-6">
       <div class="flex flex-wrap items-center justify-between gap-4">
@@ -50,6 +73,7 @@ import PageHeader from '../components/PageHeader.vue'
 import ConfigGroupList from '../components/ConfigGroupList.vue'
 import { getUserConfigMeta, updateConfig } from '../api/config'
 import type { ConfigMeta } from '../api/config'
+import { getLists, updateList, type ReminderList } from '../api/reminder'
 import { useThemeStore } from '../stores/theme'
 import { useAuthStore } from '../stores/auth'
 import { useSupportStore } from '../stores/support'
@@ -60,8 +84,47 @@ const items = ref<ConfigMeta[]>([])
 const loading = ref(false)
 const errorMsg = ref('')
 const listRef = ref<InstanceType<typeof ConfigGroupList> | null>(null)
+const lists = ref<ReminderList[]>([])
+const defaultListId = ref(0)
+const savingDefault = ref(false)
+const defaultSaved = ref(false)
 
-onMounted(loadMeta)
+onMounted(() => {
+  loadMeta()
+  loadLists()
+})
+
+// 默认清单是清单数据而不是配置项，所以走清单接口，不放进 ConfigGroupList。
+async function loadLists() {
+  try {
+    const res = await getLists()
+    lists.value = res.data?.data || []
+    defaultListId.value = lists.value.find(l => l.is_default)?.id || lists.value[0]?.id || 0
+  } catch {
+    /* 清单读不到不影响其它偏好设置的加载 */
+  }
+}
+
+async function applyDefaultList() {
+  if (!defaultListId.value || savingDefault.value) return
+  const previous = lists.value.find(l => l.is_default)?.id
+  if (previous === defaultListId.value) return
+  savingDefault.value = true
+  defaultSaved.value = false
+  errorMsg.value = ''
+  try {
+    await updateList(defaultListId.value, { is_default: true })
+    lists.value = lists.value.map(l => ({ ...l, is_default: l.id === defaultListId.value }))
+    defaultSaved.value = true
+    setTimeout(() => { defaultSaved.value = false }, 2500)
+  } catch (err: any) {
+    errorMsg.value = err.response?.data?.message || '设置默认清单失败'
+    // 失败了就把下拉框拨回原来的默认清单，避免界面显示成已经改好
+    defaultListId.value = previous || defaultListId.value
+  } finally {
+    savingDefault.value = false
+  }
+}
 
 async function loadMeta() {
   loading.value = true

@@ -26,6 +26,9 @@ func setupAuthRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	group.DELETE("/lists/:id", handleDeleteList(db))
 
 	group.GET("/items", handleListReminders(db))
+	// 「已完成」单独一个接口：它读的是 completions 历史 ∪ reminders 的完成，
+	// 返回结构（CompletedItemDTO）与 /items 不同，并且支持时间段筛选。
+	group.GET("/completed", handleCompletedHistory(db))
 	group.POST("/items", handleCreateReminder(db))
 	group.GET("/items/:id", handleGetReminder(db))
 	group.PUT("/items/:id", handleUpdateReminder(db))
@@ -183,10 +186,11 @@ func handleUpdateList(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		var in struct {
-			Name     string `json:"name"`
-			Color    string `json:"color"`
-			Icon     string `json:"icon"`
-			Position *int   `json:"position"`
+			Name      string `json:"name"`
+			Color     string `json:"color"`
+			Icon      string `json:"icon"`
+			Position  *int   `json:"position"`
+			IsDefault *bool  `json:"is_default"`
 		}
 		if err := c.ShouldBindJSON(&in); err != nil {
 			response.ErrorBadRequest(c, "清单参数无效")
@@ -196,6 +200,18 @@ func handleUpdateList(db *gorm.DB) gin.HandlerFunc {
 		if err := db.Where("id = ? AND user_id = ? AND deleted_at IS NULL", id, currentUserID(c)).First(&list).Error; err != nil {
 			writeServiceError(c, err)
 			return
+		}
+		// 默认清单必须恒有且唯一（新建提醒不带清单时、删除清单后归置提醒时都依赖它），
+		// 所以这里只接受“设为默认”，不接受“取消默认”——换默认就是给另一个清单设 true。
+		if in.IsDefault != nil {
+			if !*in.IsDefault {
+				response.ErrorBadRequest(c, "不能取消默认清单，请改为把其它清单设为默认")
+				return
+			}
+			if err := setDefaultList(db, currentUserID(c), id); err != nil {
+				writeServiceError(c, err)
+				return
+			}
 		}
 		updates := map[string]interface{}{}
 		if name := strings.TrimSpace(in.Name); name != "" {
@@ -499,6 +515,33 @@ func handleLunarConvert(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// handleCompletedHistory 返回「已完成」记录，支持按时间段筛选。
+//
+// 参数：range = all | today | week | month | year | custom（默认 all 表示不限时间），
+// custom 时另需 from / to（YYYY-MM-DD，按上海时区解释，含当天）；
+// 另支持 list_id 与 q（标题模糊搜索）。
+func handleCompletedHistory(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rng, err := ParseCompletedRange(c.Query("range"), c.Query("from"), c.Query("to"))
+		if err != nil {
+			response.ErrorBadRequest(c, err.Error())
+			return
+		}
+		var listID uint
+		if raw := strings.TrimSpace(c.Query("list_id")); raw != "" {
+			if n, convErr := strconv.Atoi(raw); convErr == nil && n > 0 {
+				listID = uint(n)
+			}
+		}
+		items, err := listCompletedHistory(db, currentUserID(c), rng, c.Query("q"), listID)
+		if err != nil {
+			response.ErrorInternal(c, "读取完成记录失败")
+			return
+		}
+		response.Success(c, items)
+	}
+}
+
 func handleSummary(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := currentUserID(c)
@@ -513,13 +556,18 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 			Completed int64
 			Overdue   int64
 		}
+		// 「已完成」角标必须和列表同口径（reminders.completed_at ∪ completions 历史），
+		// 否则重复提醒的完成记录会让侧栏数字和页面条数对不上。这里把历史计数作为
+		// 子查询并进同一条聚合语句，保持 /summary 仍然只有 2 条查询
+		// （见 performance_test.go 的 TestSummaryUsesTwoAggregateQueries）。
 		if err := db.Model(&Reminder{}).
 			Select(`
 				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND due_at < ? THEN 1 ELSE 0 END), 0) AS today,
 				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS planned,
 				COALESCE(SUM(CASE WHEN completed_at IS NULL THEN 1 ELSE 0 END), 0) AS open_total,
-				COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS completed,
-				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND due_at < ? THEN 1 ELSE 0 END), 0) AS overdue`, endToday, now).
+				COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
+					+ (SELECT COUNT(*) FROM completions WHERE user_id = ?) AS completed,
+				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND due_at < ? THEN 1 ELSE 0 END), 0) AS overdue`, endToday, userID, now).
 			Where("user_id = ? AND deleted_at IS NULL", userID).
 			Scan(&counts).Error; err != nil {
 			response.ErrorInternal(c, "统计提醒失败")

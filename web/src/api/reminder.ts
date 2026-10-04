@@ -6,6 +6,28 @@ export type ReminderChannel = 'inapp' | 'email' | 'sms' | 'feishu' | 'qq' | 'din
 // record that counts as completed the moment it is created).
 export type ReminderKind = 'task' | 'note'
 
+// 「已完成」记录有两个来源：
+//   history  —— completions 历史表，重复提醒的每一次完成（提醒删掉后记录仍在）
+//   reminder —— reminders.completed_at，非重复提醒的完成，以及全部记事
+export type CompletedSource = 'history' | 'reminder'
+
+export type CompletedRangeOption = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom'
+
+export interface CompletedItem {
+  id: number
+  source: CompletedSource
+  reminder_id: number
+  title: string
+  completed_at: string
+  scheduled_for?: string | null
+  list_id: number
+  list_name: string
+  kind: ReminderKind
+  repeat_rule: string
+  /** 底层提醒是否还在；历史记录本身没有可删的东西，前端据此决定是否给操作按钮 */
+  reminder_exists: boolean
+}
+
 export interface ReminderList {
   id: number
   name: string
@@ -121,6 +143,14 @@ export const deleteList = (id: number) => request.delete(`/api/reminder/lists/${
 
 export const getReminders = (params: { view?: string; list_id?: number; q?: string }) =>
   request.get('/api/reminder/items', { params })
+// 「已完成」走独立接口：数据源是 completions 历史 ∪ reminders 的完成，支持时间段筛选。
+export const getCompletedHistory = (params: {
+  range?: CompletedRangeOption
+  from?: string
+  to?: string
+  list_id?: number
+  q?: string
+}) => request.get('/api/reminder/completed', { params })
 export const getReminder = (id: number) => request.get(`/api/reminder/items/${id}`)
 export const createReminder = (data: SaveReminderInput) => request.post('/api/reminder/items', data)
 export const updateReminder = (id: number, data: SaveReminderInput) =>

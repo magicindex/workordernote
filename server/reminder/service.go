@@ -725,3 +725,198 @@ func nextOccurrence(t time.Time, rule string) time.Time {
 		return t
 	}
 }
+
+// CompletedRange 是「已完成」页的时间段筛选区间，左闭右开。
+type CompletedRange struct {
+	Start *time.Time
+	End   *time.Time
+}
+
+// ParseCompletedRange 把前端传来的时间段选项换算成上海时区的时间区间。
+// 空值与 "all" 表示不限时间，这样老客户端不传参数时行为与改动前一致。
+func ParseCompletedRange(option, from, to string) (CompletedRange, error) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		return CompletedRange{}, err
+	}
+	now := time.Now().In(loc)
+	startOfToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	endOfToday := startOfToday.AddDate(0, 0, 1)
+	switch option {
+	case "", "all":
+		return CompletedRange{}, nil
+	case "today":
+		return CompletedRange{Start: &startOfToday, End: &endOfToday}, nil
+	case "week":
+		// 国内习惯以周一为一周的开始；Go 的 Weekday 里 Sunday 是 0。
+		offset := (int(now.Weekday()) + 6) % 7
+		start := startOfToday.AddDate(0, 0, -offset)
+		return CompletedRange{Start: &start, End: &endOfToday}, nil
+	case "month":
+		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+		return CompletedRange{Start: &start, End: &endOfToday}, nil
+	case "year":
+		start := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, loc)
+		return CompletedRange{Start: &start, End: &endOfToday}, nil
+	case "custom":
+		start, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(from), loc)
+		if err != nil {
+			return CompletedRange{}, errors.New("自定义开始日期无效")
+		}
+		last, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(to), loc)
+		if err != nil {
+			return CompletedRange{}, errors.New("自定义结束日期无效")
+		}
+		end := last.AddDate(0, 0, 1) // 结束日期当天整天都算
+		if !end.After(start) {
+			return CompletedRange{}, errors.New("结束日期不能早于开始日期")
+		}
+		return CompletedRange{Start: &start, End: &end}, nil
+	}
+	return CompletedRange{}, errors.New("时间段参数无效")
+}
+
+// listCompletedHistory 返回「已完成」记录，来源是 completions 历史表与
+// reminders.completed_at 的并集，按完成时间倒序。
+//
+// 两个来源天然互不重叠：重复提醒完成时走历史表并把 completed_at 留空，
+// 非重复提醒与记事则只写 completed_at，因此不会重复计数。
+func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query string, listID uint) ([]CompletedItemDTO, error) {
+	var history []Completion
+	hq := db.Where("user_id = ?", userID)
+	if rng.Start != nil {
+		hq = hq.Where("completed_at >= ?", *rng.Start)
+	}
+	if rng.End != nil {
+		hq = hq.Where("completed_at < ?", *rng.End)
+	}
+	if query = strings.TrimSpace(query); query != "" {
+		hq = hq.Where("title_snapshot LIKE ?", "%"+query+"%")
+	}
+	if err := hq.Order("completed_at DESC").Find(&history).Error; err != nil {
+		return nil, err
+	}
+
+	var rows []Reminder
+	rq := db.Where("user_id = ? AND deleted_at IS NULL AND completed_at IS NOT NULL", userID)
+	if rng.Start != nil {
+		rq = rq.Where("completed_at >= ?", *rng.Start)
+	}
+	if rng.End != nil {
+		rq = rq.Where("completed_at < ?", *rng.End)
+	}
+	if listID > 0 {
+		rq = rq.Where("list_id = ?", listID)
+	}
+	if query != "" {
+		like := "%" + query + "%"
+		rq = rq.Where("(title LIKE ? OR notes LIKE ?)", like, like)
+	}
+	if err := rq.Order("completed_at DESC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	// 历史行本身不带清单归属，需要回查提醒。提醒可能已被软删除，所以这里
+	// 故意不加 deleted_at 过滤——只有这样删掉的提醒的完成记录才还找得到清单名。
+	ownerByID := map[uint]Reminder{}
+	if len(history) > 0 {
+		ids := make([]uint, 0, len(history))
+		for _, h := range history {
+			ids = append(ids, h.ReminderID)
+		}
+		var owners []Reminder
+		if err := db.Where("user_id = ? AND id IN ?", userID, ids).Find(&owners).Error; err != nil {
+			return nil, err
+		}
+		for _, o := range owners {
+			ownerByID[o.ID] = o
+		}
+	}
+
+	// 一次性取回涉及到的清单名，避免逐行查询。
+	wanted := map[uint]struct{}{}
+	for _, r := range rows {
+		if r.ListID > 0 {
+			wanted[r.ListID] = struct{}{}
+		}
+	}
+	for _, h := range history {
+		if o, ok := ownerByID[h.ReminderID]; ok && o.ListID > 0 {
+			wanted[o.ListID] = struct{}{}
+		}
+	}
+	listNames := map[uint]string{}
+	if len(wanted) > 0 {
+		ids := make([]uint, 0, len(wanted))
+		for id := range wanted {
+			ids = append(ids, id)
+		}
+		var lists []List
+		if err := db.Where("user_id = ? AND id IN ?", userID, ids).Find(&lists).Error; err != nil {
+			return nil, err
+		}
+		for _, l := range lists {
+			listNames[l.ID] = l.Name
+		}
+	}
+
+	result := make([]CompletedItemDTO, 0, len(history)+len(rows))
+	for _, h := range history {
+		item := CompletedItemDTO{
+			ID: h.ID, Source: "history", ReminderID: h.ReminderID,
+			Title: h.TitleSnapshot, CompletedAt: h.CompletedAt,
+			ScheduledFor: h.ScheduledFor, Kind: KindTask,
+		}
+		if owner, ok := ownerByID[h.ReminderID]; ok {
+			item.ListID = owner.ListID
+			item.ListName = listNames[owner.ListID]
+			item.Kind = owner.Kind
+			item.RepeatRule = owner.RepeatRule
+			item.ReminderExists = owner.DeletedAt == nil
+		}
+		if listID > 0 && item.ListID != listID {
+			continue
+		}
+		result = append(result, item)
+	}
+	for _, r := range rows {
+		if r.CompletedAt == nil {
+			continue
+		}
+		result = append(result, CompletedItemDTO{
+			ID: r.ID, Source: "reminder", ReminderID: r.ID,
+			Title: r.Title, CompletedAt: *r.CompletedAt, Kind: r.Kind,
+			ListID: r.ListID, ListName: listNames[r.ListID],
+			RepeatRule: r.RepeatRule, ReminderExists: true,
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CompletedAt.After(result[j].CompletedAt)
+	})
+	return result, nil
+}
+
+// 「已完成」角标的计数没有单独的函数：它作为子查询并进了 handleSummary 那条
+// 聚合语句里，这样 /summary 仍然只发 2 条查询（口径与 listCompletedHistory 的
+// 「不限时间」一致）。
+
+// setDefaultList 把指定清单设为该用户唯一的默认清单。默认清单必须恒有且唯一：
+// 新建提醒不带清单时、删除清单后归置提醒时都依赖它（见 ensureDefaultList）。
+func setDefaultList(db *gorm.DB, userID, listID uint) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		var list List
+		if err := tx.Where("id = ? AND user_id = ? AND deleted_at IS NULL", listID, userID).First(&list).Error; err != nil {
+			return err
+		}
+		if list.IsDefault {
+			return nil
+		}
+		if err := tx.Model(&List{}).
+			Where("user_id = ? AND is_default = ?", userID, true).
+			Update("is_default", false).Error; err != nil {
+			return err
+		}
+		return tx.Model(&List{}).Where("id = ? AND user_id = ?", listID, userID).
+			Update("is_default", true).Error
+	})
+}

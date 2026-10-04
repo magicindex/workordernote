@@ -95,17 +95,72 @@
 
     <div class="mb-2 mt-5 flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <h2 class="text-sm font-bold">{{ items.length }} 项</h2>
-        <span v-if="overdueCount" class="rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold text-rose-500">{{ overdueCount }} 项已过期</span>
+        <h2 class="text-sm font-bold">{{ view === 'completed' ? completedItems.length : items.length }} 项</h2>
+        <span v-if="view !== 'completed' && overdueCount" class="rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold text-rose-500">{{ overdueCount }} 项已过期</span>
       </div>
       <button class="text-xs font-semibold text-muted-foreground hover:text-foreground" @click="loadData">刷新</button>
     </div>
+
+    <!-- 已完成的时间段筛选。记录来源包含 completions 历史（重复提醒的每次完成），
+         所以这里的数字通常远大于「有 completed_at 的提醒数」。 -->
+    <section v-if="view === 'completed'" class="mb-4 rounded-2xl bg-muted/55 p-3 sm:p-4">
+      <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+        <button
+          v-for="opt in rangeOptions"
+          :key="opt.value"
+          class="quick-chip"
+          :class="{ active: completedRange === opt.value }"
+          @click="setCompletedRange(opt.value)"
+        >{{ opt.label }}</button>
+      </div>
+      <div v-if="completedRange === 'custom'" class="mt-3 flex flex-wrap items-center gap-2">
+        <input v-model="customFrom" type="date" class="compact-input !w-auto" aria-label="开始日期" />
+        <span class="text-xs text-muted-foreground">至</span>
+        <input v-model="customTo" type="date" class="compact-input !w-auto" aria-label="结束日期" />
+        <button class="btn-primary !h-9 !px-4" :disabled="!customFrom || !customTo" @click="loadItems">查询</button>
+      </div>
+    </section>
 
     <section v-if="loading" class="space-y-3">
       <div v-for="n in 4" :key="n" class="h-20 animate-pulse rounded-2xl bg-surface/80"></div>
     </section>
 
-    <section v-else-if="items.length" class="space-y-2">
+    <!-- 已完成：只读的完成记录，不能「完成 / 稍后提醒」；底层提醒还在时才可以编辑或删除 -->
+    <section v-else-if="view === 'completed' && completedItems.length" class="space-y-2">
+      <article v-for="entry in completedItems" :key="`${entry.source}-${entry.id}`" class="reminder-row reminder-completed">
+        <button class="complete-button cursor-default" disabled :aria-label="entry.kind === 'note' ? '记事' : '已完成'">
+          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="min-w-0 flex-1 text-left" :disabled="!entry.reminder_exists" @click="openCompletedEntry(entry)">
+          <div class="flex items-center gap-2">
+            <h3 class="truncate text-sm font-bold sm:text-[15px]">{{ entry.title }}</h3>
+            <span v-if="entry.kind === 'note'" class="tiny-badge">记事</span>
+            <span v-else-if="entry.repeat_rule && entry.repeat_rule !== 'none'" class="tiny-badge">{{ ruleLabel(entry.repeat_rule) }}</span>
+          </div>
+          <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground sm:mt-2">
+            <span class="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7v5l3 2" stroke-width="1.8" stroke-linecap="round"/></svg>
+              {{ formatCompletedAt(entry.completed_at) }}
+            </span>
+            <template v-if="entry.list_name">
+              <span class="h-1 w-1 rounded-full bg-border"></span>
+              <span>{{ entry.list_name }}</span>
+            </template>
+            <template v-if="!entry.reminder_exists">
+              <span class="h-1 w-1 rounded-full bg-border"></span>
+              <span>提醒已删除</span>
+            </template>
+          </div>
+        </button>
+        <div class="row-actions">
+          <button v-if="entry.reminder_exists" class="row-action hover:!text-rose-500" title="删除提醒" @click="removeCompleted(entry)">
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </article>
+    </section>
+
+    <section v-else-if="view !== 'completed' && items.length" class="space-y-2">
       <article
         v-for="item in items"
         :key="item.id"
@@ -256,14 +311,20 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 import LunarDatePicker from '../components/LunarDatePicker.vue'
 import RepeatNotifySelect from '../components/RepeatNotifySelect.vue'
 import {
-  completeReminder, createReminder, deleteReminder, getChannelStatuses, getLists, getReminders,
-  restoreReminder, snoozeReminder, updateReminder,
-  type ChannelStatus, type ReminderChannel, type ReminderItem, type ReminderKind, type ReminderList, type SaveReminderInput
+  completeReminder, createReminder, deleteReminder, getChannelStatuses, getCompletedHistory, getLists,
+  getReminder, getReminders, restoreReminder, snoozeReminder, updateReminder,
+  type ChannelStatus, type CompletedItem, type CompletedRangeOption, type ReminderChannel,
+  type ReminderItem, type ReminderKind, type ReminderList, type SaveReminderInput
 } from '../api/reminder'
 
 const route = useRoute()
 const router = useRouter()
 const items = ref<ReminderItem[]>([])
+// 「已完成」的数据源与普通列表不同（历史表 ∪ 完成记录），单独存一份。
+const completedItems = ref<CompletedItem[]>([])
+const completedRange = ref<CompletedRangeOption>('all')
+const customFrom = ref('')
+const customTo = ref('')
 const lists = ref<ReminderList[]>([])
 const selectableChannels = ref<ChannelStatus[]>([])
 const loading = ref(true)
@@ -299,8 +360,12 @@ const subtitle = computed(() => {
   return '所有未完成的提醒都在这里'
 })
 const overdueCount = computed(() => items.value.filter(isOverdue).length)
-const emptyTitle = computed(() => view.value === 'completed' ? '还没有完成记录' : view.value === 'today' ? '今天轻松了' : '这里还没有提醒')
-const emptyText = computed(() => view.value === 'completed' ? '完成的提醒会安静地收在这里。' : '把脑海里惦记的事情记下来，剩下的交给 Reminder。')
+const emptyTitle = computed(() => view.value === 'completed'
+  ? (completedRange.value === 'all' ? '还没有完成记录' : '这个时间段没有记录')
+  : view.value === 'today' ? '今天轻松了' : '这里还没有提醒')
+const emptyText = computed(() => view.value === 'completed'
+  ? (completedRange.value === 'all' ? '完成的提醒会安静地收在这里。' : '换一个时间段看看，或者选「全部」。')
+  : '把脑海里惦记的事情记下来，剩下的交给 Reminder。')
 
 const quickDateOpen = ref(false)
 const editingDateOpen = ref(false)
@@ -372,6 +437,17 @@ async function loadRouteData() {
   }
 }
 async function loadItems() {
+  if (view.value === 'completed') {
+    const res = await getCompletedHistory({
+      range: completedRange.value,
+      from: completedRange.value === 'custom' ? customFrom.value || undefined : undefined,
+      to: completedRange.value === 'custom' ? customTo.value || undefined : undefined,
+      list_id: selectedListID.value,
+      q: search.value || undefined,
+    })
+    completedItems.value = res.data.data || []
+    return
+  }
   const res = await getReminders({ view: view.value, list_id: selectedListID.value, q: search.value || undefined })
   items.value = res.data.data || []
 }
@@ -436,6 +512,38 @@ function setEditingKind(kind: ReminderKind) {
     editing.calendar = 'solar'
     editing.repeat_notify_minutes = 0
   }
+}
+// 已完成页的时间段选项。「全部」放第一个并作为默认，这样角标数字和列表条数
+// 从一开始就是一致的；自定义需要选完起止日期再点查询。
+const rangeOptions: { value: CompletedRangeOption; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'today', label: '今天' },
+  { value: 'week', label: '一周' },
+  { value: 'month', label: '一月' },
+  { value: 'year', label: '一年' },
+  { value: 'custom', label: '自定义' },
+]
+function setCompletedRange(option: CompletedRangeOption) {
+  completedRange.value = option
+  if (option !== 'custom') loadItems()
+}
+// 完成记录显示到分钟即可，且不显示「今天/明天」这类相对说法——它描述的是过去。
+function formatCompletedAt(value: string | null | undefined) {
+  if (!value) return ''
+  return formatFullDue(value)
+}
+async function openCompletedEntry(entry: CompletedItem) {
+  if (!entry.reminder_exists) return
+  try {
+    const res = await getReminder(entry.reminder_id)
+    if (res.data?.data) editItem(res.data.data)
+  } catch (err: any) {
+    showToast(err.response?.data?.message || '这条提醒已不存在', 'error')
+  }
+}
+function removeCompleted(entry: CompletedItem) {
+  if (!entry.reminder_exists) return
+  removeItem({ id: entry.reminder_id, title: entry.title })
 }
 function setPreset(kind: string) {
   preset.value = preset.value === kind ? '' : kind
@@ -531,10 +639,11 @@ async function toggleComplete(item: ReminderItem) {
 // 删除确认走应用内浮层（见 ConfirmDialog）：原生 confirm 在飞牛 App 的网页
 // 视图里是系统级弹窗，与应用样式割裂，手机端也容易被当成浏览器提示忽略。
 const removeVisible = ref(false)
-const removeTarget = ref<ReminderItem | null>(null)
+// 只用到 id 和标题，这样已完成页的历史记录也能复用同一个删除确认浮层。
+const removeTarget = ref<{ id: number; title: string } | null>(null)
 const removeLoading = ref(false)
 
-function removeItem(item: ReminderItem) {
+function removeItem(item: { id: number; title: string }) {
   removeTarget.value = item
   removeVisible.value = true
 }
