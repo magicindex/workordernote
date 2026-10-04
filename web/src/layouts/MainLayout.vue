@@ -134,6 +134,32 @@
             <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span v-if="summary.unread" class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-red-500"></span>
           </RouterLink>
+          <!-- 列表 / 日历 切换。放在主题按钮旁边，与它同为「换个看法」类操作。 -->
+          <div
+            v-if="showViewSwitch"
+            class="flex items-center gap-0.5 rounded-xl border border-border/70 bg-muted/55 p-0.5"
+            role="group"
+            aria-label="切换列表或日历视图"
+          >
+            <RouterLink
+              :to="listRoute"
+              class="inline-flex items-center gap-1 rounded-[0.6rem] px-2.5 py-2 text-xs font-bold transition"
+              :class="!isCalendar ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              title="列表视图"
+            >
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h16" stroke-width="2" stroke-linecap="round"/></svg>
+              <span class="hidden lg:inline">列表</span>
+            </RouterLink>
+            <RouterLink
+              to="/admin/calendar"
+              class="inline-flex items-center gap-1 rounded-[0.6rem] px-2.5 py-2 text-xs font-bold transition"
+              :class="isCalendar ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              title="日历视图"
+            >
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2.5" stroke-width="1.9"/><path d="M3 10h18M8 3v4m8-4v4" stroke-width="1.9" stroke-linecap="round"/></svg>
+              <span class="hidden lg:inline">日历</span>
+            </RouterLink>
+          </div>
           <UiThemeToggle />
           <div class="mx-1 hidden h-7 w-px bg-border sm:block"></div>
           <RouterLink to="/admin/profile" class="flex items-center gap-2 rounded-xl p-1.5 pr-2 hover:bg-muted">
@@ -270,6 +296,15 @@ watch(() => route.fullPath, () => {
 function isActive(to: string) {
   return to === '/admin' ? route.path === '/admin' : route.path === to
 }
+
+// 列表 / 日历 两种看法。只在提醒相关的页面上出现——系统配置、用户管理这些
+// 页面切到日历没有意义。
+const viewSwitchRoutes = ['Home', 'Planned', 'AllReminders', 'Completed', 'ReminderList', 'Calendar']
+const showViewSwitch = computed(() => viewSwitchRoutes.includes(String(route.name || '')))
+const isCalendar = computed(() => route.name === 'Calendar')
+// 从日历切回列表时回到「今天」，而不是记住上次那个智能清单：日历不区分清单，
+// 回来落在固定的入口更符合直觉。
+const listRoute = computed(() => (route.name === 'ReminderList' ? route.path : '/admin'))
 function listColor(color: string) {
   return ({ blue: '#3182f6', violet: '#8b5cf6', rose: '#f43f5e', amber: '#f59e0b', emerald: '#10b981' } as Record<string, string>)[color] || '#3182f6'
 }

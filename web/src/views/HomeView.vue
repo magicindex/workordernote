@@ -400,7 +400,27 @@ function debouncedLoad() {
   searchTimer = setTimeout(loadItems, 250)
 }
 
-watch(() => route.fullPath, loadRouteData)
+watch(() => route.fullPath, () => {
+  loadRouteData()
+  openRequestedEditor()
+})
+
+// 日历页点标题会带着 ?edit=<id> 跳过来。这里打开那条提醒的编辑面板，
+// 并立刻把参数从地址上抹掉，免得刷新或返回时又弹出一次。
+async function openRequestedEditor() {
+  const raw = route.query.edit
+  const id = Number(Array.isArray(raw) ? raw[0] : raw)
+  if (raw === undefined || !Number.isFinite(id) || id <= 0) return
+  const rest = { ...route.query }
+  delete rest.edit
+  router.replace({ path: route.path, query: rest })
+  try {
+    const res = await getReminder(id)
+    if (res.data?.data) editItem(res.data.data)
+  } catch {
+    showToast('这条提醒已不存在', 'error')
+  }
+}
 
 async function loadData() {
   loading.value = true
@@ -708,6 +728,7 @@ function refreshRealtimeData() {
 
 onMounted(() => {
   loadData()
+  openRequestedEditor()
   clockTimer = setInterval(() => { clockNow.value = Date.now() }, 60_000)
   window.addEventListener('open-quick-reminder', focusQuickAdd)
   window.addEventListener('reminder-realtime', refreshRealtimeData)

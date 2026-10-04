@@ -103,6 +103,25 @@ export interface LunarCalendarMonth {
   days: LunarDayInfo[]
 }
 
+// 日历视图里的一个到期提醒。含已完成项——日历要能看到「这天有哪些安排、
+// 哪些已经做完」。记事没有到期日，不会出现在这里。
+export interface CalendarItem {
+  id: number
+  title: string
+  list_id: number
+  list_name: string
+  /** 色名（blue/violet/rose/amber/emerald），沿用侧栏那套映射上色 */
+  list_color: string
+  due_at: string
+  /** 到期日在上海时区下的 YYYY-MM-DD，日历按它归格，避免浏览器时区导致跨天错位 */
+  due_date: string
+  all_day: boolean
+  completed: boolean
+  kind: ReminderKind
+  priority: number
+  repeat_rule: string
+}
+
 export interface LunarConvertResult {
   lunar_year: number
   lunar_month: number
@@ -115,6 +134,10 @@ export interface LunarConvertResult {
 
 export const getLunarCalendar = (year: number, month: number) =>
   request.get('/api/reminder/lunar', { params: { year, month } })
+
+// 日历网格数据。from/to 为 YYYY-MM-DD（上海时区），左闭右开。
+export const getCalendarItems = (params: { from: string; to: string }) =>
+  request.get('/api/reminder/calendar', { params })
 
 export const convertLunarDate = (params:
   | { year: number; month: number; day: number }

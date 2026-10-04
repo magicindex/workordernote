@@ -920,3 +920,57 @@ func setDefaultList(db *gorm.DB, userID, listID uint) error {
 			Update("is_default", true).Error
 	})
 }
+
+// listCalendarItems 返回 [from, to) 内到期的提醒，含已完成项，按到期时间升序。
+// 记事没有到期日（due_at 恒为 NULL），因此天然不会出现在日历里。
+func listCalendarItems(db *gorm.DB, userID uint, from, to time.Time) ([]CalendarItemDTO, error) {
+	var rows []Reminder
+	if err := db.Where("user_id = ? AND deleted_at IS NULL AND due_at IS NOT NULL AND due_at >= ? AND due_at < ?",
+		userID, from, to).Order("due_at ASC, id ASC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return []CalendarItemDTO{}, nil
+	}
+
+	// 清单名与颜色一次性取回，前端按清单给色块上色。
+	ids := make([]uint, 0, len(rows))
+	seen := make(map[uint]struct{}, len(rows))
+	for _, r := range rows {
+		if _, ok := seen[r.ListID]; !ok {
+			seen[r.ListID] = struct{}{}
+			ids = append(ids, r.ListID)
+		}
+	}
+	var lists []List
+	if err := db.Where("user_id = ? AND id IN ?", userID, ids).Find(&lists).Error; err != nil {
+		return nil, err
+	}
+	listByID := make(map[uint]List, len(lists))
+	for _, l := range lists {
+		listByID[l.ID] = l
+	}
+
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		return nil, err
+	}
+	result := make([]CalendarItemDTO, 0, len(rows))
+	for _, r := range rows {
+		if r.DueAt == nil {
+			continue
+		}
+		item := CalendarItemDTO{
+			ID: r.ID, Title: r.Title, ListID: r.ListID,
+			DueAt: *r.DueAt, DueDate: r.DueAt.In(loc).Format("2006-01-02"),
+			AllDay: r.AllDay, Completed: r.CompletedAt != nil,
+			Kind: r.Kind, Priority: r.Priority, RepeatRule: r.RepeatRule,
+		}
+		if l, ok := listByID[r.ListID]; ok {
+			item.ListName = l.Name
+			item.ListColor = l.Color
+		}
+		result = append(result, item)
+	}
+	return result, nil
+}

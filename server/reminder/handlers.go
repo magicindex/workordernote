@@ -29,6 +29,8 @@ func setupAuthRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	// 「已完成」单独一个接口：它读的是 completions 历史 ∪ reminders 的完成，
 	// 返回结构（CompletedItemDTO）与 /items 不同，并且支持时间段筛选。
 	group.GET("/completed", handleCompletedHistory(db))
+	// 日历视图：按日期区间取到期提醒（含已完成），供月历网格按天铺开。
+	group.GET("/calendar", handleCalendarItems(db))
 	group.POST("/items", handleCreateReminder(db))
 	group.GET("/items/:id", handleGetReminder(db))
 	group.PUT("/items/:id", handleUpdateReminder(db))
@@ -536,6 +538,43 @@ func handleCompletedHistory(db *gorm.DB) gin.HandlerFunc {
 		items, err := listCompletedHistory(db, currentUserID(c), rng, c.Query("q"), listID)
 		if err != nil {
 			response.ErrorInternal(c, "读取完成记录失败")
+			return
+		}
+		response.Success(c, items)
+	}
+}
+
+// handleCalendarItems 返回日历网格覆盖区间内的到期提醒（含已完成）。
+// from / to 为 YYYY-MM-DD（上海时区），区间左闭右开；跨度上限 70 天，
+// 一次最多覆盖两个多月的网格，避免客户端构造超大区间把库扫一遍。
+func handleCalendarItems(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		loc, err := time.LoadLocation("Asia/Shanghai")
+		if err != nil {
+			response.ErrorInternal(c, "时区数据不可用")
+			return
+		}
+		from, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(c.Query("from")), loc)
+		if err != nil {
+			response.ErrorBadRequest(c, "开始日期无效")
+			return
+		}
+		to, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(c.Query("to")), loc)
+		if err != nil {
+			response.ErrorBadRequest(c, "结束日期无效")
+			return
+		}
+		if !to.After(from) {
+			response.ErrorBadRequest(c, "结束日期必须晚于开始日期")
+			return
+		}
+		if to.Sub(from) > 70*24*time.Hour {
+			response.ErrorBadRequest(c, "日历一次最多查询 70 天")
+			return
+		}
+		items, err := listCalendarItems(db, currentUserID(c), from, to)
+		if err != nil {
+			response.ErrorInternal(c, "读取日历失败")
 			return
 		}
 		response.Success(c, items)
