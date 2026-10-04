@@ -120,10 +120,14 @@
           @click="setCompletedRange(opt.value)"
         >{{ opt.label }}</button>
       </div>
-      <!-- 后端算出来的实际区间（含当天）。放在这里是为了让「这个时间段是哪几天」
-           一眼可见：出问题时用户能立刻指出是哪一段不对，而不是只能猜。 -->
+      <!-- 后端算出来的实际区间（含当天）+ 生效的清单筛选。放在这里是为了让
+           「这个时间段是哪几天、还筛了哪些清单」一眼可见：条数不对时能立刻
+           看出是哪一层筛选造成的，而不是只能猜。 -->
       <p v-if="completedSpan" class="mt-2 text-[11px] font-medium text-muted-foreground">
         当前区间：<span class="font-bold text-foreground/80">{{ completedSpan }}</span>
+        <template v-if="completedFilterSummary">
+          <span class="mx-1">·</span>清单：<span class="font-bold text-foreground/80">{{ completedFilterSummary }}</span>
+        </template>
       </p>
       <!-- 选择显示哪些清单的完成记录；不选=全部。选择记在本地。 -->
       <ListFilter v-model="completedListFilter" :lists="lists" class="mt-3" />
@@ -278,6 +282,14 @@ const items = ref<ReminderItem[]>([])
 const completedItems = ref<CompletedItem[]>([])
 // 后端算出来的实际区间文案（含当天），显示在筛选器下方供核对。
 const completedSpan = ref('')
+// 生效中的清单筛选；空字符串=没筛（全部）。条数对不上时，第一眼要能看出
+// 是不是这层筛选造成的——它就写在「当前区间」后面。
+const completedFilterSummary = computed(() => {
+  const ids = completedListFilter.value
+  if (!ids.length) return ''
+  const names = lists.value.filter((l) => ids.includes(l.id)).map((l) => l.name)
+  return names.length ? names.join('、') : `${ids.length} 个清单`
+})
 const completedRange = ref<CompletedRangeOption>('all')
 // 已完成页显示哪些清单；空数组 = 全部
 const COMPLETED_FILTER_KEY = 'ui_completed_lists'
