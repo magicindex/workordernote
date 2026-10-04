@@ -98,7 +98,14 @@
         <h2 class="text-sm font-bold">{{ view === 'completed' ? completedItems.length : items.length }} 项</h2>
         <span v-if="view !== 'completed' && overdueCount" class="rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold text-rose-500">{{ overdueCount }} 项已过期</span>
       </div>
-      <button class="text-xs font-semibold text-muted-foreground hover:text-foreground" @click="loadData">刷新</button>
+      <div class="flex items-center gap-3">
+        <button
+          class="text-xs font-semibold text-muted-foreground hover:text-foreground disabled:opacity-50"
+          :disabled="exporting"
+          @click="handleExport"
+        >{{ exporting ? '导出中…' : '导出表格' }}</button>
+        <button class="text-xs font-semibold text-muted-foreground hover:text-foreground" @click="loadData">刷新</button>
+      </div>
     </div>
 
     <!-- 已完成的时间段筛选。记录来源包含 completions 历史（重复提醒的每次完成），
@@ -253,7 +260,7 @@ import ListFilter from '../components/ListFilter.vue'
 import LunarDatePicker from '../components/LunarDatePicker.vue'
 import RepeatNotifySelect from '../components/RepeatNotifySelect.vue'
 import {
-  completeReminder, createReminder, deleteReminder, getChannelStatuses, getCompletedHistory, getLists,
+  completeReminder, createReminder, deleteReminder, exportReminders, getChannelStatuses, getCompletedHistory, getLists,
   getReminder, getReminders, listIdsParam, restoreReminder, snoozeReminder, updateReminder,
   type ChannelStatus, type CompletedItem, type CompletedRangeOption, type ReminderChannel,
   type ReminderItem, type ReminderKind, type ReminderList, type SaveReminderInput
@@ -430,6 +437,38 @@ async function loadItems() {
   const res = await getReminders({ view: view.value, list_id: selectedListID.value, q: search.value || undefined })
   items.value = res.data.data || []
 }
+// 导出「当前屏幕上这一份筛选结果」。已完成页带时间段与清单筛选，列表页带视图/清单/搜索，
+// 参数与 loadItems 完全一致，避免导出内容和看到的列表对不上。
+const exporting = ref(false)
+async function handleExport() {
+  if (exporting.value) return
+  exporting.value = true
+  const completed = view.value === 'completed'
+  try {
+    const res = await exportReminders({
+      scope: completed ? 'completed' : 'active',
+      view: completed ? undefined : view.value,
+      range: completed ? completedRange.value : undefined,
+      from: completed && completedRange.value === 'custom' ? customFrom.value || undefined : undefined,
+      to: completed && completedRange.value === 'custom' ? customTo.value || undefined : undefined,
+      list_ids: listIdsParam(completed ? completedListFilter.value : (selectedListID.value ? [selectedListID.value] : [])),
+      list_id: completed && !completedListFilter.value.length ? selectedListID.value : undefined,
+      q: search.value || undefined,
+    })
+    const filename = completed ? 'completed-list.csv' : 'task-list.csv'
+    const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    window.URL.revokeObjectURL(url)
+    showToast(`已导出 ${filename}`, 'success')
+  } catch (err: any) {
+    showToast(err?.response?.data?.message || '导出失败', 'error')
+  } finally {
+    exporting.value = false
+  }
+}
 async function submitQuick() {
   if (!quick.title?.trim() || saving.value) return
   saving.value = true
@@ -488,9 +527,9 @@ function setQuickKind(kind: ReminderKind) {
 const rangeOptions: { value: CompletedRangeOption; label: string }[] = [
   { value: 'all', label: '全部' },
   { value: 'today', label: '今天' },
-  { value: 'week', label: '一周' },
-  { value: 'month', label: '一月' },
-  { value: 'year', label: '一年' },
+  { value: 'week', label: '本周' },
+  { value: 'month', label: '本月' },
+  { value: 'year', label: '本年' },
   { value: 'custom', label: '自定义' },
 ]
 function setCompletedRange(option: CompletedRangeOption) {

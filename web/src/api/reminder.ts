@@ -180,6 +180,20 @@ export const getCompletedHistory = (params: {
   list_id?: number
   q?: string
 }) => request.get('/api/reminder/completed', { params })
+
+/** 导出当前筛选结果成表格（CSV）。接口要带鉴权头，所以按 blob 取再前端落盘。 */
+export function exportReminders(params: {
+  scope?: 'active' | 'completed'
+  view?: string
+  range?: CompletedRangeOption
+  from?: string
+  to?: string
+  list_ids?: string
+  list_id?: number
+  q?: string
+}) {
+  return request.get('/api/reminder/export', { params, responseType: 'blob' })
+}
 export const getReminder = (id: number) => request.get(`/api/reminder/items/${id}`)
 export const createReminder = (data: SaveReminderInput) => request.post('/api/reminder/items', data)
 export const updateReminder = (id: number, data: SaveReminderInput) =>

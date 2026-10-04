@@ -9,7 +9,9 @@ server/smallgo-*
 
 # Data files (local dev data, DB, uploads, logs)
 server/data/
-data/
+# 只忽略仓库根目录的 data/：写成 data/ 会连 web/src/data/（迭代说明）一起忽略，
+# 那份源码必须入库，否则新克隆的仓库前端直接构建失败。
+/data/
 dev/data/
 *.db
 *.db-journal

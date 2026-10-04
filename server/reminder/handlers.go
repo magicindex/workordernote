@@ -31,6 +31,8 @@ func setupAuthRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	group.GET("/completed", handleCompletedHistory(db))
 	// 日历视图：按日期区间取到期提醒（含已完成），供月历网格按天铺开。
 	group.GET("/calendar", handleCalendarItems(db))
+	// 导出当前筛选结果成 CSV：scope=active 走列表口径，scope=completed 走完成记录口径。
+	group.GET("/export", handleExportReminders(db))
 	group.POST("/items", handleCreateReminder(db))
 	group.GET("/items/:id", handleGetReminder(db))
 	group.PUT("/items/:id", handleUpdateReminder(db))
