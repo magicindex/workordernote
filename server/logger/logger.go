@@ -67,6 +67,11 @@ func Init(logDir string, retentionDays int, mirrorToConsole bool) error {
 
 	// Always start the ticker so that a later admin change from 0 → N
 	// takes effect without a restart.
+	//
+	// 这里先把 done 取到局部变量再交给 goroutine：Close() 会把包级变量 l 置为 nil，
+	// 而 goroutine 若直接读 l.done，就会与 Close 竞态，在 Init 之后紧接着 Close
+	// （测试里很常见）时空指针 panic。goroutine 只认这个 channel，不再碰 l。
+	done := l.done
 	go func() {
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
@@ -76,7 +81,7 @@ func Init(logDir string, retentionDays int, mirrorToConsole bool) error {
 				if days := currentRetention(retentionDays); days > 0 {
 					cleanOldLogs(logDir, days)
 				}
-			case <-l.done:
+			case <-done:
 				return
 			}
 		}
