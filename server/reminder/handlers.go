@@ -552,8 +552,16 @@ func handleLunarConvert(db *gorm.DB) gin.HandlerFunc {
 // 参数：range = all | today | yesterday | week | month | lastmonth | year | custom
 // （默认 all 表示不限时间），custom 时另需 from / to（YYYY-MM-DD，按上海时区解释，含当天）；
 // 另支持 list_id 与 q（标题模糊搜索）。
+//
+// 返回 { items, span }：items 是完成记录，span 是这次实际生效的区间（含当天），
+// 前端把它显示在筛选器下方，用户能直接核对「这个时间段到底是哪几天」。
 func handleCompletedHistory(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		loc, err := time.LoadLocation("Asia/Shanghai")
+		if err != nil {
+			response.ErrorInternal(c, "时区数据不可用")
+			return
+		}
 		rng, err := ParseCompletedRange(c.Query("range"), c.Query("from"), c.Query("to"))
 		if err != nil {
 			response.ErrorBadRequest(c, err.Error())
@@ -564,7 +572,10 @@ func handleCompletedHistory(db *gorm.DB) gin.HandlerFunc {
 			response.ErrorInternal(c, "读取完成记录失败")
 			return
 		}
-		response.Success(c, items)
+		response.Success(c, gin.H{
+			"items": items,
+			"span":  DescribeCompletedRange(rng, loc),
+		})
 	}
 }
 

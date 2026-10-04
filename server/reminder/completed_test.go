@@ -168,7 +168,7 @@ func TestParseCompletedRange(t *testing.T) {
 		t.Fatalf("yesterday 终点应为今天 0 点，实际 %v", yesterday.End)
 	}
 
-	// 一周从周一算起（国内习惯）。
+	// 一周从周一算起（国内习惯），而且是**整周**：终点是下周一 0 点。
 	week, err := ParseCompletedRange("week", "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -179,22 +179,32 @@ func TestParseCompletedRange(t *testing.T) {
 	if week.Start.After(startOfToday) {
 		t.Fatalf("week 起点不应晚于今天 0 点，实际 %v", week.Start)
 	}
+	if week.End == nil || !week.End.Equal(week.Start.AddDate(0, 0, 7)) || week.End.Weekday() != time.Monday {
+		t.Fatalf("week 终点应是下周一 0 点（整周），实际 %v", week.End)
+	}
+	if week.Start.Day() > startOfToday.Day() && week.Start.Month() == startOfToday.Month() {
+		t.Fatalf("week 起点应落在本周，实际 %v", week.Start)
+	}
 
+	// 本月/今年都是整段：终点是下个月 1 号 / 次年 1 月 1 号，而不是「此刻」。
+	// 这一点是用户要求校准的重点：边界必须是固定的自然日历边界。
 	month, err := ParseCompletedRange("month", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if month.Start == nil || month.Start.Day() != 1 || month.Start.Month() != now.Month() {
-		t.Fatalf("month 起点应是本月 1 日，实际 %v", month.Start)
+	startOfThisMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+	if month.Start == nil || !month.Start.Equal(startOfThisMonth) {
+		t.Fatalf("month 起点应是本月 1 日 0 点，实际 %v", month.Start)
+	}
+	if month.End == nil || !month.End.Equal(startOfThisMonth.AddDate(0, 1, 0)) {
+		t.Fatalf("month 终点应是下月 1 日 0 点（整月），实际 %v", month.End)
 	}
 
-	// 上月是「整月闭区间」：从本月 1 号往前一个月，到本月 1 号为止。
-	// 跨年（1 月时上个月是去年 12 月）也必须对，所以直接和 Start 做月份差比较。
+	// 上月是整月闭区间：本月 1 号往前一个月 → 本月 1 号。
 	lastMonth, err := ParseCompletedRange("lastmonth", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	startOfThisMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
 	if lastMonth.Start == nil || !lastMonth.Start.Equal(startOfThisMonth.AddDate(0, -1, 0)) {
 		t.Fatalf("lastmonth 起点应是上个月 1 日，实际 %v", lastMonth.Start)
 	}
@@ -209,8 +219,12 @@ func TestParseCompletedRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if year.Start == nil || year.Start.Month() != time.January || year.Start.Day() != 1 || year.Start.Year() != now.Year() {
-		t.Fatalf("year 起点应是本年 1 月 1 日，实际 %v", year.Start)
+	startOfThisYear := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, loc)
+	if year.Start == nil || !year.Start.Equal(startOfThisYear) {
+		t.Fatalf("year 起点应是本年 1 月 1 日 0 点，实际 %v", year.Start)
+	}
+	if year.End == nil || !year.End.Equal(startOfThisYear.AddDate(1, 0, 0)) {
+		t.Fatalf("year 终点应是次年 1 月 1 日 0 点（整年），实际 %v", year.End)
 	}
 
 	// 自定义区间含结束日期当天，所以终点是「结束日期 + 1 天」。
@@ -236,6 +250,38 @@ func TestParseCompletedRange(t *testing.T) {
 		if _, err := ParseCompletedRange(bad[0], bad[1], bad[2]); err == nil {
 			t.Fatalf("参数 %v 应被拒绝", bad)
 		}
+	}
+}
+
+// 区间描述是给用户核对用的（界面上显示「当前区间」），所以要保证左闭右开的
+// 终点被正确回退一天：整月显示到 31 号，而不是下月 1 号。
+func TestDescribeCompletedRange(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	all := DescribeCompletedRange(CompletedRange{}, loc)
+	if all.Label != "不限时间" || all.Start != "" || all.End != "" {
+		t.Fatalf("全部区间描述错误：%+v", all)
+	}
+
+	start := time.Date(2026, 10, 1, 0, 0, 0, 0, loc)
+	end := time.Date(2026, 11, 1, 0, 0, 0, 0, loc)
+	month := DescribeCompletedRange(CompletedRange{Start: &start, End: &end}, loc)
+	if month.Label != "2026-10-01 ~ 2026-10-31" {
+		t.Fatalf("整月描述错误：%+v", month)
+	}
+
+	nextDay := start.AddDate(0, 0, 1)
+	oneDay := DescribeCompletedRange(CompletedRange{Start: &start, End: &nextDay}, loc)
+	if oneDay.Label != "2026-10-01" {
+		t.Fatalf("单日应只显示一天：%+v", oneDay)
+	}
+
+	openEnd := DescribeCompletedRange(CompletedRange{Start: &start}, loc)
+	if openEnd.Label != "2026-10-01 起" {
+		t.Fatalf("只有起点时的描述错误：%+v", openEnd)
 	}
 }
 

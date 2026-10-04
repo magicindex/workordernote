@@ -172,6 +172,7 @@ export function listIdsParam(ids: number[]): string | undefined {
   return ids.length ? ids.join(',') : undefined
 }
 // 「已完成」走独立接口：数据源是 completions 历史 ∪ reminders 的完成，支持时间段筛选。
+// 返回 { items, span }：span 是后端算出来的实际区间（含当天），给界面显示「当前区间」用。
 export const getCompletedHistory = (params: {
   range?: CompletedRangeOption
   from?: string

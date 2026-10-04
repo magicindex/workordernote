@@ -120,6 +120,11 @@
           @click="setCompletedRange(opt.value)"
         >{{ opt.label }}</button>
       </div>
+      <!-- 后端算出来的实际区间（含当天）。放在这里是为了让「这个时间段是哪几天」
+           一眼可见：出问题时用户能立刻指出是哪一段不对，而不是只能猜。 -->
+      <p v-if="completedSpan" class="mt-2 text-[11px] font-medium text-muted-foreground">
+        当前区间：<span class="font-bold text-foreground/80">{{ completedSpan }}</span>
+      </p>
       <!-- 选择显示哪些清单的完成记录；不选=全部。选择记在本地。 -->
       <ListFilter v-model="completedListFilter" :lists="lists" class="mt-3" />
       <div v-if="completedRange === 'custom'" class="mt-3 flex flex-wrap items-center gap-2">
@@ -271,6 +276,8 @@ const router = useRouter()
 const items = ref<ReminderItem[]>([])
 // 「已完成」的数据源与普通列表不同（历史表 ∪ 完成记录），单独存一份。
 const completedItems = ref<CompletedItem[]>([])
+// 后端算出来的实际区间文案（含当天），显示在筛选器下方供核对。
+const completedSpan = ref('')
 const completedRange = ref<CompletedRangeOption>('all')
 // 已完成页显示哪些清单；空数组 = 全部
 const COMPLETED_FILTER_KEY = 'ui_completed_lists'
@@ -431,7 +438,11 @@ async function loadItems() {
       list_id: completedListFilter.value.length ? undefined : selectedListID.value,
       q: search.value || undefined,
     })
-    completedItems.value = res.data.data || []
+    // 接口返回 { items, span }：span 是后端算出来的实际区间，直接显示出来，
+    // 免得「这个时间段到底是哪几天」只能靠猜（用户核对条数时最需要它）。
+    const payload = res.data.data || {}
+    completedItems.value = payload.items || []
+    completedSpan.value = payload.span?.label || ''
     return
   }
   const res = await getReminders({ view: view.value, list_id: selectedListID.value, q: search.value || undefined })
