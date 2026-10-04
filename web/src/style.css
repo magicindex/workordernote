@@ -13,6 +13,23 @@ html {
   text-size-adjust: 100%;
   /* Tailwind preflight 默认 1.5，中文界面下显得松散；收到 1.45 接近原生 App。 */
   line-height: 1.45;
+  /* 让浏览器用对应配色渲染「原生控件」——尤其是 <select> 的下拉弹层。
+     不写这条时：页面是深色（浅色文字 + 深色底），而弹层由系统按浅色画成白底，
+     结果是「白底浅字」，偏好设置里的主题模式下拉根本看不清。 */
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* 双保险：个别桌面环境/浏览器版本的下拉弹层不吃 color-scheme，会忽略上面的
+   设置继续用系统底色。直接把 option 的前景/背景钉成本应用的配色，
+   深浅两种模式下都不会出现「看不清」。 */
+select option,
+select optgroup {
+  background-color: rgb(var(--color-surface));
+  color: rgb(var(--color-foreground));
 }
 
 body {

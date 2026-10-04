@@ -1,20 +1,20 @@
 <template>
-  <div class="flex items-center gap-1.5">
-    <select :value="presetValue" class="w-full" @change="onPresetChange">
+  <div class="repeat-notify">
+    <select :value="presetValue" class="preset" @change="onPresetChange">
       <option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option>
       <option value="custom">自定义…</option>
     </select>
-    <div v-if="customizing" class="flex shrink-0 items-center gap-1">
+    <div v-if="customizing" class="custom">
       <input
         v-model.number="customValue"
         type="number"
         min="1"
         max="44640"
-        class="w-16"
+        class="custom-number"
         @change="applyCustom"
         @keydown.enter="applyCustom"
       />
-      <select v-model="customUnit" @change="applyCustom">
+      <select v-model="customUnit" class="custom-unit" @change="applyCustom">
         <option :value="1">分钟</option>
         <option :value="60">小时</option>
         <option :value="1440">天</option>
@@ -97,6 +97,16 @@ function applyCustom() {
 </script>
 
 <style scoped>
-select { @apply h-9 w-full rounded-xl border border-border bg-surface px-3 text-xs font-medium text-foreground outline-none focus:border-brand-500/50; }
-input { @apply h-9 rounded-xl border border-border bg-surface px-2 text-xs font-medium text-foreground outline-none focus:border-brand-500/50; }
+/* 这里只负责结构与占位，外观（高度 / 圆角 / 字号 / 内边距）交给宿主字段样式：
+   scoped 样式进不了子组件内部，写死一套尺寸必然在另一处对不齐，所以两处宿主
+   各自用 :deep() 把它对齐到本地的字段样式：
+     - ReminderEditor 的 .editor-field（与「重复 / 按农历循环」同一行）
+     - HomeView 快速新建的 .field-label + .compact-input（紧凑那排）
+   新增使用处时记得也给 .repeat-notify 的 select/input 补上字段样式。 */
+.repeat-notify { @apply flex items-center gap-1.5; }
+.repeat-notify .preset { @apply min-w-0 flex-1; }
+.repeat-notify .custom { @apply flex shrink-0 items-center gap-1.5; }
+/* 自定义时的两个小控件只收窄，高度跟着宿主走。 */
+.repeat-notify .custom-number { @apply w-16 shrink-0 text-center sm:w-20; }
+.repeat-notify .custom-unit { @apply w-auto shrink-0; }
 </style>

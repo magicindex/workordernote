@@ -752,5 +752,10 @@ function onShortcut(e: KeyboardEvent) {
 .empty-check { @apply absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_16px_35px_-12px_rgba(59,130,246,.65)]; }
 .empty-dot { @apply absolute h-2.5 w-2.5 rounded-full; }.dot-one { @apply left-0 top-5 bg-amber-400; }.dot-two { @apply right-1 top-1 bg-violet-400; }.dot-three { @apply bottom-0 right-6 bg-emerald-400; }
 .channel-check { @apply flex h-5 w-5 items-center justify-center rounded-full border border-current; }
+/* 「过期提醒频率」是子组件，scoped 样式穿不进去；快速新建这排字段用的是
+   .compact-input（h-9 + text-xs），所以把它对齐成同一套，避免这一格比
+   旁边的「清单 / 重复 / 按农历循环」高一截。 */
+.field-label :deep(.repeat-notify) { @apply mt-1.5; }
+.field-label :deep(.repeat-notify select), .field-label :deep(.repeat-notify input) { @apply h-9 w-full rounded-xl border border-border bg-surface px-3 text-xs font-medium text-foreground outline-none focus:border-brand-500/50; }
 .expand-enter-active, .expand-leave-active { transition: all .2s ease; }.expand-enter-from, .expand-leave-to { opacity: 0; transform: translateY(-6px); }
 </style>

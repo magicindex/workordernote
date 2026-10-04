@@ -247,6 +247,11 @@ async function save() {
 .editor-panel { @apply relative z-10 flex h-full w-full max-w-[510px] flex-col border-l border-border bg-background/95 shadow-2xl backdrop-blur-2xl; }
 .editor-field { @apply block text-xs font-bold text-muted-foreground; }
 .editor-field input, .editor-field textarea, .editor-field select { @apply mt-1.5 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground outline-none transition placeholder:text-muted-foreground/55 focus:border-brand-500/45 focus:ring-4 focus:ring-brand-500/10 sm:mt-2 sm:rounded-2xl sm:px-4 sm:py-3; }
+/* 「过期提醒频率」是子组件（RepeatNotifySelect），scoped 样式穿不进它内部，
+   上面那条选择器管不到它的控件，所以用 :deep() 把它对齐成同一套字段样式 ——
+   否则这一格比旁边「重复 / 按农历循环」矮一截、字号也小一号。 */
+.editor-field :deep(.repeat-notify) { @apply mt-1.5 sm:mt-2; }
+.editor-field :deep(.repeat-notify select), .editor-field :deep(.repeat-notify input) { @apply w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground outline-none transition focus:border-brand-500/45 focus:ring-4 focus:ring-brand-500/10 sm:rounded-2xl sm:px-4 sm:py-3; }
 .editor-field textarea { @apply resize-none leading-6; }
 .channel-option { @apply flex items-center gap-3 rounded-2xl border border-border bg-surface p-2.5 text-muted-foreground transition disabled:opacity-35 sm:p-3; }
 .channel-option.selected { @apply border-brand-500/30 bg-brand-500/10 text-brand-600 dark:text-brand-300; }
