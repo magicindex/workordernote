@@ -53,6 +53,8 @@
             class="cal-cell group flex flex-col rounded-xl border p-1 text-left transition sm:p-1.5"
             :class="cellClass(cell)"
             @click="selectedDate = cellKey(cell)"
+            @dblclick="openCreateForDate(cellKey(cell))"
+            :title="`双击在这天新建提醒`"
           >
             <div class="flex items-start justify-between gap-1">
               <span
@@ -96,8 +98,15 @@
       <!-- 选中日详情 -->
       <aside class="surface flex min-h-0 flex-col rounded-2xl p-3 sm:p-4">
         <div class="flex items-baseline justify-between gap-2">
-          <h3 class="text-sm font-extrabold sm:text-base">{{ selectedTitle }}</h3>
-          <span v-if="selectedLunar" class="text-[11px] font-semibold text-muted-foreground">{{ selectedLunar }}</span>
+          <div class="flex min-w-0 items-baseline gap-2">
+            <h3 class="text-sm font-extrabold sm:text-base">{{ selectedTitle }}</h3>
+            <span v-if="selectedLunar" class="truncate text-[11px] font-semibold text-muted-foreground">{{ selectedLunar }}</span>
+          </div>
+          <button
+            class="btn-secondary !h-8 shrink-0 !px-3 !text-[11px]"
+            :title="`在 ${selectedTitle} 新建提醒`"
+            @click="openCreateForDate(selectedDate)"
+          >＋ 新建</button>
         </div>
         <p v-if="selectedTags.length" class="mt-1 flex flex-wrap gap-1">
           <span v-for="tag in selectedTags" :key="tag.text" class="rounded-full px-2 py-0.5 text-[10px] font-bold" :class="tag.cls">{{ tag.text }}</span>
@@ -144,15 +153,17 @@
         <p v-else class="mt-4 flex-1 text-sm text-muted-foreground">这天没有安排。</p>
 
         <p class="mt-3 border-t border-border/60 pt-2.5 text-[11px] leading-4 text-muted-foreground">
-          点标题就地编辑；勾选即完成，重复提醒会自动排到下一次。
+          双击日期格在这天新建提醒；点标题就地编辑；勾选即完成，重复提醒会自动排到下一次。
         </p>
       </aside>
     </div>
 
-    <!-- 与列表页共用同一个提醒编辑器，改一处两边同时生效 -->
+    <!-- 与列表页共用同一个提醒编辑器，改一处两边同时生效。
+         editingId 为空、createPreset 有值 = 新建（双击日期格进来的）。 -->
     <ReminderEditor
       v-model="editorOpen"
       :reminder-id="editingId"
+      :preset="createPreset"
       :lists="lists"
       :channels="channels"
       @saved="onEditorSaved"
@@ -170,7 +181,7 @@ import Toast from '../components/Toast.vue'
 import { getAllConfigs } from '../api/config'
 import {
   completeReminder, getCalendarItems, getChannelStatuses, getLists, getLunarCalendar, listIdsParam, restoreReminder,
-  type CalendarItem, type ChannelStatus, type LunarDayInfo, type ReminderList,
+  type CalendarItem, type ChannelStatus, type LunarDayInfo, type ReminderList, type SaveReminderInput,
 } from '../api/reminder'
 
 const toast = reactive<{ message: string; type: 'success' | 'error' }>({ message: '', type: 'success' })
@@ -197,6 +208,8 @@ const lists = ref<ReminderList[]>([])
 const channels = ref<ChannelStatus[]>([])
 const editorOpen = ref(false)
 const editingId = ref<number | null>(null)
+// 新建模式的预填内容；非空即表示这次打开是「新建」而不是编辑。
+const createPreset = ref<SaveReminderInput | null>(null)
 
 // 日历任务字号：读「偏好设置 → 日历任务字号」，映射成像素后用 CSS 变量下发，
 // 格子里的小字、详情面板的标题、格子最小高度都跟着它走。
@@ -377,11 +390,42 @@ async function toggle(item: CalendarItem) {
 // 就地打开编辑器：与列表页共用同一个组件，不再跳走。
 // 编辑器保存后重新拉一次日历，改动立刻反映在格子里。
 function openEditor(item: CalendarItem) {
+  createPreset.value = null
   editingId.value = item.id
   editorOpen.value = true
 }
 async function onEditorSaved() {
   await load()
+}
+
+/**
+ * 双击日期格（或点「＋ 新建」）在这天新建提醒：弹出和列表页同一个编辑面板，
+ * 预填那天 20:00 —— 与首页「今天」默认 20:00 的约定保持一致。
+ * 清单沿用当前选中清单，没选就用默认清单，与首页快速新建同规则。
+ */
+function openCreateForDate(dateKey: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return
+  const [y, m, d] = dateKey.split('-').map(Number)
+  const due = new Date(y, m - 1, d, 20, 0, 0, 0)
+  editingId.value = null
+  createPreset.value = {
+    title: '', notes: '', kind: 'task',
+    list_id: listFilter.value.length === 1
+      ? listFilter.value[0]
+      : lists.value.find(x => x.is_default)?.id || lists.value[0]?.id || 0,
+    priority: 0, due_at: toLocalIso(due), all_day: false,
+    repeat_rule: 'none', calendar: 'solar', repeat_notify_minutes: 0, channels: ['inapp'],
+  }
+  editorOpen.value = true
+}
+
+// 后端 time.Time 只认 RFC3339，序列化时带上本机时区偏移，保住所选墙钟时间。
+function toLocalIso(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const offsetMinutes = -date.getTimezoneOffset()
+  const sign = offsetMinutes >= 0 ? '+' : '-'
+  const abs = Math.abs(offsetMinutes)
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
 }
 
 // 清单与通知渠道是编辑器需要的，字号设置来自「偏好设置」。三者都只拉一次，

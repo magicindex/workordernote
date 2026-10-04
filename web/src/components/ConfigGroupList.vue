@@ -138,6 +138,23 @@ const selectOptionLabelMap: Record<string, Record<string, string>> = {
     system: '跟随系统',
     light: '浅色',
     dark: '深色',
+    sun: '日出日落',
+  },
+  // 城市 id 与 web/src/utils/sun.ts 的 SUN_CITIES 一一对应，改一处要改两处。
+  sun_location: {
+    beijing: '北京', shanghai: '上海', tianjin: '天津', chongqing: '重庆',
+    guangzhou: '广州', shenzhen: '深圳', hangzhou: '杭州', nanjing: '南京',
+    suzhou: '苏州', wuxi: '无锡', changzhou: '常州', nantong: '南通',
+    yangzhou: '扬州', xuzhou: '徐州', ningbo: '宁波', wenzhou: '温州',
+    hefei: '合肥', fuzhou: '福州', xiamen: '厦门', nanchang: '南昌',
+    jinan: '济南', qingdao: '青岛', yantai: '烟台', zhengzhou: '郑州',
+    luoyang: '洛阳', wuhan: '武汉', changsha: '长沙', dongguan: '东莞',
+    foshan: '佛山', zhuhai: '珠海', shantou: '汕头', nanning: '南宁',
+    haikou: '海口', chengdu: '成都', kunming: '昆明', guiyang: '贵阳',
+    xian: '西安', lanzhou: '兰州', xining: '西宁', yinchuan: '银川',
+    urumqi: '乌鲁木齐', lhasa: '拉萨', hohhot: '呼和浩特', taiyuan: '太原',
+    shijiazhuang: '石家庄', shenyang: '沈阳', dalian: '大连', changchun: '长春',
+    harbin: '哈尔滨', kunshan: '昆山',
   },
   calendar_font_size: {
     small: '小',

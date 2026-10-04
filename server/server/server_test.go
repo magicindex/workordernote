@@ -1089,8 +1089,17 @@ func TestUserConfigMeta(t *testing.T) {
 		t.Fatalf("theme_mode default resolution wrong: %v", theme)
 	}
 	opts, ok := theme["options"].([]interface{})
-	if !ok || len(opts) != 3 {
+	if !ok || len(opts) != 4 {
 		t.Fatalf("theme_mode options wrong: %v", theme)
+	}
+	hasSun := false
+	for _, o := range opts {
+		if o == "sun" {
+			hasSun = true
+		}
+	}
+	if !hasSun {
+		t.Fatalf("theme_mode options missing sun: %v", theme)
 	}
 }
 

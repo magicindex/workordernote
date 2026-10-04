@@ -147,8 +147,11 @@ async function handleSave(key: string, value: string) {
       if (key === 'theme_mode') {
         const themeStore = useThemeStore()
         if (themeStore.mode !== value) {
-          themeStore.setMode(value as 'light' | 'dark' | 'system')
+          themeStore.setMode(value as 'light' | 'dark' | 'system' | 'sun')
         }
+      } else if (key === 'sun_location') {
+        // 位置改了就立刻重算：否则要点一下别的设置、或者刷新页面才生效。
+        useThemeStore().setSunCity(value)
       }
     } else {
       errorMsg.value = res.data?.message || '保存失败'

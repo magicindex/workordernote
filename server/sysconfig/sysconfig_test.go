@@ -63,9 +63,37 @@ func TestRegistryContainsBuiltins(t *testing.T) {
 	if theme.Type != TypeSelect || theme.Default != "system" || theme.Group != "appearance" {
 		t.Fatalf("theme_mode def wrong: %+v", theme)
 	}
-	if len(theme.Options) != 3 {
-		t.Fatalf("theme_mode options = %v, want 3 entries", theme.Options)
+	if len(theme.Options) != 4 {
+		t.Fatalf("theme_mode options = %v, want 4 entries (system/light/dark/sun)", theme.Options)
 	}
+	if !contains(theme.Options, "sun") {
+		t.Fatalf("theme_mode must offer the 日出日落 option: %v", theme.Options)
+	}
+
+	// 「日出日落位置」的默认值必须在可选城市里，否则前端会拿到一个算不出坐标的 id。
+	sun, ok := findDef(user, "sun_location")
+	if !ok {
+		t.Fatal("user registry missing sun_location")
+	}
+	if sun.Type != TypeSelect || sun.Group != "appearance" {
+		t.Fatalf("sun_location def wrong: %+v", sun)
+	}
+	if !contains(sun.Options, sun.Default) {
+		t.Fatalf("sun_location default %q not in options %v", sun.Default, sun.Options)
+	}
+	if len(sun.Options) < 20 {
+		t.Fatalf("sun_location only lists %d cities; too few to be useful", len(sun.Options))
+	}
+}
+
+// contains 是测试里的小工具：判定字符串切片里有没有某个值。
+func contains(values []string, want string) bool {
+	for _, v := range values {
+		if v == want {
+			return true
+		}
+	}
+	return false
 }
 
 // TestRegisterConfigDuplicatePanics ensures the registry refuses ambiguous

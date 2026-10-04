@@ -26,6 +26,30 @@ const (
 	TypeSelect ValueType = "select"
 )
 
+// sunLocationOptions 是「日出日落位置」可选城市。
+//
+// 这里是**校验用的取值表**，只认 id；中文名与经纬度在前端
+// web/src/utils/sun.ts 的 SUN_CITIES 里。两边必须一一对应：后端多一个 id，
+// 用户在设置里选了会存进去、但前端算不出坐标（会退回默认城市）；
+// 前端多一个 id，则设置里根本选不到。改城市时两个文件一起改。
+//
+// 顺序按直辖市 → 华东 → 华南 → 华中 → 华北 → 东北 → 西北 → 西南排，
+// 下拉框里看着顺一点，不是字典序。
+func sunLocationOptions() []string {
+	return []string{
+		"beijing", "shanghai", "tianjin", "chongqing",
+		"nanjing", "suzhou", "wuxi", "changzhou", "nantong", "yangzhou", "xuzhou", "kunshan",
+		"hangzhou", "ningbo", "wenzhou", "hefei", "fuzhou", "xiamen", "nanchang",
+		"jinan", "qingdao", "yantai",
+		"guangzhou", "shenzhen", "dongguan", "foshan", "zhuhai", "shantou", "nanning", "haikou",
+		"wuhan", "changsha", "zhengzhou", "luoyang",
+		"shijiazhuang", "taiyuan", "hohhot",
+		"shenyang", "dalian", "changchun", "harbin",
+		"xian", "lanzhou", "xining", "yinchuan", "urumqi",
+		"chengdu", "kunming", "guiyang", "lhasa",
+	}
+}
+
 // ConfigDef is the static definition of a registered config key.
 type ConfigDef struct {
 	Key         string
@@ -135,9 +159,15 @@ func init() {
 	})
 	RegisterConfig(ConfigDef{
 		Key: "theme_mode", Scope: ScopeUser, Type: TypeSelect,
-		Default: "system", Options: []string{"system", "light", "dark"},
+		Default: "system", Options: []string{"system", "light", "dark", "sun"},
 		Group: "appearance", Label: "主题模式",
-		Description: "界面配色方案",
+		Description: "界面配色方案；「日出日落」会按下方的位置自动切换浅色/深色",
+	})
+	RegisterConfig(ConfigDef{
+		Key: "sun_location", Scope: ScopeUser, Type: TypeSelect,
+		Default: "shanghai", Options: sunLocationOptions(),
+		Group: "appearance", Label: "日出日落位置",
+		Description: "「日出日落」主题按这里的经纬度计算；选离你最近的城市即可（不参与其它功能）",
 	})
 	RegisterConfig(ConfigDef{
 		Key: "calendar_font_size", Scope: ScopeUser, Type: TypeSelect,

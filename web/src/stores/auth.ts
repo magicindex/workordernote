@@ -165,9 +165,15 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const metaRes = await getUserConfigMeta()
       if (metaRes.data?.code === 0 && Array.isArray(metaRes.data.data)) {
+        // 主题模式与日出日落位置都以服务端配置为准（跨设备一致）。
+        // 位置先同步：切到「日出日落」时要立刻按正确城市算深浅色。
+        const sunItem = metaRes.data.data.find((it: any) => it.key === 'sun_location')
+        const themeStore = useThemeStore()
+        if (sunItem && typeof sunItem.value === 'string' && sunItem.value) {
+          themeStore.setSunCity(sunItem.value)
+        }
         const themeItem = metaRes.data.data.find((it: any) => it.key === 'theme_mode')
-        if (themeItem && ['system', 'light', 'dark'].includes(themeItem.value)) {
-          const themeStore = useThemeStore()
+        if (themeItem && ['system', 'light', 'dark', 'sun'].includes(themeItem.value)) {
           if (themeStore.mode !== themeItem.value) {
             themeStore.setMode(themeItem.value)
           }

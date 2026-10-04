@@ -5,9 +5,9 @@
       <aside class="editor-panel">
         <div class="flex items-center justify-between border-b border-border px-4 py-3 sm:px-6 sm:py-5">
           <div>
-            <p class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">提醒详情</p>
+            <p class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">{{ isCreate ? '新建' : '提醒详情' }}</p>
             <h2 class="mt-0.5 text-base font-extrabold sm:mt-1 sm:text-lg">
-              {{ editing.kind === 'note' ? '编辑记事' : '编辑提醒' }}
+              {{ (isCreate ? '新建' : '编辑') + (editing.kind === 'note' ? '记事' : '提醒') }}
             </h2>
           </div>
           <button class="row-action !opacity-100" aria-label="关闭" @click="close">
@@ -88,7 +88,7 @@ import { RouterLink } from 'vue-router'
 import LunarDatePicker from './LunarDatePicker.vue'
 import RepeatNotifySelect from './RepeatNotifySelect.vue'
 import {
-  getReminder, updateReminder,
+  createReminder, getReminder, updateReminder,
   type ChannelStatus, type ReminderChannel, type ReminderItem, type ReminderKind,
   type ReminderList, type SaveReminderInput,
 } from '../api/reminder'
@@ -97,6 +97,11 @@ const props = defineProps<{
   modelValue: boolean
   /** 要编辑的提醒 id；打开时按它拉一次最新数据（顺带拿到最新 version，减少保存冲突） */
   reminderId: number | null
+  /**
+   * 新建模式：给一份预填内容（日历里双击某天就用它带上那天的时间）。
+   * 有 preset 时忽略 reminderId，保存走创建接口。
+   */
+  preset?: SaveReminderInput | null
   lists: ReminderList[]
   channels: ChannelStatus[]
 }>()
@@ -106,6 +111,8 @@ const emit = defineEmits<{
   /** 保存成功。父组件据此刷新自己的列表/日历 */
   saved: []
 }>()
+
+const isCreate = computed(() => props.preset != null)
 
 const blankInput = (): SaveReminderInput & { id?: number } => ({
   title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: null,
@@ -156,10 +163,15 @@ function applyItem(item: ReminderItem) {
 }
 
 // 打开时按 id 拉最新数据：日历/列表里的那份可能是缓存，version 过期会保存失败。
-watch(() => [props.modelValue, props.reminderId], async ([open, id]) => {
+// 新建模式直接用 preset 填表，不请求、也不带 id。
+watch(() => [props.modelValue, props.reminderId, props.preset] as const, async ([open, id]) => {
   if (!open) { dateOpen.value = false; return }
   errorMsg.value = ''
   dateOpen.value = false
+  if (props.preset) {
+    Object.assign(editing, blankInput(), props.preset)
+    return
+  }
   if (!id) { errorMsg.value = '没有指定要编辑的提醒'; return }
   Object.assign(editing, blankInput(), { id: Number(id) })
   loading.value = true
@@ -212,12 +224,14 @@ function toggleEmailTarget(id: number) {
 function close() { emit('update:modelValue', false) }
 
 async function save() {
-  if (!editing.id || !editing.title?.trim() || saving.value) return
+  if (!editing.title?.trim() || saving.value) return
+  if (!isCreate.value && !editing.id) return
   saving.value = true
   errorMsg.value = ''
   try {
     const { id, ...payload } = editing
-    await updateReminder(id, payload)
+    if (isCreate.value) await createReminder(payload)
+    else await updateReminder(id as number, payload)
     emit('update:modelValue', false)
     emit('saved')
   } catch (err: any) {
