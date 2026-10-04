@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -101,8 +102,10 @@ func Parse() Config {
 	if C.UploadDir == "" {
 		C.UploadDir = filepath.Join(C.DataDir, "uploads")
 	}
+	// 用户显式给了 DB_PATH 就不要自作主张搬文件（见 migrateLegacyDBFile）
+	dbPathExplicit := C.DBPath != ""
 	if C.DBPath == "" {
-		C.DBPath = filepath.Join(C.DataDir, "db", "reminder.db")
+		C.DBPath = filepath.Join(C.DataDir, "db", dbFileName)
 	}
 	if C.LogDir == "" {
 		C.LogDir = filepath.Join(C.DataDir, "logs")
@@ -114,7 +117,50 @@ func Parse() Config {
 	os.MkdirAll(filepath.Join(C.DataDir, "uploads"), 0755)
 	os.MkdirAll(C.UploadDir, 0755)
 
+	if !dbPathExplicit {
+		migrateLegacyDBFile(C.DBPath)
+	}
+
 	return C
+}
+
+// dbFileName 是本分支的数据库文件名。上游叫 reminder.db，本分支改成项目名，
+// 免得数据库文件还挂着老项目的名字。
+const dbFileName = "workordernote.db"
+
+// legacyDBFileName 是上游沿用的库文件名，只用于升级时把老文件认出来。
+const legacyDBFileName = "reminder.db"
+
+// migrateLegacyDBFile 处理「库文件改名」这件事。
+//
+// 只把默认路径换掉是不够的：老部署升级上来时新路径不存在，程序会当场建一个空库，
+// 用户看到的就是「数据全没了」。所以这里在新库不存在、而老库存在时，把老库改名过来。
+//
+// -wal / -shm 是 SQLite 的预写日志与共享内存文件，必须跟着一起搬；只搬主文件的话，
+// 最近一次事务可能还在 wal 里，会被丢掉。
+//
+// 用户显式设置了 DB_PATH 时不猜：那时 C.DBPath 已经不指向默认目录下的老文件，
+// 这里自然什么都不做。
+func migrateLegacyDBFile(dbPath string) {
+	if _, err := os.Stat(dbPath); err == nil {
+		return // 新库已在，无需迁移
+	}
+	legacy := filepath.Join(filepath.Dir(dbPath), legacyDBFileName)
+	if _, err := os.Stat(legacy); err != nil {
+		return // 没有老库：全新安装
+	}
+	if err := os.Rename(legacy, dbPath); err != nil {
+		// 迁移失败不能硬闯：宁可让人看到报错，也不要静默建空库
+		log.Printf("[WARN] 数据库改名失败（%s → %s）：%v；将继续使用新路径，请检查文件权限", legacy, dbPath, err)
+		return
+	}
+	log.Printf("[INFO] 数据库文件已从 %s 改名为 %s（数据原样保留）", legacyDBFileName, filepath.Base(dbPath))
+	// 附件文件能搬就搬，失败不影响主库
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if _, err := os.Stat(legacy + suffix); err == nil {
+			_ = os.Rename(legacy+suffix, dbPath+suffix)
+		}
+	}
 }
 
 // PrintHelp prints a user-facing guide to the startup parameters. It is wired
