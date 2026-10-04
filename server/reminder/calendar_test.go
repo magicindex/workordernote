@@ -53,7 +53,7 @@ func TestListCalendarItems(t *testing.T) {
 	}
 
 	// [3/10, 3/17) —— 含 10 日与 16 日，不含 9 日与 17 日。
-	items, err := listCalendarItems(appDB, userID, at(10, 0), at(17, 0))
+	items, err := listCalendarItems(appDB, userID, at(10, 0), at(17, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestListCalendarItems(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	day, err := listCalendarItems(appDB, userID, at(20, 0), at(21, 0))
+	day, err := listCalendarItems(appDB, userID, at(20, 0), at(21, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestListCalendarItems(t *testing.T) {
 	}
 
 	// 空区间返回空切片而不是 nil，前端可以直接遍历。
-	empty, err := listCalendarItems(appDB, userID, at(1, 0), at(2, 0))
+	empty, err := listCalendarItems(appDB, userID, at(1, 0), at(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

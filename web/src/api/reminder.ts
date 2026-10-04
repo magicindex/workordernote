@@ -136,7 +136,7 @@ export const getLunarCalendar = (year: number, month: number) =>
   request.get('/api/reminder/lunar', { params: { year, month } })
 
 // 日历网格数据。from/to 为 YYYY-MM-DD（上海时区），左闭右开。
-export const getCalendarItems = (params: { from: string; to: string }) =>
+export const getCalendarItems = (params: { from: string; to: string; list_ids?: string }) =>
   request.get('/api/reminder/calendar', { params })
 
 export const convertLunarDate = (params:
@@ -166,11 +166,17 @@ export const deleteList = (id: number) => request.delete(`/api/reminder/lists/${
 
 export const getReminders = (params: { view?: string; list_id?: number; q?: string }) =>
   request.get('/api/reminder/items', { params })
+
+/** 多清单筛选参数：把 id 数组拼成后端认的 list_ids=1,2,3。 */
+export function listIdsParam(ids: number[]): string | undefined {
+  return ids.length ? ids.join(',') : undefined
+}
 // 「已完成」走独立接口：数据源是 completions 历史 ∪ reminders 的完成，支持时间段筛选。
 export const getCompletedHistory = (params: {
   range?: CompletedRangeOption
   from?: string
   to?: string
+  list_ids?: string
   list_id?: number
   q?: string
 }) => request.get('/api/reminder/completed', { params })

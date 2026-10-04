@@ -19,9 +19,13 @@
         <h2 class="ml-1 text-base font-extrabold tracking-tight sm:text-lg">{{ monthTitle }}</h2>
         <span v-if="lunarYearName" class="hidden text-xs font-semibold text-muted-foreground md:inline">{{ lunarYearName }}</span>
       </div>
-      <div class="flex items-center gap-3 text-[11px] font-semibold text-muted-foreground sm:text-xs">
-        <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-brand-500"></i>未完成 {{ openCount }}</span>
-        <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-emerald-500"></i>已完成 {{ doneCount }}</span>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <!-- 选择哪些清单显示在日历里；不选=全部。选择记在本地。 -->
+        <ListFilter v-model="listFilter" :lists="lists" />
+        <div class="flex items-center gap-3 text-[11px] font-semibold text-muted-foreground sm:text-xs">
+          <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-brand-500"></i>未完成 {{ openCount }}</span>
+          <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-emerald-500"></i>已完成 {{ doneCount }}</span>
+        </div>
       </div>
     </div>
 
@@ -159,12 +163,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import ListFilter from '../components/ListFilter.vue'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import Toast from '../components/Toast.vue'
 import { getAllConfigs } from '../api/config'
 import {
-  completeReminder, getCalendarItems, getChannelStatuses, getLists, getLunarCalendar, restoreReminder,
+  completeReminder, getCalendarItems, getChannelStatuses, getLists, getLunarCalendar, listIdsParam, restoreReminder,
   type CalendarItem, type ChannelStatus, type LunarDayInfo, type ReminderList,
 } from '../api/reminder'
 
@@ -195,6 +200,21 @@ const editingId = ref<number | null>(null)
 
 // 日历任务字号：读「偏好设置 → 日历任务字号」，映射成像素后用 CSS 变量下发，
 // 格子里的小字、详情面板的标题、格子最小高度都跟着它走。
+// 日历里显示哪些清单；空数组 = 全部。跟人走、跟设备走，存本地即可。
+const FILTER_KEY = 'ui_calendar_lists'
+const listFilter = ref<number[]>(readFilter())
+function readFilter(): number[] {
+  try {
+    const raw = localStorage.getItem(FILTER_KEY)
+    const arr = raw ? JSON.parse(raw) : []
+    return Array.isArray(arr) ? arr.filter((n) => typeof n === 'number' && n > 0) : []
+  } catch { return [] }
+}
+watch(listFilter, (v) => {
+  try { localStorage.setItem(FILTER_KEY, JSON.stringify(v)) } catch { /* 隐私模式忽略 */ }
+  void load()
+})
+
 const FONT_SIZES: Record<string, number> = { small: 9, medium: 10, large: 12, xlarge: 13 }
 const fontSizeKey = ref('medium')
 const calendarFontPx = computed(() => FONT_SIZES[fontSizeKey.value] ?? FONT_SIZES.medium)
@@ -314,7 +334,11 @@ async function load() {
       items.value = []
       return
     }
-    const res = await getCalendarItems({ from: rangeStart.value, to: rangeEnd.value })
+    const res = await getCalendarItems({
+      from: rangeStart.value,
+      to: rangeEnd.value,
+      list_ids: listIdsParam(listFilter.value),
+    })
     items.value = res.data?.data || []
   } catch (err: any) {
     errorMsg.value = err.response?.data?.message || '加载日历失败'

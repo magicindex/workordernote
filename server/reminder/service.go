@@ -415,7 +415,7 @@ func parseChannelTargets(raw string) []uint {
 	return ids
 }
 
-func listReminders(db *gorm.DB, userID uint, view, query string, listID uint) ([]ReminderDTO, error) {
+func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint) ([]ReminderDTO, error) {
 	var rows []Reminder
 	q := db.Where("user_id = ? AND deleted_at IS NULL", userID)
 	now := time.Now()
@@ -433,8 +433,8 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listID uint) ([
 	default:
 		q = q.Where("completed_at IS NULL")
 	}
-	if listID > 0 {
-		q = q.Where("list_id = ?", listID)
+	if len(listIDs) > 0 {
+		q = q.Where("list_id IN ?", listIDs)
 	}
 	if query = strings.TrimSpace(query); query != "" {
 		like := "%" + query + "%"
@@ -448,13 +448,15 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listID uint) ([
 	}
 
 	reminderIDs := make([]uint, 0, len(rows))
-	listIDs := make([]uint, 0, len(rows))
+	// 这里是「这批提醒涉及到的清单 id」，用于一次性取回清单名；
+	// 与入参 listIDs（筛选条件）不是一回事，故另起名字。
+	ownerListIDs := make([]uint, 0, len(rows))
 	seenLists := make(map[uint]struct{})
 	for _, row := range rows {
 		reminderIDs = append(reminderIDs, row.ID)
 		if _, ok := seenLists[row.ListID]; !ok {
 			seenLists[row.ListID] = struct{}{}
-			listIDs = append(listIDs, row.ListID)
+			ownerListIDs = append(ownerListIDs, row.ListID)
 		}
 	}
 
@@ -475,7 +477,7 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listID uint) ([
 	}
 
 	var lists []List
-	if err := db.Where("user_id = ? AND id IN ?", userID, listIDs).Find(&lists).Error; err != nil {
+	if err := db.Where("user_id = ? AND id IN ?", userID, ownerListIDs).Find(&lists).Error; err != nil {
 		return nil, err
 	}
 	listNames := make(map[uint]string, len(lists))
@@ -781,7 +783,7 @@ func ParseCompletedRange(option, from, to string) (CompletedRange, error) {
 //
 // 两个来源天然互不重叠：重复提醒完成时走历史表并把 completed_at 留空，
 // 非重复提醒与记事则只写 completed_at，因此不会重复计数。
-func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query string, listID uint) ([]CompletedItemDTO, error) {
+func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query string, listIDs []uint) ([]CompletedItemDTO, error) {
 	var history []Completion
 	hq := db.Where("user_id = ?", userID)
 	if rng.Start != nil {
@@ -805,8 +807,8 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 	if rng.End != nil {
 		rq = rq.Where("completed_at < ?", *rng.End)
 	}
-	if listID > 0 {
-		rq = rq.Where("list_id = ?", listID)
+	if len(listIDs) > 0 {
+		rq = rq.Where("list_id IN ?", listIDs)
 	}
 	if query != "" {
 		like := "%" + query + "%"
@@ -874,7 +876,8 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 			item.RepeatRule = owner.RepeatRule
 			item.ReminderExists = owner.DeletedAt == nil
 		}
-		if listID > 0 && item.ListID != listID {
+		// 历史行本身不带清单归属，只能回查后在这里按清单过滤
+		if len(listIDs) > 0 && !containsID(listIDs, item.ListID) {
 			continue
 		}
 		result = append(result, item)
@@ -900,6 +903,16 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 // 聚合语句里，这样 /summary 仍然只发 2 条查询（口径与 listCompletedHistory 的
 // 「不限时间」一致）。
 
+// containsID 判断 id 是否在列表里（清单筛选用的顺序无关小集合）。
+func containsID(ids []uint, want uint) bool {
+	for _, id := range ids {
+		if id == want {
+			return true
+		}
+	}
+	return false
+}
+
 // setDefaultList 把指定清单设为该用户唯一的默认清单。默认清单必须恒有且唯一：
 // 新建提醒不带清单时、删除清单后归置提醒时都依赖它（见 ensureDefaultList）。
 func setDefaultList(db *gorm.DB, userID, listID uint) error {
@@ -923,10 +936,14 @@ func setDefaultList(db *gorm.DB, userID, listID uint) error {
 
 // listCalendarItems 返回 [from, to) 内到期的提醒，含已完成项，按到期时间升序。
 // 记事没有到期日（due_at 恒为 NULL），因此天然不会出现在日历里。
-func listCalendarItems(db *gorm.DB, userID uint, from, to time.Time) ([]CalendarItemDTO, error) {
+func listCalendarItems(db *gorm.DB, userID uint, from, to time.Time, listIDs []uint) ([]CalendarItemDTO, error) {
 	var rows []Reminder
-	if err := db.Where("user_id = ? AND deleted_at IS NULL AND due_at IS NOT NULL AND due_at >= ? AND due_at < ?",
-		userID, from, to).Order("due_at ASC, id ASC").Find(&rows).Error; err != nil {
+	q := db.Where("user_id = ? AND deleted_at IS NULL AND due_at IS NOT NULL AND due_at >= ? AND due_at < ?",
+		userID, from, to)
+	if len(listIDs) > 0 {
+		q = q.Where("list_id IN ?", listIDs)
+	}
+	if err := q.Order("due_at ASC, id ASC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	if len(rows) == 0 {

@@ -240,7 +240,7 @@ func TestListRemindersLoadsRelatedDataInConstantQueries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	items, err := listReminders(appDB, userID, "all", "", 0)
+	items, err := listReminders(appDB, userID, "all", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

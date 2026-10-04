@@ -274,15 +274,43 @@ func handleDeleteList(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// parseListFilter 解析清单筛选参数。两种写法都认：
+//
+//	list_id=3       单个（兼容旧调用）
+//	list_ids=1,2,3  多个，用于「选择哪些清单在视图里显示」
+//
+// 空值、全非法值都返回 nil，表示不筛选（即全部清单）。
+func parseListFilter(c *gin.Context) []uint {
+	raw := strings.TrimSpace(c.Query("list_ids"))
+	if raw == "" {
+		raw = strings.TrimSpace(c.Query("list_id"))
+	}
+	if raw == "" {
+		return nil
+	}
+	seen := make(map[uint]struct{})
+	ids := make([]uint, 0, 4)
+	for _, part := range strings.Split(raw, ",") {
+		n, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil || n <= 0 {
+			continue
+		}
+		id := uint(n)
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
+}
+
 func handleListReminders(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var listID uint
-		if raw := c.Query("list_id"); raw != "" {
-			if n, err := strconv.ParseUint(raw, 10, 64); err == nil {
-				listID = uint(n)
-			}
-		}
-		items, err := listReminders(db, currentUserID(c), c.DefaultQuery("view", "today"), c.Query("q"), listID)
+		items, err := listReminders(db, currentUserID(c), c.DefaultQuery("view", "today"), c.Query("q"), parseListFilter(c))
 		if err != nil {
 			response.ErrorInternal(c, "读取提醒失败")
 			return
@@ -529,13 +557,7 @@ func handleCompletedHistory(db *gorm.DB) gin.HandlerFunc {
 			response.ErrorBadRequest(c, err.Error())
 			return
 		}
-		var listID uint
-		if raw := strings.TrimSpace(c.Query("list_id")); raw != "" {
-			if n, convErr := strconv.Atoi(raw); convErr == nil && n > 0 {
-				listID = uint(n)
-			}
-		}
-		items, err := listCompletedHistory(db, currentUserID(c), rng, c.Query("q"), listID)
+		items, err := listCompletedHistory(db, currentUserID(c), rng, c.Query("q"), parseListFilter(c))
 		if err != nil {
 			response.ErrorInternal(c, "读取完成记录失败")
 			return
@@ -572,7 +594,7 @@ func handleCalendarItems(db *gorm.DB) gin.HandlerFunc {
 			response.ErrorBadRequest(c, "日历一次最多查询 70 天")
 			return
 		}
-		items, err := listCalendarItems(db, currentUserID(c), from, to)
+		items, err := listCalendarItems(db, currentUserID(c), from, to, parseListFilter(c))
 		if err != nil {
 			response.ErrorInternal(c, "读取日历失败")
 			return

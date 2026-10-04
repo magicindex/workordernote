@@ -73,7 +73,7 @@ func TestCompletedHistoryUnionsReminderAndHistorySources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	all, err := listCompletedHistory(appDB, userID, CompletedRange{}, "", 0)
+	all, err := listCompletedHistory(appDB, userID, CompletedRange{}, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestCompletedHistoryUnionsReminderAndHistorySources(t *testing.T) {
 	if err := deleteReminder(appDB, userID, repeating.ID); err != nil {
 		t.Fatal(err)
 	}
-	afterDelete, err := listCompletedHistory(appDB, userID, CompletedRange{}, "", 0)
+	afterDelete, err := listCompletedHistory(appDB, userID, CompletedRange{}, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,5 +256,105 @@ func TestSetDefaultListKeepsExactlyOneDefault(t *testing.T) {
 	// 别人的清单不能设为默认。
 	if err := setDefaultList(appDB, 999, other.ID); err == nil {
 		t.Fatal("把不属于该用户的清单设为默认应被拒绝")
+	}
+}
+
+// 多清单筛选：日历与已完成页都靠它决定「显示哪些清单」。
+func TestMultiListFilter(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const userID = 31
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, err := ensureDefaultList(appDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := List{UserID: userID, Name: "工作", Color: "violet", Icon: "list", Position: 2}
+	if err := appDB.Create(&other).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	due := time.Date(2026, time.May, 10, 9, 0, 0, 0, loc)
+	mk := func(title string, listID uint) ReminderDTO {
+		t.Helper()
+		d := due
+		item, err := createReminder(appDB, userID, SaveReminderInput{
+			Title: title, ListID: listID, DueAt: &d, RepeatRule: "none",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return item
+	}
+	a := mk("默认清单里的", base.ID)
+	b := mk("工作清单里的", other.ID)
+
+	from := time.Date(2026, time.May, 10, 0, 0, 0, 0, loc)
+	to := time.Date(2026, time.May, 11, 0, 0, 0, 0, loc)
+
+	// 不筛选 = 全部
+	all, err := listCalendarItems(appDB, userID, from, to, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("不筛选应返回 2 条，实际 %d", len(all))
+	}
+
+	// 只选默认清单
+	onlyBase, err := listCalendarItems(appDB, userID, from, to, []uint{base.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(onlyBase) != 1 || onlyBase[0].ID != a.ID {
+		t.Fatalf("按默认清单筛选应只剩 1 条，实际 %+v", onlyBase)
+	}
+
+	// 多选 = 两个都要
+	both, err := listCalendarItems(appDB, userID, from, to, []uint{base.ID, other.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(both) != 2 {
+		t.Fatalf("多选两个清单应返回 2 条，实际 %d", len(both))
+	}
+
+	// 选中一个不存在的清单 = 空
+	none, err := listCalendarItems(appDB, userID, from, to, []uint{9999})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(none) != 0 {
+		t.Fatalf("选中不存在的清单应为空，实际 %d", len(none))
+	}
+
+	// 完成一条，验证已完成页同样支持多清单筛选
+	if _, err := completeReminder(appDB, userID, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	histAll, err := listCompletedHistory(appDB, userID, CompletedRange{}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(histAll) != 1 {
+		t.Fatalf("已完成不筛选应有 1 条，实际 %d", len(histAll))
+	}
+	histBase, err := listCompletedHistory(appDB, userID, CompletedRange{}, "", []uint{base.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(histBase) != 0 {
+		t.Fatalf("按默认清单筛已完成应为 0 条，实际 %d", len(histBase))
+	}
+	histOther, err := listCompletedHistory(appDB, userID, CompletedRange{}, "", []uint{other.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(histOther) != 1 || histOther[0].ReminderID != b.ID {
+		t.Fatalf("按工作清单筛已完成应有 1 条，实际 %+v", histOther)
 	}
 }

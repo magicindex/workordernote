@@ -113,6 +113,8 @@
           @click="setCompletedRange(opt.value)"
         >{{ opt.label }}</button>
       </div>
+      <!-- 选择显示哪些清单的完成记录；不选=全部。选择记在本地。 -->
+      <ListFilter v-model="completedListFilter" :lists="lists" class="mt-3" />
       <div v-if="completedRange === 'custom'" class="mt-3 flex flex-wrap items-center gap-2">
         <input v-model="customFrom" type="date" class="compact-input !w-auto" aria-label="开始日期" />
         <span class="text-xs text-muted-foreground">至</span>
@@ -247,11 +249,12 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import ListFilter from '../components/ListFilter.vue'
 import LunarDatePicker from '../components/LunarDatePicker.vue'
 import RepeatNotifySelect from '../components/RepeatNotifySelect.vue'
 import {
   completeReminder, createReminder, deleteReminder, getChannelStatuses, getCompletedHistory, getLists,
-  getReminder, getReminders, restoreReminder, snoozeReminder, updateReminder,
+  getReminder, getReminders, listIdsParam, restoreReminder, snoozeReminder, updateReminder,
   type ChannelStatus, type CompletedItem, type CompletedRangeOption, type ReminderChannel,
   type ReminderItem, type ReminderKind, type ReminderList, type SaveReminderInput
 } from '../api/reminder'
@@ -262,6 +265,20 @@ const items = ref<ReminderItem[]>([])
 // 「已完成」的数据源与普通列表不同（历史表 ∪ 完成记录），单独存一份。
 const completedItems = ref<CompletedItem[]>([])
 const completedRange = ref<CompletedRangeOption>('all')
+// 已完成页显示哪些清单；空数组 = 全部
+const COMPLETED_FILTER_KEY = 'ui_completed_lists'
+const completedListFilter = ref<number[]>(readCompletedFilter())
+function readCompletedFilter(): number[] {
+  try {
+    const raw = localStorage.getItem(COMPLETED_FILTER_KEY)
+    const arr = raw ? JSON.parse(raw) : []
+    return Array.isArray(arr) ? arr.filter((n) => typeof n === 'number' && n > 0) : []
+  } catch { return [] }
+}
+watch(completedListFilter, (v) => {
+  try { localStorage.setItem(COMPLETED_FILTER_KEY, JSON.stringify(v)) } catch { /* 隐私模式忽略 */ }
+  if (view.value === 'completed') void loadItems()
+})
 const customFrom = ref('')
 const customTo = ref('')
 const lists = ref<ReminderList[]>([])
@@ -402,7 +419,9 @@ async function loadItems() {
       range: completedRange.value,
       from: completedRange.value === 'custom' ? customFrom.value || undefined : undefined,
       to: completedRange.value === 'custom' ? customTo.value || undefined : undefined,
-      list_id: selectedListID.value,
+      // 已完成页自己带清单筛选；进具体清单时（列表页）仍有 selectedListID 兜底
+      list_ids: listIdsParam(completedListFilter.value),
+      list_id: completedListFilter.value.length ? undefined : selectedListID.value,
       q: search.value || undefined,
     })
     completedItems.value = res.data.data || []
