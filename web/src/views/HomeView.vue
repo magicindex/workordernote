@@ -272,13 +272,20 @@ const search = ref('')
 const quickInput = ref<HTMLInputElement | null>(null)
 const quickFocused = ref(false)
 const quickExpanded = ref(false)
-const preset = ref('')
+const preset = ref('today')
 const editorOpen = ref(false)
 const clockNow = ref(Date.now())
 const toast = reactive<{ message: string; type: 'success' | 'error' }>({ message: '', type: 'success' })
 
+// 新建提醒默认落在「今天」。时间沿用「今天」芯片既有的 20:00 约定，
+// 这样默认值与芯片点亮状态一致，不会出现「日期是今天、芯片却没点亮」的错位。
+function defaultQuickDue(): string {
+  const d = new Date()
+  d.setHours(20, 0, 0, 0)
+  return toLocalIso(d)
+}
 const blankInput = (): SaveReminderInput => ({
-  title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: null,
+  title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: defaultQuickDue(),
   all_day: false, repeat_rule: 'none', calendar: 'solar', repeat_notify_minutes: 0, channels: ['inapp'],
 })
 const quick = reactive<SaveReminderInput>(blankInput())
@@ -421,7 +428,8 @@ async function submitQuick() {
       kind: isNote ? 'note' : 'task',
       list_id: selectedListID.value || lists.value.find(x => x.is_default)?.id || lists.value[0]?.id || 0,
     })
-    preset.value = ''
+    // 归位到「今天」：新建提醒默认带今天 20:00，芯片状态也要跟着点亮
+    preset.value = isNote ? '' : 'today'
     quickExpanded.value = false
     quickFocused.value = false
     if (isNote) {

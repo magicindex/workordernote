@@ -146,6 +146,12 @@ func init() {
 		Description: "日历视图里每天那些任务文字的字体大小",
 	})
 	RegisterConfig(ConfigDef{
+		Key: "default_view", Scope: ScopeUser, Type: TypeSelect,
+		Default: "list", Options: []string{"list", "calendar"},
+		Group: "appearance", Label: "默认首页",
+		Description: "打开应用时先进哪个视图；之后仍可随时用右上角按钮切换",
+	})
+	RegisterConfig(ConfigDef{
 		Key: "log_retention_days", Scope: ScopeSystem, Type: TypeInt,
 		Default: "30",
 		Group:   "system", Label: "日志与操作记录保留天数",

@@ -5,7 +5,7 @@
       <span class="ambient-orb ambient-orb-two"></span>
     </div>
 
-    <aside class="sidebar" :class="{ 'sidebar-open': mobileOpen }">
+    <aside class="sidebar" :class="[mobileOpen ? 'sidebar-open' : '', railCollapsed ? '' : 'sidebar-docked']">
       <div class="flex h-full flex-col">
         <div class="flex items-center justify-between px-5 pb-5 pt-6">
           <RouterLink to="/admin" class="group flex items-center gap-3" @click="mobileOpen = false">
@@ -27,7 +27,7 @@
           </button>
         </div>
 
-        <button class="new-reminder-button mx-4" @click="openQuickAdd">
+        <button v-if="canCreate" class="new-reminder-button mx-4" @click="openQuickAdd">
           <span class="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
             <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2.2" stroke-linecap="round"/></svg>
           </span>
@@ -94,7 +94,25 @@
           </RouterLink>
         </nav>
 
-        <div class="border-t border-border/70 p-3">
+        <div class="border-t border-border/70">
+          <!-- 设置区可折叠：折叠后清单列表能多显示好几项。
+               默认折叠，展开状态记在本地。 -->
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-4 py-2.5 text-left transition hover:bg-muted/60"
+            :aria-expanded="settingsOpen"
+            @click="toggleSettings"
+          >
+            <span class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground/75">设置</span>
+            <span v-if="!settingsOpen && hiddenSettingCount" class="nav-count">{{ hiddenSettingCount }}</span>
+            <svg
+              viewBox="0 0 24 24"
+              class="ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200"
+              :class="{ 'rotate-180': settingsOpen }"
+              fill="none" stroke="currentColor"
+            ><path d="m6 15 6-6 6 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div v-show="settingsOpen" class="max-h-[46vh] overflow-y-auto px-3 pb-3">
           <RouterLink to="/admin/channels" class="nav-row" :class="{ 'nav-row-active': route.path === '/admin/channels' }">
             <span class="nav-symbol bg-violet-500/12 text-violet-500">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 12h8m-8 4h5m6-11H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4l3 3 3-3h4a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -124,15 +142,16 @@
             <span class="flex-1">版本信息</span>
             <span v-if="appVersion" class="version-badge">{{ appVersion }}</span>
           </button>
+          </div>
         </div>
       </div>
     </aside>
 
     <div v-if="mobileOpen" class="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-sm lg:hidden" @click="mobileOpen = false"></div>
 
-    <div class="min-h-screen lg:pl-[292px]">
+    <div class="min-h-screen" :class="railCollapsed ? 'lg:pl-0' : 'lg:pl-[292px]'">
       <header class="topbar">
-        <button class="icon-button mobile-only" aria-label="打开菜单" @click="mobileOpen = true">
+        <button class="icon-button" :aria-label="railCollapsed ? '展开侧栏' : '收起侧栏'" @click="toggleSidebar">
           <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M4 7h16M4 12h16M4 17h16" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
         <div class="hidden min-w-0 sm:block">
@@ -194,7 +213,7 @@
     <nav class="mobile-tabbar" :class="{ 'mobile-tabbar-hidden': keyboardOpen }">
       <RouterLink to="/admin" class="mobile-tab" :class="{ active: route.path === '/admin' }"><span v-html="smartNav[0].icon"></span><small>今天</small></RouterLink>
       <RouterLink to="/admin/planned" class="mobile-tab" :class="{ active: route.path === '/admin/planned' }"><span v-html="smartNav[1].icon"></span><small>计划</small></RouterLink>
-      <button class="mobile-add" aria-label="新建提醒" @click="openQuickAdd"><svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+      <button v-if="canCreate" class="mobile-add" aria-label="新建提醒" @click="openQuickAdd"><svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2.2" stroke-linecap="round"/></svg></button>
       <RouterLink to="/admin/notifications" class="mobile-tab" :class="{ active: route.path === '/admin/notifications' }"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke-width="1.8" stroke-linecap="round"/></svg></span><small>通知</small></RouterLink>
       <RouterLink to="/admin/channels" class="mobile-tab" :class="{ active: route.path === '/admin/channels' }"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 12h8m-8 4h5m6-11H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4l3 3 3-3h4a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z" stroke-width="1.8"/></svg></span><small>方式</small></RouterLink>
     </nav>
@@ -239,7 +258,7 @@ import {
   snoozeReminder,
   type ReminderList,
 } from '../api/reminder'
-import { getVersion } from '../api/config'
+import { getAllConfigs, getVersion } from '../api/config'
 import { connectReminderEvents, type RealtimeNotification, type ReminderRealtimeEvent } from '../services/reminderRealtime'
 import { onFnOSGatewayOrigin } from '../utils/gateway'
 
@@ -247,6 +266,16 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const mobileOpen = ref(false)
+
+// 界面折叠状态记在本地：这类偏好跟人走、跟设备走，不必上服务端。
+const lsGet = (key: string) => { try { return localStorage.getItem(key) } catch { return null } }
+const lsSet = (key: string, value: string) => { try { localStorage.setItem(key, value) } catch { /* 隐私模式忽略 */ } }
+
+// 桌面端把侧栏收成抽屉，内容区就能宽出来；手机端仍走原来的抽屉打开逻辑。
+const railCollapsed = ref(lsGet('ui_rail_collapsed') === '1')
+// 底部「设置」组默认折叠，给清单列表腾出更多竖向空间。
+const settingsOpen = ref(lsGet('ui_settings_open') === '1')
+
 const lists = ref<ReminderList[]>([])
 const summary = ref<Record<string, number>>({})
 const creatingList = ref(false)
@@ -289,10 +318,6 @@ watch(creatingList, async (open) => {
     listInput.value?.focus()
   }
 })
-watch(() => route.fullPath, () => {
-  mobileOpen.value = false
-})
-
 function isActive(to: string) {
   return to === '/admin' ? route.path === '/admin' : route.path === to
 }
@@ -305,6 +330,29 @@ const isCalendar = computed(() => route.name === 'Calendar')
 // 从日历切回列表时回到「今天」，而不是记住上次那个智能清单：日历不区分清单，
 // 回来落在固定的入口更符合直觉。
 const listRoute = computed(() => (route.name === 'ReminderList' ? route.path : '/admin'))
+
+// 日历是「看」的视图，不在那里新建内容：新建入口（侧栏大按钮、手机底部 +）一并隐藏。
+// 需要新建时先切回列表视图。
+const canCreate = computed(() => route.name !== 'Calendar')
+
+// 折叠后设置组里藏了几项，给个小角标提示还有东西
+const hiddenSettingCount = computed(() => 2 + (authStore.isAdmin ? adminNav.length : 0) + 1)
+
+function toggleSidebar() {
+  // 桌面：停靠 / 折叠；手机：抽屉开合。用媒体查询区分，避免两套按钮。
+  if (typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches) {
+    railCollapsed.value = !railCollapsed.value
+    lsSet('ui_rail_collapsed', railCollapsed.value ? '1' : '0')
+  } else {
+    mobileOpen.value = true
+  }
+}
+function toggleSettings() {
+  settingsOpen.value = !settingsOpen.value
+  lsSet('ui_settings_open', settingsOpen.value ? '1' : '0')
+}
+// 切到其它页面时把手机抽屉收起（点导航项已经处理，这里兜住路由变化）
+watch(() => route.fullPath, () => { mobileOpen.value = false })
 function listColor(color: string) {
   return ({ blue: '#3182f6', violet: '#8b5cf6', rose: '#f43f5e', amber: '#f59e0b', emerald: '#10b981' } as Record<string, string>)[color] || '#3182f6'
 }
@@ -588,7 +636,22 @@ function syncKeyboardState() {
   keyboardOpen.value = !!vv && window.innerHeight - vv.height > 120
 }
 
+// 只在本次会话的第一次进入时套用「默认首页」，之后用户点「今天」不该被再拽去日历。
+let defaultViewApplied = false
+async function applyDefaultViewOnce() {
+  if (defaultViewApplied) return
+  defaultViewApplied = true
+  if (route.name !== 'Home') return
+  try {
+    const res = await getAllConfigs()
+    if (res.data?.data?.default_view === 'calendar') await router.replace({ name: 'Calendar' })
+  } catch {
+    /* 读不到就按列表首页来，不该因为一个偏好读失败挡住进入应用 */
+  }
+}
+
 onMounted(() => {
+  void applyDefaultViewOnce()
   refreshNavigation()
   loadVersion()
   window.visualViewport?.addEventListener('resize', syncKeyboardState)
@@ -623,8 +686,14 @@ onBeforeUnmount(() => {
 .ambient-orb { position: absolute; border-radius: 999px; filter: blur(110px); opacity: .16; }
 .ambient-orb-one { width: 32rem; height: 32rem; left: 12%; top: -18rem; background: #60a5fa; }
 .ambient-orb-two { width: 28rem; height: 28rem; right: -10rem; bottom: -12rem; background: #a78bfa; opacity: .11; }
-.sidebar { @apply fixed inset-y-0 left-0 z-50 w-[292px] -translate-x-full border-r border-border/80 bg-surface/90 backdrop-blur-2xl transition-transform duration-300 lg:translate-x-0; }
+.sidebar { @apply fixed inset-y-0 left-0 z-50 w-[292px] -translate-x-full border-r border-border/80 bg-surface/90 backdrop-blur-2xl transition-transform duration-300; }
+/* 手机：抽屉打开 */
 .sidebar-open { @apply translate-x-0; }
+/* 桌面：停靠在左侧常驻；不加这个类就是折叠成抽屉的状态 */
+.sidebar-docked { @apply lg:translate-x-0; }
+/* 折叠后桌面要留一条窄条，方便再次点开 */
+.sidebar-rail { @apply lg:translate-x-0 lg:w-14; }
+.sidebar-rail .rail-hide { @apply lg:hidden; }
 .logo-mark { @apply flex h-11 w-11 items-center justify-center rounded-[15px] bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_10px_30px_-10px_rgba(59,130,246,.75)]; }
 .version-badge { @apply rounded-full border border-brand-500/25 bg-brand-500/10 px-2 py-0.5 text-[11px] font-bold leading-none text-brand-600 dark:text-brand-300; }
 .new-reminder-button { @apply flex h-12 items-center gap-3 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-500 px-3.5 text-sm font-bold text-white shadow-[0_14px_30px_-14px_rgba(59,130,246,.8)] transition hover:-translate-y-0.5 hover:brightness-105 active:translate-y-0; }

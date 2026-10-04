@@ -145,6 +145,10 @@ const selectOptionLabelMap: Record<string, Record<string, string>> = {
     large: '大',
     xlarge: '特大',
   },
+  default_view: {
+    list: '列表视图',
+    calendar: '日历视图',
+  },
 }
 
 function groupTitle(key: string): string {

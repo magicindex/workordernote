@@ -1,13 +1,13 @@
 <template>
-  <div class="page-container animate-fade-in flex min-h-[calc(100vh-7.5rem)] flex-col" :style="{ '--cal-task-font': calendarFontPx + 'px' }">
-    <PageHeader title="日历" description="按月查看所有到期提醒，含农历、节气与节日" />
-
-    <div v-if="errorMsg" class="surface mb-3 rounded-2xl px-5 py-3 text-sm text-destructive">
+  <div class="animate-fade-in flex flex-col gap-2.5 lg:min-h-[calc(100dvh-8.5rem)]" :style="{ '--cal-task-font': calendarFontPx + 'px' }">
+    <!-- 不再单独放一个页头：顶栏和侧栏已经表明当前在日历，重复的标题+描述白占 52px
+         （外加两段 24px 间距），把这段还给日历格子。 -->
+    <div v-if="errorMsg" class="surface rounded-2xl px-5 py-3 text-sm text-destructive">
       {{ errorMsg }}
     </div>
 
     <!-- 工具条：翻月 / 回今天 / 计数 -->
-    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
       <div class="flex items-center gap-1.5 sm:gap-2">
         <button class="icon-button" aria-label="上个月" @click="shiftMonth(-1)">
           <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m15 6-6 6 6 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -25,7 +25,7 @@
       </div>
     </div>
 
-    <div class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_19rem]">
+    <div class="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_19rem]">
       <!-- 月历网格 -->
       <section class="surface flex min-h-0 flex-col overflow-hidden rounded-2xl p-2 sm:p-3">
         <div class="grid grid-cols-7 gap-1 pb-1.5">
@@ -160,7 +160,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import PageHeader from '../components/PageHeader.vue'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import Toast from '../components/Toast.vue'
 import { getAllConfigs } from '../api/config'
