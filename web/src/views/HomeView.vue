@@ -29,33 +29,39 @@
             ref="quickInput"
             v-model="quick.title"
             class="w-full bg-transparent text-[17px] font-semibold outline-none placeholder:font-medium placeholder:text-muted-foreground/65"
-            placeholder="添加一条提醒…"
+            :placeholder="quick.kind === 'note' ? '记一笔…' : '添加一条提醒…'"
             maxlength="200"
             @keydown.enter.prevent="submitQuick"
             @focus="quickFocused = true"
           />
           <p v-if="quick.notes" class="mt-1 truncate text-xs text-muted-foreground">{{ quick.notes }}</p>
         </div>
-        <button v-if="quick.title" class="btn-primary !h-9 !px-4" :disabled="saving" @click="submitQuick">{{ saving ? '保存中' : '添加' }}</button>
+        <button v-if="quick.title" class="btn-primary !h-9 !px-4" :disabled="saving" @click="submitQuick">{{ saving ? '保存中' : quick.kind === 'note' ? '记下' : '添加' }}</button>
       </div>
 
       <div v-if="quickFocused || quick.title" class="mt-3 border-t border-border/60 pt-3 sm:mt-4 sm:pt-4">
         <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <button class="quick-chip" :class="{ active: preset === 'today' }" @click="setPreset('today')">今天</button>
-          <button class="quick-chip" :class="{ active: preset === 'tomorrow' }" @click="setPreset('tomorrow')">明天</button>
-          <button class="quick-chip" :class="{ active: preset === 'weekend' }" @click="setPreset('weekend')">本周末</button>
-          <button class="quick-chip" :class="{ active: quick.priority === 3 }" @click="quick.priority = quick.priority === 3 ? 0 : 3">
-            <span class="text-rose-500">!!!</span> 重要
-          </button>
-          <button class="quick-chip" :class="{ active: quickExpanded }" @click="quickExpanded = !quickExpanded">
-            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 6v.01M12 12v.01M12 18v.01" stroke-width="3" stroke-linecap="round"/></svg>
-            更多
-          </button>
-          <span v-if="quick.due_at" class="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-300">{{ formatDue(quick.due_at) }}</span>
+          <button class="quick-chip" :class="{ active: quick.kind !== 'note' }" @click="setQuickKind('task')">任务</button>
+          <button class="quick-chip" :class="{ active: quick.kind === 'note' }" @click="setQuickKind('note')">记事</button>
+          <span v-if="quick.kind !== 'note'" class="mx-0.5 h-4 w-px bg-border"></span>
+          <template v-if="quick.kind !== 'note'">
+            <button class="quick-chip" :class="{ active: preset === 'today' }" @click="setPreset('today')">今天</button>
+            <button class="quick-chip" :class="{ active: preset === 'tomorrow' }" @click="setPreset('tomorrow')">明天</button>
+            <button class="quick-chip" :class="{ active: preset === 'weekend' }" @click="setPreset('weekend')">本周末</button>
+            <button class="quick-chip" :class="{ active: quick.priority === 3 }" @click="quick.priority = quick.priority === 3 ? 0 : 3">
+              <span class="text-rose-500">!!!</span> 重要
+            </button>
+            <button class="quick-chip" :class="{ active: quickExpanded }" @click="quickExpanded = !quickExpanded">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 6v.01M12 12v.01M12 18v.01" stroke-width="3" stroke-linecap="round"/></svg>
+              更多
+            </button>
+          </template>
+          <span v-if="quick.kind === 'note'" class="ml-auto text-xs font-semibold text-muted-foreground">记事保存后直接归入「已完成」</span>
+          <span v-else-if="quick.due_at" class="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-300">{{ formatDue(quick.due_at) }}</span>
         </div>
 
         <Transition name="expand">
-          <div v-if="quickExpanded" class="mt-3 grid gap-2.5 rounded-2xl bg-muted/65 p-3 sm:mt-4 sm:grid-cols-2 sm:gap-3 sm:p-4 lg:grid-cols-4">
+          <div v-if="quickExpanded && quick.kind !== 'note'" class="mt-3 grid gap-2.5 rounded-2xl bg-muted/65 p-3 sm:mt-4 sm:grid-cols-2 sm:gap-3 sm:p-4 lg:grid-cols-4">
             <div class="field-label relative">
               日期时间
               <button ref="quickDateAnchor" type="button" class="compact-input mt-1.5 flex h-9 w-full items-center justify-between px-3 text-left text-xs font-medium" :class="{ '!border-brand-500/50': quickDateOpen }" @click="quickDateOpen = !quickDateOpen">
@@ -106,12 +112,19 @@
         class="reminder-row group"
         :class="{ 'reminder-completed': !!item.completed_at, 'reminder-overdue': isOverdue(item) }"
       >
-        <button class="complete-button" :aria-label="item.completed_at ? '恢复提醒' : '完成提醒'" @click.stop="toggleComplete(item)">
+        <button
+          class="complete-button"
+          :class="{ 'cursor-default': item.kind === 'note' }"
+          :disabled="item.kind === 'note'"
+          :aria-label="item.kind === 'note' ? '记事，无需完成' : item.completed_at ? '恢复提醒' : '完成提醒'"
+          @click.stop="toggleComplete(item)"
+        >
           <svg v-if="item.completed_at" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <button class="min-w-0 flex-1 text-left" @click="editItem(item)">
           <div class="flex items-center gap-2">
             <h3 class="truncate text-sm font-bold sm:text-[15px]">{{ item.title }}</h3>
+            <span v-if="item.kind === 'note'" class="tiny-badge">记事</span>
             <span v-if="item.priority" class="priority-mark" :class="`priority-${item.priority}`">{{ '!'.repeat(item.priority) }}</span>
             <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ item.calendar === 'lunar' ? `农历${ruleLabel(item.repeat_rule)}` : ruleLabel(item.repeat_rule) }}</span>
             <span v-if="item.repeat_notify_minutes" class="tiny-badge">过期提醒</span>
@@ -129,7 +142,7 @@
           </div>
         </button>
         <div class="row-actions">
-          <button v-if="!item.completed_at && item.due_at" class="row-action" title="稍后提醒" @click="snooze(item, 10)">
+          <button v-if="!item.completed_at && item.due_at && item.kind !== 'note'" class="row-action" title="稍后提醒" @click="snooze(item, 10)">
             <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 8v4l3 2M5 3l-2 3m16-3 2 3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z" stroke-width="1.8" stroke-linecap="round"/></svg>
           </button>
           <button class="row-action hover:!text-rose-500" title="删除" @click="removeItem(item)">
@@ -157,15 +170,22 @@
           <div class="flex items-center justify-between border-b border-border px-4 py-3 sm:px-6 sm:py-5">
             <div>
               <p class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">提醒详情</p>
-              <h2 class="mt-0.5 text-base font-extrabold sm:mt-1 sm:text-lg">{{ editing.id ? '编辑提醒' : '新提醒' }}</h2>
+              <h2 class="mt-0.5 text-base font-extrabold sm:mt-1 sm:text-lg">{{ editing.id ? (editing.kind === 'note' ? '编辑记事' : '编辑提醒') : '新提醒' }}</h2>
             </div>
             <button class="row-action !opacity-100" aria-label="关闭" @click="closeEditor"><svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18" stroke-width="2" stroke-linecap="round"/></svg></button>
           </div>
           <form class="flex min-h-0 flex-1 flex-col" @submit.prevent="saveEditor">
             <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:space-y-6 sm:p-6">
-              <label class="editor-field"><span>标题</span><input v-model="editing.title" autofocus maxlength="200" placeholder="要提醒什么？" /></label>
+              <label class="editor-field"><span>标题</span><input v-model="editing.title" autofocus maxlength="200" :placeholder="editing.kind === 'note' ? '记点什么…' : '要提醒什么？'" /></label>
+              <div class="editor-field">
+                <span>类型</span>
+                <div class="mt-1.5 flex gap-2">
+                  <button type="button" class="channel-pill flex-1" :class="{ selected: editing.kind !== 'note' }" @click="setEditingKind('task')">任务（需确认完成）</button>
+                  <button type="button" class="channel-pill flex-1" :class="{ selected: editing.kind === 'note' }" @click="setEditingKind('note')">记事（仅作记录）</button>
+                </div>
+              </div>
               <label class="editor-field"><span>备注</span><textarea v-model="editing.notes" rows="4" maxlength="5000" placeholder="补充一些细节…"></textarea></label>
-              <div class="grid grid-cols-2 gap-3">
+              <div v-if="editing.kind !== 'note'" class="grid grid-cols-2 gap-3">
                 <div class="editor-field relative">
                   <span>日期时间</span>
                   <button ref="editingDateAnchor" type="button" class="mt-1.5 flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-medium sm:mt-2 sm:rounded-2xl sm:px-4 sm:py-3" :class="editingDateOpen ? 'border-brand-500/45 ring-4 ring-brand-500/10' : 'border-border'" @click="editingDateOpen = !editingDateOpen">
@@ -182,7 +202,8 @@
                 <p class="col-span-2 mt-1 text-[10px] leading-4 text-muted-foreground">“过期提醒频率”在到点未完成时按所选间隔重复通知，点击完成后停止；配合“每天”等重复规则可实现固定时间的每日催办。</p>
                 <p v-if="editing.calendar === 'lunar'" class="col-span-2 -mt-3 text-[10px] leading-4 text-muted-foreground">“按农历循环”按所选日期对应的农历月/日重复，适合农历生日等纪念日期；腊月三十遇小年自动改为除夕当天，闰月日期遇无闰月年份自动用对应平月。</p>
               </div>
-              <div>
+              <p v-else class="rounded-2xl bg-muted/65 p-3 text-xs leading-5 text-muted-foreground">记事只作记录：不需要日期、重复和通知，保存后直接归入「已完成」。</p>
+              <div v-if="editing.kind !== 'note'">
                 <p class="mb-3 text-xs font-bold text-muted-foreground">通知方式</p>
                 <div class="grid grid-cols-2 gap-2">
                   <button v-for="channel in selectableChannels" :key="channel.channel" type="button" class="channel-option" :class="{ selected: isEditingChannelSelected(channel.channel) }" :disabled="channel.channel !== 'inapp' && (!channel.bound || channel.status !== 'active')" @click="toggleEditingChannel(channel.channel)">
@@ -205,7 +226,7 @@
             </div>
             <div class="flex items-center gap-3 border-t border-border bg-surface/80 p-3.5 backdrop-blur sm:p-5">
               <button type="button" class="btn-secondary flex-1" @click="closeEditor">取消</button>
-              <button class="btn-primary flex-1" :disabled="saving || !editing.title.trim()">{{ saving ? '保存中…' : '保存提醒' }}</button>
+              <button class="btn-primary flex-1" :disabled="saving || !editing.title.trim()">{{ saving ? '保存中…' : editing.kind === 'note' ? '保存记事' : '保存提醒' }}</button>
             </div>
           </form>
         </aside>
@@ -237,7 +258,7 @@ import RepeatNotifySelect from '../components/RepeatNotifySelect.vue'
 import {
   completeReminder, createReminder, deleteReminder, getChannelStatuses, getLists, getReminders,
   restoreReminder, snoozeReminder, updateReminder,
-  type ChannelStatus, type ReminderChannel, type ReminderItem, type ReminderList, type SaveReminderInput
+  type ChannelStatus, type ReminderChannel, type ReminderItem, type ReminderKind, type ReminderList, type SaveReminderInput
 } from '../api/reminder'
 
 const route = useRoute()
@@ -257,7 +278,7 @@ const clockNow = ref(Date.now())
 const toast = reactive<{ message: string; type: 'success' | 'error' }>({ message: '', type: 'success' })
 
 const blankInput = (): SaveReminderInput => ({
-  title: '', notes: '', list_id: 0, priority: 0, due_at: null,
+  title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: null,
   all_day: false, repeat_rule: 'none', calendar: 'solar', repeat_notify_minutes: 0, channels: ['inapp'],
 })
 const quick = reactive<SaveReminderInput>(blankInput())
@@ -361,14 +382,23 @@ async function submitQuick() {
     // 没设日期的提醒不会出现在按到期时间过滤的「今天 / 计划」视图里：留在原地
     // 重新拉取会让用户以为没保存成功（接口 200、列表却毫无变化），所以切到
     // 「全部」并说明原因；已经在「全部 / 清单」里时行为不变。
+    // 记事属于「已完成」，任何列表视图都不会出现它，所以单独说明去处，
+    // 并且保持「记事」模式不变，方便连着记好几条。
+    const isNote = quick.kind === 'note'
     const undated = !quick.due_at
     await createReminder({ ...quick, title: quick.title.trim() })
     quickChannelsTouched = false
-    Object.assign(quick, blankInput(), { list_id: selectedListID.value || lists.value.find(x => x.is_default)?.id || lists.value[0]?.id || 0 })
+    Object.assign(quick, blankInput(), {
+      kind: isNote ? 'note' : 'task',
+      list_id: selectedListID.value || lists.value.find(x => x.is_default)?.id || lists.value[0]?.id || 0,
+    })
     preset.value = ''
     quickExpanded.value = false
     quickFocused.value = false
-    if (undated && !selectedListID.value && (view.value === 'today' || view.value === 'planned')) {
+    if (isNote) {
+      if (view.value === 'completed') await loadItems()
+      showToast('记事已保存到「已完成」')
+    } else if (undated && !selectedListID.value && (view.value === 'today' || view.value === 'planned')) {
       await router.push({ name: 'AllReminders' })
       showToast('已保存到「全部」：这条提醒没有设置日期')
     } else {
@@ -381,6 +411,30 @@ async function submitQuick() {
   } finally {
     saving.value = false
     quickInput.value?.focus()
+  }
+}
+// 任务 / 记事 切换。记事没有排期，切过去时把已经填好的日期、重复、优先级等
+// 一并清掉，免得界面上留下选不了也删不掉的残留值；后端保存时还会再清一次。
+function setQuickKind(kind: ReminderKind) {
+  quick.kind = kind
+  if (kind === 'note') {
+    quick.due_at = null
+    quick.priority = 0
+    quick.repeat_rule = 'none'
+    quick.calendar = 'solar'
+    quick.repeat_notify_minutes = 0
+    preset.value = ''
+    quickExpanded.value = false
+  }
+}
+function setEditingKind(kind: ReminderKind) {
+  editing.kind = kind
+  if (kind === 'note') {
+    editing.due_at = null
+    editing.priority = 0
+    editing.repeat_rule = 'none'
+    editing.calendar = 'solar'
+    editing.repeat_notify_minutes = 0
   }
 }
 function setPreset(kind: string) {
@@ -437,7 +491,7 @@ watch(() => editing.repeat_rule, rule => {
 
 function editItem(item: ReminderItem) {
   Object.assign(editing, {
-    id: item.id, title: item.title, notes: item.notes, list_id: item.list_id,
+    id: item.id, title: item.title, notes: item.notes, kind: item.kind || 'task', list_id: item.list_id,
     priority: item.priority, due_at: item.due_at, all_day: item.all_day,
     repeat_rule: item.repeat_rule, calendar: item.calendar || 'solar',
     repeat_notify_minutes: item.repeat_notify_minutes || 0,
@@ -463,6 +517,9 @@ async function saveEditor() {
   } finally { saving.value = false }
 }
 async function toggleComplete(item: ReminderItem) {
+  // 记事默认就是完成，没有「完成 / 恢复」这回事：恢复会把它变成一个没有
+  // 日期的未完成任务。要改类型请用编辑器里的「类型」切换。
+  if (item.kind === 'note') return
   try {
     if (item.completed_at) await restoreReminder(item.id)
     else await completeReminder(item.id)

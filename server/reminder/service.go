@@ -22,12 +22,15 @@ var repeatRules = map[string]bool{
 }
 
 type SaveReminderInput struct {
-	Title      string     `json:"title"`
-	Notes      string     `json:"notes"`
-	ListID     uint       `json:"list_id"`
-	Priority   int        `json:"priority"`
-	DueAt      *time.Time `json:"due_at"`
-	AllDay     bool       `json:"all_day"`
+	Title string `json:"title"`
+	Notes string `json:"notes"`
+	// Kind is "task" (default) or "note". A note ignores every scheduling
+	// field and is stored as already completed.
+	Kind     string     `json:"kind"`
+	ListID   uint       `json:"list_id"`
+	Priority int        `json:"priority"`
+	DueAt    *time.Time `json:"due_at"`
+	AllDay   bool       `json:"all_day"`
 	RepeatRule string     `json:"repeat_rule"`
 	// Calendar selects "solar" (default) or "lunar" recurrence for the
 	// monthly/yearly rules. The deprecated repeat_rule value "yearly_lunar"
@@ -93,6 +96,25 @@ func validateReminderInput(in *SaveReminderInput) error {
 	if in.RepeatRule == "yearly_lunar" {
 		in.RepeatRule = "yearly"
 		in.Calendar = "lunar"
+	}
+	// A note is a plain record, not something to be reminded about. Normalize
+	// its scheduling fields away before the repeat/calendar validation below,
+	// so an old client that still sends a date cannot turn a note into a
+	// scheduled reminder (or trip the lunar rule check).
+	if in.Kind == "" {
+		in.Kind = KindTask
+	}
+	if !supportedKinds[in.Kind] {
+		return errors.New("条目类型无效")
+	}
+	if in.Kind == KindNote {
+		in.DueAt = nil
+		in.AllDay = false
+		in.RepeatRule = "none"
+		in.Calendar = "solar"
+		in.LunarAnchor = ""
+		in.RepeatNotifyMinutes = 0
+		in.Priority = 0
 	}
 	switch in.Calendar {
 	case "", "solar":
@@ -181,9 +203,18 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 		}
 		created = Reminder{
 			UserID: userID, ListID: in.ListID, Title: in.Title, Notes: in.Notes,
+			Kind:     in.Kind,
 			Priority: in.Priority, DueAt: in.DueAt, AllDay: in.AllDay,
 			RepeatRule: in.RepeatRule, Calendar: in.Calendar, LunarAnchor: in.LunarAnchor,
 			RepeatNotifyMinutes: in.RepeatNotifyMinutes, Version: 1,
+		}
+		// A note counts as completed the moment it is created. Stamping
+		// CompletedAt here files it under「已完成」and, because rebuildJobs
+		// returns early for any reminder that already has CompletedAt set,
+		// also guarantees a note never schedules a notification.
+		if created.Kind == KindNote {
+			now := time.Now()
+			created.CompletedAt = &now
 		}
 		if err := tx.Create(&created).Error; err != nil {
 			return err
@@ -221,6 +252,18 @@ func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) 
 		}
 		existing.Title = in.Title
 		existing.Notes = in.Notes
+		// Switching type has to move the row between the open and completed
+		// views: task -> note stamps CompletedAt (and never touches it again
+		// on later edits, so the note keeps its place in the completed log),
+		// note -> task clears it so the item becomes an open task.
+		wasNote := existing.Kind == KindNote
+		existing.Kind = in.Kind
+		if in.Kind == KindNote && existing.CompletedAt == nil {
+			now := time.Now()
+			existing.CompletedAt = &now
+		} else if in.Kind == KindTask && wasNote {
+			existing.CompletedAt = nil
+		}
 		existing.ListID = in.ListID
 		existing.Priority = in.Priority
 		existing.DueAt = in.DueAt
@@ -485,6 +528,12 @@ func completeReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error)
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND user_id = ? AND deleted_at IS NULL", reminderID, userID).First(&item).Error; err != nil {
 			return err
 		}
+		if item.Kind == KindNote {
+			// A note is complete by definition: there is nothing to confirm.
+			// Treat the call as a no-op instead of an error so a stale client
+			// that still shows the checkbox cannot break the save.
+			return nil
+		}
 		now := time.Now()
 		if item.RepeatRule != "" && item.RepeatRule != "none" && item.DueAt != nil {
 			history := Completion{ReminderID: item.ID, UserID: userID, ScheduledFor: item.DueAt, CompletedAt: now, TitleSnapshot: item.Title}
@@ -529,6 +578,11 @@ func restoreReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error) 
 		var item Reminder
 		if err := tx.Where("id = ? AND user_id = ? AND deleted_at IS NULL", reminderID, userID).First(&item).Error; err != nil {
 			return err
+		}
+		if item.Kind == KindNote {
+			// Restoring a note would silently turn a record into an open task
+			// with no schedule, which is never what the user meant.
+			return errors.New("记事无需恢复，请先改为任务")
 		}
 		item.CompletedAt = nil
 		item.Version++

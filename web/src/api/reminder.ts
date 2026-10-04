@@ -2,6 +2,10 @@ import request from './request'
 
 export type ReminderChannel = 'inapp' | 'email' | 'sms' | 'feishu' | 'qq' | 'dingtalk'
 
+// A row is either a task (needs confirming completion) or a note (记事: a plain
+// record that counts as completed the moment it is created).
+export type ReminderKind = 'task' | 'note'
+
 export interface ReminderList {
   id: number
   name: string
@@ -18,6 +22,7 @@ export interface ReminderItem {
   list_name: string
   title: string
   notes: string
+  kind: ReminderKind
   priority: number
   due_at: string | null
   all_day: boolean
@@ -37,6 +42,7 @@ export interface ReminderItem {
 export interface SaveReminderInput {
   title: string
   notes?: string
+  kind?: ReminderKind
   channel_targets?: Record<string, number[]>
   repeat_notify_minutes?: number
   list_id?: number

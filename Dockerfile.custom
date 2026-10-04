@@ -1,0 +1,72 @@
+# 本地构建变体（Dockerfile.custom）
+#
+# 与上游 Dockerfile 的差异**只**来自本机的网络与镜像可用性，与业务代码无关：
+#
+#  1. 运行阶段不能用 alpine:3.20。本机 registry-1.docker.io 直连 EOF，配置的加速器
+#     对 alpine:3.20 返回 401，所以改用本地已有的 alpine:latest（3.24.2）。
+#     它恰好与构建镜像 golang:1.26-alpine 的 alpine 版本一致（同为 3.24.2），
+#     因此 musl ABI 匹配，比上游钉的 3.20 更贴合。
+#  2. 三个包源在本机都直连不通，改为国内镜像，**全程不需要代理**：
+#       apk  -> mirrors.aliyun.com（dl-cdn.alpinelinux.org 不可达）
+#       npm  -> registry.npmmirror.com（registry.npmjs.org 会 ECONNRESET）
+#       go   -> goproxy.cn（proxy.golang.org 不可达）
+#  3. apk 只用于构建阶段装 gcc；运行阶段的 ca-certificates 与 tzdata 直接从已有镜像
+#     COPY，不再 apk add。
+#
+# tzdata 不是可选项：server 里多处调用 time.LoadLocation("Asia/Shanghai")，缺 tzdata
+# 时它返回 nil，随后的 now.In(loc) 会 panic。
+#
+# 用法：
+#   docker build -f Dockerfile.custom \
+#     --build-arg VERSION=v0.3.0-note --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) \
+#     -t reminders-local:v0.3.0-note .
+
+ARG VERSION=dev
+ARG BUILD_TIME=unknown
+ARG GIT_COMMIT=unknown
+
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/web
+COPY web/package*.json ./
+RUN npm config set registry https://registry.npmmirror.com && npm ci
+COPY web/ ./
+RUN npm run build
+
+FROM golang:1.26-alpine AS backend-builder
+ARG VERSION
+ARG BUILD_TIME
+ARG GIT_COMMIT
+# 仓库路径按基础镜像的 alpine 版本走；换 golang 基础镜像时要同步改这里。
+ARG ALPINE_BRANCH=v3.24
+WORKDIR /app/server
+RUN apk add --no-cache \
+      --repository=https://mirrors.aliyun.com/alpine/${ALPINE_BRANCH}/main \
+      --repository=https://mirrors.aliyun.com/alpine/${ALPINE_BRANCH}/community \
+      gcc musl-dev
+ENV GOPROXY=https://goproxy.cn,direct
+COPY server/go.mod server/go.sum ./
+RUN go mod download
+COPY server/ ./
+RUN CGO_ENABLED=1 GOOS=linux go build \
+	  -ldflags "-X smallgo/server/version.Version=${VERSION} -X smallgo/server/version.BuildTime=${BUILD_TIME} -X smallgo/server/version.GitCommit=${GIT_COMMIT} -X smallgo/server/version.AppName=提醒事项" \
+	  -o /out/reminder .
+
+# 时区数据来源：本地已有的 python:3.12-alpine 自带完整 /usr/share/zoneinfo。
+# 只 COPY 需要的目录，不会把 python 带进最终镜像。
+FROM python:3.12-alpine AS tzdata-source
+
+FROM alpine:latest
+COPY --from=backend-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=tzdata-source /usr/share/zoneinfo /usr/share/zoneinfo
+RUN adduser -D -u 1000 appuser
+WORKDIR /app
+COPY --from=backend-builder /out/reminder ./reminder
+COPY --from=frontend-builder /app/web/dist ./static/dist
+RUN mkdir -p /app/data && chown -R appuser:appuser /app
+USER appuser
+EXPOSE 8906
+VOLUME ["/app/data"]
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD wget -qO- http://localhost:8906/api/version || exit 1
+ENTRYPOINT ["./reminder"]
+CMD ["-data-dir", "/app/data", "-web-dir", "./static/dist", "-device-type", "docker"]

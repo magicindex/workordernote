@@ -16,6 +16,20 @@ var supportedChannels = map[string]bool{
 	ChannelFeishu: true, ChannelQQ: true, ChannelDingTalk: true,
 }
 
+// Kind discriminates the two things a row in the reminders table can be:
+//
+//   - KindTask is an ordinary reminder. It stays open until it is completed,
+//     and may carry a due time, a repeat rule and notification channels.
+//   - KindNote is a plain record ("记事"). It has no schedule and never
+//     notifies; it counts as completed from the moment it is created, so it
+//     files itself under「已完成」and stays out of every open-task view.
+const (
+	KindTask = "task"
+	KindNote = "note"
+)
+
+var supportedKinds = map[string]bool{KindTask: true, KindNote: true}
+
 type List struct {
 	ID        uint       `gorm:"primarykey" json:"id"`
 	UserID    uint       `gorm:"not null;index:idx_reminder_lists_user_position" json:"-"`
@@ -35,8 +49,12 @@ type Reminder struct {
 	ListID     uint       `gorm:"not null;index" json:"list_id"`
 	Title      string     `gorm:"size:200;not null" json:"title"`
 	Notes      string     `gorm:"type:text" json:"notes"`
-	Priority   int        `gorm:"not null;default:0" json:"priority"`
-	DueAt      *time.Time `gorm:"index:idx_reminders_user_due" json:"due_at"`
+	// Kind is "task" (default) or "note"; see the KindTask / KindNote
+	// constants. The column default keeps every pre-existing row on task
+	// semantics, so adding this field needs no data migration.
+	Kind     string `gorm:"size:8;not null;default:task" json:"kind"`
+	Priority int    `gorm:"not null;default:0" json:"priority"`
+	DueAt    *time.Time `gorm:"index:idx_reminders_user_due" json:"due_at"`
 	AllDay     bool       `gorm:"not null;default:false" json:"all_day"`
 	RepeatRule string     `gorm:"size:16;not null;default:none" json:"repeat_rule"`
 	// Calendar selects which calendar the repeat rule follows: "solar"
