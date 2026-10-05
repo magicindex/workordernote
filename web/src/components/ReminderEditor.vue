@@ -1,8 +1,12 @@
 <template>
-  <Transition name="drawer">
-    <div v-if="modelValue" class="fixed inset-0 z-[70] flex justify-end">
+  <Transition :name="isModal ? 'sheet' : 'drawer'">
+    <div
+      v-if="modelValue"
+      class="fixed inset-0 z-[70] flex"
+      :class="isModal ? 'items-center justify-center p-3 sm:p-6' : 'justify-end'"
+    >
       <div class="absolute inset-0 bg-slate-950/25 backdrop-blur-sm" @click="close"></div>
-      <aside class="editor-panel">
+      <aside class="editor-panel" :class="isModal ? 'editor-panel-modal' : ''">
         <div class="flex items-center justify-between border-b border-border px-4 py-3 sm:px-6 sm:py-5">
           <div>
             <p class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">{{ isCreate ? '新建' : '提醒详情' }}</p>
@@ -104,6 +108,12 @@ const props = defineProps<{
   preset?: SaveReminderInput | null
   lists: ReminderList[]
   channels: ChannelStatus[]
+  /**
+   * 呈现方式：抽屉（默认，从右侧划出）或居中悬浮弹窗。
+   * 日历视图用弹窗——日历本身已经铺满一屏，再从右边划出一整条会把人从「这天」里拽走；
+   * 列表视图仍是抽屉，来回切换时位置一致、滚动列表也没被遮住。
+   */
+  presentation?: 'drawer' | 'modal'
 }>()
 
 const emit = defineEmits<{
@@ -113,6 +123,7 @@ const emit = defineEmits<{
 }>()
 
 const isCreate = computed(() => props.preset != null)
+const isModal = computed(() => props.presentation === 'modal')
 
 const blankInput = (): SaveReminderInput & { id?: number } => ({
   title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: null,
@@ -258,6 +269,16 @@ async function save() {
 .channel-option strong { @apply block text-xs; }
 .channel-option small { @apply mt-0.5 block text-[10px] opacity-70; }
 .channel-check { @apply flex h-5 w-5 items-center justify-center rounded-full border border-current; }
+/* 居中弹窗：宽度与抽屉同量级（510px 起，宽屏放到 640px），高度最多 88vh，
+   内部滚动区自己滚（表单区已经是 min-h-0 flex-1 overflow-y-auto）。 */
+.editor-panel-modal {
+  @apply h-auto max-h-[88vh] w-full max-w-[640px] rounded-2xl border border-border shadow-2xl;
+}
+.sheet-enter-active, .sheet-leave-active { transition: opacity .18s ease; }
+.sheet-enter-active .editor-panel, .sheet-leave-active .editor-panel { transition: transform .22s cubic-bezier(.2,.8,.2,1), opacity .18s ease; }
+.sheet-enter-from, .sheet-leave-to { opacity: 0; }
+.sheet-enter-from .editor-panel, .sheet-leave-to .editor-panel { transform: translateY(10px) scale(.97); opacity: 0; }
+
 .drawer-enter-active, .drawer-leave-active { transition: opacity .22s ease; }
 .drawer-enter-active .editor-panel, .drawer-leave-active .editor-panel { transition: transform .28s cubic-bezier(.2,.8,.2,1); }
 .drawer-enter-from, .drawer-leave-to { opacity: 0; }

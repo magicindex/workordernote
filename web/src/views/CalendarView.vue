@@ -188,6 +188,7 @@
       :preset="createPreset"
       :lists="lists"
       :channels="channels"
+      presentation="modal"
       @saved="onEditorSaved"
     />
 
