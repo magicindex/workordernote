@@ -135,6 +135,8 @@
             v-for="item in selectedItems"
             :key="item.id"
             class="flex items-start gap-2 rounded-xl border border-border/70 bg-surface/60 p-2 transition hover:border-brand-500/35"
+            :class="{ 'border-brand-500/35 bg-brand-500/5': menu.item?.id === item.id && menu.open }"
+            @contextmenu.prevent.stop="openItemMenu(item, $event)"
           >
             <!-- 记事创建即完成、没有可勾选的状态，给一个静态的记录标记 -->
             <span
@@ -166,9 +168,19 @@
                 <span class="truncate">{{ item.list_name }}</span>
               </div>
             </button>
-            <span class="row-action !opacity-100" title="在列表中编辑" @click="openEditor(item)">
-              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </span>
+            <!-- 原来这里只有一支笔（只能编辑、删不掉）。改成「⋯」菜单：修改 / 删除，
+                 右键这一行也能开同一个菜单（手机上右键不方便，所以按钮常显）。 -->
+            <button
+              type="button"
+              class="row-action !opacity-100 shrink-0"
+              :title="`「${item.title}」的更多操作（也可以右键这一行）`"
+              :aria-label="`${item.title} 的更多操作`"
+              :aria-haspopup="'menu'"
+              :aria-expanded="menu.open && menu.item?.id === item.id ? 'true' : 'false'"
+              @click.stop="openItemMenu(item, $event)"
+            >
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+            </button>
           </article>
         </div>
 
@@ -192,6 +204,42 @@
       @saved="onEditorSaved"
     />
 
+    <!-- 行菜单：Teleport 到 body 用 fixed 定位。放在面板里会被它的 overflow-y-auto 裁掉
+         （滚动容器按规范另一轴也变成 auto）。 -->
+    <Teleport to="body">
+      <div
+        v-if="menu.open"
+        class="fixed z-[80] w-[11rem] overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-2xl"
+        :style="{ left: menu.x + 'px', top: menu.y + 'px' }"
+        role="menu"
+        :aria-label="menu.item ? `${menu.item.title} 的操作` : '操作'"
+        @click.stop
+        @contextmenu.prevent.stop
+      >
+        <p class="truncate px-3 py-1.5 text-[10px] font-bold text-muted-foreground">{{ menu.item?.title }}</p>
+        <button type="button" role="menuitem" class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-foreground transition hover:bg-muted" @click="menuEdit">
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          修改
+        </button>
+        <button type="button" role="menuitem" class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-destructive transition hover:bg-destructive/10" @click="menuDelete">
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          删除
+        </button>
+      </div>
+    </Teleport>
+
+    <!-- 删除确认：与列表页同一个浮层组件 -->
+    <ConfirmDialog
+      v-model="removeVisible"
+      danger
+      :title="removeTarget?.kind === 'note' ? '删除这条记事？' : '删除这条提醒？'"
+      :message="`「${removeTarget?.title || ''}」删除后无法恢复。`"
+      confirm-text="删除"
+      loading-text="删除中…"
+      :loading="removeLoading"
+      @confirm="confirmRemove"
+    />
+
     <Toast :message="toast.message" :type="toast.type" />
   </div>
 </template>
@@ -201,10 +249,11 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import ListFilter from '../components/ListFilter.vue'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import Toast from '../components/Toast.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { getAllConfigs } from '../api/config'
 import {
-  completeReminder, exportReminders, getCalendarItems, getChannelStatuses, getLists, getLunarCalendar,
-  listIdsParam, restoreReminder,
+  completeReminder, deleteReminder, exportReminders, getCalendarItems, getChannelStatuses, getLists,
+  getLunarCalendar, listIdsParam, restoreReminder,
 
   type CalendarItem, type ChannelStatus, type LunarDayInfo, type ReminderList, type SaveReminderInput,
 } from '../api/reminder'
@@ -502,6 +551,68 @@ async function loadEditorContext() {
   }
 }
 
+// ---- 右侧当天列表的行菜单（右键 / 行尾「⋯」）：修改、删除 ----
+// 这一列原来只能点标题编辑，删不掉；右键菜单是补齐入口，触屏上则靠行尾那个「⋯」。
+const menu = reactive<{ open: boolean; x: number; y: number; item: CalendarItem | null }>({
+  open: false, x: 0, y: 0, item: null,
+})
+// 菜单尺寸常量必须和 CSS 里的 w-[11rem]（176px）一致，否则贴边收不回来；
+// 量宽度用 clientWidth，它不含滚动条（innerWidth 会把滚动条算进来，差 10px 就出屏）。
+const MENU_W = 176
+const MENU_H = 108
+
+function openItemMenu(item: CalendarItem, event: MouseEvent) {
+  const clientX = event.clientX || 0
+  const clientY = event.clientY || 0
+  const vw = document.documentElement.clientWidth
+  const vh = document.documentElement.clientHeight
+  // 贴着屏幕右/下边时往回收，保证整块菜单都在视野内
+  menu.x = Math.max(8, Math.min(clientX, vw - MENU_W - 8))
+  menu.y = Math.max(8, Math.min(clientY, vh - MENU_H - 8))
+  menu.item = item
+  menu.open = true
+}
+
+function closeItemMenu() {
+  menu.open = false
+  menu.item = null
+}
+
+function menuEdit() {
+  const item = menu.item
+  closeItemMenu()
+  if (item) openEditor(item)
+}
+
+function menuDelete() {
+  const item = menu.item
+  closeItemMenu()
+  if (item) {
+    removeTarget.value = { id: item.id, title: item.title, kind: item.kind }
+    removeVisible.value = true
+  }
+}
+
+// 删除确认（与列表页同一套浮层）
+const removeVisible = ref(false)
+const removeTarget = ref<{ id: number; title: string; kind: string } | null>(null)
+const removeLoading = ref(false)
+
+async function confirmRemove() {
+  if (!removeTarget.value) return
+  removeLoading.value = true
+  try {
+    await deleteReminder(removeTarget.value.id)
+    removeVisible.value = false
+    showToast('已删除')
+    await load()
+  } catch (err: any) {
+    showToast(err?.response?.data?.message || '删除失败', 'error')
+  } finally {
+    removeLoading.value = false
+  }
+}
+
 // 别的设备改了数据（或本机在侧栏改了清单颜色/名字）时重拉：日历原先完全不监听
 // 实时事件，改完清单颜色得手动刷新页面才看得到，这正是「改了颜色日历不跟着变」。
 function refreshFromEvent() {
@@ -514,11 +625,26 @@ onMounted(() => {
   load()
   window.addEventListener('reminder-realtime', refreshFromEvent)
   window.addEventListener('reminder-realtime-resume', refreshFromEvent)
+  // 行菜单的收起时机：点别处、在别处右键、Esc、滚动、窗口尺寸变化
+  document.addEventListener('click', closeItemMenu)
+  document.addEventListener('contextmenu', closeItemMenu)
+  document.addEventListener('keydown', onMenuKeydown)
+  document.addEventListener('scroll', closeItemMenu, true)
+  window.addEventListener('resize', closeItemMenu)
 })
+
+function onMenuKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') closeItemMenu()
+}
 
 onBeforeUnmount(() => {
   window.removeEventListener('reminder-realtime', refreshFromEvent)
   window.removeEventListener('reminder-realtime-resume', refreshFromEvent)
+  document.removeEventListener('click', closeItemMenu)
+  document.removeEventListener('contextmenu', closeItemMenu)
+  document.removeEventListener('keydown', onMenuKeydown)
+  document.removeEventListener('scroll', closeItemMenu, true)
+  window.removeEventListener('resize', closeItemMenu)
 })
 </script>
 
