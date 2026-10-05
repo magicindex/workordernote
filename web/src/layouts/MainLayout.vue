@@ -857,6 +857,10 @@ onBeforeUnmount(() => {
 .sidebar-rail .nav-settings-toggle { @apply lg:justify-center lg:gap-0 lg:px-0; }
 .sidebar-rail .new-reminder-button { @apply lg:mx-auto lg:h-11 lg:w-11 lg:justify-center lg:gap-0 lg:px-0; }
 .sidebar-rail nav { @apply lg:px-2; }
+/* 56px 的图标栏里再挤一条滚动条，图标会被推得偏左（实测差 5px），而且视觉上很脏。
+   仍然可以滚（滚轮/触摸），只是不显示滚动条。 */
+.sidebar-rail nav { scrollbar-width: none; }
+.sidebar-rail nav::-webkit-scrollbar { display: none; }
 /* 「我的清单」那一行在图标栏里只剩一个 + 按钮，居中放 */
 .sidebar-rail nav > div.mt-7 { @apply lg:justify-center lg:px-0; }
 .sidebar-rail .mt-7 { @apply lg:mt-3; }
