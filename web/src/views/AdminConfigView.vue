@@ -10,12 +10,17 @@
       <div v-for="i in 4" :key="i" class="h-20 rounded-xl bg-muted animate-pulse"></div>
     </div>
 
-    <ConfigGroupList
-      v-else
-      ref="listRef"
-      :items="items"
-      @save="handleSave"
-    />
+    <div v-else class="space-y-4 sm:space-y-6">
+      <!-- 双机同步不走 ConfigGroupList：它有密钥、方向、连通性测试与结果明细，
+           不是「一个键一个值」能表达的（见 components/SyncPanel.vue）。 -->
+      <SyncPanel />
+
+      <ConfigGroupList
+        ref="listRef"
+        :items="items"
+        @save="handleSave"
+      />
+    </div>
   </div>
 </template>
 
@@ -23,6 +28,7 @@
 import { onMounted, ref } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfigGroupList from '../components/ConfigGroupList.vue'
+import SyncPanel from '../components/SyncPanel.vue'
 import { getSystemConfigMeta, updateConfig } from '../api/config'
 import type { ConfigMeta } from '../api/config'
 

@@ -187,4 +187,76 @@ func init() {
 		Group:   "system", Label: "日志与操作记录保留天数",
 		Description: "运行日志与操作日志自动清理的最大保留天数，0 表示永久保留",
 	})
+
+	// ---- 双机同步（两台工作序记之间同步清单/任务/记事/完成记录）----
+	//
+	// 全部登记为 Internal：它们既不该出现在「系统配置」那张注册表驱动的列表里
+	// （令牌是密钥，其余项需要专门的界面讲清方向、配对与结果），也不允许通过
+	// 通用配置接口 PUT /api/configs 改动。读写只走 /api/reminder/admin/sync/*
+	// 与 /api/reminder/sync/*，见 reminder/sync_settings.go。
+	//
+	// 仍然登记在注册表里是为了拿到「唯一权威的键名 + 默认值 + 类型校验」：
+	// InitDefaultConfigs 会按 ScopeSystem 建行，sysconfig.Validate 直接复用。
+	RegisterConfig(ConfigDef{
+		Key: "sync_instance_id", Scope: ScopeSystem, Type: TypeString,
+		Internal: true,
+		Group:    "sync", Label: "本机实例标识",
+		Description: "本机在这次同步配对里的身份，首次启动时自动生成，勿手动修改",
+	})
+	RegisterConfig(ConfigDef{
+		Key: "sync_token", Scope: ScopeSystem, Type: TypeString,
+		Internal: true,
+		Group:    "sync", Label: "同步令牌",
+		Description: "两台机器共用的通信密钥，必须完全一致；首次启动自动生成",
+	})
+	RegisterConfig(ConfigDef{
+		Key: "sync_direction", Scope: ScopeSystem, Type: TypeSelect,
+		Default: "off", Options: []string{"off", "push", "pull", "both"},
+		Internal: true,
+		Group:    "sync", Label: "同步方向",
+		Description: "off 关闭；push 本机推给对端；pull 从对端拉取；both 双向",
+	})
+	RegisterConfig(ConfigDef{
+		Key: "sync_peer_url", Scope: ScopeSystem, Type: TypeString,
+		Internal: true,
+		Group:    "sync", Label: "对端地址",
+		Description: "对端工作序记的访问地址，例如 http://192.168.3.201:8906",
+	})
+	RegisterConfig(ConfigDef{
+		Key: "sync_interval_minutes", Scope: ScopeSystem, Type: TypeInt,
+		Default:  "0",
+		Internal: true,
+		Group:    "sync", Label: "自动同步间隔（分钟）",
+		Description: "0 表示只在手动点「立即同步」时同步",
+	})
+	RegisterConfig(ConfigDef{
+		Key: "sync_last_at", Scope: ScopeSystem, Type: TypeString,
+		Internal: true,
+		Group:    "sync", Label: "上次同步时间",
+		Description: "最近一次同步的结束时间（RFC3339），仅用于展示",
+	})
+	RegisterConfig(ConfigDef{
+		Key: "sync_last_status", Scope: ScopeSystem, Type: TypeString,
+		Internal: true,
+		Group:    "sync", Label: "上次同步结果",
+		Description: "ok / error / partial，仅用于展示",
+	})
+	RegisterConfig(ConfigDef{
+		Key: "sync_last_detail", Scope: ScopeSystem, Type: TypeString,
+		Internal: true,
+		Group:    "sync", Label: "上次同步明细",
+		Description: "最近一次同步的 JSON 明细（各方向增删改计数、失败原因）",
+	})
+	RegisterConfig(ConfigDef{
+		Key: "sync_peer_instance_id", Scope: ScopeSystem, Type: TypeString,
+		Internal: true,
+		Group:    "sync", Label: "对端实例标识",
+		Description: "最近一次成功通信时对端报出的实例标识，仅用于展示",
+	})
+	RegisterConfig(ConfigDef{
+		Key: "sync_peer_summary", Scope: ScopeSystem, Type: TypeString,
+		Internal: true,
+		Group:    "sync", Label: "对端概况",
+		Description: "对端的应用名/版本/账号数，仅用于展示",
+	})
 }

@@ -12,11 +12,25 @@ import (
 )
 
 func generateJWTSecret() (string, error) {
-	b := make([]byte, 16)
+	return randomHex(16)
+}
+
+// randomHex 生成长度为 n 字节的随机密钥的十六进制串（2n 个字符）。
+func randomHex(n int) (string, error) {
+	b := make([]byte, n)
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
-		return "", fmt.Errorf("generate JWT secret: %w", err)
+		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// generatedSecrets 是「默认值不是固定常量，而是每次安装随机生成」的配置项。
+// 它们只在数据库里还没有这一行时生成一次：升级既有安装不会把已有身份/令牌换掉，
+// 否则两台机器刚配好的同步会因为重启而失效。
+var generatedSecrets = map[string]func() (string, error){
+	"jwt_secret":       generateJWTSecret,
+	"sync_instance_id": func() (string, error) { return randomHex(8) },
+	"sync_token":       func() (string, error) { return randomHex(16) },
 }
 
 // InitDefaultConfigs seeds one row per registered system-scope config.
@@ -24,11 +38,11 @@ func generateJWTSecret() (string, error) {
 func InitDefaultConfigs(db *gorm.DB) error {
 	for _, def := range ListConfigs(ScopeSystem) {
 		value := def.Default
-		if def.Key == "jwt_secret" {
+		if gen, ok := generatedSecrets[def.Key]; ok {
 			var err error
-			value, err = generateJWTSecret()
+			value, err = gen()
 			if err != nil {
-				return err
+				return fmt.Errorf("generate %s: %w", def.Key, err)
 			}
 		}
 		var existing database.SystemConfig

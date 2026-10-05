@@ -30,8 +30,17 @@ const (
 
 var supportedKinds = map[string]bool{KindTask: true, KindNote: true}
 
+// SyncUID 是这一行在「双机同步」里的身份标识，见 sync_identity.go。
+// 它的取值只在本应用的同步协议里有意义，不出现在任何业务接口的 JSON 里。
+//
+// 为什么不能用自增 ID：两台 NAS 各自的自增序列互不相关，同一个 5 在 A 上可能是
+// <今天的任务>、在 B 上是 <上周的记事>。同步必须按一个跨实例稳定的键配对。
+//
+// 索引用普通索引而不是唯一索引：AutoMigrate 会给历史行补空串，多行空串在唯一
+// 索引上直接建不出来；配对由应用层（按 sync_uid + 用户查一行）保证。
 type List struct {
 	ID        uint       `gorm:"primarykey" json:"id"`
+	SyncUID   string     `gorm:"size:40;index" json:"-"`
 	UserID    uint       `gorm:"not null;index:idx_reminder_lists_user_position" json:"-"`
 	Name      string     `gorm:"size:40;not null" json:"name"`
 	Color     string     `gorm:"size:16;not null;default:blue" json:"color"`
@@ -44,17 +53,18 @@ type List struct {
 }
 
 type Reminder struct {
-	ID         uint       `gorm:"primarykey" json:"id"`
-	UserID     uint       `gorm:"not null;index:idx_reminders_user_due;index:idx_reminders_user_completed" json:"-"`
-	ListID     uint       `gorm:"not null;index" json:"list_id"`
-	Title      string     `gorm:"size:200;not null" json:"title"`
-	Notes      string     `gorm:"type:text" json:"notes"`
+	ID      uint   `gorm:"primarykey" json:"id"`
+	SyncUID string `gorm:"size:40;index" json:"-"`
+	UserID  uint   `gorm:"not null;index:idx_reminders_user_due;index:idx_reminders_user_completed" json:"-"`
+	ListID  uint   `gorm:"not null;index" json:"list_id"`
+	Title   string `gorm:"size:200;not null" json:"title"`
+	Notes   string `gorm:"type:text" json:"notes"`
 	// Kind is "task" (default) or "note"; see the KindTask / KindNote
 	// constants. The column default keeps every pre-existing row on task
 	// semantics, so adding this field needs no data migration.
-	Kind     string `gorm:"size:8;not null;default:task" json:"kind"`
-	Priority int    `gorm:"not null;default:0" json:"priority"`
-	DueAt    *time.Time `gorm:"index:idx_reminders_user_due" json:"due_at"`
+	Kind       string     `gorm:"size:8;not null;default:task" json:"kind"`
+	Priority   int        `gorm:"not null;default:0" json:"priority"`
+	DueAt      *time.Time `gorm:"index:idx_reminders_user_due" json:"due_at"`
 	AllDay     bool       `gorm:"not null;default:false" json:"all_day"`
 	RepeatRule string     `gorm:"size:16;not null;default:none" json:"repeat_rule"`
 	// Calendar selects which calendar the repeat rule follows: "solar"
@@ -96,6 +106,7 @@ type ReminderChannel struct {
 
 type Completion struct {
 	ID            uint       `gorm:"primarykey" json:"id"`
+	SyncUID       string     `gorm:"size:40;index" json:"-"`
 	ReminderID    uint       `gorm:"not null;index" json:"reminder_id"`
 	UserID        uint       `gorm:"not null;index" json:"-"`
 	ScheduledFor  *time.Time `json:"scheduled_for"`
@@ -222,10 +233,10 @@ type CompletedItemDTO struct {
 // CalendarItemDTO 是日历视图里的一个到期提醒。含已完成项——日历要能看到
 // 「这天有哪些安排、哪些已经做完」，所以不像列表那样过滤掉 completed_at。
 type CalendarItemDTO struct {
-	ID       uint      `json:"id"`
-	Title    string    `json:"title"`
-	ListID   uint      `json:"list_id"`
-	ListName string    `json:"list_name"`
+	ID       uint   `json:"id"`
+	Title    string `json:"title"`
+	ListID   uint   `json:"list_id"`
+	ListName string `json:"list_name"`
 	// ListColor 是清单的色名（blue/violet/rose/amber/emerald），前端沿用
 	// 侧栏那套 listColor 映射上色，保证同一清单处处同色。
 	ListColor string    `json:"list_color"`

@@ -26,11 +26,11 @@ type SaveReminderInput struct {
 	Notes string `json:"notes"`
 	// Kind is "task" (default) or "note". A note ignores every scheduling
 	// field and is stored as already completed.
-	Kind     string     `json:"kind"`
-	ListID   uint       `json:"list_id"`
-	Priority int        `json:"priority"`
-	DueAt    *time.Time `json:"due_at"`
-	AllDay   bool       `json:"all_day"`
+	Kind       string     `json:"kind"`
+	ListID     uint       `json:"list_id"`
+	Priority   int        `json:"priority"`
+	DueAt      *time.Time `json:"due_at"`
+	AllDay     bool       `json:"all_day"`
 	RepeatRule string     `json:"repeat_rule"`
 	// Calendar selects "solar" (default) or "lunar" recurrence for the
 	// monthly/yearly rules. The deprecated repeat_rule value "yearly_lunar"
@@ -976,6 +976,33 @@ func containsID(ids []uint, want uint) bool {
 		}
 	}
 	return false
+}
+
+// deleteList 删除一个清单：先把清单里的提醒归到默认清单，再软删清单。
+// 抽成函数是为了让「接口删除」与「同步收到对端的删除」走同一条路径——
+// 两处各写一遍时，同步那条路很容易漏掉「提醒归置」，留下一批挂在已删除清单上
+// 的孤儿数据（列表按清单筛选时它们会凭空消失）。
+func deleteList(db *gorm.DB, userID, listID uint) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		var list List
+		if err := tx.Where("id = ? AND user_id = ? AND deleted_at IS NULL", listID, userID).First(&list).Error; err != nil {
+			return err
+		}
+		if list.IsDefault {
+			return errors.New("默认清单不能删除")
+		}
+		fallback, err := ensureDefaultList(tx, userID)
+		if err != nil {
+			return err
+		}
+		if err := tx.Model(&Reminder{}).
+			Where("user_id = ? AND list_id = ? AND deleted_at IS NULL", userID, listID).
+			Update("list_id", fallback.ID).Error; err != nil {
+			return err
+		}
+		now := time.Now()
+		return tx.Model(&list).Update("deleted_at", &now).Error
+	})
 }
 
 // setDefaultList 把指定清单设为该用户唯一的默认清单。默认清单必须恒有且唯一：

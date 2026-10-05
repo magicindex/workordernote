@@ -124,7 +124,12 @@ func TestInitDefaultConfigsSeedsSystemConfigs(t *testing.T) {
 	}
 
 	// Then: every registered system config exists with a non-empty value
-	for _, key := range []string{"site_title", "site_description", "allow_register", "require_login", "jwt_secret"} {
+	for _, key := range []string{
+		"site_title", "site_description", "allow_register", "require_login", "jwt_secret",
+		// 双机同步的两个密钥类配置必须每次安装自动生成：空值会让同步接口
+		// 在校验令牌时把「未配置」当成「令牌正确」。
+		"sync_instance_id", "sync_token",
+	} {
 		value, err := GetConfig(db, key, 0)
 		if err != nil {
 			t.Fatalf("seeded config %q missing: %v", key, err)
@@ -164,8 +169,11 @@ func TestInitDefaultConfigsPreservesAdminEdits(t *testing.T) {
 	if err := db.Model(&database.SystemConfig{}).Where("user_id = 0").Count(&count).Error; err != nil {
 		t.Fatal(err)
 	}
-	if count != 6 {
-		t.Fatalf("system config rows = %d, want 6 (no duplicates)", count)
+	// 期望「一个已注册的系统配置恰好一行」：写死数字会在每次新增配置时误报，
+	// 而真正的断言是「没有重复行」——种子跑两遍后的行数应等于注册表条数。
+	want := int64(len(ListConfigs(ScopeSystem)))
+	if count != want {
+		t.Fatalf("system config rows = %d, want %d (one per registered key, no duplicates)", count, want)
 	}
 }
 

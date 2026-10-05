@@ -91,10 +91,15 @@ func init() {
 		Icon:        "check-circle",
 		RoutePrefix: "/reminders",
 		NavPosition: 10,
+		Setup:       setupSyncPublicRoutes,
 		SetupAuth:   setupAuthRoutes,
 		SetupAdmin:  setupAdminRoutes,
 		Migrate: func(db *gorm.DB) error {
 			appDB = db
+			// 同步标识的补写放在迁移之后：AutoMigrate 在这一步才加上 sync_uid 列。
+			if err := BackfillSyncUIDs(db); err != nil {
+				return err
+			}
 			return nil
 		},
 	})
@@ -109,6 +114,7 @@ func init() {
 			}
 		},
 	})
+	registerSyncScheduler()
 	scheduler.Register(scheduler.Job{
 		Name: "reminder-qq-gateway", Interval: 30 * time.Second,
 		Run: func() {

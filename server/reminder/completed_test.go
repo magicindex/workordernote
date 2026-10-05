@@ -267,7 +267,7 @@ func TestParseCompletedRange(t *testing.T) {
 	for _, bad := range [][3]string{
 		{"custom", "2026-02-01", "2026-01-01"}, // 结束早于开始
 		{"custom", "", "2026-01-01"},           // 缺开始日期
-		{"custom", "不是日期", "2026-01-01"},      // 非法日期
+		{"custom", "不是日期", "2026-01-01"},       // 非法日期
 		{"lastyear", "", ""},                   // 未知选项
 	} {
 		if _, err := ParseCompletedRange(bad[0], bad[1], bad[2]); err == nil {

@@ -64,6 +64,8 @@ func originClientID(c *gin.Context) string {
 }
 
 func setupAdminRoutes(api *gin.RouterGroup, db *gorm.DB) {
+	// 双机同步的设置与手动触发（见 sync_handlers.go）。
+	setupSyncAdminRoutes(api, db)
 	api.GET("/reminder/admin/providers", handleProviderStatuses(db))
 	api.GET("/reminder/admin/notification-brand", handleNotificationBrand(db))
 	api.PUT("/reminder/admin/notification-brand", handleNotificationBrand(db))
@@ -247,24 +249,7 @@ func handleDeleteList(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		userID := currentUserID(c)
-		err := db.Transaction(func(tx *gorm.DB) error {
-			var list List
-			if err := tx.Where("id = ? AND user_id = ? AND deleted_at IS NULL", id, userID).First(&list).Error; err != nil {
-				return err
-			}
-			if list.IsDefault {
-				return errors.New("默认清单不能删除")
-			}
-			fallback, err := ensureDefaultList(tx, userID)
-			if err != nil {
-				return err
-			}
-			if err := tx.Model(&Reminder{}).Where("user_id = ? AND list_id = ? AND deleted_at IS NULL", userID, id).Update("list_id", fallback.ID).Error; err != nil {
-				return err
-			}
-			now := time.Now()
-			return tx.Model(&list).Update("deleted_at", &now).Error
-		})
+		err := deleteList(db, userID, id)
 		if err != nil {
 			writeServiceError(c, err)
 			return
