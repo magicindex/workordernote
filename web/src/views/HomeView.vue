@@ -98,13 +98,24 @@
         <h2 class="text-sm font-bold">{{ view === 'completed' ? completedItems.length : items.length }} 项</h2>
         <span v-if="view !== 'completed' && overdueCount" class="rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold text-rose-500">{{ overdueCount }} 项已过期</span>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <button class="btn-secondary !h-8 !gap-1.5 !px-3 !text-xs" :disabled="exporting" @click="handleExport">
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          {{ exporting ? '导出中…' : '导出表格' }}
+        </button>
         <button
-          class="text-xs font-semibold text-muted-foreground hover:text-foreground disabled:opacity-50"
-          :disabled="exporting"
-          @click="handleExport"
-        >{{ exporting ? '导出中…' : '导出表格' }}</button>
-        <button class="text-xs font-semibold text-muted-foreground hover:text-foreground" @click="loadData">刷新</button>
+          v-if="view === 'completed'"
+          class="btn-secondary !h-8 !gap-1.5 !px-3 !text-xs"
+          :disabled="!completedItems.length"
+          @click="printOpen = true"
+        >
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M7 9V4h10v5M7 19H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M7 15h10v6H7z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          打印
+        </button>
+        <button class="btn-secondary !h-8 !gap-1.5 !px-3 !text-xs" @click="loadData">
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          刷新
+        </button>
       </div>
     </div>
 
@@ -245,6 +256,15 @@
       @saved="onEditorSaved"
     />
 
+    <!-- 打印完成记录：勾选要打印的列，纸张方向/字号按列数自动适配 -->
+    <PrintDialog
+      v-model="printOpen"
+      :items="completedItems"
+      :range-label="completedSpan"
+      :list-label="completedFilterSummary"
+      :site-title="authStore.siteTitle || '工作序记'"
+    />
+
     <Toast :message="toast.message" :type="toast.type" />
 
     <ConfirmDialog
@@ -263,11 +283,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 import Toast from '../components/Toast.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import ListFilter from '../components/ListFilter.vue'
 import LunarDatePicker from '../components/LunarDatePicker.vue'
 import RepeatNotifySelect from '../components/RepeatNotifySelect.vue'
+import PrintDialog from '../components/PrintDialog.vue'
+import ReminderEditor from '../components/ReminderEditor.vue'
 import {
   completeReminder, createReminder, deleteReminder, exportReminders, getChannelStatuses, getCompletedHistory, getLists,
   getReminder, getReminders, listIdsParam, restoreReminder, snoozeReminder, updateReminder,
@@ -275,6 +298,7 @@ import {
   type ReminderItem, type ReminderKind, type ReminderList, type SaveReminderInput
 } from '../api/reminder'
 
+const authStore = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const items = ref<ReminderItem[]>([])
@@ -282,6 +306,8 @@ const items = ref<ReminderItem[]>([])
 const completedItems = ref<CompletedItem[]>([])
 // 后端算出来的实际区间文案（含当天），显示在筛选器下方供核对。
 const completedSpan = ref('')
+// 打印弹窗开关
+const printOpen = ref(false)
 // 生效中的清单筛选；空字符串=没筛（全部）。条数对不上时，第一眼要能看出
 // 是不是这层筛选造成的——它就写在「当前区间」后面。
 const completedFilterSummary = computed(() => {

@@ -195,3 +195,39 @@ textarea {
     @apply flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-muted hover:text-foreground;
   }
 }
+
+/* ---------------- 打印（已完成记录） ----------------
+   打印时只显示 #print-root（由 PrintDialog 里渲染的整页表格），其余全部隐藏。
+   @page 的纸张方向与页边距由 PrintDialog 在打印前动态注入，用户选「自动」时
+   会按列数横排/纵排放。
+   表格用 table-layout:auto 让浏览器按内容分配列宽，长标题折行、时间列不折行，
+   这样列多列少都不会挤出纸外。 */
+#print-root { display: none; }
+
+@media print {
+  body > *:not(#print-root) { display: none !important; }
+  #print-root { display: block !important; }
+  html, body { background: #fff !important; }
+}
+
+.print-doc { color: #111827; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+.print-doc h1 { margin: 0 0 6px; font-size: 16px; font-weight: 800; }
+.print-doc .meta { margin: 0 0 10px; font-size: 11px; color: #4b5563; }
+.print-doc table { width: 100%; table-layout: auto; border-collapse: collapse; }
+.print-doc thead { display: table-header-group; }   /* 跨页时每页都带表头 */
+.print-doc tr { break-inside: avoid; }
+.print-doc th, .print-doc td {
+  border: 1px solid #9ca3af;
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.print-doc th { background: #f3f4f6; font-weight: 700; }
+.print-doc .col-num { width: 1%; text-align: right; white-space: nowrap; }
+.print-doc .col-time { white-space: nowrap; }
+.print-doc .col-tight { white-space: nowrap; }
+.print-doc.size-small { font-size: 10.5px; }
+.print-doc.size-medium { font-size: 12px; }
+.print-doc.size-large { font-size: 13.5px; }
