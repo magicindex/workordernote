@@ -31,6 +31,17 @@
         <button
           type="button"
           class="btn-secondary !h-8 !gap-1.5 !px-3 !text-[11px] sm:!text-xs"
+          :disabled="!cells.length"
+          title="打印当前显示的这一个月（A4，弹窗里可预览与调版式）"
+          aria-label="打印日历"
+          @click="printOpen = true"
+        >
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M7 9V4h10v5M7 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2m-10 0v3h10v-3m-10 0h10" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          打印本月
+        </button>
+        <button
+          type="button"
+          class="btn-secondary !h-8 !gap-1.5 !px-3 !text-[11px] sm:!text-xs"
           :disabled="exporting || !items.length"
           title="把本月日历上的内容导出成表格"
           @click="exportMonth"
@@ -225,6 +236,14 @@
       :loading="removeLoading"
       @confirm="confirmRemove"
     />
+    <CalendarPrintDialog
+      v-model="printOpen"
+      :cells="cells"
+      :items="items"
+      :year="cursor.year"
+      :month="cursor.month"
+      :list-label="printListLabel"
+    />
 
     <Toast :message="toast.message" :type="toast.type" />
   </div>
@@ -237,6 +256,7 @@ import ReminderEditor from '../components/ReminderEditor.vue'
 import Toast from '../components/Toast.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import ContextMenu from '../components/ContextMenu.vue'
+import CalendarPrintDialog from '../components/CalendarPrintDialog.vue'
 import type { ContextMenuItem } from '../components/ContextMenu.vue'
 import { getAllConfigs } from '../api/config'
 import {
@@ -266,6 +286,13 @@ const loading = ref(false)
 const errorMsg = ref('')
 const saving = ref(false)
 const exporting = ref(false)
+// 打印弹窗（打印当前显示的这一个月）
+const printOpen = ref(false)
+// 顶部说明里的清单筛选文案：没勾 = 全部，勾了就列名字
+const printListLabel = computed(() => {
+  if (!listFilter.value.length) return '全部'
+  return lists.value.filter((l) => listFilter.value.includes(l.id)).map((l) => l.name).join('、') || '全部'
+})
 
 // 编码器需要清单与通知渠道列表
 const lists = ref<ReminderList[]>([])

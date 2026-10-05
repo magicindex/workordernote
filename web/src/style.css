@@ -252,3 +252,52 @@ textarea {
 .print-doc.size-small { font-size: 10.5px; }
 .print-doc.size-medium { font-size: 12px; }
 .print-doc.size-large { font-size: 13.5px; }
+
+/* ---------------- 打印（日历） ----------------
+   与「已完成记录」共用 #print-root 与 .print-doc 的机制，这里只补月历版式：
+   一周一行（break-inside: avoid，不让一行被撕到两页），格子等宽平分，
+   每条安排左侧一条清单色条——用户把浏览器的「打印背景图形」关掉时，
+   色条和文字颜色仍然能区分清单。 */
+.print-cal { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+.print-cal .cal-print-weekdays { display: flex; }
+.print-cal .cal-print-weekdays span {
+  flex: 1 1 0;
+  padding: 3px 0;
+  text-align: center;
+  font-size: 0.92em;
+  font-weight: 700;
+  border-bottom: 1px solid #9ca3af;
+}
+.print-cal .cal-print-weekdays span.weekend { color: #b91c1c; }
+.print-cal .cal-print-grid { border-top: 1px solid #9ca3af; border-left: 1px solid #9ca3af; }
+.print-cal .cal-print-row { display: flex; break-inside: avoid; }
+.print-cal .cal-print-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 64px;
+  padding: 3px 4px;
+  border-right: 1px solid #9ca3af;
+  border-bottom: 1px solid #9ca3af;
+}
+.print-cal.size-small .cal-print-cell { min-height: 56px; }
+.print-cal.size-large .cal-print-cell { min-height: 74px; }
+.print-cal .cal-print-cell.out { background: #f9fafb; color: #9ca3af; }
+.print-cal .cal-print-head { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; }
+.print-cal .cal-print-head .d { font-weight: 700; }
+.print-cal .cal-print-head .l { font-size: 0.85em; color: #6b7280; }
+.print-cal .cal-print-cell.out .cal-print-head .l { color: #9ca3af; }
+.print-cal .cal-print-tasks { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 0; padding: 0; list-style: none; }
+.print-cal .cal-print-tasks li {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 0 3px;
+  border-left: 3px solid transparent;
+  border-radius: 3px;
+  font-size: 0.95em;
+  line-height: 1.3;
+}
+.print-cal .cal-print-tasks li .mark { font-size: 0.8em; font-weight: 700; opacity: 0.75; }
+.print-cal .cal-print-tasks li .t { font-variant-numeric: tabular-nums; opacity: 0.8; }
+.print-cal .cal-print-tasks li .ti { min-width: 0; overflow-wrap: anywhere; }
+.print-cal .cal-print-tasks li.done { text-decoration: line-through; opacity: 0.5; }
