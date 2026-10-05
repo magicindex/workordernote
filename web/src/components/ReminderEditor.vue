@@ -22,7 +22,10 @@
         <p v-if="errorMsg" class="mx-4 mt-3 rounded-xl bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive sm:mx-6">{{ errorMsg }}</p>
 
         <form class="flex min-h-0 flex-1 flex-col" @submit.prevent="save">
-          <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:space-y-6 sm:p-6">
+          <div
+            class="min-h-0 flex-1 overflow-y-auto p-4"
+            :class="isModal ? 'space-y-3 sm:space-y-4 sm:p-5' : 'space-y-4 sm:space-y-6 sm:p-6'"
+          >
             <label class="editor-field"><span>标题</span><input v-model="editing.title" autofocus maxlength="200" :placeholder="editing.kind === 'note' ? '记点什么…' : '要提醒什么？'" /></label>
             <div class="editor-field">
               <span>类型</span>
@@ -33,7 +36,11 @@
             </div>
             <label class="editor-field"><span>备注</span><textarea v-model="editing.notes" rows="4" maxlength="5000" placeholder="补充一些细节…"></textarea></label>
 
-            <div v-if="editing.kind !== 'note'" class="grid grid-cols-2 gap-3">
+            <div
+              v-if="editing.kind !== 'note'"
+              class="grid gap-3"
+              :class="isModal ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2'"
+            >
               <div class="editor-field relative">
                 <span>日期时间</span>
                 <button ref="dateAnchor" type="button" class="mt-1.5 flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-medium sm:mt-2 sm:rounded-2xl sm:px-4 sm:py-3" :class="dateOpen ? 'border-brand-500/45 ring-4 ring-brand-500/10' : 'border-border'" @click="dateOpen = !dateOpen">
@@ -47,12 +54,19 @@
               <label class="editor-field"><span>重复</span><select v-model="editing.repeat_rule"><option value="none">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option></select></label>
               <label class="editor-field"><span>按农历循环</span><select v-model="editing.calendar" @change="upgradeCalendarToYearly"><option value="solar">公历</option><option value="lunar">农历</option></select></label>
               <label class="editor-field"><span>过期提醒频率</span><RepeatNotifySelect :model-value="editing.repeat_notify_minutes ?? 0" @update:model-value="editing.repeat_notify_minutes = $event" /></label>
-              <p class="col-span-2 mt-1 text-[10px] leading-4 text-muted-foreground">“过期提醒频率”在到点未完成时按所选间隔重复通知，点击完成后停止；配合“每天”等重复规则可实现固定时间的每日催办。</p>
-              <p v-if="editing.calendar === 'lunar'" class="col-span-2 -mt-3 text-[10px] leading-4 text-muted-foreground">“按农历循环”按所选日期对应的农历月/日重复，适合农历生日等纪念日期；腊月三十遇小年自动改为除夕当天，闰月日期遇无闰月年份自动用对应平月。</p>
+              <p class="mt-1 text-[10px] leading-4 text-muted-foreground" :class="isModal ? 'col-span-2 sm:col-span-3' : 'col-span-2'">“过期提醒频率”在到点未完成时按所选间隔重复通知，点击完成后停止；配合“每天”等重复规则可实现固定时间的每日催办。</p>
+              <p v-if="editing.calendar === 'lunar'" class="text-[10px] leading-4 text-muted-foreground" :class="isModal ? 'col-span-2 -mt-2 sm:col-span-3' : 'col-span-2 -mt-3'">“按农历循环”按所选日期对应的农历月/日重复，适合农历生日等纪念日期；腊月三十遇小年自动改为除夕当天，闰月日期遇无闰月年份自动用对应平月。</p>
             </div>
             <p v-else class="rounded-2xl bg-muted/65 p-3 text-xs leading-5 text-muted-foreground">记事只作记录：不需要日期、重复和通知，保存后直接归入「已完成」。</p>
 
-            <div v-if="editing.kind !== 'note'">
+            <!-- 弹窗（日历里的新建/编辑）不摆渠道选择：六个渠道格子就占掉两百多像素，
+                 卡片再也装不下整张表单。渠道沿用默认设置（编辑时沿用这条提醒原有的），
+                 要逐条指定就去列表视图的抽屉里改。 -->
+            <p v-if="isModal && editing.kind !== 'note'" class="rounded-xl bg-muted/60 px-3 py-2 text-[11px] leading-4 text-muted-foreground">
+              通知方式沿用{{ isCreate ? '默认设置' : '原有设置' }}，需要逐条调整时请在列表视图里打开这条提醒。
+            </p>
+
+            <div v-if="editing.kind !== 'note' && !isModal">
               <p class="mb-3 text-xs font-bold text-muted-foreground">通知方式</p>
               <div class="grid grid-cols-2 gap-2">
                 <button v-for="channel in channels" :key="channel.channel" type="button" class="channel-option" :class="{ selected: isChannelSelected(channel.channel) }" :disabled="channel.channel !== 'inapp' && (!channel.bound || channel.status !== 'active')" @click="toggleChannel(channel.channel)">
@@ -272,7 +286,7 @@ async function save() {
 /* 居中弹窗：宽度与抽屉同量级（510px 起，宽屏放到 640px），高度最多 88vh，
    内部滚动区自己滚（表单区已经是 min-h-0 flex-1 overflow-y-auto）。 */
 .editor-panel-modal {
-  @apply h-auto max-h-[88vh] w-full max-w-[640px] rounded-2xl border border-border shadow-2xl;
+  @apply h-auto max-h-[88vh] w-full max-w-[680px] rounded-2xl border border-border shadow-2xl;
 }
 .sheet-enter-active, .sheet-leave-active { transition: opacity .18s ease; }
 .sheet-enter-active .editor-panel, .sheet-leave-active .editor-panel { transition: transform .22s cubic-bezier(.2,.8,.2,1), opacity .18s ease; }
