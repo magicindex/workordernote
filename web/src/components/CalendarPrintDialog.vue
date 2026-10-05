@@ -8,8 +8,9 @@
           class="relative w-full max-w-4xl rounded-2xl border border-border bg-background p-4 shadow-2xl sm:p-6"
           :data-print-orientation="effectiveOrientation"
           :data-print-font="effectiveFontSize"
-          :data-print-layout="mode"
-          :data-print-columns="mode === 'list' ? activeColumns.length : 0"
+          :data-print-layout="effectiveMode"
+          :data-print-columns="effectiveMode === 'list' ? activeColumns.length : 0"
+          :data-print-narrow="narrow ? '1' : '0'"
         >
           <div class="flex items-start justify-between gap-3">
             <div>
@@ -24,31 +25,34 @@
             </button>
           </div>
 
-          <!-- 打印形式：月历格子 / 列表 -->
-          <div class="mt-4">
+          <!-- 打印形式：月历格子 / 列表。手机屏幕窄、月历格子挤不开，窄屏只给列表 -->
+          <div v-if="!narrow" class="mt-4">
             <p class="text-xs font-bold text-muted-foreground">打印形式</p>
             <div class="mt-2 flex flex-wrap items-center gap-2">
               <div class="inline-flex rounded-xl border border-border bg-muted/60 p-0.5">
                 <button
                   type="button"
                   class="seg-btn"
-                  :class="{ active: mode === 'calendar' }"
+                  :class="{ active: effectiveMode === 'calendar' }"
                   data-print-mode="calendar"
                   @click="setMode('calendar')"
                 >月历</button>
                 <button
                   type="button"
                   class="seg-btn"
-                  :class="{ active: mode === 'list' }"
+                  :class="{ active: effectiveMode === 'list' }"
                   data-print-mode="list"
                   @click="setMode('list')"
                 >列表</button>
               </div>
               <span class="text-[11px] font-semibold text-muted-foreground">
-                {{ mode === 'calendar' ? '整月格子，和屏幕上看到的一样' : '一行一条，按日期时间排序（像「已完成记录」那样）' }}
+                {{ effectiveMode === 'calendar' ? '整月格子，和屏幕上看到的一样' : '一行一条，按日期时间排序（像「已完成记录」那样）' }}
               </span>
             </div>
           </div>
+          <p v-else class="mt-4 text-xs font-semibold text-muted-foreground">
+            打印形式：<b>列表</b>（手机屏幕上月历格子太挤，这里只提供列表；需要月历请用电脑打开）
+          </p>
 
           <!-- 打印哪些内容：记事 / 已完成是筛选，两种形式都生效 -->
           <div class="mt-4">
@@ -67,7 +71,7 @@
           </div>
 
           <!-- 列表模式：像「已完成记录」那样勾选要打印的列 -->
-          <div v-if="mode === 'list'" class="mt-4">
+          <div v-if="effectiveMode === 'list'" class="mt-4">
             <div class="flex items-center justify-between gap-2">
               <p class="text-xs font-bold text-muted-foreground">打印哪些列（已选 {{ selected.length }} / {{ columns.length }}）</p>
               <div class="flex items-center gap-2 text-[11px] font-semibold">
@@ -117,19 +121,19 @@
 
           <label class="mt-3 flex items-center gap-2 text-xs font-semibold text-muted-foreground">
             <input v-model="withSummary" type="checkbox" class="h-4 w-4 rounded border-border" />
-            在{{ mode === 'calendar' ? '日历' : '表格' }}上方打印说明（月份 / 清单 / 条数 / 打印时间）
+            在{{ effectiveMode === 'calendar' ? '日历' : '表格' }}上方打印说明（月份 / 清单 / 条数 / 打印时间）
           </label>
 
           <!-- 预览：所见即所得 -->
           <div class="mt-4">
             <p class="mb-2 text-xs font-bold text-muted-foreground">
-              预览（打印的就是这一份，共 {{ printedCount }} 条安排{{ mode === 'list' ? '，这里最多显示 8 行' : '' }}）
+              预览（打印的就是这一份，共 {{ printedCount }} 条安排{{ effectiveMode === 'list' ? '，这里最多显示 8 行' : '' }}）
             </p>
             <div class="max-h-80 overflow-auto rounded-xl border border-border bg-white p-3">
-              <div class="print-doc" :class="[`size-${effectiveFontSize}`, mode === 'calendar' ? 'print-cal' : '']">
+              <div class="print-doc" :class="[`size-${effectiveFontSize}`, effectiveMode === 'calendar' ? 'print-cal' : '']">
                 <h1 v-if="docTitle">{{ docTitle }}</h1>
                 <p v-if="withSummary" class="meta">{{ metaLine }}</p>
-                <PrintCalendarGrid v-if="mode === 'calendar'" />
+                <PrintCalendarGrid v-if="effectiveMode === 'calendar'" />
                 <table v-else-if="activeColumns.length">
                   <thead>
                     <tr><th v-for="col in activeColumns" :key="col.key" :class="col.cls">{{ col.label }}</th></tr>
@@ -148,7 +152,7 @@
             <button class="btn-secondary flex-1" @click="close">取消</button>
             <button
               class="btn-primary flex-1"
-              :disabled="printing || (mode === 'calendar' ? !weeks.length : (!selected.length || !listRows.length))"
+              :disabled="printing || (effectiveMode === 'calendar' ? !weeks.length : (!selected.length || !listRows.length))"
               @click="doPrint"
             >{{ printing ? '打印中…' : '打印' }}</button>
           </div>
@@ -158,10 +162,10 @@
 
     <!-- 真正被打印的整页内容：屏幕上看不见，@media print 时只显示它 -->
     <div v-if="modelValue" id="print-root">
-      <div class="print-doc" :class="[`size-${effectiveFontSize}`, mode === 'calendar' ? 'print-cal' : '']">
+      <div class="print-doc" :class="[`size-${effectiveFontSize}`, effectiveMode === 'calendar' ? 'print-cal' : '']">
         <h1 v-if="docTitle">{{ docTitle }}</h1>
         <p v-if="withSummary" class="meta">{{ metaLine }}</p>
-        <PrintCalendarGrid v-if="mode === 'calendar'" />
+        <PrintCalendarGrid v-if="effectiveMode === 'calendar'" />
         <table v-else-if="activeColumns.length">
           <thead>
             <tr><th v-for="col in activeColumns" :key="col.key" :class="col.cls">{{ col.label }}</th></tr>
@@ -178,7 +182,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CalendarItem, LunarDayInfo } from '../api/reminder'
 import { listColorHex, listInk, listTint } from '../utils/list-colors'
 
@@ -201,8 +205,18 @@ const pad = (n: number) => String(n).padStart(2, '0')
 const keyOf = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`
 const cellKey = (c: LunarDayInfo) => keyOf(c.year, c.month, c.day)
 
-/** 打印形式：月历格子，或像「已完成记录」那样的列表表格。 */
+/**
+ * 打印形式：月历格子，或像「已完成记录」那样的列表表格。
+ * 手机（窄屏 ≤640px）只保留列表：月历格子在小屏上一格才 40 多像素宽，
+ * 日期和安排都挤成一团，打出来也不能看，所以窄屏把「打印形式」整块藏掉、
+ * 强制走列表，并把只对月历有意义的开关（农历/节气、时间）一并收起来。
+ */
 const mode = ref<'calendar' | 'list'>('calendar')
+const NARROW_MQ = '(max-width: 640px)'
+const narrow = ref(false)
+let narrowMq: MediaQueryList | null = null
+const onNarrowChange = () => { narrow.value = !!narrowMq?.matches }
+const effectiveMode = computed<'calendar' | 'list'>(() => (narrow.value ? 'list' : mode.value))
 function setMode(next: 'calendar' | 'list') {
   mode.value = next
   syncAutoTitle()
@@ -221,7 +235,7 @@ const toggles = computed(() => {
     { key: 'notes', label: '记事', on: showNotes.value, set: (v: boolean) => { showNotes.value = v } },
     { key: 'completed', label: '已完成', on: showCompleted.value, set: (v: boolean) => { showCompleted.value = v } },
   ]
-  if (mode.value !== 'calendar') return filters
+  if (effectiveMode.value !== 'calendar') return filters
   return [
     { key: 'lunar', label: '农历 / 节气', on: showLunar.value, set: (v: boolean) => { showLunar.value = v } },
     ...filters,
@@ -275,10 +289,10 @@ const docTitle = ref('')
 
 // 月历是横向铺开的，默认横向更好排；显示时间/记事时字号默认收小一档。
 // 列表模式照「已完成记录」的规则：列 ≥5 横排、≥6 收小字号。
-const autoOrientation = computed(() => (mode.value === 'calendar'
+const autoOrientation = computed(() => (effectiveMode.value === 'calendar'
   ? 'landscape'
   : (activeColumns.value.length >= 5 ? 'landscape' : 'portrait')))
-const autoFontSize = computed(() => (mode.value === 'calendar'
+const autoFontSize = computed(() => (effectiveMode.value === 'calendar'
   ? ((showTime.value || showNotes.value) ? 'small' : 'medium')
   : (activeColumns.value.length >= 6 ? 'small' : 'medium')))
 const autoFontLabel = computed(() => (autoFontSize.value === 'small' ? '小' : '中'))
@@ -319,7 +333,7 @@ const listRows = computed<ListRow[]>(() => filteredItems.value
     : a.due_date.localeCompare(b.due_date)))
   .map((item) => ({ key: `${item.kind}-${item.id}`, item })))
 
-const printedCount = computed(() => (mode.value === 'calendar'
+const printedCount = computed(() => (effectiveMode.value === 'calendar'
   ? weeks.value.reduce((n, w) => n + w.reduce((m, c) => m + itemsFor(c).length, 0), 0)
   : listRows.value.length))
 
@@ -414,7 +428,7 @@ function applyPageRule() {
 
 const printing = ref(false)
 async function doPrint() {
-  if (mode.value === 'calendar' ? !weeks.value.length : (!selected.value.length || !listRows.value.length)) return
+  if (effectiveMode.value === 'calendar' ? !weeks.value.length : (!selected.value.length || !listRows.value.length)) return
   printing.value = true
   applyPageRule()
   await nextTick()
@@ -432,7 +446,7 @@ window.addEventListener('afterprint', cleanup)
 /** 标题是自动生成的（用户手改过就不再覆盖）：月历叫「日历」、列表叫「安排」。 */
 const AUTO_TITLE = /^工作序记 · \d{4} 年 \d{1,2} 月 (日历|安排)$/
 function autoTitle(y = props.year, m = props.month) {
-  return `工作序记 · ${y} 年 ${m} 月 ${mode.value === 'calendar' ? '日历' : '安排'}`
+  return `工作序记 · ${y} 年 ${m} 月 ${effectiveMode.value === 'calendar' ? '日历' : '安排'}`
 }
 function syncAutoTitle() {
   if (!docTitle.value || AUTO_TITLE.test(docTitle.value)) docTitle.value = autoTitle()
@@ -455,7 +469,17 @@ watch([effectiveOrientation, effectiveFontSize], () => {
   if (props.modelValue) applyPageRule()
 })
 
+onMounted(() => {
+  narrowMq = window.matchMedia(NARROW_MQ)
+  onNarrowChange()
+  narrowMq.addEventListener('change', onNarrowChange)
+})
+
+// 窄屏/宽屏切换时，形式与自动版式都可能变，标题（没手改过的话）也要跟着换
+watch(effectiveMode, () => { syncAutoTitle() })
+
 onBeforeUnmount(() => {
+  narrowMq?.removeEventListener('change', onNarrowChange)
   window.removeEventListener('afterprint', cleanup)
   cleanup()
 })
