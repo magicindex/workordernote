@@ -33,6 +33,7 @@
             maxlength="200"
             @keydown.enter.prevent="submitQuick"
             @focus="quickFocused = true"
+            @click="quickFocused = true"
           />
           <p v-if="quick.notes" class="mt-1 truncate text-xs text-muted-foreground">{{ quick.notes }}</p>
         </div>
@@ -51,6 +52,18 @@
             <button class="quick-chip" :class="{ active: quick.priority === 3 }" @click="quick.priority = quick.priority === 3 ? 0 : 3">
               <span class="text-rose-500">!!!</span> 重要
             </button>
+            <!-- 清单选择常显（原来藏在「更多」里）：默认是「偏好设置 → 默认清单」里那一本，
+                 临时想放到别的清单就在这里改，改完只影响这一次新建。 -->
+            <label class="ml-0.5 inline-flex items-center gap-1.5" title="这条提醒加到哪个清单（默认取偏好设置里的默认清单）">
+              <i class="h-2 w-2 shrink-0 rounded-full" :style="{ background: listColor(quickListColor) }"></i>
+              <select
+                v-model.number="quick.list_id"
+                class="quick-chip !h-7 max-w-[9rem] !px-2 !text-[11px]"
+                aria-label="选择清单"
+              >
+                <option v-for="list in lists" :key="list.id" :value="list.id">{{ list.name }}</option>
+              </select>
+            </label>
             <button class="quick-chip" :class="{ active: quickExpanded }" @click="quickExpanded = !quickExpanded">
               <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 6v.01M12 12v.01M12 18v.01" stroke-width="3" stroke-linecap="round"/></svg>
               更多
@@ -70,7 +83,6 @@
               </button>
               <LunarDatePicker v-if="quickDateOpen" v-model="quickDatePicked" with-time :anchor-el="quickDateAnchor" @commit="quickDateOpen = false" />
             </div>
-            <label class="field-label">清单<select v-model.number="quick.list_id" class="compact-input"><option v-for="list in lists" :key="list.id" :value="list.id">{{ list.name }}</option></select></label>
             <label class="field-label">重复<select v-model="quick.repeat_rule" class="compact-input"><option value="none">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option></select></label>
             <label class="field-label">备注<input v-model="quick.notes" class="compact-input" placeholder="可选" maxlength="5000" /></label>
             <label class="field-label">按农历循环<select v-model="quick.calendar" class="compact-input" @change="upgradeCalendarToYearly(quick)"><option value="solar">公历</option><option value="lunar">农历</option></select></label>
@@ -774,6 +786,9 @@ function channelName(ch: ReminderChannel) { return ({ inapp: '站内', email: '�
 function ruleLabel(rule: string) { return ({ daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年' } as Record<string, string>)[rule] || '循环' }
 // 清单色表在 utils/list-colors.ts（侧栏/筛选/标题/日历共用一份，改一处不会走样）。
 function listColor(color: string) { return listColorHex(color) }
+
+// 快速新建里那个清单下拉当前选中项的色名（色点跟清单同色）
+const quickListColor = computed(() => lists.value.find((l) => l.id === quick.list_id)?.color || 'blue')
 function changed() { window.dispatchEvent(new CustomEvent('reminder-data-changed')) }
 function showToast(message: string, type: 'success' | 'error' = 'success') { toast.message = ''; setTimeout(() => Object.assign(toast, { message, type }), 0) }
 

@@ -8,7 +8,15 @@
     <aside class="sidebar" :class="[mobileOpen ? 'sidebar-open' : '', railActive ? 'sidebar-rail' : 'sidebar-docked']">
       <div class="flex h-full flex-col">
         <div class="flex items-center justify-between px-5 pb-5 pt-6">
-          <RouterLink to="/admin" class="group flex items-center gap-3" :title="railActive ? (authStore.siteTitle || '工作序记') : undefined" @click="mobileOpen = false">
+          <!-- 左上角这一块改成视图切换：点一下去日历、再点一下回列表（原来点它只是回首页）。
+               品牌信息仍然保留，只是整体变成按钮；提示文字随当前视图变化。 -->
+          <button
+            type="button"
+            class="group flex items-center gap-3 text-left"
+            :title="railActive ? (isCalendar ? '切到列表视图' : '切到日历视图') : (isCalendar ? '点这里切回列表视图' : '点这里切到日历视图')"
+            :aria-label="isCalendar ? '切换到列表视图' : '切换到日历视图'"
+            @click="toggleViewFromLogo"
+          >
             <span class="logo-mark">
               <!-- 与新应用图标同形：记录本 + 已办结的勾 -->
               <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" aria-hidden="true">
@@ -22,9 +30,11 @@
                 <span class="font-display text-lg font-extrabold tracking-tight">{{ authStore.siteTitle || '工作序记' }}</span>
                 <span v-if="appVersion" class="version-badge" :title="appBuildTime ? `构建时间：${appBuildTime}` : ''">{{ appVersion }}</span>
               </span>
-              <span class="block text-[11px] font-medium text-muted-foreground">把重要的事，放心交给我</span>
+              <span class="block text-[11px] font-medium text-muted-foreground">
+                {{ isCalendar ? '点一下回到列表' : '点一下切到日历' }}
+              </span>
             </span>
-          </RouterLink>
+          </button>
           <button class="icon-button mobile-only" aria-label="关闭菜单" @click="mobileOpen = false">
             <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
@@ -80,38 +90,47 @@
             <span v-if="summary.all" class="nav-count">{{ summary.all }}</span>
           </RouterLink>
 
+          <!-- 清单行不再挂「笔」图标：右键（桌面）或长按（触屏）弹出菜单，里面有重命名 / 修改 / 删除。
+               右键菜单藏起来的入口，所以这里不摆任何常驻按钮，侧栏更干净。 -->
           <div
             v-for="list in lists"
             :key="list.id"
             class="group/list flex items-center"
+            @contextmenu.prevent.stop="openListMenu(list, $event)"
+            @touchstart.passive="onListTouchStart(list, $event)"
+            @touchmove.passive="cancelListLongPress"
+            @touchend="cancelListLongPress"
+            @touchcancel="cancelListLongPress"
+            @click.capture="onListRowClick"
           >
             <RouterLink
               :to="`/admin/list/${list.id}`"
-              :title="railActive ? list.name : undefined"
+              :title="railActive ? list.name : `右键（手机上长按）可重命名、改颜色或删除「${list.name}」`"
               class="nav-row min-w-0 flex-1"
               :class="{ 'nav-row-active': route.path === `/admin/list/${list.id}` }"
               @click="mobileOpen = false"
             >
               <span class="h-2.5 w-2.5 rounded-full ring-4 ring-current/10" :style="{ color: listColor(list.color), background: listColor(list.color) }"></span>
-              <span class="flex-1 truncate">{{ list.name }}</span>
+              <!-- 重命名就地改：回车保存、Esc 取消，不弹窗 -->
+              <input
+                v-if="renamingListId === list.id"
+                ref="renameInput"
+                v-model="renameDraft"
+                class="min-w-0 flex-1 rounded-lg border border-brand-500/40 bg-surface px-2 py-1 text-sm font-semibold outline-none"
+                maxlength="40"
+                :aria-label="`重命名清单「${list.name}」`"
+                @click.stop.prevent
+                @keydown.enter.prevent="commitRename(list)"
+                @keydown.esc.prevent="cancelRename"
+                @blur="commitRename(list)"
+              />
+              <span v-else class="flex-1 truncate">{{ list.name }}</span>
               <!-- 默认清单标识；改默认清单在「偏好设置」里操作 -->
               <span v-if="list.is_default" class="rail-hide shrink-0 text-amber-400" title="默认清单" aria-label="默认清单">
                 <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor"><path d="m12 3.6 2.6 5.27 5.82.85-4.21 4.1.99 5.8L12 16.87l-5.2 2.75.99-5.8-4.21-4.1 5.82-.85L12 3.6Z"/></svg>
               </span>
               <span v-if="list.open_count" class="nav-count">{{ list.open_count }}</span>
             </RouterLink>
-            <!-- 编辑清单（改名 / 换颜色）。放成 RouterLink 的兄弟节点而不是嵌在里面：
-                 交互元素不能套在链接里（键盘与读屏都会出问题）。手机上没有 hover，
-                 所以窄屏常显、桌面悬停才出现。 -->
-            <button
-              type="button"
-              class="nav-edit rail-hide mr-1 shrink-0 rounded-lg p-1.5 text-muted-foreground opacity-70 transition hover:bg-muted hover:text-foreground sm:opacity-0 sm:group-hover/list:opacity-100 sm:focus:opacity-100"
-              :aria-label="`编辑清单「${list.name}」`"
-              :title="`编辑清单「${list.name}」（改名 / 换颜色）`"
-              @click="openListEditor(list)"
-            >
-              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
           </div>
         </nav>
 
@@ -265,6 +284,28 @@
     <!-- 版本信息与迭代说明 -->
     <VersionDialog v-model="versionOpen" :version="appVersion" :build-time="appBuildTime" />
 
+    <!-- 清单行的右键 / 长按菜单 -->
+    <ContextMenu
+      v-model:open="listMenu.open"
+      :x="listMenu.x"
+      :y="listMenu.y"
+      :heading="listMenu.list?.name || ''"
+      :items="listMenuItems"
+      @select="onListMenuSelect"
+    />
+
+    <!-- 删除清单的确认浮层（与提醒删除同一套） -->
+    <ConfirmDialog
+      v-model="deleteListVisible"
+      danger
+      title="删除这个清单？"
+      :message="`「${deleteListTarget?.name || ''}」里的提醒会移到默认清单，清单本身删除后无法恢复。`"
+      confirm-text="删除清单"
+      loading-text="删除中…"
+      :loading="deleteListLoading"
+      @confirm="confirmDeleteList"
+    />
+
     <!-- 编辑清单：改名 / 换颜色。颜色是清单的属性，改完侧栏圆点、列表页任务标题、
          日历格子与详情面板一起变（前两者靠这里的 refreshNavigation + 广播数据变更事件，
          日历靠监听同一个事件重拉数据）。 -->
@@ -318,11 +359,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import VersionDialog from '../components/VersionDialog.vue'
 import Modal from '../components/Modal.vue'
+import ContextMenu from '../components/ContextMenu.vue'
+import type { ContextMenuItem } from '../components/ContextMenu.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import UiThemeToggle from '../components/ui/ThemeToggle.vue'
 import ReminderAlert from '../components/ReminderAlert.vue'
 import { useAuthStore } from '../stores/auth'
@@ -334,6 +378,7 @@ import {
   getRevision,
   getSummary,
   markNotificationRead,
+  deleteList,
   snoozeReminder,
   updateList,
   type ReminderList,
@@ -458,6 +503,175 @@ function openQuickAdd() {
   mobileOpen.value = false
   setTimeout(() => window.dispatchEvent(new CustomEvent('open-quick-reminder')), 80)
 }
+// ---- 左上角 logo：列表 / 日历 一键切换 ----
+// 顶栏右侧那个「列表 / 日历」开关仍然保留（只在提醒相关页面出现），这里是从 logo 直接切。
+function toggleViewFromLogo() {
+  mobileOpen.value = false
+  if (isCalendar.value) router.push(listRoute.value)
+  else router.push('/admin/calendar')
+}
+
+// ---- 清单行的右键 / 长按菜单：重命名、修改、删除 ----
+const listMenu = reactive<{ open: boolean; x: number; y: number; list: ReminderList | null }>({
+  open: false, x: 0, y: 0, list: null,
+})
+const listMenuItems = computed<ContextMenuItem[]>(() => {
+  const target = listMenu.list
+  return [
+    {
+      key: 'rename', label: '重命名',
+      icon: '<svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M4 7h10M4 12h16M4 17h7" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    },
+    {
+      key: 'edit', label: '修改（名称 / 颜色）',
+      icon: '<svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    },
+    {
+      key: 'default', label: '设为默认清单',
+      disabled: !!target?.is_default,
+      title: target?.is_default ? '它已经是默认清单' : '新建提醒不带清单时放进这里',
+      icon: '<svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor"><path d="m12 3.6 2.6 5.27 5.82.85-4.21 4.1.99 5.8L12 16.87l-5.2 2.75.99-5.8-4.21-4.1 5.82-.85L12 3.6Z"/></svg>',
+    },
+    {
+      key: 'delete', label: '删除清单', danger: true,
+      disabled: !!target?.is_default,
+      title: target?.is_default ? '默认清单不能删除' : '里面的提醒会移到默认清单',
+      icon: '<svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    },
+  ]
+})
+
+function openListMenu(list: ReminderList, event: MouseEvent) {
+  listMenu.x = event.clientX || 0
+  listMenu.y = event.clientY || 0
+  listMenu.list = list
+  listMenu.open = true
+}
+
+function onListMenuSelect(key: string) {
+  const list = listMenu.list
+  if (!list) return
+  if (key === 'rename') startRename(list)
+  else if (key === 'edit') openListEditor(list)
+  else if (key === 'default') void makeDefaultList(list)
+  else if (key === 'delete') askDeleteList(list)
+}
+
+// 触屏：长按 550ms 开同一个菜单；长按触发后要吃掉随后那次 click，
+// 否则手指抬起会顺带跳进这个清单。
+let listPressTimer: ReturnType<typeof setTimeout> | null = null
+let suppressListClick = false
+
+function onListTouchStart(list: ReminderList, event: TouchEvent) {
+  cancelListLongPress()
+  const touch = event.touches[0]
+  if (!touch) return
+  const point = { clientX: touch.clientX, clientY: touch.clientY }
+  listPressTimer = setTimeout(() => {
+    listPressTimer = null
+    suppressListClick = true
+    // 合成一个 MouseEvent：菜单只需要坐标
+    openListMenu(list, point as MouseEvent)
+    setTimeout(() => { suppressListClick = false }, 700)
+  }, 550)
+}
+
+function cancelListLongPress() {
+  if (listPressTimer) {
+    clearTimeout(listPressTimer)
+    listPressTimer = null
+  }
+}
+
+function onListRowClick(e: MouseEvent) {
+  if (!suppressListClick) return
+  suppressListClick = false
+  e.preventDefault()
+  e.stopPropagation()
+}
+
+// ---- 重命名（就地改，不弹窗）----
+const renamingListId = ref(0)
+const renameDraft = ref('')
+const renameInput = ref<HTMLInputElement[] | HTMLInputElement | null>(null)
+
+async function startRename(list: ReminderList) {
+  renamingListId.value = list.id
+  renameDraft.value = list.name
+  await nextTick()
+  const el = Array.isArray(renameInput.value) ? renameInput.value[0] : renameInput.value
+  el?.focus()
+  el?.select()
+}
+
+function cancelRename() {
+  renamingListId.value = 0
+  renameDraft.value = ''
+}
+
+async function commitRename(list: ReminderList) {
+  if (renamingListId.value !== list.id) return
+  const name = renameDraft.value.trim()
+  cancelRename()
+  if (!name || name === list.name) return
+  try {
+    await updateList(list.id, { name })
+    await refreshNavigation()
+    notifyDataChanged('list', 'updated', list.id)
+  } catch (err: any) {
+    realtimeToast.value = err?.response?.data?.message || '重命名失败'
+  }
+}
+
+// ---- 设为默认 / 删除清单 ----
+async function makeDefaultList(list: ReminderList) {
+  try {
+    await updateList(list.id, { is_default: true })
+    await refreshNavigation()
+    notifyDataChanged('list', 'updated', list.id)
+    realtimeToast.value = `已把「${list.name}」设为默认清单`
+  } catch (err: any) {
+    realtimeToast.value = err?.response?.data?.message || '设置失败'
+  }
+}
+
+const deleteListVisible = ref(false)
+const deleteListTarget = ref<ReminderList | null>(null)
+const deleteListLoading = ref(false)
+
+function askDeleteList(list: ReminderList) {
+  deleteListTarget.value = list
+  deleteListVisible.value = true
+}
+
+async function confirmDeleteList() {
+  const target = deleteListTarget.value
+  if (!target) return
+  deleteListLoading.value = true
+  try {
+    await deleteList(target.id)
+    deleteListVisible.value = false
+    await refreshNavigation()
+    notifyDataChanged('list', 'deleted', target.id)
+    realtimeToast.value = `已删除清单「${target.name}」`
+    // 正停在这个清单页上时回首页，否则页面会因为清单没了而空白
+    if (route.path === `/admin/list/${target.id}`) router.push('/admin')
+  } catch (err: any) {
+    realtimeToast.value = err?.response?.data?.message || '删除失败'
+  } finally {
+    deleteListLoading.value = false
+  }
+}
+
+// 数据变更广播：列表页 / 日历页监听 reminder-realtime 重拉（与编辑清单同一套）
+function notifyDataChanged(scope: string, action: string, targetId: number) {
+  const event: ReminderRealtimeEvent = {
+    type: 'reminders.changed', scope, action, target_id: targetId, sent_at: new Date().toISOString(),
+  }
+  window.dispatchEvent(new CustomEvent('reminder-realtime', { detail: event }))
+  window.dispatchEvent(new CustomEvent('reminder-data-changed'))
+}
+
 // ---- 编辑清单（改名 / 换颜色）----
 const listEditorOpen = ref(false)
 const listEditorId = ref(0)
@@ -499,15 +713,7 @@ async function submitListEditor() {
     // 数据，于是颜色改动会立刻反映到列表页的任务标题和**已经打开的日历**上。
     // 事件形状与后端推送的保持一致（scope=list, action=updated），这样本机改动和
     // 另一台设备的改动走同一条刷新路径，不必为「本地」再写一套。
-    const localEvent: ReminderRealtimeEvent = {
-      type: 'reminders.changed',
-      scope: 'list',
-      action: 'updated',
-      target_id: listEditorId.value,
-      sent_at: new Date().toISOString(),
-    }
-    window.dispatchEvent(new CustomEvent('reminder-realtime', { detail: localEvent }))
-    window.dispatchEvent(new CustomEvent('reminder-data-changed'))
+    notifyDataChanged('list', 'updated', listEditorId.value)
   } catch (err: any) {
     listEditorError.value = err?.response?.data?.message || '保存失败'
   } finally {
