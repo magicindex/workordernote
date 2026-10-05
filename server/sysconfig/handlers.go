@@ -107,9 +107,12 @@ func handleUpdateConfig(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetUint("userID")
 		isAdmin := c.GetString("role") == "admin"
+		// Value 不加 binding:"required"：字符串型配置要允许被清空
+		// （典型场景：把「外网下载地址」留空）。类型检查交给 Validate——
+		// bool/int/select 传空照样会被拒，只是错误信息更具体。
 		var req struct {
 			Key   string `json:"key" binding:"required"`
-			Value string `json:"value" binding:"required"`
+			Value string `json:"value"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			response.ErrorBadRequest(c, "请求无效")

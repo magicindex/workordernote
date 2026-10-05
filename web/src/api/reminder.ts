@@ -254,3 +254,31 @@ export const saveFeishuProvider = (data: { app_id: string; app_secret: string })
 export const saveProvider = (provider: 'email' | 'sms' | 'qq', data: Record<string, string>) =>
   request.put(`/api/reminder/admin/providers/${provider}`, data)
 export const createQQBindCode = () => request.post('/api/reminder/channels/qq/bind-code')
+
+// ---- 安卓客户端（WebView 壳子）的发布信息 ----
+export interface AndroidClient {
+  version: string
+  notes: string
+  file_name: string
+  file_size: number
+  sha256: string
+  uploaded_at: string
+  has_apk: boolean
+  lan_url: string
+  wan_url: string
+  min_sdk: number
+}
+
+export const getAndroidClient = () => request.get('/api/reminder/android')
+
+/** 管理员上传/替换安装包（顺带把版本号写进配置）。 */
+export const uploadAndroidApk = (file: File, version: string) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  fd.append('version', version)
+  // 上传大文件别用默认的 30s 超时
+  return request.post('/api/reminder/admin/android/apk', fd, { timeout: 300000 })
+}
+
+/** 管理员下架安装包。 */
+export const deleteAndroidApk = () => request.delete('/api/reminder/admin/android/apk')

@@ -38,6 +38,23 @@
       </button>
     </form>
 
+    <!-- 安卓客户端里才显示：改服务器地址（网页里没有这个概念，所以只在壳子内出现）。
+         网页通过 JS 桥 AndroidShell 调起原生弹窗，地址存在手机本地。 -->
+    <div v-if="inAndroidShell" class="mt-5 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3" data-server-entry>
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">服务器地址</p>
+          <p class="mt-0.5 truncate text-sm font-semibold text-white/90" data-server-url>{{ serverUrl || '未设置' }}</p>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/[0.08]"
+          data-server-edit
+          @click="openServerSettings"
+        >修改</button>
+      </div>
+    </div>
+
     <Teleport to="body">
       <transition enter-active-class="transition duration-200" enter-from-class="opacity-0" leave-active-class="transition duration-150" leave-to-class="opacity-0">
         <div v-if="showFnOSConfirm" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 px-4 backdrop-blur-sm" @click.self="cancelFnOSConfirm">
@@ -83,6 +100,18 @@ import AuthField from '../components/auth/AuthField.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+// 安卓壳子（WebView 客户端）会注入 AndroidShell 这个 JS 桥；网页里没有它。
+const shell = (window as unknown as { AndroidShell?: { getServerUrl?: () => string; openServerSettings?: () => void } }).AndroidShell
+const inAndroidShell = ref(!!shell)
+const serverUrl = ref('')
+function openServerSettings() {
+  try { shell?.openServerSettings?.() } catch { /* 桥异常不该影响登录页 */ }
+}
+function readServerUrl() {
+  try { serverUrl.value = String(shell?.getServerUrl?.() || '') } catch { serverUrl.value = '' }
+}
+readServerUrl()
 
 const username = ref('')
 const password = ref('')

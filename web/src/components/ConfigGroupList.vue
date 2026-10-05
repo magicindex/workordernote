@@ -131,6 +131,7 @@ const groupTitleMap: Record<string, string> = {
   access: '访问控制',
   appearance: '外观',
   system: '系统维护',
+  android: '安卓客户端',
 }
 
 const selectOptionLabelMap: Record<string, Record<string, string>> = {

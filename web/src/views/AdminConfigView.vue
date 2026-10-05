@@ -20,6 +20,10 @@
         :items="items"
         @save="handleSave"
       />
+
+      <!-- 安卓客户端安装包：版本号/说明/下载地址是上面那个配置分组里的普通配置项，
+           安装包本身必须是文件，单独一块（上传后卡片上就会出现下载按钮与二维码）。 -->
+      <AndroidApkUploader />
     </div>
   </div>
 </template>
@@ -29,6 +33,7 @@ import { onMounted, ref } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfigGroupList from '../components/ConfigGroupList.vue'
 import SyncPanel from '../components/SyncPanel.vue'
+import AndroidApkUploader from '../components/AndroidApkUploader.vue'
 import { getSystemConfigMeta, updateConfig } from '../api/config'
 import type { ConfigMeta } from '../api/config'
 

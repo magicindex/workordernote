@@ -18,6 +18,9 @@
       </div>
     </div>
 
+    <!-- 安卓客户端：软件信息卡片（版本/更新说明/下载地址与二维码） -->
+    <AndroidClientCard :open="modelValue" />
+
     <!-- 迭代说明 -->
     <h4 class="mt-5 text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground">迭代说明</h4>
     <ol class="mt-2 space-y-4">
@@ -51,6 +54,7 @@
 
 <script setup lang="ts">
 import Modal from './Modal.vue'
+import AndroidClientCard from './AndroidClientCard.vue'
 import { PROJECT, UPSTREAM, releaseNotes } from '../data/release-notes'
 
 defineProps<{

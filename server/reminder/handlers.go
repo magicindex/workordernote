@@ -66,6 +66,9 @@ func originClientID(c *gin.Context) string {
 func setupAdminRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	// 双机同步的设置与手动触发（见 sync_handlers.go）。
 	setupSyncAdminRoutes(api, db)
+	// 安卓客户端安装包的上传/下架（见 android_client.go）
+	api.POST("/reminder/admin/android/apk", handleAndroidUploadAPK(db))
+	api.DELETE("/reminder/admin/android/apk", handleAndroidDeleteAPK(db))
 	api.GET("/reminder/admin/providers", handleProviderStatuses(db))
 	api.GET("/reminder/admin/notification-brand", handleNotificationBrand(db))
 	api.PUT("/reminder/admin/notification-brand", handleNotificationBrand(db))

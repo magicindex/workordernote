@@ -250,3 +250,31 @@ func TestValidateAcceptsValidValues(t *testing.T) {
 		}
 	}
 }
+
+// 字符串型配置必须能被清空：管理员把「外网下载地址」这类可选地址留空是正常操作。
+// 之前 handleUpdateConfig 给 Value 加了 binding:"required"，空值直接 400，
+// 用户就再也删不掉已经填过的可选地址了（安卓客户端的下载地址踩到过）。
+func TestUpdateConfigAllowsEmptyString(t *testing.T) {
+	db := setupTestDB(t)
+	RegisterConfig(ConfigDef{
+		Key: "test_optional_url", Scope: ScopeSystem, Type: TypeString,
+		Default: "", Group: "test", Label: "可选地址",
+	})
+	if err := UpdateConfig(db, "test_optional_url", "https://example.com/x.apk", 0); err != nil {
+		t.Fatalf("写入失败：%v", err)
+	}
+	if err := UpdateConfig(db, "test_optional_url", "", 0); err != nil {
+		t.Fatalf("清空失败：%v", err)
+	}
+	got, err := GetConfig(db, "test_optional_url", 0)
+	if err != nil {
+		t.Fatalf("回读失败：%v", err)
+	}
+	if got != "" {
+		t.Fatalf("期望清空后为空串，实际 %q", got)
+	}
+	// 类型检查仍然拦得住：int 型传空要报错
+	if err := Validate(ConfigDef{Key: "k", Type: TypeInt}, ""); err == nil {
+		t.Fatal("int 型配置传空值应当被 Validate 拒绝")
+	}
+}
