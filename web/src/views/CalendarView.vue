@@ -25,14 +25,26 @@
         <div class="flex items-center gap-3 text-[11px] font-semibold text-muted-foreground sm:text-xs">
           <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-brand-500"></i>未完成 {{ openCount }}</span>
           <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-emerald-500"></i>已完成 {{ doneCount }}</span>
+          <!-- 记事既不是未完成也不是「做完的任务」，单独计数，免得两个数字互相污染 -->
+          <span v-if="noteCount" class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-slate-400"></i>记事 {{ noteCount }}</span>
         </div>
+        <button
+          type="button"
+          class="btn-secondary !h-8 !gap-1.5 !px-3 !text-[11px] sm:!text-xs"
+          :disabled="exporting || !items.length"
+          title="把本月日历上的内容导出成表格"
+          @click="exportMonth"
+        >
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          {{ exporting ? '导出中…' : '导出本月' }}
+        </button>
       </div>
     </div>
 
-    <div class="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_19rem]">
+    <div class="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_19rem]">
       <!-- 月历网格 -->
       <section class="surface flex min-h-0 flex-col overflow-hidden rounded-2xl p-2 sm:p-3">
-        <div class="grid grid-cols-7 gap-1 pb-1.5">
+        <div class="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1 pb-1.5">
           <div
             v-for="(w, i) in weekdays"
             :key="w"
@@ -41,11 +53,11 @@
           >{{ w }}</div>
         </div>
 
-        <div v-if="loading && !cells.length" class="grid flex-1 grid-cols-7 gap-1">
+        <div v-if="loading && !cells.length" class="grid flex-1 grid-cols-[repeat(7,minmax(0,1fr))] gap-1">
           <div v-for="n in 35" :key="n" class="min-h-[4.5rem] animate-pulse rounded-xl bg-muted/70"></div>
         </div>
 
-        <div v-else class="grid flex-1 auto-rows-fr grid-cols-7 gap-1">
+        <div v-else class="grid flex-1 auto-rows-fr grid-cols-[repeat(7,minmax(0,1fr))] gap-1">
           <button
             v-for="cell in cells"
             :key="cellKey(cell)"
@@ -74,10 +86,12 @@
                 v-for="item in visibleItems(cell)"
                 :key="item.id"
                 class="cal-task flex min-w-0 items-center gap-1 rounded-md px-1 py-[1px] font-semibold leading-tight"
-                :class="{ 'opacity-55 line-through': item.completed }"
+                :class="{ 'opacity-55 line-through': item.completed && item.kind !== 'note' }"
                 :style="{ background: tint(item.list_color), color: ink(item.list_color) }"
               >
-                <i class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ background: dot(item.list_color) }"></i>
+                <!-- 记事用「记」字标记而不是清单圆点：一眼区分「记录」和「要做的事」 -->
+                <i v-if="item.kind === 'note'" class="cal-note-mark shrink-0">记</i>
+                <i v-else class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ background: dot(item.list_color) }"></i>
                 <span class="truncate">{{ item.title }}</span>
               </span>
               <span v-if="extraCount(cell) > 0" class="cal-task px-1 font-bold text-muted-foreground">+{{ extraCount(cell) }}</span>
@@ -122,7 +136,14 @@
             :key="item.id"
             class="flex items-start gap-2 rounded-xl border border-border/70 bg-surface/60 p-2 transition hover:border-brand-500/35"
           >
+            <!-- 记事创建即完成、没有可勾选的状态，给一个静态的记录标记 -->
+            <span
+              v-if="item.kind === 'note'"
+              class="cal-note-mark mt-0.5 h-5 w-5 shrink-0"
+              title="记事（记录，无需完成）"
+            >记</span>
             <button
+              v-else
               class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition"
               :class="item.completed ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-brand-500/30 text-transparent hover:border-brand-500'"
               :aria-label="item.completed ? '恢复提醒' : '完成提醒'"
@@ -131,16 +152,17 @@
               <svg viewBox="0 0 24 24" class="h-3 w-3" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <button class="min-w-0 flex-1 text-left" @click="openEditor(item)">
-              <div class="flex items-center gap-1.5">
-                <h4 class="cal-task-lg truncate font-bold" :class="{ 'line-through opacity-60': item.completed }">{{ item.title }}</h4>
+              <div class="flex min-w-0 items-center gap-1.5">
+                <h4 class="cal-task-lg truncate font-bold" :class="{ 'line-through opacity-60': item.completed && item.kind !== 'note' }">{{ item.title }}</h4>
+                <span v-if="item.kind === 'note'" class="tiny-badge shrink-0">记事</span>
                 <span v-if="item.priority" class="shrink-0 text-[10px] font-black text-rose-500">{{ '!'.repeat(item.priority) }}</span>
               </div>
               <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
                 <span>{{ timeLabel(item) }}</span>
                 <span v-if="item.repeat_rule && item.repeat_rule !== 'none'" class="tiny-badge">{{ ruleLabel(item.repeat_rule) }}</span>
               </div>
-              <div class="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                <i class="h-2 w-2 rounded-full" :style="{ background: dot(item.list_color) }"></i>
+              <div class="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                <i class="h-2 w-2 shrink-0 rounded-full" :style="{ background: dot(item.list_color) }"></i>
                 <span class="truncate">{{ item.list_name }}</span>
               </div>
             </button>
@@ -180,7 +202,8 @@ import ReminderEditor from '../components/ReminderEditor.vue'
 import Toast from '../components/Toast.vue'
 import { getAllConfigs } from '../api/config'
 import {
-  completeReminder, getCalendarItems, getChannelStatuses, getLists, getLunarCalendar, listIdsParam, restoreReminder,
+  completeReminder, exportReminders, getCalendarItems, getChannelStatuses, getLists, getLunarCalendar,
+  listIdsParam, restoreReminder,
   type CalendarItem, type ChannelStatus, type LunarDayInfo, type ReminderList, type SaveReminderInput,
 } from '../api/reminder'
 
@@ -202,6 +225,7 @@ const selectedDate = ref(keyOf(now.getFullYear(), now.getMonth() + 1, now.getDat
 const loading = ref(false)
 const errorMsg = ref('')
 const saving = ref(false)
+const exporting = ref(false)
 
 // 编码器需要清单与通知渠道列表
 const lists = ref<ReminderList[]>([])
@@ -251,8 +275,10 @@ const byDate = computed(() => {
 })
 const selectedItems = computed(() => byDate.value.get(selectedDate.value) || [])
 
-const openCount = computed(() => items.value.filter(i => !i.completed).length)
-const doneCount = computed(() => items.value.filter(i => i.completed).length)
+// 计数只看任务：记事既不是「未完成」也不是「做完的任务」，单独计数。
+const openCount = computed(() => items.value.filter(i => i.kind !== 'note' && !i.completed).length)
+const doneCount = computed(() => items.value.filter(i => i.kind !== 'note' && i.completed).length)
+const noteCount = computed(() => items.value.filter(i => i.kind === 'note').length)
 
 const selectedCell = computed(() => cells.value.find(c => cellKey(c) === selectedDate.value))
 const selectedTitle = computed(() => {
@@ -319,12 +345,44 @@ const ink = (name: string) => hex(name)
 const dot = (name: string) => hex(name)
 
 function timeLabel(item: CalendarItem) {
+  // 记事的 due_at 是它的记录时间（后端取 completed_at），说「记录」比「到期」准确。
+  if (item.kind === 'note') {
+    const d = new Date(item.due_at)
+    return '记录 ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  }
   if (item.all_day) return '全天'
   const d = new Date(item.due_at)
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 function ruleLabel(rule: string) {
   return ({ daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年' } as Record<string, string>)[rule] || '循环'
+}
+
+// 导出当前这一屏：月份 + 当前清单筛选，参数与右侧详情/格子里的内容完全一致，
+// 内容也和日历口径一致（任务看到期时间、记事看记录时间）。
+async function exportMonth() {
+  if (exporting.value) return
+  exporting.value = true
+  const month = `${cursor.value.year}-${String(cursor.value.month).padStart(2, '0')}`
+  try {
+    const res = await exportReminders({
+      scope: 'calendar',
+      month,
+      list_ids: listIdsParam(listFilter.value),
+    })
+    const filename = `calendar-${month}.csv`
+    const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    window.URL.revokeObjectURL(url)
+    showToast(`已导出 ${filename}`, 'success')
+  } catch (err: any) {
+    showToast(err?.response?.data?.message || '导出失败', 'error')
+  } finally {
+    exporting.value = false
+  }
 }
 
 const rangeStart = computed(() => (cells.value.length ? cellKey(cells.value[0]) : ''))

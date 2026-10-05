@@ -173,6 +173,27 @@ textarea {
     @apply border-brand-500/25 bg-brand-500/10 text-brand-600 dark:text-brand-300;
   }
 
+  /* 分段开关（如列表页的「未完成 / 全部」）：两个按钮共享一个胶囊底，选中项高亮。
+     用 aria-pressed 表达状态，键盘与读屏都能识别。 */
+  .seg-btn {
+    @apply h-7 rounded-lg px-2.5 text-[11px] font-bold text-muted-foreground transition hover:text-foreground;
+  }
+  /* 日历里「记事」的标记：一个很小的圆角方块，与任务前的清单圆点区分开。 */
+  .cal-note-mark {
+    @apply inline-flex items-center justify-center rounded bg-slate-500/85 text-[9px] font-black leading-none text-white;
+    min-width: 0.95rem;
+    height: 0.95rem;
+  }
+  .cal-note-mark.h-5 {
+    min-width: 1.25rem;
+    height: 1.25rem;
+    font-size: 11px;
+  }
+
+  .seg-btn-on {
+    @apply bg-brand-500/10 text-brand-600 dark:text-brand-300;
+  }
+
   .compact-input {
     @apply mt-1.5 h-9 w-full rounded-xl border border-border bg-surface px-3 text-xs font-medium text-foreground outline-none focus:border-brand-500/50;
   }

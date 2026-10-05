@@ -99,6 +99,31 @@
         <span v-if="view !== 'completed' && overdueCount" class="rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold text-rose-500">{{ overdueCount }} 项已过期</span>
       </div>
       <div class="flex flex-wrap items-center gap-2">
+        <!-- 未完成 / 全部：记事创建即完成，想在这个页面看见记事就得切到「全部」。
+             选择记在本地（跟人走、跟设备走），与清单筛选一致。 -->
+        <div
+          v-if="view !== 'completed'"
+          class="inline-flex h-8 items-center gap-0.5 rounded-xl border border-border bg-surface p-0.5"
+          role="group"
+          aria-label="显示范围"
+        >
+          <button
+            type="button"
+            class="seg-btn"
+            :class="{ 'seg-btn-on': listStatus === 'open' }"
+            :aria-pressed="listStatus === 'open'"
+            title="只看还没完成的"
+            @click="setListStatus('open')"
+          >未完成</button>
+          <button
+            type="button"
+            class="seg-btn"
+            :class="{ 'seg-btn-on': listStatus === 'all' }"
+            :aria-pressed="listStatus === 'all'"
+            title="未完成和已完成都显示（含记事）"
+            @click="setListStatus('all')"
+          >全部</button>
+        </div>
         <button class="btn-secondary !h-8 !gap-1.5 !px-3 !text-xs" :disabled="exporting" @click="handleExport">
           <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           {{ exporting ? '导出中…' : '导出表格' }}
@@ -319,6 +344,8 @@ const completedFilterSummary = computed(() => {
 const completedRange = ref<CompletedRangeOption>('all')
 // 已完成页显示哪些清单；空数组 = 全部
 const COMPLETED_FILTER_KEY = 'ui_completed_lists'
+// 「未完成 / 全部」开关记在本地：这类偏好跟人走、跟设备走，不必上服务端。
+const LIST_STATUS_KEY = 'ui_list_status'
 const completedListFilter = ref<number[]>(readCompletedFilter())
 function readCompletedFilter(): number[] {
   try {
@@ -331,6 +358,20 @@ watch(completedListFilter, (v) => {
   try { localStorage.setItem(COMPLETED_FILTER_KEY, JSON.stringify(v)) } catch { /* 隐私模式忽略 */ }
   if (view.value === 'completed') void loadItems()
 })
+
+// 列表页的「未完成 / 全部」：'all' 时后端连已完成的也返回（记事因此可见）。
+// 「已完成」页有自己的口径，不受这个开关影响（模板里也不显示它）。
+const listStatus = ref<'open' | 'all'>(readListStatus())
+const showCompleted = computed(() => listStatus.value === 'all')
+function readListStatus(): 'open' | 'all' {
+  try { return localStorage.getItem(LIST_STATUS_KEY) === 'all' ? 'all' : 'open' } catch { return 'open' }
+}
+function setListStatus(next: 'open' | 'all') {
+  if (listStatus.value === next) return
+  listStatus.value = next
+  try { localStorage.setItem(LIST_STATUS_KEY, next) } catch { /* 隐私模式忽略 */ }
+  void loadItems()
+}
 const customFrom = ref('')
 const customTo = ref('')
 const lists = ref<ReminderList[]>([])
@@ -483,7 +524,12 @@ async function loadItems() {
     completedSpan.value = payload.span?.label || ''
     return
   }
-  const res = await getReminders({ view: view.value, list_id: selectedListID.value, q: search.value || undefined })
+  const res = await getReminders({
+    view: view.value,
+    list_id: selectedListID.value,
+    q: search.value || undefined,
+    status: showCompleted.value ? 'all' : undefined,
+  })
   items.value = res.data.data || []
 }
 // 导出「当前屏幕上这一份筛选结果」。已完成页带时间段与清单筛选，列表页带视图/清单/搜索，
@@ -503,6 +549,8 @@ async function handleExport() {
       list_ids: listIdsParam(completed ? completedListFilter.value : (selectedListID.value ? [selectedListID.value] : [])),
       list_id: completed && !completedListFilter.value.length ? selectedListID.value : undefined,
       q: search.value || undefined,
+      // 导出必须和屏幕上这一份一致：开关在「全部」时连已完成的一起导出。
+      status: !completed && showCompleted.value ? 'all' : undefined,
     })
     const filename = completed ? 'completed-list.csv' : 'task-list.csv'
     const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8' }))

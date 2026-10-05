@@ -261,6 +261,13 @@ func handleDeleteList(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// wantCompleted 解析列表接口的 status 参数：all = 连已完成的也返回（界面上
+// 「未完成 / 全部」开关的「全部」），其余（含缺省）都是只看未完成。
+// 只认 all，避免 open/active 之类同义词各自实现出一套不一致的口径。
+func wantCompleted(c *gin.Context) bool {
+	return strings.EqualFold(strings.TrimSpace(c.Query("status")), "all")
+}
+
 // parseListFilter 解析清单筛选参数。两种写法都认：
 //
 //	list_id=3       单个（兼容旧调用）
@@ -297,7 +304,8 @@ func parseListFilter(c *gin.Context) []uint {
 
 func handleListReminders(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		items, err := listReminders(db, currentUserID(c), c.DefaultQuery("view", "today"), c.Query("q"), parseListFilter(c))
+		items, err := listReminders(db, currentUserID(c), c.DefaultQuery("view", "today"),
+			c.Query("q"), parseListFilter(c), wantCompleted(c))
 		if err != nil {
 			response.ErrorInternal(c, "读取提醒失败")
 			return

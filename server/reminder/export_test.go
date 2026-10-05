@@ -193,6 +193,49 @@ func TestExportRemindersHandler(t *testing.T) {
 		t.Fatalf("空区间应只有表头，实际 %d 行", len(records))
 	}
 
+	// 「全部」口径：连已完成的也导出（记事同样在列），这是列表页开关对应的导出。
+	records, _ = exportRows(t, "scope=active&view=all&status=all", userID)
+	if len(records) != 4 {
+		t.Fatalf("「全部」导出行数 %d，期望 4（表头+3，含记事）", len(records))
+	}
+	if records[3][0] != "一条记事" || records[3][1] != "记事" || records[3][3] != "已完成" {
+		t.Fatalf("「全部」应含记事且状态为已完成，实际 %v", records[3])
+	}
+
+	// 日历口径：按月份导出，任务看到期时间、记事看记录时间，文件名带月份。
+	month := time.Now().In(shanghai()).Format("2006-01")
+	records, recorder = exportRows(t, "scope=calendar&month="+month, userID)
+	if len(records) != 4 {
+		t.Fatalf("日历导出行数 %d，期望 4（表头 + 2 个任务 + 记事；记事按记录时间落在本月）", len(records))
+	}
+	var noteRow []string
+	for _, row := range records[1:] {
+		if row[1] == "记事" {
+			noteRow = row
+		}
+	}
+	if noteRow == nil {
+		t.Fatalf("日历导出应包含记事，实际 %v", records)
+	}
+	if noteRow[3] != "记事" || noteRow[4] != "" {
+		t.Fatalf("记事的「状态」应为记事、「到期时间」应为空，实际 %v", noteRow)
+	}
+	if noteRow[5] == "" {
+		t.Fatalf("记事的记录时间应写进「完成时间」列，实际 %v", noteRow)
+	}
+	if disposition := recorder.Header().Get("Content-Disposition"); !strings.Contains(disposition, "calendar-"+month+".csv") {
+		t.Fatalf("Content-Disposition = %q", disposition)
+	}
+	// 月份参数写错要报 400，而不是导出一份空表。
+	badRecorder := httptest.NewRecorder()
+	badCtx, _ := gin.CreateTestContext(badRecorder)
+	badCtx.Request = httptest.NewRequest(http.MethodGet, "/api/reminder/export?scope=calendar&month=2026-13", nil)
+	badCtx.Set("userID", userID)
+	handleExportReminders(appDB)(badCtx)
+	if badRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("非法月份返回 %d，期望 400", badRecorder.Code)
+	}
+
 	// 非法参数要明确报错，而不是导出一份空表。
 	recorder = httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)

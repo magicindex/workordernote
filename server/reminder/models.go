@@ -230,8 +230,15 @@ type CompletedItemDTO struct {
 	ReminderExists bool `json:"reminder_exists"`
 }
 
-// CalendarItemDTO 是日历视图里的一个到期提醒。含已完成项——日历要能看到
-// 「这天有哪些安排、哪些已经做完」，所以不像列表那样过滤掉 completed_at。
+// CalendarItemDTO 是日历视图里的一项，有两种来源：
+//
+//   - 任务：按 due_at 落在这一天；
+//   - 记事：记事没有到期时间（保存时会被清空），按**记录时间**落进日历
+//     （记事的 completed_at 就是它的创建时刻）。用户要的是「某天记了什么」，
+//     记事不进日历，等于这些工作记录在日历上凭空消失。
+//
+// 两种都含已完成项——日历要能看到「这天有哪些安排、哪些已经做完」，
+// 所以不像列表那样按 completed_at 过滤。
 type CalendarItemDTO struct {
 	ID       uint   `json:"id"`
 	Title    string `json:"title"`
@@ -249,6 +256,11 @@ type CalendarItemDTO struct {
 	Kind       string `json:"kind"`
 	Priority   int    `json:"priority"`
 	RepeatRule string `json:"repeat_rule"`
+	// Notes 是备注原文，导出「本月」表格时要带上（日历界面上不展示）。
+	Notes string `json:"notes,omitempty"`
+	// CompletedAt 只对任务有意义，用于导出表格的「完成时间」列；
+	// 记事的记录时间放在 DueAt 里，见 listCalendarItems。
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
 }
 
 type ChannelStatus struct {

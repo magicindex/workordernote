@@ -2,6 +2,7 @@ package reminder
 
 import (
 	"encoding/csv"
+	"errors"
 	"strings"
 	"time"
 
@@ -105,11 +106,60 @@ func completedExportRows(items []CompletedItemDTO, loc *time.Location) [][]strin
 	return rows
 }
 
+// calendarExportRows 把「某个月的日历条目」转成导出行，沿用同一套列。
+//
+// 与列表口径的差别只在时间列：
+//   - 任务：到期时间 = due_at，完成时间 = completed_at；
+//   - 记事：没有到期时间（存的时候就被清掉了），记录时间写进「完成时间」列，
+//     状态列统一写「记事」——它既不是未完成也不是「做完的任务」。
+func calendarExportRows(items []CalendarItemDTO, loc *time.Location) [][]string {
+	rows := make([][]string, 0, len(items))
+	for _, item := range items {
+		status := "未完成"
+		dueAt := &item.DueAt
+		completedAt := item.CompletedAt
+		if item.Kind == KindNote {
+			status = "记事"
+			dueAt = nil
+		} else if item.Completed {
+			status = "已完成"
+		}
+		rows = append(rows, []string{
+			item.Title,
+			kindLabel(item.Kind),
+			item.ListName,
+			status,
+			formatExportTime(dueAt, item.AllDay, loc),
+			formatExportTime(completedAt, false, loc),
+			repeatRuleLabel(item.RepeatRule, ""),
+			strings.ReplaceAll(item.Notes, "\r\n", "\n"),
+		})
+	}
+	return rows
+}
+
+// parseExportMonth 解析 scope=calendar 的月份参数（YYYY-MM，缺省当月），
+// 返回该月第一天与下月第一天（左闭右开，与其它区间口径一致）。
+func parseExportMonth(raw string, loc *time.Location) (time.Time, time.Time, error) {
+	month := strings.TrimSpace(raw)
+	if month == "" {
+		now := time.Now().In(loc)
+		month = now.Format("2006-01")
+	}
+	start, err := time.ParseInLocation("2006-01", month, loc)
+	if err != nil {
+		return time.Time{}, time.Time{}, errors.New("月份格式应为 YYYY-MM")
+	}
+	return start, start.AddDate(0, 1, 0), nil
+}
+
 // handleExportReminders 把清单导出成 CSV（带 UTF-8 BOM，Excel/WPS 直接双击可读）。
 //
 // 参数与列表接口保持一致，导出的是「当前屏幕上这一份筛选结果」：
-//   - scope=active（默认）：走 /items 的 view / q / list_ids；
-//   - scope=completed：走 /completed 的 range / from / to / q / list_ids。
+//   - scope=active（默认）：走 /items 的 view / q / list_ids / status；
+//   - scope=completed：走 /completed 的 range / from / to / q / list_ids；
+//   - scope=calendar：走日历视图的 month=YYYY-MM（缺省当月）+ list_ids，
+//     内容与日历上看到的完全一致（任务按到期时间、记事按记录时间）。
 func handleExportReminders(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		loc, err := time.LoadLocation("Asia/Shanghai")
@@ -137,12 +187,26 @@ func handleExportReminders(db *gorm.DB) gin.HandlerFunc {
 			rows = completedExportRows(items, loc)
 			filename = "completed-list.csv"
 		case "active":
-			items, err := listReminders(db, userID, c.DefaultQuery("view", "all"), c.Query("q"), parseListFilter(c))
+			items, err := listReminders(db, userID, c.DefaultQuery("view", "all"),
+				c.Query("q"), parseListFilter(c), wantCompleted(c))
 			if err != nil {
 				response.ErrorInternal(c, "读取提醒失败")
 				return
 			}
 			rows = activeExportRows(items, loc, time.Now())
+		case "calendar":
+			start, end, err := parseExportMonth(c.Query("month"), loc)
+			if err != nil {
+				response.ErrorBadRequest(c, err.Error())
+				return
+			}
+			items, err := listCalendarItems(db, userID, start, end, parseListFilter(c))
+			if err != nil {
+				response.ErrorInternal(c, "读取日历数据失败")
+				return
+			}
+			rows = calendarExportRows(items, loc)
+			filename = "calendar-" + start.Format("2006-01") + ".csv"
 		default:
 			response.ErrorBadRequest(c, "导出范围无效")
 			return

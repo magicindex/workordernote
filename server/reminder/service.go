@@ -415,7 +415,12 @@ func parseChannelTargets(raw string) []uint {
 	return ids
 }
 
-func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint) ([]ReminderDTO, error) {
+// listReminders 列出一屏提醒/记事。
+//
+// includeCompleted 对应界面上「未完成 / 全部」开关的「全部」：打开后已完成的行也
+// 一起返回（记事创建即完成，所以「我的清单」想看见记事就必须打开它）。
+// view=completed（「已完成」页）走的是另一个接口，这里不受开关影响。
+func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint, includeCompleted bool) ([]ReminderDTO, error) {
 	var rows []Reminder
 	q := db.Where("user_id = ? AND deleted_at IS NULL", userID)
 	now := time.Now()
@@ -423,15 +428,22 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint)
 	localNow := now.In(loc)
 	startToday := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, loc)
 	endToday := startToday.AddDate(0, 0, 1)
+	// 未完成口径：view=completed 恒定只看已完成；其余视图按开关决定是否再筛。
+	openOnly := "completed_at IS NULL AND "
+	if includeCompleted && view != "completed" {
+		openOnly = ""
+	}
 	switch view {
 	case "today":
-		q = q.Where("completed_at IS NULL AND due_at IS NOT NULL AND due_at < ?", endToday)
+		q = q.Where(openOnly+"due_at IS NOT NULL AND due_at < ?", endToday)
 	case "planned":
-		q = q.Where("completed_at IS NULL AND due_at IS NOT NULL")
+		q = q.Where(openOnly + "due_at IS NOT NULL")
 	case "completed":
 		q = q.Where("completed_at IS NOT NULL")
 	default:
-		q = q.Where("completed_at IS NULL")
+		if openOnly != "" {
+			q = q.Where("completed_at IS NULL")
+		}
 	}
 	if len(listIDs) > 0 {
 		q = q.Where("list_id IN ?", listIDs)
@@ -440,7 +452,12 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint)
 		like := "%" + query + "%"
 		q = q.Where("(title LIKE ? OR notes LIKE ?)", like, like)
 	}
-	if err := q.Order("CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, priority DESC, position ASC, id DESC").Find(&rows).Error; err != nil {
+	// 「全部」视图里已完成的行排到最后：先看还要做的事，再回头翻已做完的。
+	order := "CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, priority DESC, position ASC, id DESC"
+	if includeCompleted && view != "completed" {
+		order = "CASE WHEN completed_at IS NULL THEN 0 ELSE 1 END, " + order
+	}
+	if err := q.Order(order).Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	if len(rows) == 0 {
@@ -1026,16 +1043,27 @@ func setDefaultList(db *gorm.DB, userID, listID uint) error {
 	})
 }
 
-// listCalendarItems 返回 [from, to) 内到期的提醒，含已完成项，按到期时间升序。
-// 记事没有到期日（due_at 恒为 NULL），因此天然不会出现在日历里。
+// listCalendarItems 返回 [from, to) 内「落在这段时间」的条目，含已完成项，按时间升序。
+//
+// 两类来源：
+//   - 任务：到期时间（due_at）在区间内；
+//   - 记事：没有到期时间（保存时会被清空），按**记录时间**（completed_at，
+//     记事创建即完成）落在区间内。
+//
+// 排序按「生效时间」COALESCE(due_at, completed_at)：一天里任务与记事混排，
+// 顺序稳定（SQLite 的 COALESCE 对 NULL 取后一个参数）。
 func listCalendarItems(db *gorm.DB, userID uint, from, to time.Time, listIDs []uint) ([]CalendarItemDTO, error) {
 	var rows []Reminder
-	q := db.Where("user_id = ? AND deleted_at IS NULL AND due_at IS NOT NULL AND due_at >= ? AND due_at < ?",
-		userID, from, to)
+	// 记事的 completed_at 一定非空（创建时写入），任务的 due_at 一定非空，
+	// 两个条件互斥，合起来就是「这一天有这条数据」。
+	q := db.Where("user_id = ? AND deleted_at IS NULL AND ("+
+		"(kind = ? AND due_at IS NOT NULL AND due_at >= ? AND due_at < ?) OR "+
+		"(kind = ? AND completed_at IS NOT NULL AND completed_at >= ? AND completed_at < ?))",
+		userID, KindTask, from, to, KindNote, from, to)
 	if len(listIDs) > 0 {
 		q = q.Where("list_id IN ?", listIDs)
 	}
-	if err := q.Order("due_at ASC, id ASC").Find(&rows).Error; err != nil {
+	if err := q.Order("COALESCE(due_at, completed_at) ASC, id ASC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	if len(rows) == 0 {
@@ -1066,14 +1094,20 @@ func listCalendarItems(db *gorm.DB, userID uint, from, to time.Time, listIDs []u
 	}
 	result := make([]CalendarItemDTO, 0, len(rows))
 	for _, r := range rows {
-		if r.DueAt == nil {
+		// 生效时间：任务看到期时间，记事看记录时间。
+		at := r.DueAt
+		if at == nil {
+			at = r.CompletedAt
+		}
+		if at == nil {
 			continue
 		}
 		item := CalendarItemDTO{
 			ID: r.ID, Title: r.Title, ListID: r.ListID,
-			DueAt: *r.DueAt, DueDate: r.DueAt.In(loc).Format("2006-01-02"),
-			AllDay: r.AllDay, Completed: r.CompletedAt != nil,
+			DueAt: *at, DueDate: at.In(loc).Format("2006-01-02"),
+			AllDay: r.AllDay && r.Kind == KindTask, Completed: r.CompletedAt != nil,
 			Kind: r.Kind, Priority: r.Priority, RepeatRule: r.RepeatRule,
+			Notes: r.Notes, CompletedAt: r.CompletedAt,
 		}
 		if l, ok := listByID[r.ListID]; ok {
 			item.ListName = l.Name

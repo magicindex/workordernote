@@ -120,6 +120,13 @@ export interface CalendarItem {
   kind: ReminderKind
   priority: number
   repeat_rule: string
+  /** 备注原文（日历界面不展示，导出「本月」时带上） */
+  notes?: string
+  /**
+   * 完成时间。任务用它填导出表格的「完成时间」列；记事没有到期时间，
+   * 它的**记录时间**放在 due_at 里（后端取 completed_at），导出时写进完成时间列。
+   */
+  completed_at?: string | null
 }
 
 export interface LunarConvertResult {
@@ -164,7 +171,11 @@ export const updateList = (id: number, data: Partial<ReminderList>) =>
   request.patch(`/api/reminder/lists/${id}`, data)
 export const deleteList = (id: number) => request.delete(`/api/reminder/lists/${id}`)
 
-export const getReminders = (params: { view?: string; list_id?: number; q?: string }) =>
+/**
+ * status='all' 表示连已完成的也返回（列表页「未完成 / 全部」开关的「全部」）。
+ * 记事创建即完成，所以「我的清单」想看见记事就得打开这个开关。
+ */
+export const getReminders = (params: { view?: string; list_id?: number; q?: string; status?: 'all' }) =>
   request.get('/api/reminder/items', { params })
 
 /** 多清单筛选参数：把 id 数组拼成后端认的 list_ids=1,2,3。 */
@@ -184,7 +195,12 @@ export const getCompletedHistory = (params: {
 
 /** 导出当前筛选结果成表格（CSV）。接口要带鉴权头，所以按 blob 取再前端落盘。 */
 export function exportReminders(params: {
-  scope?: 'active' | 'completed'
+  /**
+   * active   = 列表页（按 view/q/list_ids/status）
+   * completed= 已完成页（按 range/from/to）
+   * calendar = 日历页（按 month=YYYY-MM + list_ids，内容与日历上看到的一致）
+   */
+  scope?: 'active' | 'completed' | 'calendar'
   view?: string
   range?: CompletedRangeOption
   from?: string
@@ -192,6 +208,10 @@ export function exportReminders(params: {
   list_ids?: string
   list_id?: number
   q?: string
+  /** status='all' 时连已完成的也导出（与列表页「未完成 / 全部」开关一致） */
+  status?: 'all'
+  /** 日历导出用：YYYY-MM，缺省当月 */
+  month?: string
 }) {
   return request.get('/api/reminder/export', { params, responseType: 'blob' })
 }
