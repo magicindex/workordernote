@@ -95,7 +95,7 @@
               <span class="h-2.5 w-2.5 rounded-full ring-4 ring-current/10" :style="{ color: listColor(list.color), background: listColor(list.color) }"></span>
               <span class="flex-1 truncate">{{ list.name }}</span>
               <!-- 默认清单标识；改默认清单在「偏好设置」里操作 -->
-              <span v-if="list.is_default" class="shrink-0 text-amber-400" title="默认清单" aria-label="默认清单">
+              <span v-if="list.is_default" class="rail-hide shrink-0 text-amber-400" title="默认清单" aria-label="默认清单">
                 <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor"><path d="m12 3.6 2.6 5.27 5.82.85-4.21 4.1.99 5.8L12 16.87l-5.2 2.75.99-5.8-4.21-4.1 5.82-.85L12 3.6Z"/></svg>
               </span>
               <span v-if="list.open_count" class="nav-count">{{ list.open_count }}</span>
@@ -131,7 +131,7 @@
             <span class="nav-symbol h-7 w-7 bg-brand-500/20 text-brand-600 dark:text-brand-300">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M10.3 3.6a2 2 0 0 1 3.4 0l.5.9a1.6 1.6 0 0 0 1.9.8l1-.3a2 2 0 0 1 2.4 2.4l-.3 1a1.6 1.6 0 0 0 .8 1.9l.9.5a2 2 0 0 1 0 3.4l-.9.5a1.6 1.6 0 0 0-.8 1.9l.3 1a2 2 0 0 1-2.4 2.4l-1-.3a1.6 1.6 0 0 0-1.9.8l-.5.9a2 2 0 0 1-3.4 0l-.5-.9a1.6 1.6 0 0 0-1.9-.8l-1 .3a2 2 0 0 1-2.4-2.4l.3-1a1.6 1.6 0 0 0-.8-1.9l-.9-.5a2 2 0 0 1 0-3.4l.9-.5a1.6 1.6 0 0 0 .8-1.9l-.3-1A2 2 0 0 1 6.9 5l1 .3a1.6 1.6 0 0 0 1.9-.8l.5-.9Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.1" stroke-width="1.7"/></svg>
             </span>
-            <span class="text-xs font-extrabold tracking-[.08em] text-brand-700 dark:text-brand-200">设置</span>
+            <span class="rail-hide text-xs font-extrabold tracking-[.08em] text-brand-700 dark:text-brand-200">设置</span>
             <span v-if="!settingsOpen && hiddenSettingCount" class="nav-count">{{ hiddenSettingCount }}</span>
             <svg
               viewBox="0 0 24 24"
@@ -857,6 +857,8 @@ onBeforeUnmount(() => {
 .sidebar-rail .nav-settings-toggle { @apply lg:justify-center lg:gap-0 lg:px-0; }
 .sidebar-rail .new-reminder-button { @apply lg:mx-auto lg:h-11 lg:w-11 lg:justify-center lg:gap-0 lg:px-0; }
 .sidebar-rail nav { @apply lg:px-2; }
+/* 「我的清单」那一行在图标栏里只剩一个 + 按钮，居中放 */
+.sidebar-rail nav > div.mt-7 { @apply lg:justify-center lg:px-0; }
 .sidebar-rail .mt-7 { @apply lg:mt-3; }
 .logo-mark { @apply flex h-11 w-11 items-center justify-center rounded-[15px] bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_10px_30px_-10px_rgba(59,130,246,.75)]; }
 .version-badge { @apply rounded-full border border-brand-500/25 bg-brand-500/10 px-2 py-0.5 text-[11px] font-bold leading-none text-brand-600 dark:text-brand-300; }
