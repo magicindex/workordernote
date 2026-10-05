@@ -11,7 +11,7 @@ export type ReminderKind = 'task' | 'note'
 //   reminder —— reminders.completed_at，非重复提醒的完成，以及全部记事
 export type CompletedSource = 'history' | 'reminder'
 
-export type CompletedRangeOption = 'all' | 'today' | 'yesterday' | 'week' | 'month' | 'lastmonth' | 'year' | 'custom'
+export type CompletedRangeOption = 'all' | 'today' | 'yesterday' | 'week' | 'lastweek' | 'month' | 'lastmonth' | 'year' | 'custom'
 
 export interface CompletedItem {
   id: number

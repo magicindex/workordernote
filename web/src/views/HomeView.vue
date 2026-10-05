@@ -552,6 +552,7 @@ const rangeOptions: { value: CompletedRangeOption; label: string }[] = [
   { value: 'today', label: '今天' },
   { value: 'yesterday', label: '昨天' },
   { value: 'week', label: '本周' },
+  { value: 'lastweek', label: '上周' },
   { value: 'month', label: '本月' },
   { value: 'lastmonth', label: '上月' },
   { value: 'year', label: '今年' },

@@ -186,6 +186,29 @@ func TestParseCompletedRange(t *testing.T) {
 		t.Fatalf("week 起点应落在本周，实际 %v", week.Start)
 	}
 
+	// 上周是上一个**自然周**（周一 → 周日），不是「最近 7 天」：
+	// 起点必须是周一、终点必须正好接上本周起点，且跨月/跨年也要对。
+	lastWeek, err := ParseCompletedRange("lastweek", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lastWeek.Start == nil || lastWeek.Start.Weekday() != time.Monday {
+		t.Fatalf("lastweek 起点应是周一，实际 %v (%v)", lastWeek.Start, lastWeek.Start.Weekday())
+	}
+	if lastWeek.End == nil || !lastWeek.End.Equal(*week.Start) {
+		t.Fatalf("lastweek 终点应正好是本周起点（首尾相接），实际 %v vs %v", lastWeek.End, week.Start)
+	}
+	if !lastWeek.Start.Equal(week.Start.AddDate(0, 0, -7)) {
+		t.Fatalf("lastweek 起点应是本周一往前 7 天，实际 %v", lastWeek.Start)
+	}
+	if lastWeek.End.Sub(*lastWeek.Start) != 7*24*time.Hour {
+		t.Fatalf("lastweek 应恰好 7 天，实际 %v", lastWeek.End.Sub(*lastWeek.Start))
+	}
+	// 整段都在过去：终点（本周一 0 点）不能晚于今天 0 点。
+	if lastWeek.End.After(startOfToday) {
+		t.Fatalf("lastweek 不应包含今天之后的时刻，终点 %v", lastWeek.End)
+	}
+
 	// 本月/今年都是整段：终点是下个月 1 号 / 次年 1 月 1 号，而不是「此刻」。
 	// 这一点是用户要求校准的重点：边界必须是固定的自然日历边界。
 	month, err := ParseCompletedRange("month", "", "")

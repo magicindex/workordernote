@@ -777,6 +777,7 @@ func DescribeCompletedRange(rng CompletedRange, loc *time.Location) CompletedRan
 //	today     今天 00:00 → 明天 00:00
 //	yesterday 昨天 00:00 → 今天 00:00
 //	week      本周一 00:00 → 下周一 00:00（整周）
+//	lastweek  上周一 00:00 → 本周一 00:00（上一整个自然周）
 //	month     本月 1 日 00:00 → 下月 1 日 00:00（整月）
 //	lastmonth 上月 1 日 00:00 → 本月 1 日 00:00（整月）
 //	year      1 月 1 日 00:00 → 次年 1 月 1 日 00:00（整年）
@@ -808,6 +809,13 @@ func ParseCompletedRange(option, from, to string) (CompletedRange, error) {
 		start := startOfToday.AddDate(0, 0, -offset)
 		end := start.AddDate(0, 0, 7)
 		return CompletedRange{Start: &start, End: &end}, nil
+	case "lastweek":
+		// 上周是**上一个自然周**（周一 → 周日），不是「最近 7 天」：
+		// 起点 = 本周一往前 7 天，终点 = 本周一，左闭右开，刚好和「本周」首尾相接。
+		offset := (int(now.Weekday()) + 6) % 7
+		startOfThisWeek := startOfToday.AddDate(0, 0, -offset)
+		start := startOfThisWeek.AddDate(0, 0, -7)
+		return CompletedRange{Start: &start, End: &startOfThisWeek}, nil
 	case "month":
 		end := startOfThisMonth.AddDate(0, 1, 0)
 		return CompletedRange{Start: &startOfThisMonth, End: &end}, nil
