@@ -33,9 +33,6 @@ COPY web/ ./
 RUN npm run build
 
 FROM golang:1.26-alpine AS backend-builder
-ARG VERSION
-ARG BUILD_TIME
-ARG GIT_COMMIT
 # 仓库路径按基础镜像的 alpine 版本走；换 golang 基础镜像时要同步改这里。
 ARG ALPINE_BRANCH=v3.24
 WORKDIR /app/server
@@ -47,6 +44,13 @@ ENV GOPROXY=https://goproxy.cn,direct
 COPY server/go.mod server/go.sum ./
 RUN go mod download
 COPY server/ ./
+# VERSION / BUILD_TIME / GIT_COMMIT 放到这里声明，**不要**放到 apk 之前：
+# ARG 是它后面每个 RUN 的缓存键的一部分，一旦放前面，每次发版改版本号都会让
+# 「装 gcc」那层缓存失效——本机 apk 源在构建里慢起来要十分钟以上（实测最慢半小时），
+# 而这三个值只有下面这条 go build 用得到。
+ARG VERSION
+ARG BUILD_TIME
+ARG GIT_COMMIT
 RUN CGO_ENABLED=1 GOOS=linux go build \
 	  -ldflags "-X smallgo/server/version.Version=${VERSION} -X smallgo/server/version.BuildTime=${BUILD_TIME} -X smallgo/server/version.GitCommit=${GIT_COMMIT} -X smallgo/server/version.AppName=工作序记" \
 	  -o /out/reminder .

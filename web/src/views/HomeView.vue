@@ -441,6 +441,17 @@ const emptyText = computed(() => view.value === 'completed'
 const quickDateOpen = ref(false)
 const quickDateAnchor = ref<HTMLElement | null>(null)
 
+// 新建框里那个「任务清单」选择框该默认选谁：
+//   - 在某个具体清单页面（/admin/list/:id）→ 跟着当前清单走；
+//   - 今天 / 计划 / 全部 / 已完成       → 用后台设置的默认清单。
+// 只依赖「路由里的清单」和「后台默认清单」这两个来源，别依赖整个 lists 数组：
+// 别人同步过来的实时刷新会重取清单列表，那样会把用户刚手动选的清单冲掉。
+const defaultListID = computed(() => lists.value.find(x => x.is_default)?.id || lists.value[0]?.id || 0)
+const quickTargetListID = computed(() => selectedListID.value || defaultListID.value || 0)
+watch([selectedListID, defaultListID], () => {
+  quick.list_id = quickTargetListID.value
+}, { immediate: true })
+
 const quickDatePicked = computed({
   get: () => (quick.due_at ? new Date(quick.due_at) : null),
   set: value => {
@@ -499,7 +510,7 @@ async function loadData() {
         .map(channel => channel.channel)
       if (!quick.channels.length) quick.channels = ['inapp']
     }
-    if (!quick.list_id) quick.list_id = selectedListID.value || lists.value.find(x => x.is_default)?.id || lists.value[0]?.id || 0
+    // 清单选择框的默认值由 quickTargetListID 的 watcher 统一负责（进具体清单跟随、其余用后台默认）
     await loadItems()
   } catch (err: any) {
     showToast(err.response?.data?.message || '读取提醒失败', 'error')
@@ -596,7 +607,7 @@ async function submitQuick() {
     quickChannelsTouched = false
     Object.assign(quick, blankInput(), {
       kind: isNote ? 'note' : 'task',
-      list_id: selectedListID.value || lists.value.find(x => x.is_default)?.id || lists.value[0]?.id || 0,
+      list_id: quickTargetListID.value,
     })
     // 归位到「今天」：新建提醒默认带今天 20:00，芯片状态也要跟着点亮
     preset.value = isNote ? '' : 'today'
