@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { isNarrowNow } from '../utils/use-narrow'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -73,6 +74,12 @@ router.beforeEach(async (to, from, next) => {
     // 授权；只有用户主动点击「使用飞牛 NAS 登录」并确认后，才进入飞牛绑定
     // 创建模式（注册页内会带上 fnos=bind 查询参数）。
     next({ name: 'Register' })
+    return
+  }
+
+  // 手机上没有日历视图：入口已隐藏，直接输网址/书签进 /admin/calendar 也送回列表视图
+  if (to.name === 'Calendar' && isNarrowNow()) {
+    next({ path: '/admin' })
     return
   }
 

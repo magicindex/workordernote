@@ -182,9 +182,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { CalendarItem, LunarDayInfo } from '../api/reminder'
 import { listColorHex, listInk, listTint } from '../utils/list-colors'
+import { useIsNarrow } from '../utils/use-narrow'
 
 const props = defineProps<{
   modelValue: boolean
@@ -212,10 +213,8 @@ const cellKey = (c: LunarDayInfo) => keyOf(c.year, c.month, c.day)
  * 强制走列表，并把只对月历有意义的开关（农历/节气、时间）一并收起来。
  */
 const mode = ref<'calendar' | 'list'>('calendar')
-const NARROW_MQ = '(max-width: 640px)'
-const narrow = ref(false)
-let narrowMq: MediaQueryList | null = null
-const onNarrowChange = () => { narrow.value = !!narrowMq?.matches }
+// 手机的判定与侧栏/路由守卫共用一份（utils/use-narrow）
+const narrow = useIsNarrow()
 const effectiveMode = computed<'calendar' | 'list'>(() => (narrow.value ? 'list' : mode.value))
 function setMode(next: 'calendar' | 'list') {
   mode.value = next
@@ -469,17 +468,10 @@ watch([effectiveOrientation, effectiveFontSize], () => {
   if (props.modelValue) applyPageRule()
 })
 
-onMounted(() => {
-  narrowMq = window.matchMedia(NARROW_MQ)
-  onNarrowChange()
-  narrowMq.addEventListener('change', onNarrowChange)
-})
-
 // 窄屏/宽屏切换时，形式与自动版式都可能变，标题（没手改过的话）也要跟着换
 watch(effectiveMode, () => { syncAutoTitle() })
 
 onBeforeUnmount(() => {
-  narrowMq?.removeEventListener('change', onNarrowChange)
   window.removeEventListener('afterprint', cleanup)
   cleanup()
 })

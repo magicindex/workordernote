@@ -251,6 +251,8 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { useIsNarrow } from '../utils/use-narrow'
 import ListFilter from '../components/ListFilter.vue'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import Toast from '../components/Toast.vue'
@@ -266,6 +268,13 @@ import {
   type CalendarItem, type ChannelStatus, type LunarDayInfo, type ReminderList, type SaveReminderInput,
 } from '../api/reminder'
 import { listInk, listTint } from '../utils/list-colors'
+
+// 手机上不提供日历视图：正常路径是入口隐藏 + 路由守卫拦掉；
+// 这里再兜一层「从电脑宽度缩到手机宽度」——那种情况下路由不会重新匹配，
+// 所以直接把人送回列表视图。
+const isNarrow = useIsNarrow()
+const router = useRouter()
+watch(isNarrow, (narrow) => { if (narrow) void router.replace('/admin') })
 
 const toast = reactive<{ message: string; type: 'success' | 'error' }>({ message: '', type: 'success' })
 function showToast(message: string, type: 'success' | 'error' = 'success') {

@@ -13,8 +13,8 @@
           <button
             type="button"
             class="group flex items-center gap-3 text-left"
-            :title="railActive ? (isCalendar ? '切到列表视图' : '切到日历视图') : (isCalendar ? '点这里切回列表视图' : '点这里切到日历视图')"
-            :aria-label="isCalendar ? '切换到列表视图' : '切换到日历视图'"
+            :title="logoTitle"
+            :aria-label="logoAria"
             @click="toggleViewFromLogo"
           >
             <span class="logo-mark">
@@ -31,7 +31,7 @@
                 <span v-if="appVersion" class="version-badge" :title="appBuildTime ? `构建时间：${appBuildTime}` : ''">{{ appVersion }}</span>
               </span>
               <span class="block text-[11px] font-medium text-muted-foreground">
-                {{ isCalendar ? '点一下回到列表' : '点一下切到日历' }}
+                {{ logoSubtitle }}
               </span>
             </span>
           </button>
@@ -212,7 +212,7 @@
           </RouterLink>
           <!-- 列表 / 日历 切换。放在主题按钮旁边，与它同为「换个看法」类操作。 -->
           <div
-            v-if="showViewSwitch"
+            v-if="showViewSwitch && !isNarrow"
             class="flex items-center gap-0.5 rounded-xl border border-border/70 bg-muted/55 p-0.5"
             role="group"
             aria-label="切换列表或日历视图"
@@ -365,6 +365,7 @@ import Toast from '../components/Toast.vue'
 import VersionDialog from '../components/VersionDialog.vue'
 import Modal from '../components/Modal.vue'
 import ContextMenu from '../components/ContextMenu.vue'
+import { isNarrowNow, useIsNarrow } from '../utils/use-narrow'
 import type { ContextMenuItem } from '../components/ContextMenu.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import UiThemeToggle from '../components/ui/ThemeToggle.vue'
@@ -456,11 +457,25 @@ function isActive(to: string) {
 // 列表 / 日历 两种看法。只在提醒相关的页面上出现——系统配置、用户管理这些
 // 页面切到日历没有意义。
 const viewSwitchRoutes = ['Home', 'Planned', 'AllReminders', 'Completed', 'ReminderList', 'Calendar']
-const showViewSwitch = computed(() => viewSwitchRoutes.includes(String(route.name || '')))
+// 手机上没有日历视图（入口隐藏 + 路由守卫兜底），所以顶栏那组「列表 / 日历」切换也收起来
+const isNarrow = useIsNarrow()
+const showViewSwitch = computed(() => !isNarrow.value && viewSwitchRoutes.includes(String(route.name || '')))
 const isCalendar = computed(() => route.name === 'Calendar')
 // 从日历切回列表时回到「今天」，而不是记住上次那个智能清单：日历不区分清单，
 // 回来落在固定的入口更符合直觉。
 const listRoute = computed(() => (route.name === 'ReminderList' ? route.path : '/admin'))
+// 左上角这块在手机上只承担「回到列表」：不再出现任何日历相关的提示文字
+const logoTitle = computed(() => (isNarrow.value
+  ? '回到列表视图'
+  : railActive.value
+    ? (isCalendar.value ? '切到列表视图' : '切到日历视图')
+    : (isCalendar.value ? '点这里切回列表视图' : '点这里切到日历视图')))
+const logoAria = computed(() => (isNarrow.value
+  ? '回到列表视图'
+  : isCalendar.value ? '切换到列表视图' : '切换到日历视图'))
+const logoSubtitle = computed(() => (isNarrow.value
+  ? '点一下回到列表'
+  : isCalendar.value ? '点一下回到列表' : '点一下切到日历'))
 
 // 日历是「看」的视图，不在那里新建内容：新建入口（侧栏大按钮、手机底部 +）一并隐藏。
 // 需要新建时先切回列表视图。
@@ -506,10 +521,11 @@ function openQuickAdd() {
 // ---- 左上角 logo：列表 / 日历 一键切换 ----
 // 顶栏右侧那个「列表 / 日历」开关仍然保留（只在提醒相关页面出现），这里是从 logo 直接切。
 function toggleViewFromLogo() {
-  mobileOpen.value = false
-  if (isCalendar.value) router.push(listRoute.value)
+  // 手机上没有日历视图，这一步永远只是「回到列表」
+  if (isNarrow.value || isCalendar.value) router.push(listRoute.value)
   else router.push('/admin/calendar')
 }
+
 
 // ---- 清单行的右键 / 长按菜单：重命名、修改、删除 ----
 const listMenu = reactive<{ open: boolean; x: number; y: number; list: ReminderList | null }>({
@@ -1004,7 +1020,8 @@ async function applyDefaultViewOnce() {
   if (route.name !== 'Home') return
   try {
     const res = await getAllConfigs()
-    if (res.data?.data?.default_view === 'calendar') await router.replace({ name: 'Calendar' })
+    // 手机上没有日历视图：默认首页即使设成「日历」，也按列表首页进
+    if (res.data?.data?.default_view === 'calendar' && !isNarrowNow()) await router.replace({ name: 'Calendar' })
   } catch {
     /* 读不到就按列表首页来，不该因为一个偏好读失败挡住进入应用 */
   }
