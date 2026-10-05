@@ -165,7 +165,14 @@ func saveSyncSettings(db *gorm.DB, in syncSettingsInput) error {
 		if peerURL == "" {
 			return fmt.Errorf("启用同步需要填写对端地址")
 		}
-		if err := validateSyncToken(token); err != nil {
+		// 令牌留空表示「不改」：校验要看**实际生效**的那个值（新填的，或库里已有的）。
+		// 只校验入参会导致「只想改对端地址、不带令牌」的调用方莫名其妙收到
+		// 「令牌至少 8 位」；只看库里的又会在令牌被清空后放过一个空令牌。
+		effective := token
+		if effective == "" {
+			effective = syncConfigValue(db, "sync_token")
+		}
+		if err := validateSyncToken(effective); err != nil {
 			return err
 		}
 	}

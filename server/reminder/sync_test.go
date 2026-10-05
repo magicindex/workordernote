@@ -890,3 +890,53 @@ func TestAutoSyncTickRespectsDirectionAndInterval(t *testing.T) {
 		t.Fatalf("到点后没有同步：对端有 %d 条，期望 2", got)
 	}
 }
+
+// TestSaveSyncSettingsKeepsExistingToken 锁住「令牌留空 = 不改」这条约定：
+// 启用状态下只改对端地址（不带令牌）必须成功，并且库里的令牌原样保留。
+// 之前只在入参上做校验，这种调用会被判成「令牌至少 8 位」而 400（实测踩到）。
+func TestSaveSyncSettingsKeepsExistingToken(t *testing.T) {
+	db := newSyncDB(t)
+	if err := saveSyncSettings(db, syncSettingsInput{
+		Direction: syncDirectionBoth, PeerURL: "http://192.168.3.201:8908", Token: "shared-token-123",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := loadSyncSettings(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 只改地址、令牌留空
+	if err := saveSyncSettings(db, syncSettingsInput{
+		Direction: syncDirectionBoth, PeerURL: "http://192.168.3.201:8906",
+	}); err != nil {
+		t.Fatalf("令牌留空表示不改，应当成功，实际报错：%v", err)
+	}
+	after, err := loadSyncSettings(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Token != before.Token {
+		t.Fatalf("令牌不该被改动：%q → %q", before.Token, after.Token)
+	}
+	if after.PeerURL != "http://192.168.3.201:8906" {
+		t.Fatalf("地址应已更新，实际 %q", after.PeerURL)
+	}
+
+	// 库里令牌被清空时必须拦住：否则会启用一个「空令牌」的同步。
+	if err := sysconfig.UpdateConfig(db, "sync_token", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveSyncSettings(db, syncSettingsInput{
+		Direction: syncDirectionBoth, PeerURL: "http://192.168.3.201:8906",
+	}); err == nil {
+		t.Fatal("库里令牌为空时应当拒绝启用同步")
+	}
+
+	// 新填一个太短的令牌仍然要拦。
+	if err := saveSyncSettings(db, syncSettingsInput{
+		Direction: syncDirectionBoth, PeerURL: "http://192.168.3.201:8906", Token: "short",
+	}); err == nil {
+		t.Fatal("太短的令牌应当被拒绝")
+	}
+}
