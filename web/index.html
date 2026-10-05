@@ -2,10 +2,13 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <!-- 图标只声明浏览器实际会取的小尺寸；512 的大图仅留给 PWA 清单，
-         否则首屏会白白多下载几百 KB（弱网下就是好几秒）。 -->
+    <!-- 图标：优先 SVG（任意尺寸都清晰，只有几 KB，标签页/书签栏都用它）；
+         PNG 给老浏览器兜底，ico 给书签栏与旧引擎。512 的大图只留给 PWA 清单，
+         首屏不下载，避免弱网下白白多等几百 KB。 -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -75,8 +78,8 @@
         display: grid;
         place-items: center;
         border-radius: 16px;
-        background: linear-gradient(135deg, #3182f6, #a855f7);
-        box-shadow: 0 14px 32px rgba(49, 130, 246, 0.32);
+        background: linear-gradient(135deg, #3b82f6, #6366f1);
+        box-shadow: 0 14px 32px rgba(59, 130, 246, 0.32);
         color: #fff;
         font-size: 24px;
         font-weight: 700;
@@ -105,7 +108,7 @@
   </head>
   <body>
     <div id="boot-splash">
-      <div class="boot-logo" aria-hidden="true">提</div>
+      <div class="boot-logo" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="5.2" y="3.4" width="13.6" height="17.2" rx="3" stroke-width="1.8"/><path d="M9.4 3.4v17.2" stroke-width="1.8"/><path d="m11.6 12.1 1.8 1.8 3.2-3.6" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <p class="boot-title">工作序记</p>
       <p class="boot-hint" id="boot-hint">正在加载…</p>
     </div>

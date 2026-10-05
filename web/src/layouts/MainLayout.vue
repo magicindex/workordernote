@@ -10,8 +10,11 @@
         <div class="flex items-center justify-between px-5 pb-5 pt-6">
           <RouterLink to="/admin" class="group flex items-center gap-3" @click="mobileOpen = false">
             <span class="logo-mark">
-              <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor">
-                <path d="m7 12 3 3 7-7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- 与新应用图标同形：记录本 + 已办结的勾 -->
+              <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" aria-hidden="true">
+                <rect x="5.2" y="3.4" width="13.6" height="17.2" rx="3" stroke-width="1.8"/>
+                <path d="M9.4 3.4v17.2" stroke-width="1.8"/>
+                <path d="m11.6 12.1 1.8 1.8 3.2-3.6" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </span>
             <span>

@@ -8,7 +8,7 @@
     * { box-sizing: border-box; }
     body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; color: #fff; background: #171827; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
     .card { width: min(440px,100%); padding: 36px; border: 1px solid rgba(255,255,255,.12); border-radius: 20px; background: rgba(255,255,255,.04); text-align: center; }
-    .icon { width: 52px; height: 52px; margin: 0 auto 20px; display: grid; place-items: center; border-radius: 15px; color: #fff; background: linear-gradient(135deg,#6366f1,#8b5cf6); font-size: 24px; }
+    .icon { width: 52px; height: 52px; margin: 0 auto 20px; display: grid; place-items: center; border-radius: 15px; color: #fff; background: linear-gradient(135deg,#3b82f6,#6366f1); font-size: 24px; }
     h1 { margin: 0 0 10px; font-size: 22px; }
     p { margin: 0; color: rgba(255,255,255,.6); font-size: 14px; line-height: 1.65; }
     .error { color: #fda4af; }
@@ -18,7 +18,7 @@
     .name { color: #fff; font-weight: 600; font-size: 15px; word-break: break-all; }
     button { width: 100%; margin-top: 12px; min-height: 46px; border: 0; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; transition: filter .15s, background .15s, color .15s; font-family: inherit; }
     button:disabled { opacity: .6; cursor: not-allowed; }
-    .primary { color: #fff; background: linear-gradient(135deg,#6366f1,#8b5cf6); box-shadow: 0 8px 20px -8px rgba(99,102,241,.6); }
+    .primary { color: #fff; background: linear-gradient(135deg,#3b82f6,#6366f1); box-shadow: 0 8px 20px -8px rgba(99,102,241,.6); }
     .primary:hover:not(:disabled) { filter: brightness(1.08); }
     .ghost { color: #c7d2fe; background: transparent; border: 1px solid rgba(255,255,255,.15); }
     .ghost:hover:not(:disabled) { background: rgba(255,255,255,.06); }
@@ -33,7 +33,7 @@
 </head>
 <body>
   <main class="card">
-    <div class="icon">✓</div>
+    <div class="icon"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="5.2" y="3.4" width="13.6" height="17.2" rx="3" stroke-width="1.8"/><path d="M9.4 3.4v17.2" stroke-width="1.8"/><path d="m11.6 12.1 1.8 1.8 3.2-3.6" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <h1>使用飞牛 NAS 登录</h1>
     <p id="status">正在获取当前飞牛 NAS 用户…</p>
 
