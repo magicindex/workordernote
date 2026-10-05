@@ -28,6 +28,7 @@
 
 <script setup lang="ts">
 import type { ReminderList } from '../api/reminder'
+import { listColorHex } from '../utils/list-colors'
 
 const props = defineProps<{
   /** 要筛选的清单；空数组表示全部（不筛选） */
@@ -40,12 +41,8 @@ const emit = defineEmits<{
 }>()
 
 // 与侧栏同一套色名映射，保证同一清单处处同色
-const COLORS: Record<string, string> = {
-  blue: '#3182f6', violet: '#8b5cf6', rose: '#f43f5e', amber: '#f59e0b', emerald: '#10b981',
-}
-function color(name: string) {
-  return COLORS[name] || COLORS.blue
-}
+// 清单色表在 utils/list-colors.ts：筛选芯片、侧栏圆点、任务标题、日历色块同色。
+const color = listColorHex
 
 // 多选：点一下加入，再点一下移出；全移出等于「全部」。
 function toggle(id: number) {

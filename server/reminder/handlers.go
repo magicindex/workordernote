@@ -170,6 +170,10 @@ func handleCreateList(db *gorm.DB) gin.HandlerFunc {
 		if in.Color == "" {
 			in.Color = "blue"
 		}
+		if err := validateListColor(in.Color); err != nil {
+			response.ErrorBadRequest(c, err.Error())
+			return
+		}
 		if in.Icon == "" {
 			in.Icon = "list"
 		}
@@ -224,6 +228,10 @@ func handleUpdateList(db *gorm.DB) gin.HandlerFunc {
 			updates["name"] = name
 		}
 		if in.Color != "" {
+			if err := validateListColor(in.Color); err != nil {
+				response.ErrorBadRequest(c, err.Error())
+				return
+			}
 			updates["color"] = in.Color
 		}
 		if in.Icon != "" {

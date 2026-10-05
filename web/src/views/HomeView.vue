@@ -232,7 +232,9 @@
         </button>
         <button class="min-w-0 flex-1 text-left" @click="editItem(item)">
           <div class="flex items-center gap-2">
-            <h3 class="truncate text-sm font-bold sm:text-[15px]">{{ item.title }}</h3>
+            <!-- 任务标题用所属清单的颜色：侧栏圆点、这里的标题、日历色块三处同色。
+                 颜色在侧栏「编辑清单」里改，改完会广播数据变更，本页与日历立即刷新。 -->
+            <h3 class="truncate text-sm font-bold sm:text-[15px]" :style="{ color: listColor(item.list_color) }">{{ item.title }}</h3>
             <span v-if="item.kind === 'note'" class="tiny-badge">记事</span>
             <span v-if="item.priority" class="priority-mark" :class="`priority-${item.priority}`">{{ '!'.repeat(item.priority) }}</span>
             <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ item.calendar === 'lunar' ? `农历${ruleLabel(item.repeat_rule)}` : ruleLabel(item.repeat_rule) }}</span>
@@ -315,6 +317,7 @@ import ListFilter from '../components/ListFilter.vue'
 import LunarDatePicker from '../components/LunarDatePicker.vue'
 import RepeatNotifySelect from '../components/RepeatNotifySelect.vue'
 import PrintDialog from '../components/PrintDialog.vue'
+import { listColorHex } from '../utils/list-colors'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import {
   completeReminder, createReminder, deleteReminder, exportReminders, getChannelStatuses, getCompletedHistory, getLists,
@@ -769,7 +772,8 @@ function formatDue(value: string | null | undefined) {
 }
 function channelName(ch: ReminderChannel) { return ({ inapp: '站内', email: '邮件', sms: '短信', feishu: '飞书', qq: 'QQ', dingtalk: '钉钉' } as Record<string, string>)[ch] || ch }
 function ruleLabel(rule: string) { return ({ daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年' } as Record<string, string>)[rule] || '循环' }
-function listColor(color: string) { return ({ blue: '#3182f6', violet: '#8b5cf6', rose: '#f43f5e', amber: '#f59e0b', emerald: '#10b981' } as Record<string, string>)[color] || '#3182f6' }
+// 清单色表在 utils/list-colors.ts（侧栏/筛选/标题/日历共用一份，改一处不会走样）。
+function listColor(color: string) { return listColorHex(color) }
 function changed() { window.dispatchEvent(new CustomEvent('reminder-data-changed')) }
 function showToast(message: string, type: 'success' | 'error' = 'success') { toast.message = ''; setTimeout(() => Object.assign(toast, { message, type }), 0) }
 

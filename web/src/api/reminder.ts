@@ -42,6 +42,8 @@ export interface ReminderItem {
   id: number
   list_id: number
   list_name: string
+  /** 所属清单的色名（blue/violet/rose/amber/emerald），列表页用它给标题上色 */
+  list_color: string
   title: string
   notes: string
   kind: ReminderKind

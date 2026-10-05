@@ -1,6 +1,9 @@
 package reminder
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 const (
 	ChannelInApp    = "inapp"
@@ -198,6 +201,24 @@ type ReminderDTO struct {
 	Channels       []string          `json:"channels"`
 	ChannelTargets map[string][]uint `json:"channel_targets,omitempty"`
 	ListName       string            `json:"list_name"`
+	// ListColor 是所属清单的色名（blue/violet/…）。列表页用它给任务标题上色，
+	// 与侧栏圆点、日历色块保持同一份取色规则（前端 utils/list-colors.ts）。
+	ListColor string `json:"list_color"`
+}
+
+// supportedListColors 是清单颜色的白名单。它与前端 utils/list-colors.ts 的
+// LIST_COLOR_NAMES 一一对应：这里多一个，前端取色会回落到蓝色；前端多一个，
+// 写入时会被这里拒掉。改颜色名时两边一起改。
+var supportedListColors = map[string]bool{
+	"blue": true, "violet": true, "rose": true, "amber": true, "emerald": true,
+}
+
+// validateListColor 只接受白名单内的色名；空值表示「不修改」，由调用方决定默认值。
+func validateListColor(color string) error {
+	if color == "" || supportedListColors[color] {
+		return nil
+	}
+	return errors.New("清单颜色无效，可选：blue / violet / rose / amber / emerald")
 }
 
 type ListDTO struct {

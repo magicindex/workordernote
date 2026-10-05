@@ -79,22 +79,38 @@
             <span v-if="summary.all" class="nav-count">{{ summary.all }}</span>
           </RouterLink>
 
-          <RouterLink
+          <div
             v-for="list in lists"
             :key="list.id"
-            :to="`/admin/list/${list.id}`"
-            class="nav-row"
-            :class="{ 'nav-row-active': route.path === `/admin/list/${list.id}` }"
-            @click="mobileOpen = false"
+            class="group/list flex items-center"
           >
-            <span class="h-2.5 w-2.5 rounded-full ring-4 ring-current/10" :style="{ color: listColor(list.color), background: listColor(list.color) }"></span>
-            <span class="flex-1 truncate">{{ list.name }}</span>
-            <!-- 默认清单标识；改默认清单在「偏好设置」里操作 -->
-            <span v-if="list.is_default" class="shrink-0 text-amber-400" title="默认清单" aria-label="默认清单">
-              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor"><path d="m12 3.6 2.6 5.27 5.82.85-4.21 4.1.99 5.8L12 16.87l-5.2 2.75.99-5.8-4.21-4.1 5.82-.85L12 3.6Z"/></svg>
-            </span>
-            <span v-if="list.open_count" class="nav-count">{{ list.open_count }}</span>
-          </RouterLink>
+            <RouterLink
+              :to="`/admin/list/${list.id}`"
+              class="nav-row min-w-0 flex-1"
+              :class="{ 'nav-row-active': route.path === `/admin/list/${list.id}` }"
+              @click="mobileOpen = false"
+            >
+              <span class="h-2.5 w-2.5 rounded-full ring-4 ring-current/10" :style="{ color: listColor(list.color), background: listColor(list.color) }"></span>
+              <span class="flex-1 truncate">{{ list.name }}</span>
+              <!-- 默认清单标识；改默认清单在「偏好设置」里操作 -->
+              <span v-if="list.is_default" class="shrink-0 text-amber-400" title="默认清单" aria-label="默认清单">
+                <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor"><path d="m12 3.6 2.6 5.27 5.82.85-4.21 4.1.99 5.8L12 16.87l-5.2 2.75.99-5.8-4.21-4.1 5.82-.85L12 3.6Z"/></svg>
+              </span>
+              <span v-if="list.open_count" class="nav-count">{{ list.open_count }}</span>
+            </RouterLink>
+            <!-- 编辑清单（改名 / 换颜色）。放成 RouterLink 的兄弟节点而不是嵌在里面：
+                 交互元素不能套在链接里（键盘与读屏都会出问题）。手机上没有 hover，
+                 所以窄屏常显、桌面悬停才出现。 -->
+            <button
+              type="button"
+              class="nav-edit mr-1 shrink-0 rounded-lg p-1.5 text-muted-foreground opacity-70 transition hover:bg-muted hover:text-foreground sm:opacity-0 sm:group-hover/list:opacity-100 sm:focus:opacity-100"
+              :aria-label="`编辑清单「${list.name}」`"
+              :title="`编辑清单「${list.name}」（改名 / 换颜色）`"
+              @click="openListEditor(list)"
+            >
+              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
         </nav>
 
         <div class="border-t border-border/70">
@@ -239,6 +255,56 @@
 
     <!-- 版本信息与迭代说明 -->
     <VersionDialog v-model="versionOpen" :version="appVersion" :build-time="appBuildTime" />
+
+    <!-- 编辑清单：改名 / 换颜色。颜色是清单的属性，改完侧栏圆点、列表页任务标题、
+         日历格子与详情面板一起变（前两者靠这里的 refreshNavigation + 广播数据变更事件，
+         日历靠监听同一个事件重拉数据）。 -->
+    <Modal v-model="listEditorOpen" :title="`编辑清单「${listEditorOriginalName}」`">
+      <div class="space-y-4">
+        <label class="block">
+          <span class="text-xs font-bold text-foreground">名称</span>
+          <input
+            v-model="listEditorName"
+            class="input-field mt-1.5 !py-2"
+            maxlength="40"
+            placeholder="清单名称"
+            @keydown.enter.prevent="submitListEditor"
+          />
+        </label>
+
+        <div>
+          <span class="text-xs font-bold text-foreground">颜色</span>
+          <p class="mt-1 text-[11px] leading-4 text-muted-foreground">
+            这个颜色用于侧栏圆点、清单里的任务标题和日历上的色块；改完立即生效。
+          </p>
+          <div class="mt-2 flex flex-wrap items-center gap-2" role="radiogroup" aria-label="清单颜色">
+            <button
+              v-for="color in LIST_COLOR_NAMES"
+              :key="color"
+              type="button"
+              role="radio"
+              :aria-checked="listEditorColor === color"
+              :aria-label="listColorLabel(color)"
+              :title="listColorLabel(color)"
+              class="flex h-9 w-9 items-center justify-center rounded-full border-2 transition"
+              :class="listEditorColor === color ? 'border-foreground/60 scale-105' : 'border-transparent hover:scale-105'"
+              @click="listEditorColor = color"
+            >
+              <span class="h-6 w-6 rounded-full" :style="{ background: listColor(color) }"></span>
+            </button>
+          </div>
+        </div>
+
+        <p v-if="listEditorError" class="rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{{ listEditorError }}</p>
+
+        <div class="flex justify-end gap-2">
+          <button type="button" class="btn-secondary !h-10" :disabled="listEditorSaving" @click="listEditorOpen = false">取消</button>
+          <button type="button" class="btn-brand" :disabled="listEditorSaving || !listEditorDirty" @click="submitListEditor">
+            {{ listEditorSaving ? '保存中…' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </Modal>
   </div>
 </template>
 
@@ -247,6 +313,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import VersionDialog from '../components/VersionDialog.vue'
+import Modal from '../components/Modal.vue'
 import UiThemeToggle from '../components/ui/ThemeToggle.vue'
 import ReminderAlert from '../components/ReminderAlert.vue'
 import { useAuthStore } from '../stores/auth'
@@ -259,10 +326,12 @@ import {
   getSummary,
   markNotificationRead,
   snoozeReminder,
+  updateList,
   type ReminderList,
 } from '../api/reminder'
 import { getAllConfigs, getVersion } from '../api/config'
 import { connectReminderEvents, type RealtimeNotification, type ReminderRealtimeEvent } from '../services/reminderRealtime'
+import { LIST_COLOR_NAMES, listColorHex, listColorLabel } from '../utils/list-colors'
 import { onFnOSGatewayOrigin } from '../utils/gateway'
 
 const route = useRoute()
@@ -356,14 +425,70 @@ function toggleSettings() {
 }
 // 切到其它页面时把手机抽屉收起（点导航项已经处理，这里兜住路由变化）
 watch(() => route.fullPath, () => { mobileOpen.value = false })
-function listColor(color: string) {
-  return ({ blue: '#3182f6', violet: '#8b5cf6', rose: '#f43f5e', amber: '#f59e0b', emerald: '#10b981' } as Record<string, string>)[color] || '#3182f6'
-}
+// 清单色表已抽到 utils/list-colors.ts（侧栏/筛选/列表标题/日历共用一份）。
+const listColor = listColorHex
 function openQuickAdd() {
   if (!route.path.startsWith('/admin') || ['notifications', 'channels', 'settings', 'profile'].some(x => route.path.includes(x))) router.push('/admin')
   mobileOpen.value = false
   setTimeout(() => window.dispatchEvent(new CustomEvent('open-quick-reminder')), 80)
 }
+// ---- 编辑清单（改名 / 换颜色）----
+const listEditorOpen = ref(false)
+const listEditorId = ref(0)
+const listEditorOriginalName = ref('')
+const listEditorName = ref('')
+const listEditorColor = ref<string>('blue')
+const listEditorOriginalColor = ref<string>('blue')
+const listEditorSaving = ref(false)
+const listEditorError = ref('')
+
+const listEditorDirty = computed(() =>
+  listEditorName.value.trim() !== listEditorOriginalName.value || listEditorColor.value !== listEditorOriginalColor.value,
+)
+
+function openListEditor(list: ReminderList) {
+  listEditorId.value = list.id
+  listEditorOriginalName.value = list.name
+  listEditorName.value = list.name
+  listEditorColor.value = list.color || 'blue'
+  listEditorOriginalColor.value = list.color || 'blue'
+  listEditorError.value = ''
+  listEditorOpen.value = true
+}
+
+async function submitListEditor() {
+  if (listEditorSaving.value) return
+  const name = listEditorName.value.trim()
+  if (!name) {
+    listEditorError.value = '清单名称不能为空'
+    return
+  }
+  listEditorSaving.value = true
+  listEditorError.value = ''
+  try {
+    await updateList(listEditorId.value, { name, color: listEditorColor.value })
+    listEditorOpen.value = false
+    await refreshNavigation()
+    // 广播「数据变了」：HomeView 与 CalendarView 监听 reminder-realtime 重拉自己的
+    // 数据，于是颜色改动会立刻反映到列表页的任务标题和**已经打开的日历**上。
+    // 事件形状与后端推送的保持一致（scope=list, action=updated），这样本机改动和
+    // 另一台设备的改动走同一条刷新路径，不必为「本地」再写一套。
+    const localEvent: ReminderRealtimeEvent = {
+      type: 'reminders.changed',
+      scope: 'list',
+      action: 'updated',
+      target_id: listEditorId.value,
+      sent_at: new Date().toISOString(),
+    }
+    window.dispatchEvent(new CustomEvent('reminder-realtime', { detail: localEvent }))
+    window.dispatchEvent(new CustomEvent('reminder-data-changed'))
+  } catch (err: any) {
+    listEditorError.value = err?.response?.data?.message || '保存失败'
+  } finally {
+    listEditorSaving.value = false
+  }
+}
+
 async function submitList() {
   if (!newListName.value.trim()) return
   await createList({ name: newListName.value.trim(), color: ['blue', 'violet', 'rose', 'amber', 'emerald'][lists.value.length % 5] })

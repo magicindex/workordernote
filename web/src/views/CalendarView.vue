@@ -196,7 +196,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import ListFilter from '../components/ListFilter.vue'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import Toast from '../components/Toast.vue'
@@ -204,8 +204,10 @@ import { getAllConfigs } from '../api/config'
 import {
   completeReminder, exportReminders, getCalendarItems, getChannelStatuses, getLists, getLunarCalendar,
   listIdsParam, restoreReminder,
+
   type CalendarItem, type ChannelStatus, type LunarDayInfo, type ReminderList, type SaveReminderInput,
 } from '../api/reminder'
+import { listInk, listTint } from '../utils/list-colors'
 
 const toast = reactive<{ message: string; type: 'success' | 'error' }>({ message: '', type: 'success' })
 function showToast(message: string, type: 'success' | 'error' = 'success') {
@@ -335,14 +337,11 @@ function dayNumberClass(c: LunarDayInfo) {
   return 'text-foreground'
 }
 
-const COLORS: Record<string, string> = {
-  blue: '#3182f6', violet: '#8b5cf6', rose: '#f43f5e', amber: '#f59e0b', emerald: '#10b981',
-}
-const hex = (name: string) => COLORS[name] || COLORS.blue
-// 用清单色做浅底 + 深字，同一清单在日历里和侧栏同色。
-const tint = (name: string) => `${hex(name)}1f`
-const ink = (name: string) => hex(name)
-const dot = (name: string) => hex(name)
+// 清单色表在 utils/list-colors.ts（与侧栏、列表页标题共用一份）。
+// 用清单色做浅底 + 同色文字，同一清单在日历里和侧栏、列表页同色。
+const tint = listTint
+const ink = listInk
+const dot = listInk
 
 function timeLabel(item: CalendarItem) {
   // 记事的 due_at 是它的记录时间（后端取 completed_at），说「记录」比「到期」准确。
@@ -502,9 +501,23 @@ async function loadEditorContext() {
   }
 }
 
+// 别的设备改了数据（或本机在侧栏改了清单颜色/名字）时重拉：日历原先完全不监听
+// 实时事件，改完清单颜色得手动刷新页面才看得到，这正是「改了颜色日历不跟着变」。
+function refreshFromEvent() {
+  loadEditorContext()
+  void load()
+}
+
 onMounted(() => {
   loadEditorContext()
   load()
+  window.addEventListener('reminder-realtime', refreshFromEvent)
+  window.addEventListener('reminder-realtime-resume', refreshFromEvent)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('reminder-realtime', refreshFromEvent)
+  window.removeEventListener('reminder-realtime-resume', refreshFromEvent)
 })
 </script>
 
