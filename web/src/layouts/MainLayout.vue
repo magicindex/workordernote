@@ -5,10 +5,10 @@
       <span class="ambient-orb ambient-orb-two"></span>
     </div>
 
-    <aside class="sidebar" :class="[mobileOpen ? 'sidebar-open' : '', railCollapsed ? '' : 'sidebar-docked']">
+    <aside class="sidebar" :class="[mobileOpen ? 'sidebar-open' : '', railActive ? 'sidebar-rail' : 'sidebar-docked']">
       <div class="flex h-full flex-col">
         <div class="flex items-center justify-between px-5 pb-5 pt-6">
-          <RouterLink to="/admin" class="group flex items-center gap-3" @click="mobileOpen = false">
+          <RouterLink to="/admin" class="group flex items-center gap-3" :title="railActive ? (authStore.siteTitle || '工作序记') : undefined" @click="mobileOpen = false">
             <span class="logo-mark">
               <!-- 与新应用图标同形：记录本 + 已办结的勾 -->
               <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" aria-hidden="true">
@@ -17,7 +17,7 @@
                 <path d="m11.6 12.1 1.8 1.8 3.2-3.6" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </span>
-            <span>
+            <span class="rail-hide">
               <span class="flex items-center gap-2">
                 <span class="font-display text-lg font-extrabold tracking-tight">{{ authStore.siteTitle || '工作序记' }}</span>
                 <span v-if="appVersion" class="version-badge" :title="appBuildTime ? `构建时间：${appBuildTime}` : ''">{{ appVersion }}</span>
@@ -30,12 +30,12 @@
           </button>
         </div>
 
-        <button v-if="canCreate" class="new-reminder-button mx-4" @click="openQuickAdd">
-          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
+        <button v-if="canCreate" class="new-reminder-button mx-4" :title="railActive ? '新建提醒（快捷键 N）' : undefined" @click="openQuickAdd">
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20">
             <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2.2" stroke-linecap="round"/></svg>
           </span>
-          新建提醒
-          <kbd class="ml-auto hidden rounded-md bg-black/10 px-1.5 py-0.5 text-[10px] sm:inline">N</kbd>
+          <span class="rail-hide">新建提醒</span>
+          <kbd class="rail-hide ml-auto hidden rounded-md bg-black/10 px-1.5 py-0.5 text-[10px] sm:inline">N</kbd>
         </button>
 
         <nav class="mt-6 flex-1 overflow-y-auto px-3 pb-5">
@@ -46,6 +46,7 @@
             :to="item.to"
             class="nav-row"
             :class="{ 'nav-row-active': isActive(item.to) }"
+            :title="railActive ? item.label : undefined"
             @click="mobileOpen = false"
           >
             <span class="nav-symbol" :class="item.tone" v-html="item.icon"></span>
@@ -86,6 +87,7 @@
           >
             <RouterLink
               :to="`/admin/list/${list.id}`"
+              :title="railActive ? list.name : undefined"
               class="nav-row min-w-0 flex-1"
               :class="{ 'nav-row-active': route.path === `/admin/list/${list.id}` }"
               @click="mobileOpen = false"
@@ -103,7 +105,7 @@
                  所以窄屏常显、桌面悬停才出现。 -->
             <button
               type="button"
-              class="nav-edit mr-1 shrink-0 rounded-lg p-1.5 text-muted-foreground opacity-70 transition hover:bg-muted hover:text-foreground sm:opacity-0 sm:group-hover/list:opacity-100 sm:focus:opacity-100"
+              class="nav-edit rail-hide mr-1 shrink-0 rounded-lg p-1.5 text-muted-foreground opacity-70 transition hover:bg-muted hover:text-foreground sm:opacity-0 sm:group-hover/list:opacity-100 sm:focus:opacity-100"
               :aria-label="`编辑清单「${list.name}」`"
               :title="`编辑清单「${list.name}」（改名 / 换颜色）`"
               @click="openListEditor(list)"
@@ -122,6 +124,7 @@
             type="button"
             class="nav-settings-toggle flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left"
             :aria-expanded="settingsOpen"
+            :title="railActive ? '设置' : undefined"
             aria-controls="sidebar-settings"
             @click="toggleSettings"
           >
@@ -132,19 +135,19 @@
             <span v-if="!settingsOpen && hiddenSettingCount" class="nav-count">{{ hiddenSettingCount }}</span>
             <svg
               viewBox="0 0 24 24"
-              class="ml-auto h-4 w-4 shrink-0 text-brand-600/80 transition-transform duration-200 dark:text-brand-300/80"
+              class="rail-hide ml-auto h-4 w-4 shrink-0 text-brand-600/80 transition-transform duration-200 dark:text-brand-300/80"
               :class="{ 'rotate-180': settingsOpen }"
               fill="none" stroke="currentColor" aria-hidden="true"
             ><path d="m6 15 6-6 6 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
           <div v-show="settingsOpen" id="sidebar-settings" class="max-h-[46vh] overflow-y-auto px-1 pb-3 pt-1">
-          <RouterLink to="/admin/channels" class="nav-row" :class="{ 'nav-row-active': route.path === '/admin/channels' }">
+          <RouterLink to="/admin/channels" class="nav-row" :class="{ 'nav-row-active': route.path === '/admin/channels' }" :title="railActive ? '通知方式' : undefined">
             <span class="nav-symbol bg-violet-500/12 text-violet-500">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 12h8m-8 4h5m6-11H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4l3 3 3-3h4a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </span>
             <span class="flex-1">通知方式</span>
           </RouterLink>
-          <RouterLink to="/admin/settings" class="nav-row" :class="{ 'nav-row-active': route.path === '/admin/settings' }">
+          <RouterLink to="/admin/settings" class="nav-row" :class="{ 'nav-row-active': route.path === '/admin/settings' }" :title="railActive ? '偏好设置' : undefined">
             <span class="nav-symbol bg-slate-500/10 text-slate-500">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.13.38.35.72.65 1 .3.28.7.42 1.1.4H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </span>
@@ -152,7 +155,7 @@
           </RouterLink>
           <template v-if="authStore.isAdmin">
             <p class="nav-caption mt-3">系统管理</p>
-            <RouterLink v-for="item in adminNav" :key="item.to" :to="item.to" class="nav-row" :class="{ 'nav-row-active': isActive(item.to) }">
+            <RouterLink v-for="item in adminNav" :key="item.to" :to="item.to" class="nav-row" :class="{ 'nav-row-active': isActive(item.to) }" :title="railActive ? item.label : undefined">
               <span class="nav-symbol" :class="item.tone" v-html="item.icon"></span>
               <span class="flex-1">{{ item.label }}</span>
             </RouterLink>
@@ -160,7 +163,7 @@
 
           <!-- 版本信息：放在系统管理下方，点开是迭代说明与原项目信息 -->
           <p class="nav-caption mt-3">关于</p>
-          <button type="button" class="nav-row w-full text-left" @click="versionOpen = true" title="查看版本信息与迭代说明">
+          <button type="button" class="nav-row w-full text-left" :title="railActive ? '版本信息' : '查看版本信息与迭代说明'" @click="versionOpen = true">
             <span class="nav-symbol bg-brand-500/12 text-brand-500">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 11v5.5M12 7.6v.01" stroke-width="2" stroke-linecap="round"/></svg>
             </span>
@@ -174,7 +177,7 @@
 
     <div v-if="mobileOpen" class="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-sm lg:hidden" @click="mobileOpen = false"></div>
 
-    <div class="min-h-screen" :class="railCollapsed ? 'lg:pl-0' : 'lg:pl-[292px]'">
+    <div class="min-h-screen" :class="railActive ? 'lg:pl-14' : 'lg:pl-[292px]'">
       <header class="topbar">
         <button class="icon-button" :aria-label="railCollapsed ? '展开侧栏' : '收起侧栏'" @click="toggleSidebar">
           <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M4 7h16M4 12h16M4 17h16" stroke-width="2" stroke-linecap="round"/></svg>
@@ -350,7 +353,12 @@ const lsGet = (key: string) => { try { return localStorage.getItem(key) } catch 
 const lsSet = (key: string, value: string) => { try { localStorage.setItem(key, value) } catch { /* 隐私模式忽略 */ } }
 
 // 桌面端把侧栏收成抽屉，内容区就能宽出来；手机端仍走原来的抽屉打开逻辑。
+// 桌面折叠态。railCollapsed 是**用户偏好**（记在本地），railForced 是「当前视图
+// 临时要求收成图标栏」（日历视图）——两者分开，进日历自动收起就不会把用户偏好改掉，
+// 离开日历时能原样还原。手机端这两者都不影响抽屉（CSS 里的规则都带 lg: 前缀）。
 const railCollapsed = ref(lsGet('ui_rail_collapsed') === '1')
+const railForced = ref(false)
+const railActive = computed(() => railCollapsed.value || railForced.value)
 // 底部「设置」组默认折叠，给清单列表腾出更多竖向空间。
 const settingsOpen = ref(lsGet('ui_settings_open') === '1')
 
@@ -419,8 +427,13 @@ const hiddenSettingCount = computed(() => 2 + (authStore.isAdmin ? adminNav.leng
 function toggleSidebar() {
   // 桌面：停靠 / 折叠；手机：抽屉开合。用媒体查询区分，避免两套按钮。
   if (typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches) {
-    railCollapsed.value = !railCollapsed.value
-    lsSet('ui_rail_collapsed', railCollapsed.value ? '1' : '0')
+    // 翻转的是**当前看到的状态**（railActive），不是偏好本身：在日历里被临时收起时，
+    // 点一下应当展开（而不是把偏好翻成 true 继续收着——那样点了没反应）。
+    // 用户手动决定之后，日历的临时收起也不再压着他。
+    const next = !railActive.value
+    railForced.value = false
+    railCollapsed.value = next
+    lsSet('ui_rail_collapsed', next ? '1' : '0')
   } else {
     mobileOpen.value = true
   }
@@ -431,6 +444,13 @@ function toggleSettings() {
 }
 // 切到其它页面时把手机抽屉收起（点导航项已经处理，这里兜住路由变化）
 watch(() => route.fullPath, () => { mobileOpen.value = false })
+
+// 日历视图里侧栏基本用不上（日历要的是横向空间），进这一页自动收成图标栏；
+// 离开自动还原用户偏好。只看「路由变化」这一个事件，所以用户在日历里手动展开
+// 之后不会被反复强行收起（手动动过就清掉临时态，见 toggleSidebar）。
+watch(() => route.path, (path) => {
+  railForced.value = path.startsWith('/admin/calendar')
+}, { immediate: true })
 // 清单色表已抽到 utils/list-colors.ts（侧栏/筛选/列表标题/日历共用一份）。
 const listColor = listColorHex
 function openQuickAdd() {
@@ -825,9 +845,19 @@ onBeforeUnmount(() => {
 .sidebar-open { @apply translate-x-0; }
 /* 桌面：停靠在左侧常驻；不加这个类就是折叠成抽屉的状态 */
 .sidebar-docked { @apply lg:translate-x-0; }
-/* 折叠后桌面要留一条窄条，方便再次点开 */
+/* 折叠后桌面留一条 56px 的图标栏：只显示图标，文字与角标藏起来，
+   鼠标悬停在图标上由 title 提示（浏览器原生提示，不会被侧栏的滚动容器裁掉）。 */
 .sidebar-rail { @apply lg:translate-x-0 lg:w-14; }
 .sidebar-rail .rail-hide { @apply lg:hidden; }
+.sidebar-rail .nav-caption,
+.sidebar-rail .nav-row > .flex-1,
+.sidebar-rail .nav-count,
+.sidebar-rail .version-badge { @apply lg:hidden; }
+.sidebar-rail .nav-row,
+.sidebar-rail .nav-settings-toggle { @apply lg:justify-center lg:gap-0 lg:px-0; }
+.sidebar-rail .new-reminder-button { @apply lg:mx-auto lg:h-11 lg:w-11 lg:justify-center lg:gap-0 lg:px-0; }
+.sidebar-rail nav { @apply lg:px-2; }
+.sidebar-rail .mt-7 { @apply lg:mt-3; }
 .logo-mark { @apply flex h-11 w-11 items-center justify-center rounded-[15px] bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_10px_30px_-10px_rgba(59,130,246,.75)]; }
 .version-badge { @apply rounded-full border border-brand-500/25 bg-brand-500/10 px-2 py-0.5 text-[11px] font-bold leading-none text-brand-600 dark:text-brand-300; }
 .new-reminder-button { @apply flex h-12 items-center gap-3 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-500 px-3.5 text-sm font-bold text-white shadow-[0_14px_30px_-14px_rgba(59,130,246,.8)] transition hover:-translate-y-0.5 hover:brightness-105 active:translate-y-0; }
