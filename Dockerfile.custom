@@ -56,6 +56,20 @@ RUN CGO_ENABLED=1 GOOS=linux go build \
 FROM python:3.12-alpine AS tzdata-source
 
 FROM alpine:latest
+# 镜像的「名字」：Docker 的仓库名只允许小写，所以只能叫 workordernote；
+# 真正给人看的显示名 WorkOrderNote 写进 OCI 标签（docker inspect 可见，
+# 推送到镜像仓库时也会显示），离线安装包的 manifest.json 里同样有。
+ARG VERSION=dev
+ARG BUILD_TIME=unknown
+ARG GIT_COMMIT=unknown
+LABEL org.opencontainers.image.title="WorkOrderNote" \
+      org.opencontainers.image.description="工作序记：任务、记事与日历一体的提醒应用（基于 TechFunWay/reminders 衍生开发）" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_TIME}" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.vendor="WorkOrderNote" \
+      org.opencontainers.image.source="https://github.com/TechFunWay/reminders"
 COPY --from=backend-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=tzdata-source /usr/share/zoneinfo /usr/share/zoneinfo
 RUN adduser -D -u 1000 appuser
