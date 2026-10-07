@@ -397,6 +397,19 @@ func handleBootstrap(db *gorm.DB, fnOSApp bool, servicePort string) gin.HandlerF
 			return
 		}
 
+		// 个人偏好（ScopeUser，例如「信用卡账单栏目」开关）要以**当前登录用户**的值
+		// 为准：GetPublicConfigs 只按「公开」取，拿到的是默认行。这里把该用户自己的
+		// 值并进来（只并用户级键，不会覆盖系统级配置）。未登录时跳过。
+		if uid := c.GetUint("userID"); uid > 0 {
+			if mine, err := sysconfig.GetUserConfigs(db, uid); err == nil {
+				for key, value := range mine {
+					if def, ok := sysconfig.GetConfigDef(key); ok && def.Scope == sysconfig.ScopeUser {
+						configs[key] = value
+					}
+				}
+			}
+		}
+
 		var accountCount int64
 		if err := db.Model(&database.User{}).Count(&accountCount).Error; err != nil {
 			response.ErrorInternal(c, "检查初始化状态失败")

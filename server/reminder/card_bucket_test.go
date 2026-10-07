@@ -19,13 +19,14 @@ func withFreshCardFeature(t *testing.T) {
 	})
 }
 
-func setCardFeature(t *testing.T, on bool) {
+// setCardFeature 改**某个用户自己的**偏好（信用卡栏目现在是个人开关，默认关）。
+func setCardFeature(t *testing.T, userID uint, on bool) {
 	t.Helper()
 	value := "true"
 	if !on {
 		value = "false"
 	}
-	if err := sysconfig.UpdateConfig(appDB, "credit_card_enabled", value, 0); err != nil {
+	if err := sysconfig.UpdateConfig(appDB, "credit_card_enabled", value, userID); err != nil {
 		t.Fatal(err)
 	}
 	resetCardFeatureCache()
@@ -109,6 +110,7 @@ func TestNewCardAlwaysLandsInBucket(t *testing.T) {
 		t.Fatalf("卡片应挂在信用卡账单栏目下：%+v", cards)
 	}
 	// 卡片自己占一个清单，普通清单页不该混进卡片提醒——栏目页只显示卡片。
+	// （这段只验证落库位置，与个人开关无关。）
 	var remindersInBucket int64
 	if err := appDB.Model(&Reminder{}).
 		Where("user_id = ? AND list_id = ? AND deleted_at IS NULL", 32, bucket.ID).
@@ -149,6 +151,13 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// 默认是**关**的（个人偏好，不是所有人都用信用卡）：先确认这一点，
+	// 再打开它看卡片提醒回来。
+	if creditCardFeatureEnabled(appDB, userID) {
+		t.Fatal("个人偏好默认应为关闭")
+	}
+	setCardFeature(t, userID, true)
+
 	// 开着的时候：4 条（3 条卡片提醒 + 1 条普通任务），日历里也应该有卡片提醒。
 	items, err := listReminders(appDB, userID, "all", "", nil, false)
 	if err != nil {
@@ -165,7 +174,10 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 		t.Fatal("开启时日历里应该有卡片提醒")
 	}
 
-	setCardFeature(t, false)
+	setCardFeature(t, userID, false)
+	if creditCardFeatureEnabled(appDB, userID) {
+		t.Fatal("关掉之后读取应为关闭")
+	}
 
 	items, err = listReminders(appDB, userID, "all", "", nil, false)
 	if err != nil {
@@ -193,7 +205,7 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 		t.Fatalf("关闭只是隐藏，数据应保留：cards=%d reminders=%d lists=%d", cards, reminders, lists)
 	}
 
-	setCardFeature(t, true)
+	setCardFeature(t, userID, true)
 	items, err = listReminders(appDB, userID, "all", "", nil, false)
 	if err != nil {
 		t.Fatal(err)

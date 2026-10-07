@@ -77,8 +77,8 @@ func cardColor(name string) string {
 func handleListCards(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := currentUserID(c)
-		// 栏目被后台关掉时：卡片数据还在，但这一栏不对外开放（前端也不会显示入口）。
-		if !creditCardFeatureEnabled(db) {
+		// 栏目被这个用户关掉时：卡片数据还在，但这一栏不对外开放（前端也不会显示入口）。
+		if !creditCardFeatureEnabled(db, userID) {
 			response.Success(c, []CardDTO{})
 			return
 		}
@@ -104,7 +104,7 @@ func handleListCards(db *gorm.DB) gin.HandlerFunc {
 func handleWeekDueCards(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := currentUserID(c)
-		if !creditCardFeatureEnabled(db) {
+		if !creditCardFeatureEnabled(db, userID) {
 			response.Success(c, WeekDueDTO{Cards: []WeekDueCard{}})
 			return
 		}
@@ -133,8 +133,8 @@ func handleCreateCard(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		userID := currentUserID(c)
-		if !creditCardFeatureEnabled(db) {
-			response.ErrorBadRequest(c, "「信用卡账单」栏目已在后台关闭，请先到系统配置 → 功能开关里打开")
+		if !creditCardFeatureEnabled(db, userID) {
+			response.ErrorBadRequest(c, "「信用卡账单」栏目还没打开，请先到偏好设置 → 功能开关里打开")
 			return
 		}
 		bucket, err := ensureCardBucket(db, userID)

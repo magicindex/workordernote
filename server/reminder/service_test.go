@@ -240,6 +240,11 @@ func TestListRemindersLoadsRelatedDataInConstantQueries(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// 「信用卡账单」是个人偏好，读它会查一次配置（并按用户缓存 2 秒）。
+	// 先把缓存读热再清零计数，统计的才是**稳定态**的查询次数（线上绝大多数请求都是）。
+	creditCardFeatureEnabled(appDB, userID)
+	queryCount.Store(0)
+
 	items, err := listReminders(appDB, userID, "all", "", nil, false)
 	if err != nil {
 		t.Fatal(err)

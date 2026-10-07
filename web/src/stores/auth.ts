@@ -47,9 +47,10 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<any>(null)
   const requireLogin = ref(true)
   const allowRegister = ref(true)
-  // 后台偏好「信用卡账单栏目」：侧栏那个固定栏目在不在，由它决定。
-  // 留在 store 里是为了「管理员刚保存偏好、侧栏立刻跟着变」，不用重进页面。
-  const creditCardEnabled = ref(true)
+  // 个人偏好「信用卡账单栏目」：侧栏那个固定栏目在不在，由它决定。
+  // **每人一份、默认关**（不是所有人都用信用卡，要用的人自己在偏好设置里打开）。
+  // 留在 store 里是为了「刚保存偏好、侧栏立刻跟着变」，不用重进页面。
+  const creditCardEnabled = ref(false)
   const setupRequired = ref(false)
   const siteTitle = ref('工作序记')
   // 飞牛部署下授权登录要用的两个信息，随启动引导一起取回，登录/注册页不再

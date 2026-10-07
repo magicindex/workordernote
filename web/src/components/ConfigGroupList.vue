@@ -22,6 +22,7 @@
           v-for="item in group.items"
           :key="item.key"
           class="flex flex-col gap-2.5 px-4 py-3.5 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:gap-3 sm:p-5 sm:px-6"
+          :data-config-key="item.key"
         >
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 flex-wrap">

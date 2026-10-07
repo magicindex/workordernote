@@ -69,11 +69,13 @@ import ConfigGroupList from '../components/ConfigGroupList.vue'
 import { getUserConfigMeta, updateConfig } from '../api/config'
 import type { ConfigMeta } from '../api/config'
 import { getLists, updateList, type ReminderList } from '../api/reminder'
+import { useAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
 
 const items = ref<ConfigMeta[]>([])
 const loading = ref(false)
 const errorMsg = ref('')
+const authStore = useAuthStore()
 const listRef = ref<InstanceType<typeof ConfigGroupList> | null>(null)
 const lists = ref<ReminderList[]>([])
 // 默认清单只能从普通清单里选：信用卡账单是固定栏目，不适合当默认清单。
@@ -144,6 +146,10 @@ async function handleSave(key: string, value: string) {
       const idx = items.value.findIndex((it) => it.key === key)
       if (idx >= 0) {
         items.value[idx] = { ...items.value[idx], value }
+      }
+      // 「信用卡账单栏目」是个人开关：侧栏那一行要立刻跟着变，不用重进页面。
+      if (key === 'credit_card_enabled') {
+        authStore.setCreditCardEnabled(value !== 'false')
       }
       listRef.value?.markSaved(key)
       if (key === 'theme_mode') {

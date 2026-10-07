@@ -196,10 +196,14 @@ func init() {
 		Description: "打开应用时先进哪个视图；之后仍可随时用右上角按钮切换",
 	})
 	// 信用卡账单：侧栏里那个**固定栏目**，不是普通清单——不用在「新建清单」里选模板，
-	// 卡片一律归到这一栏里。管理员可以整栏关掉（数据保留，见 server/reminder/card_bucket.go）。
+	// 卡片一律归到这一栏里。
+	//
+	// **这是每个人的个人偏好，不是系统开关**：不是所有人都用信用卡，所以默认关，
+	// 需要的人在「偏好设置」里自己打开。关掉后栏目与卡片提醒一起隐藏，数据保留
+	// （见 server/reminder/card_bucket.go）。
 	RegisterConfig(ConfigDef{
-		Key: "credit_card_enabled", Scope: ScopeSystem, Type: TypeBool,
-		Default: "true", Public: true,
+		Key: "credit_card_enabled", Scope: ScopeUser, Type: TypeBool,
+		Default: "false", Public: true,
 		Group: "features", Label: "信用卡账单栏目",
 		Description: "在侧栏显示固定的「信用卡账单」栏目（新建卡片都在这里）；关掉后栏目与卡片提醒一起隐藏，数据保留",
 	})

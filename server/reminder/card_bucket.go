@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
+	"smallgo/server/sysconfig"
 )
 
 // 「信用卡账单」是侧栏里一个**固定栏目**，不是普通清单：
@@ -24,41 +26,80 @@ const (
 	cardBucketListIcon  = "card"
 )
 
-// creditCardFeatureEnabled 读后台偏好 credit_card_enabled，默认开。
+// creditCardFeatureEnabled 读**这个用户自己**的偏好 credit_card_enabled。
 //
-// 这个值在 /summary、/items、/calendar 这些热路径上都要看，而它又是一个
-// 几乎不变的开关，所以带一个很短的进程内缓存：开关一改，最迟 2 秒后生效
-// （前端的侧栏是保存后立刻更新的，感知不到）。这样普通路径上不额外查库，
-// 也不会把 /summary 的固定查询次数（见 performance_test.go）撑大。
+// 「信用卡账单」不是所有人都用，所以它是个人偏好（ScopeUser，默认关）而不是系统开关。
+// 这个值在 /summary、/items、/calendar 这些热路径上都要看，而它又是一个几乎不变的
+// 开关，所以按用户做一层很短的进程内缓存：改完最迟 2 秒生效（前端的侧栏是保存后
+// 立刻更新的，感知不到）。这样普通路径上不额外查库，也不会把 /summary 的固定查询
+// 次数（见 performance_test.go）撑大。
 var (
 	cardFeatureMu    sync.Mutex
-	cardFeatureAt    time.Time
-	cardFeatureOn    = true
+	cardFeatureByUID = map[uint]cardFeatureEntry{}
 	cardFeatureCache = 2 * time.Second
+	cardFeatureMax   = 512 // 缓存条目上限，超过就整体清一次（单机用户数远小于它）
 )
 
-func creditCardFeatureEnabled(db *gorm.DB) bool {
+type cardFeatureEntry struct {
+	on     bool
+	hidden []uint // 栏目关掉时要摘掉的清单 id；开着时是 nil
+	at     time.Time
+}
+
+// cardFeatureState 一次算出「这个用户开没开」以及「关着的话要摘掉哪些清单」，
+// 两者共用同一份缓存：否则关着栏目的用户每读一次列表/日历/统计都要多查两次库，
+// 把「固定查询次数」的保证打穿（见 performance_test.go）。
+func cardFeatureState(db *gorm.DB, userID uint) (bool, []uint) {
 	cardFeatureMu.Lock()
-	if time.Since(cardFeatureAt) < cardFeatureCache {
-		v := cardFeatureOn
+	if entry, ok := cardFeatureByUID[userID]; ok && time.Since(entry.at) < cardFeatureCache {
 		cardFeatureMu.Unlock()
-		return v
+		return entry.on, entry.hidden
 	}
 	cardFeatureMu.Unlock()
 
-	on := syncConfigValue(db, "credit_card_enabled") != "false"
+	on := userConfigValue(db, userID, "credit_card_enabled") == "true"
+	var hidden []uint
+	if !on {
+		// 只有关掉时才需要知道要摘哪些清单（开着的话调用点根本不用过滤）。
+		var lists []List
+		if err := db.Where("user_id = ? AND template = ? AND deleted_at IS NULL", userID, listTemplateCard).
+			Find(&lists).Error; err == nil {
+			for _, l := range lists {
+				hidden = append(hidden, l.ID)
+			}
+		}
+	}
 
 	cardFeatureMu.Lock()
-	cardFeatureOn = on
-	cardFeatureAt = time.Now()
+	if len(cardFeatureByUID) >= cardFeatureMax {
+		cardFeatureByUID = map[uint]cardFeatureEntry{}
+	}
+	cardFeatureByUID[userID] = cardFeatureEntry{on: on, hidden: hidden, at: time.Now()}
 	cardFeatureMu.Unlock()
+	return on, hidden
+}
+
+func creditCardFeatureEnabled(db *gorm.DB, userID uint) bool {
+	on, _ := cardFeatureState(db, userID)
 	return on
+}
+
+// userConfigValue 取某个用户自己的配置值；没写过就用注册表里的默认值。
+func userConfigValue(db *gorm.DB, userID uint, key string) string {
+	value := ""
+	if def, ok := sysconfig.GetConfigDef(key); ok {
+		value = def.Default
+	}
+	if v, err := sysconfig.GetConfig(db, key, userID); err == nil && v != "" {
+		value = v
+	}
+	return value
 }
 
 // resetCardFeatureCache 让下一次读取重新查库（测试与「刚改完配置」的路径用）。
 func resetCardFeatureCache() {
 	cardFeatureMu.Lock()
-	cardFeatureAt = time.Time{}
+	cardFeatureByUID = map[uint]cardFeatureEntry{}
 	cardFeatureMu.Unlock()
 }
 
@@ -186,19 +227,8 @@ func adoptLegacyCardLists(db *gorm.DB, userID uint, bucket List, extras []List) 
 // 返回**全部** template=credit_card 的清单（老数据可能不止一条，见 adoptLegacyCardLists），
 // 否则关掉栏目后旧清单里的卡片提醒还会留在列表与日历里。
 func hiddenCardListIDs(db *gorm.DB, userID uint) []uint {
-	if creditCardFeatureEnabled(db) {
-		return nil
-	}
-	var lists []List
-	if err := db.Where("user_id = ? AND template = ? AND deleted_at IS NULL", userID, listTemplateCard).
-		Find(&lists).Error; err != nil || len(lists) == 0 {
-		return nil
-	}
-	ids := make([]uint, 0, len(lists))
-	for _, l := range lists {
-		ids = append(ids, l.ID)
-	}
-	return ids
+	_, hidden := cardFeatureState(db, userID)
+	return hidden
 }
 
 // excludeHiddenCardReminders 把卡片生成的提醒从查询里摘掉（只在栏目关闭时生效）。
