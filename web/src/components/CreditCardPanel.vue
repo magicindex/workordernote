@@ -1,7 +1,7 @@
 <template>
-  <!-- 信用卡账单栏目：一张张卡（卡面样式）+ 本期应还 + 还款闭环 + 还款计划，
-       下面是那条「今天 + 本周待还」长条卡片。这一页只做卡片相关的事：
-       要加卡片就点右上角「新建卡片」。 -->
+  <!-- 信用卡账单栏目：最上面是「今天 + 本周待还」那条长条卡片（时间卡片），
+       下面才是一张张银行卡（卡面）+ 本期应还 + 还款闭环 + 还款计划。
+       这一页只做卡片相关的事：要加卡片就点右上角「新建卡片」。 -->
   <section v-if="isCardList" class="mb-3" data-card-panel>
     <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
       <h3 class="flex items-center gap-2 text-sm font-extrabold">
@@ -15,6 +15,47 @@
         <button class="btn-primary !h-8 !px-3 !text-[11px]" data-card-add @click="openCreate">+ 新建卡片</button>
       </div>
     </div>
+
+    <!-- 长条卡片：左边今天（日期 + 星期），右边本周要还的卡（小卡面）。
+         本周 = 周一到周日（后端算），已经逾期的也列在这里并标红。 -->
+    <section class="week-strip mb-3" data-week-strip>
+      <div class="min-w-0">
+        <p class="text-[11px] font-bold uppercase tracking-[.18em] text-muted-foreground">今天</p>
+        <p class="mt-1 font-display text-2xl font-extrabold leading-none tracking-tight" data-week-today>{{ todayLabel }}</p>
+        <p class="mt-1.5 text-[12px] font-semibold text-muted-foreground" data-week-weekday>
+          {{ week?.weekday || '' }}
+          <span v-if="week" class="font-medium">· 本周 {{ shortRange }}</span>
+        </p>
+        <p class="mt-2 text-[12px] font-semibold" :class="week && week.overdue ? 'text-rose-500' : 'text-muted-foreground'">
+          <template v-if="week && week.count">
+            本周待还 <b class="text-foreground">{{ week.count }}</b> 张 · 合计
+            <b class="text-foreground">¥{{ formatCents(week.total_cents) }}</b>
+            <span v-if="week.overdue">（含 {{ week.overdue }} 张逾期）</span>
+          </template>
+          <template v-else>本周没有要还的卡</template>
+        </p>
+      </div>
+
+      <div class="flex flex-wrap items-stretch justify-end gap-2" data-week-cards>
+        <article
+          v-for="item in week?.cards || []"
+          :key="item.card_id"
+          class="week-mini-card"
+          :class="{ 'week-mini-card-overdue': item.overdue }"
+          :style="{ background: gradientOf(item.color) }"
+          :data-week-card="item.card_id"
+        >
+          <p class="truncate text-[11px] font-extrabold leading-4">{{ [item.bank, item.name].filter(Boolean).join('') || '信用卡' }}</p>
+          <p class="mt-0.5 font-mono text-[10px] tracking-[.16em] text-white/85">{{ item.tail ? `****${item.tail}` : '****' }}</p>
+          <p class="mt-1.5 text-[11px] font-bold leading-4">¥{{ item.amount_cents ? formatCents(item.amount_cents) : '—' }}</p>
+          <p class="mt-0.5 text-[10px] leading-4 text-white/85">
+            {{ item.overdue ? `逾期 ${Math.abs(item.days_left)} 天` : item.days_left === 0 ? '就是今天' : `还有 ${item.days_left} 天` }}
+            · {{ monthDay(item.due_date) }}
+          </p>
+        </article>
+        <p v-if="week && !week.cards.length" class="self-center text-xs text-muted-foreground">这周没有到期的还款，安心。</p>
+      </div>
+    </section>
 
     <p v-if="!cards.length && !loading" class="surface rounded-2xl px-4 py-6 text-center text-sm text-muted-foreground" data-card-empty>
       还没有卡片。点「+ 新建卡片」填银行、卡名、账单日与还款日，系统会自动生成账单日/还款日提醒。
@@ -104,47 +145,6 @@
         <p v-if="messageId === card.id && message" class="mt-2 text-[11px] font-semibold" :class="ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'" data-card-message>{{ message }}</p>
       </article>
     </div>
-
-    <!-- 长条卡片：左边今天（日期 + 星期），右边本周要还的卡（小卡面）。
-         本周 = 周一到周日（后端算），已经逾期的也列在这里并标红。 -->
-    <section class="week-strip mt-3" data-week-strip>
-      <div class="min-w-0">
-        <p class="text-[11px] font-bold uppercase tracking-[.18em] text-muted-foreground">今天</p>
-        <p class="mt-1 font-display text-2xl font-extrabold leading-none tracking-tight" data-week-today>{{ todayLabel }}</p>
-        <p class="mt-1.5 text-[12px] font-semibold text-muted-foreground" data-week-weekday>
-          {{ week?.weekday || '' }}
-          <span v-if="week" class="font-medium">· 本周 {{ shortRange }}</span>
-        </p>
-        <p class="mt-2 text-[12px] font-semibold" :class="week && week.overdue ? 'text-rose-500' : 'text-muted-foreground'">
-          <template v-if="week && week.count">
-            本周待还 <b class="text-foreground">{{ week.count }}</b> 张 · 合计
-            <b class="text-foreground">¥{{ formatCents(week.total_cents) }}</b>
-            <span v-if="week.overdue">（含 {{ week.overdue }} 张逾期）</span>
-          </template>
-          <template v-else>本周没有要还的卡</template>
-        </p>
-      </div>
-
-      <div class="flex flex-wrap items-stretch justify-end gap-2" data-week-cards>
-        <article
-          v-for="item in week?.cards || []"
-          :key="item.card_id"
-          class="week-mini-card"
-          :class="{ 'week-mini-card-overdue': item.overdue }"
-          :style="{ background: gradientOf(item.color) }"
-          :data-week-card="item.card_id"
-        >
-          <p class="truncate text-[11px] font-extrabold leading-4">{{ [item.bank, item.name].filter(Boolean).join('') || '信用卡' }}</p>
-          <p class="mt-0.5 font-mono text-[10px] tracking-[.16em] text-white/85">{{ item.tail ? `****${item.tail}` : '****' }}</p>
-          <p class="mt-1.5 text-[11px] font-bold leading-4">¥{{ item.amount_cents ? formatCents(item.amount_cents) : '—' }}</p>
-          <p class="mt-0.5 text-[10px] leading-4 text-white/85">
-            {{ item.overdue ? `逾期 ${Math.abs(item.days_left)} 天` : item.days_left === 0 ? '就是今天' : `还有 ${item.days_left} 天` }}
-            · {{ monthDay(item.due_date) }}
-          </p>
-        </article>
-        <p v-if="week && !week.cards.length" class="self-center text-xs text-muted-foreground">这周没有到期的还款，安心。</p>
-      </div>
-    </section>
 
     <!-- 填/改本期金额 -->
     <Modal v-model="amountOpen" size="md" :title="`本期金额${amountCard ? ` · ${amountCard.current?.period || ''}` : ''}`">
