@@ -301,3 +301,49 @@ textarea {
 .print-cal .cal-print-tasks li .t { font-variant-numeric: tabular-nums; opacity: 0.8; }
 .print-cal .cal-print-tasks li .ti { min-width: 0; overflow-wrap: anywhere; }
 .print-cal .cal-print-tasks li.done { text-decoration: line-through; opacity: 0.5; }
+
+/* ---------------- 标题工具栏（列表页） ----------------
+   一条轻量卡片：左边是条数与过期提示，右边是显示范围与操作。
+   手机上会自动换行，按钮只留图标语义（刷新带旋转反馈），不留多余边框。 */
+.list-toolbar {
+  @apply mb-3 mt-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-2xl border border-border/60 bg-surface/70 px-3 py-2 shadow-sm backdrop-blur-sm sm:px-4 sm:py-2.5;
+}
+.list-toolbar-count { @apply flex flex-wrap items-baseline gap-x-1.5 gap-y-1; }
+.count-number { @apply font-display text-xl font-extrabold leading-none tracking-tight tabular-nums sm:text-2xl; }
+.count-unit { @apply text-[11px] font-bold text-muted-foreground sm:text-xs; }
+.count-overdue {
+  @apply ml-1 inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold leading-none text-rose-500;
+}
+.count-overdue svg { @apply h-3 w-3; }
+.list-toolbar-actions { @apply flex flex-wrap items-center gap-2; }
+.seg-group {
+  @apply inline-flex h-8 items-center gap-0.5 rounded-xl border border-border/70 bg-muted/50 p-0.5;
+}
+.toolbar-btn {
+  /* 刻意不写 display：由使用处给 inline-flex / hidden sm:inline-flex。
+     写在类里优先级高于 Tailwind 的 hidden，手机上藏不住（踩过）。 */
+  @apply h-8 items-center gap-1.5 rounded-xl border border-border/70 bg-surface px-2.5 text-[11px] font-bold text-muted-foreground transition-colors hover:border-brand-500/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60 sm:text-xs;
+}
+.toolbar-btn svg { @apply h-3.5 w-3.5; }
+.toolbar-btn.is-spinning svg { animation: toolbar-spin 0.9s linear infinite; }
+@keyframes toolbar-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .toolbar-btn.is-spinning svg { animation: none; }
+}
+
+/* ---------------- 手机端渲染开销（全局卡片与点击反馈） ----------------
+   .surface 用的大半径柔和阴影在滚动时每帧都要重绘，小屏上换成一层极浅的投影；
+   可点元素的 tap 高亮块与 300ms 双击缩放等待也一并去掉，点起来更跟手。 */
+@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+  .surface {
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+  }
+  button,
+  a,
+  [role='button'],
+  .seg-btn,
+  .toolbar-btn {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}

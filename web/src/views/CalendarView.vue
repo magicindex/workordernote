@@ -39,9 +39,10 @@
           <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M7 9V4h10v5M7 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2m-10 0v3h10v-3m-10 0h10" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           打印本月
         </button>
+        <!-- 导出表格：手机上不提供（与列表页一致） -->
         <button
           type="button"
-          class="btn-secondary !h-8 !gap-1.5 !px-3 !text-[11px] sm:!text-xs"
+          class="btn-secondary hidden !h-8 !gap-1.5 !px-3 !text-[11px] sm:inline-flex sm:!text-xs"
           :disabled="exporting || !items.length"
           title="把本月日历上的内容导出成表格"
           @click="exportMonth"

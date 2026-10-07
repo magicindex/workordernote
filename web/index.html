@@ -11,7 +11,13 @@
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- 安装到桌面（PWA）：iOS 用 apple-mobile-web-app-*，安卓用 mobile-web-app-capable -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="工作序记" />
+    <meta name="theme-color" content="#2563eb" />
     <title>工作序记</title>
     <script>
       // 本次页面是不是由飞牛统一网关的 socket 服务出来的：服务端返回入口 HTML 时

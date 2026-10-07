@@ -465,6 +465,16 @@ func NewRouter(cfg config.Config, db *gorm.DB, jwtSecret string) *gin.Engine {
 			c.Header("Content-Type", "application/manifest+json")
 			c.File(cfg.WebDir + "/manifest.webmanifest")
 		})
+		// Service Worker 必须显式注册：静态白名单里没有它，会落到 SPA 兜底；
+		// 而兜底对「带扩展名的路径」一律 404（避免把 index.html 当 JS 发出去），
+		// 结果就是 /sw.js 拿不到、浏览器装不了应用（PWA 要求有 SW）。
+		// 不允许缓存：SW 更新要靠浏览器重新拉这个脚本。
+		appGroup.GET("/sw.js", func(c *gin.Context) {
+			c.Header("Content-Type", "application/javascript; charset=utf-8")
+			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+			c.Header("Service-Worker-Allowed", "/")
+			c.File(cfg.WebDir + "/sw.js")
+		})
 		// Gateway trampoline: served on the gateway prefix with the real
 		// service port injected, it exchanges the fnOS gateway session for a
 		// one-time ticket and sends the browser to the plain TCP listener.

@@ -24,10 +24,22 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// GenerateToken issues a 7-day HS256 JWT for the given user. The serialized
-// body includes an authVersion claim so password changes and resets can revoke
-// every previously-issued token for the account.
+// defaultTokenTTL 是没指定有效期时的兜底（7 天）。实际有效期由登录接口按
+// 「系统配置 → 记住登录天数 / 临时登录小时数」传进来。
+const defaultTokenTTL = 7 * 24 * time.Hour
+
+// GenerateToken issues a 7-day HS256 JWT for the given user.
 func GenerateToken(userID uint, username, role string, authVersion uint, secret string) (string, error) {
+	return GenerateTokenTTL(userID, username, role, authVersion, secret, defaultTokenTTL)
+}
+
+// GenerateTokenTTL 与 GenerateToken 相同，只是有效期由调用方决定（记住登录多久、
+// 不记住多久是后台可配的）。The serialized body includes an authVersion claim so
+// password changes and resets can revoke every previously-issued token for the account.
+func GenerateTokenTTL(userID uint, username, role string, authVersion uint, secret string, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		ttl = defaultTokenTTL
+	}
 	now := time.Now()
 	claims := Claims{
 		UserID:      userID,
@@ -35,7 +47,7 @@ func GenerateToken(userID uint, username, role string, authVersion uint, secret 
 		Role:        role,
 		AuthVersion: authVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(7 * 24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
 	}

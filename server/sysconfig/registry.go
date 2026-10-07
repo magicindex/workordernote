@@ -151,6 +151,20 @@ func init() {
 		Group: "access", Label: "需要登录",
 		Description: "要求访客登录后才能使用应用",
 	})
+	// 登录有效期：勾了「记住登录」用天数、没勾用小时数。两个都放在访问控制组里，
+	// 管理员按自己的安全要求在「系统配置 → 访问控制」里调。
+	RegisterConfig(ConfigDef{
+		Key: "login_remember_days", Scope: ScopeSystem, Type: TypeInt,
+		Default: "7", Public: true,
+		Group: "access", Label: "记住登录的有效天数",
+		Description: "登录时勾选「记住登录」后，登录状态保持多少天（默认 7 天）",
+	})
+	RegisterConfig(ConfigDef{
+		Key: "login_session_hours", Scope: ScopeSystem, Type: TypeInt,
+		Default: "12", Public: true,
+		Group: "access", Label: "不记住登录的有效小时数",
+		Description: "没勾「记住登录」时登录状态保持多少小时；关掉浏览器就要重新登录（默认 12 小时）",
+	})
 	RegisterConfig(ConfigDef{
 		Key: "jwt_secret", Scope: ScopeSystem, Type: TypeString,
 		Internal: true,

@@ -21,6 +21,19 @@
         </template>
       </AuthField>
 
+      <label class="flex cursor-pointer items-center gap-2.5 text-sm text-white/70 select-none">
+        <input
+          v-model="remember"
+          type="checkbox"
+          class="h-4 w-4 rounded border-white/25 bg-white/10 accent-brand-400"
+          data-remember
+        />
+        <span>
+          记住登录
+          <span class="text-xs text-white/45">{{ rememberHint }}</span>
+        </span>
+      </label>
+
       <transition enter-active-class="transition duration-200" enter-from-class="opacity-0 -translate-y-1" leave-active-class="transition duration-150" leave-to-class="opacity-0">
         <div v-if="errorMsg" class="flex items-center gap-2 text-sm text-red-300 bg-red-500/10 border border-red-500/25 rounded-xl px-3.5 py-2.5">
           <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86a2 2 0 001.74-3L13.74 4a2 2 0 00-3.48 0L3.34 16a2 2 0 001.73 3z"/></svg>
@@ -39,20 +52,15 @@
     </form>
 
     <!-- 安卓客户端里才显示：改服务器地址（网页里没有这个概念，所以只在壳子内出现）。
-         网页通过 JS 桥 AndroidShell 调起原生弹窗，地址存在手机本地。 -->
-    <div v-if="inAndroidShell" class="mt-5 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3" data-server-entry>
-      <div class="flex items-center justify-between gap-3">
-        <div class="min-w-0">
-          <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">服务器地址</p>
-          <p class="mt-0.5 truncate text-sm font-semibold text-white/90" data-server-url>{{ serverUrl || '未设置' }}</p>
-        </div>
-        <button
-          type="button"
-          class="shrink-0 rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/[0.08]"
-          data-server-edit
-          @click="openServerSettings"
-        >修改</button>
-      </div>
+         只放一行文字入口，地址本身不摆在登录页上——点一下弹原生输入框。 -->
+    <div v-if="inAndroidShell" class="mt-6 text-center" data-server-entry>
+      <button
+        type="button"
+        class="text-xs font-semibold text-white/50 underline-offset-4 transition-colors hover:text-white/80 hover:underline"
+        data-server-edit
+        aria-label="服务器设置"
+        @click="openServerSettings"
+      >服务器设置</button>
     </div>
 
     <Teleport to="body">
@@ -92,6 +100,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { bindFnOSAccount, login, fnosLogin } from '../api/auth'
+import { getPublicConfigs } from '../api/config'
 import { useAuthStore } from '../stores/auth'
 import { resolveFnOSGatewayEntry, startFnOSAccountSwitch, startFnOSAuthorize, startFnOSFullPageAuthorize, tryIssueFnOSTicket, fnOSMobileClient } from '../utils/fnos-auth'
 import { SK } from '../utils/storage-keys'
@@ -115,6 +124,11 @@ readServerUrl()
 
 const username = ref('')
 const password = ref('')
+// 记住登录：默认勾上（与之前的行为一致——之前所有令牌都是 7 天）。
+// 天数/小时数由后台「系统配置 → 访问控制」决定，这里只显示出来让用户心里有数。
+const remember = ref(true)
+const rememberDays = ref(7)
+const rememberHint = computed(() => (remember.value ? `（${rememberDays.value} 天内不用再登录）` : '（关闭浏览器就要重新登录）'))
 const loading = ref(false)
 const errorMsg = ref('')
 const fnosBindingRequired = ref(false)
@@ -146,10 +160,10 @@ async function handleLogin() {
   try {
     const res = fnosBindingRequired.value
       ? await bindFnOSAccount('bind', username.value, password.value)
-      : await login(username.value, password.value)
+      : await login(username.value, password.value, remember.value)
     if (res.data?.code === 0) {
       if (fnosBindingRequired.value) clearFnOSTicket()
-      authStore.setToken(res.data.data.token)
+      authStore.setToken(res.data.data.token, remember.value)
       authStore.setUser(res.data.data.user)
       router.push('/admin')
     } else {
@@ -295,6 +309,11 @@ async function confirmFnOSLogin() {
 }
 
 onMounted(async () => {
+  try {
+    const res = await getPublicConfigs()
+    const days = Number(res.data?.data?.login_remember_days)
+    if (Number.isFinite(days) && days > 0) rememberDays.value = days
+  } catch { /* 读不到就按 7 天显示 */ }
   // 整页授权流程带回的票据由 main.ts 从 hash 接到 sessionStorage，这里直接读；
   // 服务端口与网关入口已随启动引导取回并缓存在 store / localStorage。
   if (!fnosEnabled.value) return

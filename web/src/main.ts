@@ -78,6 +78,24 @@ captureFnOSTicket()
 captureFnOSEntryError()
 rememberFnOSGateway()
 
+// 浏览器安装（PWA）：「可安装」事件可能在任何组件挂载之前就触发，
+// 所以在应用启动时就接住它，供「版本信息 → 装到桌面」那张卡片使用。
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault()
+  ;(window as unknown as { __deferredInstallPrompt?: Event }).__deferredInstallPrompt = e
+  window.dispatchEvent(new Event('install-prompt-ready'))
+})
+
+// Service Worker 只在安全上下文注册（https / localhost）：内网纯 http 打开的
+// 时候浏览器根本不允许注册，调用会抛错，这里先判断再注册，别把控制台刷满。
+if (window.isSecureContext && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {
+      /* 注册失败不影响使用：只是没有离线缓存与安装入口 */
+    })
+  })
+}
+
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)

@@ -1,9 +1,11 @@
 import request from './request'
 
-export function login(username: string, password: string) {
+export function login(username: string, password: string, remember = true) {
   return request.post('/api/auth/login', {
     username,
     password,
+    // 记住登录：勾了按后台「记住登录的有效天数」发长效令牌，不勾按「临时登录小时数」
+    remember,
   })
 }
 

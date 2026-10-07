@@ -19,12 +19,31 @@ const STARTUP_TIMEOUT_MS = 4000
 const STARTUP_MAX_ATTEMPTS = 3
 const STARTUP_RETRY_DELAY_MS = 1200
 
+function readStoredToken(): string {
+  try {
+    return localStorage.getItem(SK.token) || sessionStorage.getItem(SK.token) || ''
+  } catch {
+    return ''
+  }
+}
+
+function clearStoredToken() {
+  try {
+    localStorage.removeItem(SK.token)
+    sessionStorage.removeItem(SK.token)
+  } catch { /* 隐私模式忽略 */ }
+}
+
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(localStorage.getItem(SK.token) || '')
+  // 令牌存哪取决于登录时有没有勾「记住登录」：
+  //   记住 → localStorage（关浏览器也在，默认 7 天，后台可配）
+  //   没勾 → sessionStorage（关掉浏览器就要重新登录，默认 12 小时）
+  // 读的时候两边都看，升级/换浏览器也不会把已有的登录态弄丢。
+  const token = ref(readStoredToken())
   const user = ref<any>(null)
   const requireLogin = ref(true)
   const allowRegister = ref(true)
@@ -71,7 +90,7 @@ export const useAuthStore = defineStore('auth', () => {
   function clearSession() {
     token.value = ''
     user.value = null
-    localStorage.removeItem(SK.token)
+    clearStoredToken()
   }
 
   function applyBootstrap(data: BootstrapData) {
@@ -187,9 +206,15 @@ export const useAuthStore = defineStore('auth', () => {
     initPromise = null
   }
 
-  function setToken(newToken: string) {
+  function setToken(newToken: string, remember = true) {
     token.value = newToken
-    localStorage.setItem(SK.token, newToken)
+    if (remember) {
+      localStorage.setItem(SK.token, newToken)
+      sessionStorage.removeItem(SK.token)
+    } else {
+      sessionStorage.setItem(SK.token, newToken)
+      localStorage.removeItem(SK.token)
+    }
   }
 
   function setUser(newUser: any) {
@@ -202,7 +227,7 @@ export const useAuthStore = defineStore('auth', () => {
   function clearLocalSession() {
     token.value = ''
     user.value = null
-    localStorage.removeItem(SK.token)
+    clearStoredToken()
     localStorage.removeItem(DISMISS_KEY)
     // 一次性飞牛票据不能跨会话残留：换 NAS 账号登录时必须重新取票。
     sessionStorage.removeItem(SK.fnosTicket)

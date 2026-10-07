@@ -135,7 +135,7 @@ func Register(db *gorm.DB, username string, password string, jwtSecret string) (
 	return result, err
 }
 
-func Login(db *gorm.DB, username string, password string, passwordMd5 string, jwtSecret string) (map[string]interface{}, error) {
+func Login(db *gorm.DB, username string, password string, passwordMd5 string, jwtSecret string, ttl time.Duration) (map[string]interface{}, error) {
 	var user database.User
 	if err := db.Where("username = ?", username).First(&user).Error; err != nil {
 		return nil, fmt.Errorf("用户名或密码错误")
@@ -167,7 +167,7 @@ func Login(db *gorm.DB, username string, password string, passwordMd5 string, jw
 		}
 	}
 
-	token, err := auth.GenerateToken(user.ID, user.Username, user.Role, user.AuthVersion, jwtSecret)
+	token, err := auth.GenerateTokenTTL(user.ID, user.Username, user.Role, user.AuthVersion, jwtSecret, ttl)
 	if err != nil {
 		return nil, err
 	}

@@ -174,6 +174,9 @@ func handleLogin(db *gorm.DB) gin.HandlerFunc {
 			Username    string `json:"username" binding:"required"`
 			Password    string `json:"password" binding:"required"`
 			PasswordMd5 string `json:"password_md5"`
+			// 记住登录：勾了就按「记住登录天数」发长效令牌，不勾按「临时登录小时数」。
+			// 用指针是为了区分「没传」（按记住处理，保持老行为）和「明确不记住」。
+			Remember *bool `json:"remember"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			response.ErrorBadRequest(c, "请输入用户名和密码")
@@ -181,7 +184,9 @@ func handleLogin(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		secret := getJWTSecret(db)
-		result, err := Login(db, req.Username, req.Password, req.PasswordMd5, secret)
+		remember := req.Remember == nil || *req.Remember
+		ttl := loginTokenTTL(db, remember)
+		result, err := Login(db, req.Username, req.Password, req.PasswordMd5, secret, ttl)
 		if err != nil {
 			response.Error(c, http.StatusUnauthorized, response.CodeInvalidCredentials, err.Error())
 			return

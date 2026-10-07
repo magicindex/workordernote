@@ -105,17 +105,26 @@
       </div>
     </section>
 
-    <div class="mb-2 mt-5 flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <h2 class="text-sm font-bold">{{ view === 'completed' ? completedItems.length : items.length }} 项</h2>
-        <span v-if="view !== 'completed' && overdueCount" class="rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold text-rose-500">{{ overdueCount }} 项已过期</span>
+    <!-- 标题工具栏：条数 / 过期提示 / 未完成·全部 / 刷新（导出只在电脑上出现） -->
+    <div class="list-toolbar">
+      <div class="list-toolbar-count">
+        <span class="count-number">{{ view === 'completed' ? completedItems.length : items.length }}</span>
+        <span class="count-unit">项</span>
+        <span
+          v-if="view !== 'completed' && overdueCount"
+          class="count-overdue"
+          :title="`已经过了提醒时间还没做的：${overdueCount} 项`"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 8v5m0 3h.01M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          {{ overdueCount }} 项已过期
+        </span>
       </div>
-      <div class="flex flex-wrap items-center gap-2">
+      <div class="list-toolbar-actions">
         <!-- 未完成 / 全部：记事创建即完成，想在这个页面看见记事就得切到「全部」。
              选择记在本地（跟人走、跟设备走），与清单筛选一致。 -->
         <div
           v-if="view !== 'completed'"
-          class="inline-flex h-8 items-center gap-0.5 rounded-xl border border-border bg-surface p-0.5"
+          class="seg-group"
           role="group"
           aria-label="显示范围"
         >
@@ -136,22 +145,30 @@
             @click="setListStatus('all')"
           >全部</button>
         </div>
-        <button class="btn-secondary !h-8 !gap-1.5 !px-3 !text-xs" :disabled="exporting" @click="handleExport">
-          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          {{ exporting ? '导出中…' : '导出表格' }}
+        <button
+          class="toolbar-btn inline-flex"
+          :class="{ 'is-spinning': loading }"
+          :disabled="loading"
+          aria-label="刷新"
+          title="重新读取这一页的数据"
+          @click="loadData"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>刷新</span>
+        </button>
+        <!-- 导出表格：手机上不提供（屏幕小、CSV 也不好用），电脑上照旧 -->
+        <button class="toolbar-btn hidden sm:inline-flex" :class="{ 'is-spinning': exporting }" :disabled="exporting" @click="handleExport">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>{{ exporting ? '导出中…' : '导出表格' }}</span>
         </button>
         <button
           v-if="view === 'completed'"
-          class="btn-secondary !h-8 !gap-1.5 !px-3 !text-xs"
+          class="toolbar-btn hidden sm:inline-flex"
           :disabled="!completedItems.length"
           @click="printOpen = true"
         >
-          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M7 9V4h10v5M7 19H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M7 15h10v6H7z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          打印
-        </button>
-        <button class="btn-secondary !h-8 !gap-1.5 !px-3 !text-xs" @click="loadData">
-          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          刷新
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M7 9V4h10v5M7 19H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M7 15h10v6H7z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>打印</span>
         </button>
       </div>
     </div>
@@ -853,6 +870,19 @@ function onShortcut(e: KeyboardEvent) {
 .priority-1 { @apply text-blue-500; }.priority-2 { @apply text-amber-500; }.priority-3 { @apply text-rose-500; }
 .empty-state { @apply mt-4 flex min-h-[230px] flex-col items-center justify-center rounded-[28px] border border-dashed border-border bg-surface/35 px-6 text-center sm:min-h-[280px]; }
 .empty-art { @apply relative h-28 w-28; }
+
+/* 手机端渲染开销：滚动时最贵的是「每行一个模糊阴影 + 每行 backdrop-blur + hover 位移」。
+   模糊与位移在触屏上没有意义（还会被 hover 卡住留下残影），阴影改由细边框表达，
+   transition 从 all 收窄成颜色/边框，避免滚动中触发布局与大范围重绘。 */
+@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+  .reminder-row {
+    box-shadow: none;
+    transition: background-color .15s ease, border-color .15s ease;
+  }
+  .reminder-row:hover { transform: none; }
+  .quick-card { box-shadow: none; }
+  .empty-state { min-height: 200px; }
+}
 .empty-ring { @apply absolute inset-2 rounded-full border border-brand-500/20 bg-brand-500/5; }
 .empty-check { @apply absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_16px_35px_-12px_rgba(59,130,246,.65)]; }
 .empty-dot { @apply absolute h-2.5 w-2.5 rounded-full; }.dot-one { @apply left-0 top-5 bg-amber-400; }.dot-two { @apply right-1 top-1 bg-violet-400; }.dot-three { @apply bottom-0 right-6 bg-emerald-400; }
