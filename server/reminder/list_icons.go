@@ -12,6 +12,7 @@ var listIconDefs = []struct {
 	Label string
 }{
 	{Key: "list", Label: "清单"},
+	{Key: "card", Label: "银行卡"},
 	{Key: "check", Label: "待办"},
 	{Key: "star", Label: "重要"},
 	{Key: "flag", Label: "标记"},

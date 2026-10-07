@@ -280,6 +280,18 @@
     <nav class="mobile-tabbar" :class="{ 'mobile-tabbar-hidden': keyboardOpen }">
       <RouterLink to="/admin" class="mobile-tab" :class="{ active: route.path === '/admin' }"><span v-html="smartNav[0].icon"></span><small>今天</small></RouterLink>
       <RouterLink to="/admin/planned" class="mobile-tab" :class="{ active: route.path === '/admin/planned' }"><span v-html="smartNav[1].icon"></span><small>计划</small></RouterLink>
+      <!-- 信用卡账单：手机端也要有直接入口（抽屉里也有，但底部标签是主要导航）。
+           只有个人偏好打开、且确实有这一栏时才出现。 -->
+      <RouterLink
+        v-if="authStore.creditCardEnabled && cardBucket"
+        :to="`/admin/list/${cardBucket.id}`"
+        class="mobile-tab"
+        :class="{ active: route.path === `/admin/list/${cardBucket.id}` }"
+        data-tab-cards
+      >
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5" stroke-width="1.8"/><path d="M2.5 10h19M6 13.5h4" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <small>信用卡</small>
+      </RouterLink>
       <button v-if="canCreate" class="mobile-add" aria-label="新建提醒" @click="openQuickAdd"><svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2.2" stroke-linecap="round"/></svg></button>
       <RouterLink to="/admin/notifications" class="mobile-tab" :class="{ active: route.path === '/admin/notifications' }"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke-width="1.8" stroke-linecap="round"/></svg></span><small>通知</small></RouterLink>
       <RouterLink to="/admin/channels" class="mobile-tab" :class="{ active: route.path === '/admin/channels' }"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 12h8m-8 4h5m6-11H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4l3 3 3-3h4a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z" stroke-width="1.8"/></svg></span><small>方式</small></RouterLink>

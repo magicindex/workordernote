@@ -113,17 +113,17 @@
                 :class="{ 'opacity-55 line-through': item.completed && item.kind !== 'note' }"
                 :style="chipStyle(item)"
               >
-                <!-- 记事用「记」字标记；任务是清单图标（形状识别清单，替代原来的圆点）；
-                     信用卡的账单日/还款日/提前提醒沿用固定双色圆点，因为它们不是「清单」语义。 -->
+                <!-- 记事用「记」字标记；其余一律用图标（不再用圆点）：
+                     普通提醒用清单图标，信用卡的账单日/还款日/提前提醒用**银行卡图标**（缩到 11px），
+                     颜色仍按角色区分（账单日琥珀 / 还款日玫红 / 提前提醒橙）。 -->
                 <i v-if="item.kind === 'note'" class="cal-note-mark shrink-0">记</i>
                 <ListIcon
-                  v-else-if="!item.card_role"
-                  :name="item.list_icon"
+                  v-else
+                  :name="iconOf(item)"
                   :size="11"
                   class="shrink-0"
                   :style="{ color: chipDot(item) }"
                 />
-                <i v-else class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ background: chipDot(item) }"></i>
                 <span class="truncate">{{ item.title }}</span>
               </span>
               <span v-if="extraCount(cell) > 0" class="cal-task px-1 font-bold text-muted-foreground">+{{ extraCount(cell) }}</span>
@@ -132,7 +132,7 @@
               <ListIcon
                 v-for="item in visibleItems(cell).slice(0, 4)"
                 :key="item.id"
-                :name="item.card_role ? 'list' : item.list_icon"
+                :name="iconOf(item)"
                 :size="10"
                 :class="{ 'opacity-45': item.completed }"
                 :style="{ color: dot(item.list_color) }"
@@ -197,7 +197,7 @@
                 <span v-if="item.repeat_rule && item.repeat_rule !== 'none'" class="tiny-badge">{{ ruleLabel(item.repeat_rule) }}</span>
               </div>
               <div class="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                <ListIcon :name="item.list_icon" :size="13" class="shrink-0" :style="{ color: dot(item.list_color) }" />
+                <ListIcon :name="iconOf(item)" :size="13" class="shrink-0" :style="{ color: dot(item.list_color) }" />
                 <span class="truncate">{{ item.list_name }}</span>
               </div>
             </button>
@@ -434,6 +434,11 @@ function dayNumberClass(c: LunarDayInfo) {
   if (isToday(c)) return 'bg-brand-500 text-white shadow-sm'
   if (cellKey(c) === selectedDate.value) return 'text-brand-600 dark:text-brand-300'
   return 'text-foreground'
+}
+
+/** 日历里每条提醒前面的图标：信用卡的日子（账单日/还款日/提前提醒）用银行卡图标，其余用清单图标。 */
+function iconOf(item: CalendarItem) {
+  return item.card_role ? 'card' : (item.list_icon || 'list')
 }
 
 // 清单色表在 utils/list-colors.ts（与侧栏、列表页标题共用一份）。
