@@ -79,6 +79,7 @@
             @click="selectedDate = cellKey(cell)"
             @dblclick="openCreateForDate(cellKey(cell))"
             :title="`双击在这天新建提醒`"
+            :data-cal-date="cellKey(cell)"
           >
             <div class="flex items-start justify-between gap-1">
               <span
