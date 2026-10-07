@@ -398,6 +398,10 @@ func handlePayCardStatement(db *gorm.DB) gin.HandlerFunc {
 }
 
 // POST /cards/:id/statements/:period/unpay —— 取消已还（点错了能撤回）
+//
+// 撤回必须是**完整**的：标记已还时我们写了完成记录、并把「还款日」提醒滚到了
+// 下一期。只清 paid_at 的话，用户会看到「完成记录里还留着一笔、本期却再没有
+// 还款日提醒」——像是已经还过了。所以这里把这两样一起撤回。
 func handleUnpayCardStatement(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		card, ok := cardFromContext(c, db)
@@ -411,13 +415,80 @@ func handleUnpayCardStatement(db *gorm.DB) gin.HandlerFunc {
 			writeServiceError(c, err)
 			return
 		}
-		if err := db.Model(&row).Updates(map[string]interface{}{"paid_at": nil, "paid_amount": 0}).Error; err != nil {
+		_, dueDate, err := parsePeriodDates(card, period)
+		if err != nil {
+			response.ErrorBadRequest(c, err.Error())
+			return
+		}
+		var rolled *Reminder
+		err = db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Model(&CardStatement{}).Where("id = ?", row.ID).
+				Updates(map[string]interface{}{"paid_at": nil, "paid_amount": 0}).Error; err != nil {
+				return err
+			}
+			item, changed, err := retractCardPayment(tx, card, dueDate)
+			if err != nil {
+				return err
+			}
+			if changed {
+				rolled = &item
+			}
+			return nil
+		})
+		if err != nil {
 			response.ErrorInternal(c, "取消失败")
 			return
 		}
 		publishDataChanged(card.UserID, "card", "updated", card.ID, originClientID(c))
+		if rolled != nil {
+			publishDataChanged(card.UserID, "reminder", "updated", rolled.ID, originClientID(c))
+		}
 		response.Success(c, CardStatementDTO{CardStatement: row, CardName: card.Name, Bank: card.Bank, Color: card.Color})
 	}
+}
+
+// retractCardPayment 撤回「标记已还」在提醒侧留下的痕迹：
+// 删掉这一期的完成记录，并把「还款日」提醒滚回这一期（同时刷新投递任务）。
+// 只有真的找到并删掉了完成记录才动提醒——否则说明这一期的还款本来就不是
+// 当前这条提醒完成的（例如补还很久以前的某一期），硬滚回去会把提醒改错。
+func retractCardPayment(tx *gorm.DB, card Card, dueDate time.Time) (Reminder, bool, error) {
+	var item Reminder
+	if err := tx.Where("user_id = ? AND card_id = ? AND card_role = ? AND deleted_at IS NULL",
+		card.UserID, card.ID, cardRoleDue).First(&item).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return item, false, nil
+		}
+		return item, false, err
+	}
+	// 完成记录里的 scheduled_for 就是当时那条提醒的 due_at，按自然日匹配。
+	res := tx.Where("user_id = ? AND reminder_id = ? AND scheduled_for >= ? AND scheduled_for < ?",
+		card.UserID, item.ID, dueDate, dueDate.AddDate(0, 0, 1)).Delete(&Completion{})
+	if res.Error != nil {
+		return item, false, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return item, false, nil
+	}
+	item.DueAt = &dueDate
+	item.CompletedAt = nil
+	item.SnoozedUntil = nil
+	item.Version++
+	if err := tx.Save(&item).Error; err != nil {
+		return item, false, err
+	}
+	var channelRows []ReminderChannel
+	if err := tx.Where("reminder_id = ? AND user_id = ? AND enabled = ?", item.ID, card.UserID, true).
+		Find(&channelRows).Error; err != nil {
+		return item, false, err
+	}
+	channels := make([]string, 0, len(channelRows))
+	for _, ch := range channelRows {
+		channels = append(channels, ch.Channel)
+	}
+	if err := rebuildJobs(tx, item, channels); err != nil {
+		return item, false, err
+	}
+	return item, true, nil
 }
 
 // cardFromContext 按 :id 取卡片并确认归属当前用户。

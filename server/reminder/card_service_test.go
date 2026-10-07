@@ -187,6 +187,43 @@ func TestCardStatementPayFlow(t *testing.T) {
 	if got := due.DueAt.Format("2006-01-02"); got != "2026-11-25" {
 		t.Errorf("还款日提醒应滚到 11-25，实际 %s", got)
 	}
+
+	// 撤销已还必须是完整撤回：完成记录删掉、还款日提醒滚回本期。
+	_, dueDate, err := parsePeriodDates(card, "2026-10")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rolled, changed, err := retractCardPayment(appDB, card, dueDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("撤销已还应撤回这一期的完成记录")
+	}
+	if rolled.DueAt == nil || rolled.DueAt.Format("2006-01-02") != "2026-10-25" {
+		t.Errorf("撤销后还款日提醒应回到 2026-10-25，实际 %v", rolled.DueAt)
+	}
+	if rolled.CompletedAt != nil || rolled.SnoozedUntil != nil {
+		t.Errorf("撤销后提醒不应处于已完成/已稍后状态：%+v", rolled)
+	}
+	if err := appDB.Model(&Completion{}).Where("user_id = ?", 92).Count(&history).Error; err != nil {
+		t.Fatal(err)
+	}
+	if history != 0 {
+		t.Errorf("撤销后完成记录应清空，实际 %d 条", history)
+	}
+
+	// 再撤一次：这一期已经没有对应完成记录了，不能把提醒越改越偏。
+	if _, changed, err := retractCardPayment(appDB, card, dueDate); err != nil || changed {
+		t.Errorf("重复撤销不应改动提醒（changed=%v err=%v）", changed, err)
+	}
+	var again Reminder
+	if err := appDB.Where("user_id = ? AND card_id = ? AND card_role = ?", 92, card.ID, cardRoleDue).First(&again).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got := again.DueAt.Format("2006-01-02"); got != "2026-10-25" {
+		t.Errorf("重复撤销后还款日提醒应仍是 2026-10-25，实际 %s", got)
+	}
 }
 
 // 还款计划：当期标出来，已还的期数带 paid_at，逾期期数标 overdue。
