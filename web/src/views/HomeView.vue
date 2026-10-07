@@ -3,8 +3,9 @@
     <!-- 信用卡账单是固定栏目：这一页**只有卡片**——没有快速新建、没有提醒列表、
          没有完成记录筛选；要加东西就点「新建卡片」。 -->
     <template v-if="isCardBucketPage">
-      <section class="mb-3 flex flex-col gap-2.5 sm:mb-6 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-        <div class="min-w-0">
+      <!-- 页面标题那一行右侧就是时间卡片：宽屏并排（有最大宽度），窄屏自动折到标题下方 -->
+      <section class="mb-3 flex flex-col gap-2.5 sm:mb-5 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+        <div class="min-w-0 lg:shrink-0">
           <div class="mb-2 hidden items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-muted-foreground sm:flex">
             <span class="h-2 w-2 rounded-full" :style="{ background: accentColor }"></span>
             信用卡账单
@@ -13,8 +14,11 @@
           <p class="mt-2 hidden text-sm text-muted-foreground sm:block">卡片、账单日与本周待还都在这一页；一个栏目装下所有卡。</p>
           <p class="truncate text-xs text-muted-foreground sm:hidden">卡片与本周待还都在这一页</p>
         </div>
+        <div class="min-w-0 w-full lg:max-w-[34rem]">
+          <WeekDueStrip :refresh-key="weekRefreshKey" />
+        </div>
       </section>
-      <CreditCardPanel v-if="selectedList" :list="selectedList" @changed="loadData" />
+      <CreditCardPanel v-if="selectedList" :list="selectedList" @changed="onCardsChanged" />
     </template>
 
     <template v-else>
@@ -369,6 +373,7 @@ import Toast from '../components/Toast.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import ListFilter from '../components/ListFilter.vue'
 import ListIcon from '../components/ListIcon.vue'
+import WeekDueStrip from '../components/WeekDueStrip.vue'
 import LunarDatePicker from '../components/LunarDatePicker.vue'
 import RepeatNotifySelect from '../components/RepeatNotifySelect.vue'
 import PrintDialog from '../components/PrintDialog.vue'
@@ -466,6 +471,12 @@ const selectedListID = computed(() => route.name === 'ReminderList' ? Number(rou
 const selectedList = computed(() => lists.value.find(x => x.id === selectedListID.value))
 // 「信用卡账单」是固定栏目：这一页只渲染卡片面板（见模板最上面那一支），
 // 快速新建、提醒列表、完成记录筛选都不出现。栏目被后台关掉时不认这一页。
+// 卡片有增删改时 +1，时间卡片据此重新拉一次（它自己管数据）
+const weekRefreshKey = ref(0)
+function onCardsChanged() {
+  weekRefreshKey.value += 1
+  void loadData()
+}
 const isCardBucketPage = computed(() => selectedList.value?.template === 'credit_card' && authStore.creditCardEnabled)
 // 下拉/筛选里能选的只有普通清单（卡片栏目不是「清单」，不该出现在这些地方）
 const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card'))
