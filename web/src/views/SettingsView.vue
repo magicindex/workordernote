@@ -32,7 +32,7 @@
           aria-label="默认清单"
           @change="applyDefaultList"
         >
-          <option v-for="list in lists" :key="list.id" :value="list.id">{{ list.name }}</option>
+          <option v-for="list in navLists" :key="list.id" :value="list.id">{{ list.name }}</option>
         </select>
         <span v-if="savingDefault" class="text-xs font-semibold text-muted-foreground">保存中…</span>
         <span v-else-if="defaultSaved" class="text-xs font-semibold text-emerald-500">已设为默认</span>
@@ -63,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfigGroupList from '../components/ConfigGroupList.vue'
 import { getUserConfigMeta, updateConfig } from '../api/config'
@@ -76,6 +76,8 @@ const loading = ref(false)
 const errorMsg = ref('')
 const listRef = ref<InstanceType<typeof ConfigGroupList> | null>(null)
 const lists = ref<ReminderList[]>([])
+// 默认清单只能从普通清单里选：信用卡账单是固定栏目，不适合当默认清单。
+const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card'))
 const defaultListId = ref(0)
 const savingDefault = ref(false)
 const defaultSaved = ref(false)
@@ -90,7 +92,7 @@ async function loadLists() {
   try {
     const res = await getLists()
     lists.value = res.data?.data || []
-    defaultListId.value = lists.value.find(l => l.is_default)?.id || lists.value[0]?.id || 0
+    defaultListId.value = navLists.value.find(l => l.is_default)?.id || navLists.value[0]?.id || 0
   } catch {
     /* 清单读不到不影响其它偏好设置的加载 */
   }
@@ -98,7 +100,7 @@ async function loadLists() {
 
 async function applyDefaultList() {
   if (!defaultListId.value || savingDefault.value) return
-  const previous = lists.value.find(l => l.is_default)?.id
+  const previous = navLists.value.find(l => l.is_default)?.id
   if (previous === defaultListId.value) return
   savingDefault.value = true
   defaultSaved.value = false

@@ -1,5 +1,7 @@
 <template>
-  <!-- 信用卡清单：一张张卡（卡面样式）+ 本期应还 + 还款闭环 + 还款计划入口 -->
+  <!-- 信用卡账单栏目：一张张卡（卡面样式）+ 本期应还 + 还款闭环 + 还款计划，
+       下面是那条「今天 + 本周待还」长条卡片。这一页只做卡片相关的事：
+       要加卡片就点右上角「新建卡片」。 -->
   <section v-if="isCardList" class="mb-3" data-card-panel>
     <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
       <h3 class="flex items-center gap-2 text-sm font-extrabold">
@@ -10,12 +12,12 @@
         <button class="btn-secondary !h-8 !px-3 !text-[11px]" :disabled="loading" data-card-refresh @click="load">
           {{ loading ? '读取中…' : '刷新' }}
         </button>
-        <button class="btn-primary !h-8 !px-3 !text-[11px]" data-card-add @click="openCreate">+ 添加卡片</button>
+        <button class="btn-primary !h-8 !px-3 !text-[11px]" data-card-add @click="openCreate">+ 新建卡片</button>
       </div>
     </div>
 
     <p v-if="!cards.length && !loading" class="surface rounded-2xl px-4 py-6 text-center text-sm text-muted-foreground" data-card-empty>
-      还没有卡片。点「+ 添加卡片」填银行、卡名、账单日与还款日，系统会自动生成账单日/还款日提醒。
+      还没有卡片。点「+ 新建卡片」填银行、卡名、账单日与还款日，系统会自动生成账单日/还款日提醒。
     </p>
 
     <div class="grid gap-3 lg:grid-cols-2">
@@ -103,6 +105,47 @@
       </article>
     </div>
 
+    <!-- 长条卡片：左边今天（日期 + 星期），右边本周要还的卡（小卡面）。
+         本周 = 周一到周日（后端算），已经逾期的也列在这里并标红。 -->
+    <section class="week-strip mt-3" data-week-strip>
+      <div class="min-w-0">
+        <p class="text-[11px] font-bold uppercase tracking-[.18em] text-muted-foreground">今天</p>
+        <p class="mt-1 font-display text-2xl font-extrabold leading-none tracking-tight" data-week-today>{{ todayLabel }}</p>
+        <p class="mt-1.5 text-[12px] font-semibold text-muted-foreground" data-week-weekday>
+          {{ week?.weekday || '' }}
+          <span v-if="week" class="font-medium">· 本周 {{ shortRange }}</span>
+        </p>
+        <p class="mt-2 text-[12px] font-semibold" :class="week && week.overdue ? 'text-rose-500' : 'text-muted-foreground'">
+          <template v-if="week && week.count">
+            本周待还 <b class="text-foreground">{{ week.count }}</b> 张 · 合计
+            <b class="text-foreground">¥{{ formatCents(week.total_cents) }}</b>
+            <span v-if="week.overdue">（含 {{ week.overdue }} 张逾期）</span>
+          </template>
+          <template v-else>本周没有要还的卡</template>
+        </p>
+      </div>
+
+      <div class="flex flex-wrap items-stretch justify-end gap-2" data-week-cards>
+        <article
+          v-for="item in week?.cards || []"
+          :key="item.card_id"
+          class="week-mini-card"
+          :class="{ 'week-mini-card-overdue': item.overdue }"
+          :style="{ background: gradientOf(item.color) }"
+          :data-week-card="item.card_id"
+        >
+          <p class="truncate text-[11px] font-extrabold leading-4">{{ [item.bank, item.name].filter(Boolean).join('') || '信用卡' }}</p>
+          <p class="mt-0.5 font-mono text-[10px] tracking-[.16em] text-white/85">{{ item.tail ? `****${item.tail}` : '****' }}</p>
+          <p class="mt-1.5 text-[11px] font-bold leading-4">¥{{ item.amount_cents ? formatCents(item.amount_cents) : '—' }}</p>
+          <p class="mt-0.5 text-[10px] leading-4 text-white/85">
+            {{ item.overdue ? `逾期 ${Math.abs(item.days_left)} 天` : item.days_left === 0 ? '就是今天' : `还有 ${item.days_left} 天` }}
+            · {{ monthDay(item.due_date) }}
+          </p>
+        </article>
+        <p v-if="week && !week.cards.length" class="self-center text-xs text-muted-foreground">这周没有到期的还款，安心。</p>
+      </div>
+    </section>
+
     <!-- 填/改本期金额 -->
     <Modal v-model="amountOpen" size="md" :title="`本期金额${amountCard ? ` · ${amountCard.current?.period || ''}` : ''}`">
       <div class="grid gap-3 sm:grid-cols-2">
@@ -152,8 +195,8 @@ import ConfirmDialog from './ConfirmDialog.vue'
 import CardEditorDialog from './CardEditorDialog.vue'
 import CardScheduleDialog from './CardScheduleDialog.vue'
 import {
-  deleteCard, getCards, payCardStatement, saveCardStatement, unpayCardStatement,
-  type CreditCard, type ReminderList,
+  deleteCard, getCards, getWeekDueCards, payCardStatement, saveCardStatement, unpayCardStatement,
+  type CreditCard, type ReminderList, type WeekDue,
 } from '../api/reminder'
 import { listColorHex } from '../utils/list-colors'
 import { cardTail, daysUntil, formatCardDate, formatCents, graceDays, nextDayOccurrence, parseYuanToCents } from '../utils/card'
@@ -163,6 +206,8 @@ const emit = defineEmits<{ (e: 'changed'): void }>()
 
 const isCardList = computed(() => props.list?.template === 'credit_card')
 const cards = ref<CreditCard[]>([])
+// 长条卡片的数据：今天日期 + 本周（周一到周日）要还的卡（含逾期）
+const week = ref<WeekDue | null>(null)
 const loading = ref(false)
 const busyId = ref<number | null>(null)
 const message = ref('')
@@ -229,13 +274,29 @@ async function load() {
   if (!isCardList.value) return
   loading.value = true
   try {
-    const res = await getCards(props.list.id)
-    cards.value = res.data?.data || []
+    // 卡片与本周期数据一起拉：这一栏是固定栏目，不再按 list_id 过滤也拿得到。
+    const [cardRes, weekRes] = await Promise.all([getCards(), getWeekDueCards()])
+    cards.value = cardRes.data?.data || []
+    week.value = weekRes.data?.data || null
   } catch {
     cards.value = []
+    week.value = null
   } finally {
     loading.value = false
   }
+}
+
+// 长条卡片左边的「今天」：本地时间算，不依赖后端（后端也给了，用于星期与本周区间）。
+const todayLabel = computed(() =>
+  new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric' }).format(new Date()))
+const shortRange = computed(() => {
+  const w = week.value
+  if (!w) return ''
+  return `${monthDay(w.week_start)} ~ ${monthDay(w.week_end)}`
+})
+/** "2026-10-09" → "10-09"（长条卡片地方小，年份省略） */
+function monthDay(date: string) {
+  return date ? date.slice(5) : ''
 }
 
 function openCreate() {
@@ -337,3 +398,22 @@ async function confirmDelete() {
 watch(() => props.list?.id, () => { void load() }, { immediate: true })
 watch(isCardList, (v) => { if (v) void load() })
 </script>
+
+<style scoped>
+/* 长条卡片：左边今天、右边本周待还。窄屏上下排，宽屏左右排。 */
+.week-strip {
+  @apply flex flex-col gap-3 rounded-2xl border border-border/70 bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between;
+}
+/* 小卡面：跟大卡面同一套渐变，只是缩到能并排放下几张。 */
+.week-mini-card {
+  @apply w-[8.6rem] shrink-0 rounded-xl px-2.5 py-2 text-white shadow-md;
+}
+/* 逾期的那张加一圈玫红描边，一眼能挑出来。 */
+.week-mini-card-overdue {
+  @apply ring-2 ring-rose-400/80;
+}
+/* 手机端去掉阴影：这一条会常驻在卡片页，滚动时省一点渲染。 */
+@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+  .week-mini-card { box-shadow: none; }
+}
+</style>

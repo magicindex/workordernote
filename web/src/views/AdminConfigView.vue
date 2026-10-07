@@ -39,8 +39,10 @@ import SyncPanel from '../components/SyncPanel.vue'
 import SyncImportWizard from '../components/SyncImportWizard.vue'
 import AndroidApkUploader from '../components/AndroidApkUploader.vue'
 import { getSystemConfigMeta, updateConfig } from '../api/config'
+import { useAuthStore } from '../stores/auth'
 import type { ConfigMeta } from '../api/config'
 
+const authStore = useAuthStore()
 const items = ref<ConfigMeta[]>([])
 const syncPanelRef = ref<InstanceType<typeof SyncPanel> | null>(null)
 
@@ -80,6 +82,10 @@ async function handleSave(key: string, value: string) {
       const idx = items.value.findIndex((it) => it.key === key)
       if (idx >= 0) {
         items.value[idx] = { ...items.value[idx], value }
+      }
+      // 「信用卡账单」栏目开关：侧栏那个固定栏目要立刻跟着变，不用重进页面。
+      if (key === 'credit_card_enabled') {
+        authStore.setCreditCardEnabled(value !== 'false')
       }
       listRef.value?.markSaved(key)
     } else {

@@ -427,6 +427,9 @@ func parseChannelTargets(raw string) []uint {
 func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint, includeCompleted bool) ([]ReminderDTO, error) {
 	var rows []Reminder
 	q := db.Where("user_id = ? AND deleted_at IS NULL", userID)
+	// 「信用卡账单」栏目被后台关掉时，它自动生成的账单日/还款日提醒也不出现在这里
+	// （栏目本身、卡片与金额都还在，重新打开偏好就回来）。
+	q = excludeHiddenCardReminders(q, hiddenCardListIDs(db, userID))
 	now := time.Now()
 	loc, _ := time.LoadLocation("Asia/Shanghai")
 	localNow := now.In(loc)
@@ -875,6 +878,7 @@ func ParseCompletedRange(option, from, to string) (CompletedRange, error) {
 func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query string, listIDs []uint) ([]CompletedItemDTO, error) {
 	var history []Completion
 	hq := db.Where("user_id = ?", userID)
+	hq = excludeHiddenCardCompletions(hq, db, hiddenCardListIDs(db, userID))
 	if rng.Start != nil {
 		hq = hq.Where("completed_at >= ?", *rng.Start)
 	}
@@ -890,6 +894,7 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 
 	var rows []Reminder
 	rq := db.Where("user_id = ? AND deleted_at IS NULL AND completed_at IS NOT NULL", userID)
+	rq = excludeHiddenCardReminders(rq, hiddenCardListIDs(db, userID))
 	if rng.Start != nil {
 		rq = rq.Where("completed_at >= ?", *rng.Start)
 	}
@@ -1067,6 +1072,7 @@ func listCalendarItems(db *gorm.DB, userID uint, from, to time.Time, listIDs []u
 		"(kind = ? AND due_at IS NOT NULL AND due_at >= ? AND due_at < ?) OR "+
 		"(kind = ? AND completed_at IS NOT NULL AND completed_at >= ? AND completed_at < ?))",
 		userID, KindTask, from, to, KindNote, from, to)
+	q = excludeHiddenCardReminders(q, hiddenCardListIDs(db, userID))
 	if len(listIDs) > 0 {
 		q = q.Where("list_id IN ?", listIDs)
 	}

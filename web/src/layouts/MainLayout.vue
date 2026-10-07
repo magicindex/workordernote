@@ -83,10 +83,28 @@
             <span v-if="summary.all" class="nav-count">{{ summary.all }}</span>
           </RouterLink>
 
+          <!-- 信用卡账单：固定栏目（不是普通清单）。由后台偏好控制显示，
+               启用后卡片一律归到这一栏，用户不用（也不能）自己建这个清单。 -->
+          <RouterLink
+            v-if="authStore.creditCardEnabled && cardBucket"
+            :to="`/admin/list/${cardBucket.id}`"
+            class="nav-row"
+            :class="{ 'nav-row-active': route.path === `/admin/list/${cardBucket.id}` }"
+            :title="railActive ? '信用卡账单' : '信用卡账单：卡片、账单日与还款提醒都在这里'"
+            data-nav-cards
+            @click="mobileOpen = false"
+          >
+            <span class="nav-symbol h-5 w-5 bg-brand-500/12 text-brand-500">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="6" width="18" height="12" rx="2.5" stroke-width="1.7"/><path d="M3 10h18M6.5 14h4" stroke-width="1.7" stroke-linecap="round"/></svg>
+            </span>
+            <span class="flex-1">信用卡账单</span>
+            <span v-if="cardBucket.card_count" class="nav-count">{{ cardBucket.card_count }}</span>
+          </RouterLink>
+
           <!-- 清单行不再挂「笔」图标：右键（桌面）或长按（触屏）弹出菜单，里面有重命名 / 修改 / 删除。
                右键菜单藏起来的入口，所以这里不摆任何常驻按钮，侧栏更干净。 -->
           <div
-            v-for="list in lists"
+            v-for="list in navLists"
             :key="list.id"
             class="group/list flex items-center"
             @contextmenu.prevent.stop="openListMenu(list, $event)"
@@ -119,13 +137,6 @@
               />
               <span v-else class="flex min-w-0 flex-1 items-center gap-1">
                 <span class="truncate">{{ list.name }}</span>
-                <!-- 信用卡清单：一个小卡标记，和普通清单一眼区分 -->
-                <span
-                  v-if="list.template === 'credit_card'"
-                  class="rail-hide shrink-0 rounded-md bg-rose-500/12 px-1 text-[10px] font-bold leading-4 text-rose-500"
-                  data-card-badge
-                  title="信用卡清单：自动生成账单日与还款日提醒"
-                >卡</span>
               </span>
               <!-- 默认清单标识；改默认清单在「偏好设置」里操作 -->
               <span v-if="list.is_default" class="rail-hide shrink-0 text-amber-400" title="默认清单" aria-label="默认清单">
@@ -289,7 +300,7 @@
     <!-- 新建清单：先选模板（通用 / 信用卡），信用卡填完卡片信息自动生成还款计划 -->
     <ListCreateDialog
       v-model="creatingList"
-      :default-color="['blue', 'violet', 'rose', 'amber', 'emerald'][lists.length % 5]"
+      :default-color="['blue', 'violet', 'rose', 'amber', 'emerald'][navLists.length % 5]"
       @created="onListCreated"
     />
 
@@ -418,6 +429,9 @@ const railActive = computed(() => railCollapsed.value || railForced.value)
 const settingsOpen = ref(lsGet('ui_settings_open') === '1')
 
 const lists = ref<ReminderList[]>([])
+// 侧栏「我的清单」里只列普通清单：信用卡账单是上面那个固定栏目，不混在里面。
+const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card'))
+const cardBucket = computed(() => lists.value.find((l) => l.template === 'credit_card') || null)
 const summary = ref<Record<string, number>>({})
 const creatingList = ref(false)
 const realtimeToast = ref('')

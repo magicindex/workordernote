@@ -166,6 +166,11 @@ func handleListLists(db *gorm.DB) gin.HandlerFunc {
 		}
 		result := make([]ListDTO, 0, len(lists))
 		for _, list := range lists {
+			// 信用卡栏目在侧栏与页面标题上恒叫「信用卡账单」：老数据里它可能是用户
+			// 自己起的名字（例如「招商银行信用卡」），这里统一成固定栏目的名字。
+			if list.Template == listTemplateCard {
+				list.Name = cardBucketListName
+			}
 			result = append(result, ListDTO{List: list, OpenCount: openCounts[list.ID], CardCount: cardCounts[list.ID]})
 		}
 		response.Success(c, result)
@@ -178,7 +183,8 @@ func handleCreateList(db *gorm.DB) gin.HandlerFunc {
 			Name  string `json:"name"`
 			Color string `json:"color"`
 			Icon  string `json:"icon"`
-			// 模板：general（普通，默认）或 credit_card（信用卡清单，里面放卡片）
+			// Template 仅为兼容旧客户端保留：现在信用卡是侧栏那个**固定栏目**
+			// （见 card_bucket.go），不在「新建清单」里选模板，所以这里一律建普通清单。
 			Template string `json:"template"`
 		}
 		if err := c.ShouldBindJSON(&in); err != nil {
@@ -204,7 +210,7 @@ func handleCreateList(db *gorm.DB) gin.HandlerFunc {
 		_ = db.Model(&List{}).Where("user_id = ?", currentUserID(c)).Select("COALESCE(MAX(position), 0)").Scan(&maxPosition).Error
 		list := List{
 			UserID: currentUserID(c), Name: in.Name, Color: in.Color, Icon: in.Icon,
-			Position: maxPosition + 1, Template: normalizeListTemplate(in.Template),
+			Position: maxPosition + 1, Template: listTemplateGeneral,
 		}
 		if err := db.Create(&list).Error; err != nil {
 			response.ErrorInternal(c, "创建清单失败")
@@ -227,7 +233,7 @@ func handleUpdateList(db *gorm.DB) gin.HandlerFunc {
 			Icon      string `json:"icon"`
 			Position  *int   `json:"position"`
 			IsDefault *bool  `json:"is_default"`
-			// 信用卡字段：传了才改（用指针区分「没传」和「传了 0/空」）
+			// 信用卡字段：旧客户端才会传，现在一律忽略（卡片走 /cards 接口，模板不再是清单属性）
 			Template         *string `json:"template"`
 			CardName         *string `json:"card_name"`
 			CardBank         *string `json:"card_bank"`
@@ -278,9 +284,8 @@ func handleUpdateList(db *gorm.DB) gin.HandlerFunc {
 			updates["position"] = *in.Position
 		}
 
-		if in.Template != nil {
-			updates["template"] = normalizeListTemplate(*in.Template)
-		}
+		// Template 同样忽略：模板不再由客户端改（信用卡栏目由 ensureCardBucket 维护），
+		// 否则旧客户端能把普通清单改成「信用卡清单」，凭空多出第二个卡片栏目。
 		if err := db.Model(&list).Updates(updates).Error; err != nil {
 			response.ErrorInternal(c, "更新清单失败")
 			return
@@ -676,16 +681,26 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		// 否则重复提醒的完成记录会让侧栏数字和页面条数对不上。这里把历史计数作为
 		// 子查询并进同一条聚合语句，保持 /summary 仍然只有 2 条查询
 		// （见 performance_test.go 的 TestSummaryUsesTwoAggregateQueries）。
-		if err := db.Model(&Reminder{}).
+		hiddenCards := hiddenCardListIDs(db, userID)
+		completedExpr := `COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
+					+ (SELECT COUNT(*) FROM completions WHERE user_id = ?)`
+		selectArgs := []interface{}{endToday, userID, now}
+		if len(hiddenCards) > 0 {
+			// 栏目关掉时，它那些卡片提醒的完成记录也不该再计入角标。
+			completedExpr = `COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
+					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND reminder_id NOT IN (SELECT id FROM reminders WHERE list_id IN ?))`
+			selectArgs = []interface{}{endToday, userID, hiddenCards, now}
+		}
+		q := db.Model(&Reminder{}).
 			Select(`
 				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND due_at < ? THEN 1 ELSE 0 END), 0) AS today,
 				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS planned,
 				COALESCE(SUM(CASE WHEN completed_at IS NULL THEN 1 ELSE 0 END), 0) AS open_total,
-				COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
-					+ (SELECT COUNT(*) FROM completions WHERE user_id = ?) AS completed,
-				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND due_at < ? THEN 1 ELSE 0 END), 0) AS overdue`, endToday, userID, now).
-			Where("user_id = ? AND deleted_at IS NULL", userID).
-			Scan(&counts).Error; err != nil {
+				`+completedExpr+` AS completed,
+				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND due_at < ? THEN 1 ELSE 0 END), 0) AS overdue`, selectArgs...).
+			Where("user_id = ? AND deleted_at IS NULL", userID)
+		q = excludeHiddenCardReminders(q, hiddenCards)
+		if err := q.Scan(&counts).Error; err != nil {
 			response.ErrorInternal(c, "统计提醒失败")
 			return
 		}

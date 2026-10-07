@@ -141,6 +141,10 @@ func applySyncLists(tx *gorm.DB, snap syncSnapshot, users map[string]database.Us
 				IsDefault: false,
 				CreatedAt: incoming.CreatedAt,
 				UpdatedAt: incoming.UpdatedAt,
+				// 模板也要一起落：信用卡账单栏目（template=credit_card）是对端建的，
+				// 漏了它，这一栏在新设备上会变成普通清单，卡片页不再认识它
+				// （老用例只按名字断言，所以这个漏字段一直没被发现）。
+				Template: normalizeListTemplate(incoming.Template),
 			}
 			// 默认清单是「本机偏好」，只在新建时采纳对端的标记，而且必须
 			// 确认本机此刻还没有默认清单——否则会出现两个默认清单，

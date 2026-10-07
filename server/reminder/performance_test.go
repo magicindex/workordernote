@@ -112,6 +112,10 @@ func TestSummaryUsesTwoAggregateQueries(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// 「信用卡账单」开关是进程内缓存的：刚启动时第一次读会查一次配置，之后不再查。
+	// 先把它读热，统计的才是**稳定态**的查询次数（线上绝大多数请求都是稳定态）。
+	creditCardFeatureEnabled(appDB)
+
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
 	context.Request = httptest.NewRequest(http.MethodGet, "/api/reminder/summary", nil)

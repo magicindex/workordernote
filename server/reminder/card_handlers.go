@@ -20,6 +20,8 @@ import (
 func registerCardRoutes(group *gin.RouterGroup, db *gorm.DB) {
 	group.GET("/cards", handleListCards(db))
 	group.POST("/cards", handleCreateCard(db))
+	// 首页那条「本周待还」长条卡片的数据
+	group.GET("/cards/week", handleWeekDueCards(db))
 	group.PATCH("/cards/:id", handleUpdateCard(db))
 	group.DELETE("/cards/:id", handleDeleteCard(db))
 	// 重建这张卡的提醒（账单日/还款日/提前提醒）
@@ -71,11 +73,25 @@ func cardColor(name string) string {
 	return "blue"
 }
 
-// GET /cards?list_id=
+// GET /cards?list_id= —— 不带 list_id 就是「信用卡账单」这一栏的全部卡片
 func handleListCards(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		userID := currentUserID(c)
+		// 栏目被后台关掉时：卡片数据还在，但这一栏不对外开放（前端也不会显示入口）。
+		if !creditCardFeatureEnabled(db) {
+			response.Success(c, []CardDTO{})
+			return
+		}
 		listID, _ := strconv.Atoi(c.Query("list_id"))
-		cards, err := listCards(db, currentUserID(c), uint(listID), time.Now())
+		if listID == 0 {
+			bucket, err := ensureCardBucket(db, userID)
+			if err != nil {
+				response.ErrorInternal(c, "读取信用卡账单失败")
+				return
+			}
+			listID = int(bucket.ID)
+		}
+		cards, err := listCards(db, userID, uint(listID), time.Now())
 		if err != nil {
 			response.ErrorInternal(c, "读取卡片失败")
 			return
@@ -84,7 +100,27 @@ func handleListCards(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// GET /cards/week —— 首页那条长条卡片用：本周（周一到周日）要还的卡片 + 已逾期的卡片。
+func handleWeekDueCards(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := currentUserID(c)
+		if !creditCardFeatureEnabled(db) {
+			response.Success(c, WeekDueDTO{Cards: []WeekDueCard{}})
+			return
+		}
+		out, err := weekDueCards(db, userID, time.Now())
+		if err != nil {
+			response.ErrorInternal(c, "读取本周待还失败")
+			return
+		}
+		response.Success(c, out)
+	}
+}
+
 // POST /cards —— 建卡并立刻生成提醒（账单日 / 还款日 / 提前提醒）
+//
+// 卡片一律归到「信用卡账单」这一栏：请求里不再需要 list_id，带了也忽略
+// （以前是先在「新建清单」里建一个信用卡清单，现在没这一步了）。
 func handleCreateCard(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var in cardInput
@@ -97,11 +133,16 @@ func handleCreateCard(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		userID := currentUserID(c)
-		// 卡片必须挂在当前用户自己的清单下
-		if err := assertListOwner(db, userID, in.ListID); err != nil {
-			writeServiceError(c, err)
+		if !creditCardFeatureEnabled(db) {
+			response.ErrorBadRequest(c, "「信用卡账单」栏目已在后台关闭，请先到系统配置 → 功能开关里打开")
 			return
 		}
+		bucket, err := ensureCardBucket(db, userID)
+		if err != nil {
+			response.ErrorInternal(c, "准备信用卡账单栏目失败")
+			return
+		}
+		in.ListID = bucket.ID
 		advance := 3
 		if in.AdvanceDays != nil {
 			advance = *in.AdvanceDays

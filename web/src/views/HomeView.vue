@@ -1,341 +1,357 @@
 <template>
   <div class="mx-auto max-w-6xl">
-    <section class="mb-3 flex flex-col gap-2.5 sm:mb-6 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-      <div class="min-w-0">
-        <div class="mb-2 hidden items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-muted-foreground sm:flex">
-          <span class="h-2 w-2 rounded-full" :style="{ background: accentColor }"></span>
-          {{ eyebrow }}
+    <!-- 信用卡账单是固定栏目：这一页**只有卡片**——没有快速新建、没有提醒列表、
+         没有完成记录筛选；要加东西就点「新建卡片」。 -->
+    <template v-if="isCardBucketPage">
+      <section class="mb-3 flex flex-col gap-2.5 sm:mb-6 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+        <div class="min-w-0">
+          <div class="mb-2 hidden items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-muted-foreground sm:flex">
+            <span class="h-2 w-2 rounded-full" :style="{ background: accentColor }"></span>
+            信用卡账单
+          </div>
+          <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">信用卡账单</h1>
+          <p class="mt-2 hidden text-sm text-muted-foreground sm:block">卡片、账单日与本周待还都在这一页；一个栏目装下所有卡。</p>
+          <p class="truncate text-xs text-muted-foreground sm:hidden">卡片与本周待还都在这一页</p>
         </div>
-        <div class="flex flex-wrap items-baseline gap-x-2">
-          <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">{{ pageTitle }}</h1>
-          <p class="truncate text-xs text-muted-foreground sm:hidden">{{ subtitle }}</p>
+      </section>
+      <CreditCardPanel v-if="selectedList" :list="selectedList" @changed="loadData" />
+    </template>
+
+    <template v-else>
+      <section class="mb-3 flex flex-col gap-2.5 sm:mb-6 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+        <div class="min-w-0">
+          <div class="mb-2 hidden items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-muted-foreground sm:flex">
+            <span class="h-2 w-2 rounded-full" :style="{ background: accentColor }"></span>
+            {{ eyebrow }}
+          </div>
+          <div class="flex flex-wrap items-baseline gap-x-2">
+            <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">{{ pageTitle }}</h1>
+            <p class="truncate text-xs text-muted-foreground sm:hidden">{{ subtitle }}</p>
+          </div>
+          <p class="mt-2 hidden text-sm text-muted-foreground sm:block">{{ subtitle }}</p>
         </div>
-        <p class="mt-2 hidden text-sm text-muted-foreground sm:block">{{ subtitle }}</p>
-      </div>
-      <label class="search-box">
-        <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" stroke-width="1.8"/><path d="m16.5 16.5 4 4" stroke-width="1.8" stroke-linecap="round"/></svg>
-        <input v-model="search" placeholder="搜索提醒…" @input="debouncedLoad" />
-        <kbd class="hidden rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] sm:inline">⌘ K</kbd>
-      </label>
-    </section>
+        <label class="search-box">
+          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" stroke-width="1.8"/><path d="m16.5 16.5 4 4" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <input v-model="search" placeholder="搜索提醒…" @input="debouncedLoad" />
+          <kbd class="hidden rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] sm:inline">⌘ K</kbd>
+        </label>
+      </section>
 
-    <!-- 信用卡清单：卡片信息 + 账单日/还款日倒计时（普通清单不显示） -->
-    <CreditCardPanel v-if="selectedList" :list="selectedList" @changed="loadData" />
-
-    <section v-if="view !== 'completed'" class="quick-card" :class="{ 'quick-card-expanded': quickExpanded }">
-      <div class="flex items-start gap-3">
-        <button class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-brand-500/25 text-brand-500" aria-label="新提醒">
-          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2" stroke-linecap="round"/></svg>
-        </button>
-        <div class="min-w-0 flex-1">
-          <input
-            ref="quickInput"
-            v-model="quick.title"
-            class="w-full bg-transparent text-[17px] font-semibold outline-none placeholder:font-medium placeholder:text-muted-foreground/65"
-            :placeholder="quick.kind === 'note' ? '记一笔…' : '添加一条提醒…'"
-            maxlength="200"
-            @keydown.enter.prevent="submitQuick"
-            @focus="quickFocused = true"
-            @click="quickFocused = true"
-          />
-          <p v-if="quick.notes" class="mt-1 truncate text-xs text-muted-foreground">{{ quick.notes }}</p>
-        </div>
-        <button v-if="quick.title" class="btn-primary !h-9 !px-4" :disabled="saving" @click="submitQuick">{{ saving ? '保存中' : quick.kind === 'note' ? '记下' : '添加' }}</button>
-      </div>
-
-      <div v-if="quickFocused || quick.title" class="mt-3 border-t border-border/60 pt-3 sm:mt-4 sm:pt-4">
-        <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <button class="quick-chip" :class="{ active: quick.kind !== 'note' }" @click="setQuickKind('task')">任务</button>
-          <button class="quick-chip" :class="{ active: quick.kind === 'note' }" @click="setQuickKind('note')">记事</button>
-          <span v-if="quick.kind !== 'note'" class="mx-0.5 h-4 w-px bg-border"></span>
-          <template v-if="quick.kind !== 'note'">
-            <button class="quick-chip" :class="{ active: preset === 'today' }" @click="setPreset('today')">今天</button>
-            <button class="quick-chip" :class="{ active: preset === 'tomorrow' }" @click="setPreset('tomorrow')">明天</button>
-            <button class="quick-chip" :class="{ active: preset === 'weekend' }" @click="setPreset('weekend')">本周末</button>
-            <button class="quick-chip" :class="{ active: quick.priority === 3 }" @click="quick.priority = quick.priority === 3 ? 0 : 3">
-              <span class="text-rose-500">!!!</span> 重要
-            </button>
-            <!-- 清单选择常显（原来藏在「更多」里）：默认是「偏好设置 → 默认清单」里那一本，
-                 临时想放到别的清单就在这里改，改完只影响这一次新建。 -->
-            <label class="ml-0.5 inline-flex items-center gap-1.5" title="这条提醒加到哪个清单（默认取偏好设置里的默认清单）">
-              <i class="h-2 w-2 shrink-0 rounded-full" :style="{ background: listColor(quickListColor) }"></i>
-              <select
-                v-model.number="quick.list_id"
-                class="quick-chip !h-7 max-w-[9rem] !px-2 !text-[11px]"
-                aria-label="选择清单"
-              >
-                <option v-for="list in lists" :key="list.id" :value="list.id">{{ list.name }}</option>
-              </select>
-            </label>
-            <button class="quick-chip" :class="{ active: quickExpanded }" @click="quickExpanded = !quickExpanded">
-              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 6v.01M12 12v.01M12 18v.01" stroke-width="3" stroke-linecap="round"/></svg>
-              更多
-            </button>
-          </template>
-          <span v-if="quick.kind === 'note'" class="ml-auto text-xs font-semibold text-muted-foreground">记事保存后直接归入「已完成」</span>
-          <span v-else-if="quick.due_at" class="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-300">{{ formatDue(quick.due_at) }}</span>
+      <section v-if="view !== 'completed'" class="quick-card" :class="{ 'quick-card-expanded': quickExpanded }">
+        <div class="flex items-start gap-3">
+          <button class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-brand-500/25 text-brand-500" aria-label="新提醒">
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <div class="min-w-0 flex-1">
+            <input
+              ref="quickInput"
+              v-model="quick.title"
+              class="w-full bg-transparent text-[17px] font-semibold outline-none placeholder:font-medium placeholder:text-muted-foreground/65"
+              :placeholder="quick.kind === 'note' ? '记一笔…' : '添加一条提醒…'"
+              maxlength="200"
+              @keydown.enter.prevent="submitQuick"
+              @focus="quickFocused = true"
+              @click="quickFocused = true"
+            />
+            <p v-if="quick.notes" class="mt-1 truncate text-xs text-muted-foreground">{{ quick.notes }}</p>
+          </div>
+          <button v-if="quick.title" class="btn-primary !h-9 !px-4" :disabled="saving" @click="submitQuick">{{ saving ? '保存中' : quick.kind === 'note' ? '记下' : '添加' }}</button>
         </div>
 
-        <Transition name="expand">
-          <div v-if="quickExpanded && quick.kind !== 'note'" class="mt-3 grid gap-2.5 rounded-2xl bg-muted/65 p-3 sm:mt-4 sm:grid-cols-2 sm:gap-3 sm:p-4 lg:grid-cols-4">
-            <div class="field-label relative">
-              日期时间
-              <button ref="quickDateAnchor" type="button" class="compact-input mt-1.5 flex h-9 w-full items-center justify-between px-3 text-left text-xs font-medium" :class="{ '!border-brand-500/50': quickDateOpen }" @click="quickDateOpen = !quickDateOpen">
-                <span :class="{ 'text-muted-foreground/60': !quick.due_at }">{{ quick.due_at ? formatFullDue(quick.due_at) : '选择日期' }}</span>
-                <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-muted-foreground" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2" stroke-width="1.8"/><path d="M8 3v4m8-4v4M3 10h18" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <div v-if="quickFocused || quick.title" class="mt-3 border-t border-border/60 pt-3 sm:mt-4 sm:pt-4">
+          <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <button class="quick-chip" :class="{ active: quick.kind !== 'note' }" @click="setQuickKind('task')">任务</button>
+            <button class="quick-chip" :class="{ active: quick.kind === 'note' }" @click="setQuickKind('note')">记事</button>
+            <span v-if="quick.kind !== 'note'" class="mx-0.5 h-4 w-px bg-border"></span>
+            <template v-if="quick.kind !== 'note'">
+              <button class="quick-chip" :class="{ active: preset === 'today' }" @click="setPreset('today')">今天</button>
+              <button class="quick-chip" :class="{ active: preset === 'tomorrow' }" @click="setPreset('tomorrow')">明天</button>
+              <button class="quick-chip" :class="{ active: preset === 'weekend' }" @click="setPreset('weekend')">本周末</button>
+              <button class="quick-chip" :class="{ active: quick.priority === 3 }" @click="quick.priority = quick.priority === 3 ? 0 : 3">
+                <span class="text-rose-500">!!!</span> 重要
               </button>
-              <LunarDatePicker v-if="quickDateOpen" v-model="quickDatePicked" with-time :anchor-el="quickDateAnchor" @commit="quickDateOpen = false" />
-            </div>
-            <label class="field-label">重复<select v-model="quick.repeat_rule" class="compact-input"><option value="none">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option></select></label>
-            <label class="field-label">备注<input v-model="quick.notes" class="compact-input" placeholder="可选" maxlength="5000" /></label>
-            <label class="field-label">按农历循环<select v-model="quick.calendar" class="compact-input" @change="upgradeCalendarToYearly(quick)"><option value="solar">公历</option><option value="lunar">农历</option></select></label>
-            <label class="field-label">过期提醒频率<RepeatNotifySelect :model-value="quick.repeat_notify_minutes ?? 0" @update:model-value="quick.repeat_notify_minutes = $event" /></label>
-            <p v-if="quick.calendar === 'lunar'" class="text-[10px] leading-4 text-muted-foreground sm:col-span-2 lg:col-span-4">已按农历循环：提醒按所选日期的农历月/日重复，腊月三十遇小年自动改为除夕当天，闰月日期遇无闰月年份自动用对应平月。</p>
-            <div class="sm:col-span-2 lg:col-span-4">
-              <p class="field-label mb-2">通知方式</p>
-              <div class="flex flex-wrap gap-2">
-                <button v-for="channel in selectableChannels" :key="channel.channel" class="channel-pill" :class="{ selected: isQuickChannelSelected(channel.channel) }" :disabled="channel.channel !== 'inapp' && (!channel.bound || channel.status !== 'active')" @click="toggleQuickChannel(channel.channel)">
-                  {{ channel.label }}
+              <!-- 清单选择常显（原来藏在「更多」里）：默认是「偏好设置 → 默认清单」里那一本，
+                   临时想放到别的清单就在这里改，改完只影响这一次新建。 -->
+              <label class="ml-0.5 inline-flex items-center gap-1.5" title="这条提醒加到哪个清单（默认取偏好设置里的默认清单）">
+                <i class="h-2 w-2 shrink-0 rounded-full" :style="{ background: listColor(quickListColor) }"></i>
+                <select
+                  v-model.number="quick.list_id"
+                  class="quick-chip !h-7 max-w-[9rem] !px-2 !text-[11px]"
+                  aria-label="选择清单"
+                >
+                  <option v-for="list in navLists" :key="list.id" :value="list.id">{{ list.name }}</option>
+                </select>
+              </label>
+              <button class="quick-chip" :class="{ active: quickExpanded }" @click="quickExpanded = !quickExpanded">
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 6v.01M12 12v.01M12 18v.01" stroke-width="3" stroke-linecap="round"/></svg>
+                更多
+              </button>
+            </template>
+            <span v-if="quick.kind === 'note'" class="ml-auto text-xs font-semibold text-muted-foreground">记事保存后直接归入「已完成」</span>
+            <span v-else-if="quick.due_at" class="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-300">{{ formatDue(quick.due_at) }}</span>
+          </div>
+
+          <Transition name="expand">
+            <div v-if="quickExpanded && quick.kind !== 'note'" class="mt-3 grid gap-2.5 rounded-2xl bg-muted/65 p-3 sm:mt-4 sm:grid-cols-2 sm:gap-3 sm:p-4 lg:grid-cols-4">
+              <div class="field-label relative">
+                日期时间
+                <button ref="quickDateAnchor" type="button" class="compact-input mt-1.5 flex h-9 w-full items-center justify-between px-3 text-left text-xs font-medium" :class="{ '!border-brand-500/50': quickDateOpen }" @click="quickDateOpen = !quickDateOpen">
+                  <span :class="{ 'text-muted-foreground/60': !quick.due_at }">{{ quick.due_at ? formatFullDue(quick.due_at) : '选择日期' }}</span>
+                  <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-muted-foreground" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2" stroke-width="1.8"/><path d="M8 3v4m8-4v4M3 10h18" stroke-width="1.8" stroke-linecap="round"/></svg>
                 </button>
+                <LunarDatePicker v-if="quickDateOpen" v-model="quickDatePicked" with-time :anchor-el="quickDateAnchor" @commit="quickDateOpen = false" />
+              </div>
+              <label class="field-label">重复<select v-model="quick.repeat_rule" class="compact-input"><option value="none">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option></select></label>
+              <label class="field-label">备注<input v-model="quick.notes" class="compact-input" placeholder="可选" maxlength="5000" /></label>
+              <label class="field-label">按农历循环<select v-model="quick.calendar" class="compact-input" @change="upgradeCalendarToYearly(quick)"><option value="solar">公历</option><option value="lunar">农历</option></select></label>
+              <label class="field-label">过期提醒频率<RepeatNotifySelect :model-value="quick.repeat_notify_minutes ?? 0" @update:model-value="quick.repeat_notify_minutes = $event" /></label>
+              <p v-if="quick.calendar === 'lunar'" class="text-[10px] leading-4 text-muted-foreground sm:col-span-2 lg:col-span-4">已按农历循环：提醒按所选日期的农历月/日重复，腊月三十遇小年自动改为除夕当天，闰月日期遇无闰月年份自动用对应平月。</p>
+              <div class="sm:col-span-2 lg:col-span-4">
+                <p class="field-label mb-2">通知方式</p>
+                <div class="flex flex-wrap gap-2">
+                  <button v-for="channel in selectableChannels" :key="channel.channel" class="channel-pill" :class="{ selected: isQuickChannelSelected(channel.channel) }" :disabled="channel.channel !== 'inapp' && (!channel.bound || channel.status !== 'active')" @click="toggleQuickChannel(channel.channel)">
+                    {{ channel.label }}
+                  </button>
+                </div>
+              </div>
+              <!-- 底部提交按钮：手机端填完下方字段后无需滚回顶部再点添加 -->
+              <div class="sm:col-span-2 lg:col-span-4">
+                <button class="btn-primary w-full" :disabled="saving || !quick.title?.trim()" @click="submitQuick">{{ saving ? '保存中…' : '添加提醒' }}</button>
               </div>
             </div>
-            <!-- 底部提交按钮：手机端填完下方字段后无需滚回顶部再点添加 -->
-            <div class="sm:col-span-2 lg:col-span-4">
-              <button class="btn-primary w-full" :disabled="saving || !quick.title?.trim()" @click="submitQuick">{{ saving ? '保存中…' : '添加提醒' }}</button>
+          </Transition>
+        </div>
+      </section>
+
+      <!-- 标题工具栏：条数 / 过期提示 / 未完成·全部 / 刷新（导出只在电脑上出现） -->
+      <div class="list-toolbar">
+        <div class="list-toolbar-count">
+          <span class="count-number">{{ view === 'completed' ? completedItems.length : items.length }}</span>
+          <span class="count-unit">项</span>
+          <span
+            v-if="view !== 'completed' && overdueCount"
+            class="count-overdue"
+            :title="`已经过了提醒时间还没做的：${overdueCount} 项`"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 8v5m0 3h.01M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            {{ overdueCount }} 项已过期
+          </span>
+        </div>
+        <div class="list-toolbar-actions">
+          <!-- 未完成 / 全部：记事创建即完成，想在这个页面看见记事就得切到「全部」。
+               选择记在本地（跟人走、跟设备走），与清单筛选一致。 -->
+          <div
+            v-if="view !== 'completed'"
+            class="seg-group"
+            role="group"
+            aria-label="显示范围"
+          >
+            <button
+              type="button"
+              class="seg-btn"
+              :class="{ 'seg-btn-on': listStatus === 'open' }"
+              :aria-pressed="listStatus === 'open'"
+              title="只看还没完成的"
+              @click="setListStatus('open')"
+            >未完成</button>
+            <button
+              type="button"
+              class="seg-btn"
+              :class="{ 'seg-btn-on': listStatus === 'all' }"
+              :aria-pressed="listStatus === 'all'"
+              title="未完成和已完成都显示（含记事）"
+              @click="setListStatus('all')"
+            >全部</button>
+          </div>
+          <button
+            class="toolbar-btn inline-flex"
+            :class="{ 'is-spinning': loading }"
+            :disabled="loading"
+            aria-label="刷新"
+            title="重新读取这一页的数据"
+            @click="loadData"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>刷新</span>
+          </button>
+          <!-- 导出表格：手机上不提供（屏幕小、CSV 也不好用），电脑上照旧 -->
+          <button class="toolbar-btn hidden sm:inline-flex" :class="{ 'is-spinning': exporting }" :disabled="exporting" @click="handleExport">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>{{ exporting ? '导出中…' : '导出表格' }}</span>
+          </button>
+          <button
+            v-if="view === 'completed'"
+            class="toolbar-btn hidden sm:inline-flex"
+            :disabled="!completedItems.length"
+            @click="printOpen = true"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M7 9V4h10v5M7 19H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M7 15h10v6H7z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>打印</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 已完成的时间段筛选。记录来源包含 completions 历史（重复提醒的每次完成），
+           所以这里的数字通常远大于「有 completed_at 的提醒数」。 -->
+      <section v-if="view === 'completed'" class="mb-4 rounded-2xl bg-muted/55 p-3 sm:p-4">
+        <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <button
+            v-for="opt in rangeOptions"
+            :key="opt.value"
+            class="quick-chip"
+            :class="{ active: completedRange === opt.value }"
+            @click="setCompletedRange(opt.value)"
+          >{{ opt.label }}</button>
+        </div>
+        <!-- 后端算出来的实际区间（含当天）+ 生效的清单筛选。放在这里是为了让
+             「这个时间段是哪几天、还筛了哪些清单」一眼可见：条数不对时能立刻
+             看出是哪一层筛选造成的，而不是只能猜。 -->
+        <p v-if="completedSpan" class="mt-2 text-[11px] font-medium text-muted-foreground">
+          当前区间：<span class="font-bold text-foreground/80">{{ completedSpan }}</span>
+          <template v-if="completedFilterSummary">
+            <span class="mx-1">·</span>清单：<span class="font-bold text-foreground/80">{{ completedFilterSummary }}</span>
+          </template>
+        </p>
+        <!-- 选择显示哪些清单的完成记录；不选=全部。选择记在本地。 -->
+        <ListFilter v-model="completedListFilter" :lists="navLists" class="mt-3" />
+        <div v-if="completedRange === 'custom'" class="mt-3 flex flex-wrap items-center gap-2">
+          <input v-model="customFrom" type="date" class="compact-input !w-auto" aria-label="开始日期" />
+          <span class="text-xs text-muted-foreground">至</span>
+          <input v-model="customTo" type="date" class="compact-input !w-auto" aria-label="结束日期" />
+          <button class="btn-primary !h-9 !px-4" :disabled="!customFrom || !customTo" @click="loadItems">查询</button>
+        </div>
+      </section>
+
+      <section v-if="loading" class="space-y-3">
+        <div v-for="n in 4" :key="n" class="h-20 animate-pulse rounded-2xl bg-surface/80"></div>
+      </section>
+
+      <!-- 已完成：只读的完成记录，不能「完成 / 稍后提醒」；底层提醒还在时才可以编辑或删除 -->
+      <section v-else-if="view === 'completed' && completedItems.length" class="space-y-2">
+        <article v-for="entry in completedItems" :key="`${entry.source}-${entry.id}`" class="reminder-row reminder-completed">
+          <button class="complete-button cursor-default" disabled :aria-label="entry.kind === 'note' ? '记事' : '已完成'">
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="min-w-0 flex-1 text-left" :disabled="!entry.reminder_exists" @click="openCompletedEntry(entry)">
+            <div class="flex items-center gap-2">
+              <h3 class="truncate text-sm font-bold sm:text-[15px]">{{ entry.title }}</h3>
+              <span v-if="entry.kind === 'note'" class="tiny-badge">记事</span>
+              <span v-else-if="entry.repeat_rule && entry.repeat_rule !== 'none'" class="tiny-badge">{{ ruleLabel(entry.repeat_rule) }}</span>
             </div>
+            <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground sm:mt-2">
+              <span class="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7v5l3 2" stroke-width="1.8" stroke-linecap="round"/></svg>
+                {{ formatCompletedAt(entry.completed_at) }}
+              </span>
+              <template v-if="entry.list_name">
+                <span class="h-1 w-1 rounded-full bg-border"></span>
+                <span>{{ entry.list_name }}</span>
+              </template>
+              <template v-if="!entry.reminder_exists">
+                <span class="h-1 w-1 rounded-full bg-border"></span>
+                <span>提醒已删除</span>
+              </template>
+            </div>
+          </button>
+          <div class="row-actions">
+            <button v-if="entry.reminder_exists" class="row-action hover:!text-rose-500" title="删除提醒" @click="removeCompleted(entry)">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
           </div>
-        </Transition>
-      </div>
-    </section>
+        </article>
+      </section>
 
-    <!-- 标题工具栏：条数 / 过期提示 / 未完成·全部 / 刷新（导出只在电脑上出现） -->
-    <div class="list-toolbar">
-      <div class="list-toolbar-count">
-        <span class="count-number">{{ view === 'completed' ? completedItems.length : items.length }}</span>
-        <span class="count-unit">项</span>
-        <span
-          v-if="view !== 'completed' && overdueCount"
-          class="count-overdue"
-          :title="`已经过了提醒时间还没做的：${overdueCount} 项`"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 8v5m0 3h.01M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          {{ overdueCount }} 项已过期
-        </span>
-      </div>
-      <div class="list-toolbar-actions">
-        <!-- 未完成 / 全部：记事创建即完成，想在这个页面看见记事就得切到「全部」。
-             选择记在本地（跟人走、跟设备走），与清单筛选一致。 -->
-        <div
-          v-if="view !== 'completed'"
-          class="seg-group"
-          role="group"
-          aria-label="显示范围"
+      <section v-else-if="view !== 'completed' && items.length" class="space-y-2">
+        <article
+          v-for="item in items"
+          :key="item.id"
+          class="reminder-row group"
+          :class="{ 'reminder-completed': !!item.completed_at, 'reminder-overdue': isOverdue(item) }"
         >
           <button
-            type="button"
-            class="seg-btn"
-            :class="{ 'seg-btn-on': listStatus === 'open' }"
-            :aria-pressed="listStatus === 'open'"
-            title="只看还没完成的"
-            @click="setListStatus('open')"
-          >未完成</button>
-          <button
-            type="button"
-            class="seg-btn"
-            :class="{ 'seg-btn-on': listStatus === 'all' }"
-            :aria-pressed="listStatus === 'all'"
-            title="未完成和已完成都显示（含记事）"
-            @click="setListStatus('all')"
-          >全部</button>
-        </div>
-        <button
-          class="toolbar-btn inline-flex"
-          :class="{ 'is-spinning': loading }"
-          :disabled="loading"
-          aria-label="刷新"
-          title="重新读取这一页的数据"
-          @click="loadData"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span>刷新</span>
-        </button>
-        <!-- 导出表格：手机上不提供（屏幕小、CSV 也不好用），电脑上照旧 -->
-        <button class="toolbar-btn hidden sm:inline-flex" :class="{ 'is-spinning': exporting }" :disabled="exporting" @click="handleExport">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span>{{ exporting ? '导出中…' : '导出表格' }}</span>
-        </button>
-        <button
-          v-if="view === 'completed'"
-          class="toolbar-btn hidden sm:inline-flex"
-          :disabled="!completedItems.length"
-          @click="printOpen = true"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M7 9V4h10v5M7 19H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M7 15h10v6H7z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span>打印</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- 已完成的时间段筛选。记录来源包含 completions 历史（重复提醒的每次完成），
-         所以这里的数字通常远大于「有 completed_at 的提醒数」。 -->
-    <section v-if="view === 'completed'" class="mb-4 rounded-2xl bg-muted/55 p-3 sm:p-4">
-      <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
-        <button
-          v-for="opt in rangeOptions"
-          :key="opt.value"
-          class="quick-chip"
-          :class="{ active: completedRange === opt.value }"
-          @click="setCompletedRange(opt.value)"
-        >{{ opt.label }}</button>
-      </div>
-      <!-- 后端算出来的实际区间（含当天）+ 生效的清单筛选。放在这里是为了让
-           「这个时间段是哪几天、还筛了哪些清单」一眼可见：条数不对时能立刻
-           看出是哪一层筛选造成的，而不是只能猜。 -->
-      <p v-if="completedSpan" class="mt-2 text-[11px] font-medium text-muted-foreground">
-        当前区间：<span class="font-bold text-foreground/80">{{ completedSpan }}</span>
-        <template v-if="completedFilterSummary">
-          <span class="mx-1">·</span>清单：<span class="font-bold text-foreground/80">{{ completedFilterSummary }}</span>
-        </template>
-      </p>
-      <!-- 选择显示哪些清单的完成记录；不选=全部。选择记在本地。 -->
-      <ListFilter v-model="completedListFilter" :lists="lists" class="mt-3" />
-      <div v-if="completedRange === 'custom'" class="mt-3 flex flex-wrap items-center gap-2">
-        <input v-model="customFrom" type="date" class="compact-input !w-auto" aria-label="开始日期" />
-        <span class="text-xs text-muted-foreground">至</span>
-        <input v-model="customTo" type="date" class="compact-input !w-auto" aria-label="结束日期" />
-        <button class="btn-primary !h-9 !px-4" :disabled="!customFrom || !customTo" @click="loadItems">查询</button>
-      </div>
-    </section>
-
-    <section v-if="loading" class="space-y-3">
-      <div v-for="n in 4" :key="n" class="h-20 animate-pulse rounded-2xl bg-surface/80"></div>
-    </section>
-
-    <!-- 已完成：只读的完成记录，不能「完成 / 稍后提醒」；底层提醒还在时才可以编辑或删除 -->
-    <section v-else-if="view === 'completed' && completedItems.length" class="space-y-2">
-      <article v-for="entry in completedItems" :key="`${entry.source}-${entry.id}`" class="reminder-row reminder-completed">
-        <button class="complete-button cursor-default" disabled :aria-label="entry.kind === 'note' ? '记事' : '已完成'">
-          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <button class="min-w-0 flex-1 text-left" :disabled="!entry.reminder_exists" @click="openCompletedEntry(entry)">
-          <div class="flex items-center gap-2">
-            <h3 class="truncate text-sm font-bold sm:text-[15px]">{{ entry.title }}</h3>
-            <span v-if="entry.kind === 'note'" class="tiny-badge">记事</span>
-            <span v-else-if="entry.repeat_rule && entry.repeat_rule !== 'none'" class="tiny-badge">{{ ruleLabel(entry.repeat_rule) }}</span>
-          </div>
-          <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground sm:mt-2">
-            <span class="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7v5l3 2" stroke-width="1.8" stroke-linecap="round"/></svg>
-              {{ formatCompletedAt(entry.completed_at) }}
-            </span>
-            <template v-if="entry.list_name">
+            class="complete-button"
+            :class="{ 'cursor-default': item.kind === 'note' }"
+            :disabled="item.kind === 'note'"
+            :aria-label="item.kind === 'note' ? '记事，无需完成' : item.completed_at ? '恢复提醒' : '完成提醒'"
+            @click.stop="toggleComplete(item)"
+          >
+            <svg v-if="item.completed_at" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="min-w-0 flex-1 text-left" @click="editItem(item)">
+            <div class="flex items-center gap-2">
+              <!-- 任务标题用所属清单的颜色：侧栏圆点、这里的标题、日历色块三处同色。
+                   颜色在侧栏「编辑清单」里改，改完会广播数据变更，本页与日历立即刷新。 -->
+              <h3 class="truncate text-sm font-bold sm:text-[15px]" :style="{ color: listColor(item.list_color) }">{{ item.title }}</h3>
+              <span v-if="item.kind === 'note'" class="tiny-badge">记事</span>
+              <span v-if="item.priority" class="priority-mark" :class="`priority-${item.priority}`">{{ '!'.repeat(item.priority) }}</span>
+              <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ item.calendar === 'lunar' ? `农历${ruleLabel(item.repeat_rule)}` : ruleLabel(item.repeat_rule) }}</span>
+              <span v-if="item.repeat_notify_minutes" class="tiny-badge">过期提醒</span>
+            </div>
+            <p v-if="item.notes" class="mt-0.5 truncate text-xs text-muted-foreground sm:mt-1">{{ item.notes }}</p>
+            <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground sm:mt-2">
+              <span class="inline-flex items-center gap-1" :class="{ 'text-rose-500': isOverdue(item) }">
+                <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7v5l3 2" stroke-width="1.8" stroke-linecap="round"/></svg>
+                {{ item.due_at ? formatDue(item.snoozed_until || item.due_at) : '无日期' }}
+              </span>
               <span class="h-1 w-1 rounded-full bg-border"></span>
-              <span>{{ entry.list_name }}</span>
-            </template>
-            <template v-if="!entry.reminder_exists">
-              <span class="h-1 w-1 rounded-full bg-border"></span>
-              <span>提醒已删除</span>
-            </template>
-          </div>
-        </button>
-        <div class="row-actions">
-          <button v-if="entry.reminder_exists" class="row-action hover:!text-rose-500" title="删除提醒" @click="removeCompleted(entry)">
-            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>{{ item.list_name }}</span>
+              <span v-if="item.channels?.length" class="h-1 w-1 rounded-full bg-border"></span>
+              <span v-if="item.channels?.length">{{ item.channels.map(channelName).join(' · ') }}</span>
+            </div>
           </button>
+          <div class="row-actions">
+            <button v-if="!item.completed_at && item.due_at && item.kind !== 'note'" class="row-action" title="稍后提醒" @click="snooze(item, 10)">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 8v4l3 2M5 3l-2 3m16-3 2 3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+            <button class="row-action hover:!text-rose-500" title="删除" @click="removeItem(item)">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </article>
+      </section>
+
+      <section v-else class="empty-state">
+        <div class="empty-art" aria-hidden="true">
+          <span class="empty-ring"></span>
+          <span class="empty-check"><svg viewBox="0 0 24 24" class="h-8 w-8" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="empty-dot dot-one"></span><span class="empty-dot dot-two"></span><span class="empty-dot dot-three"></span>
         </div>
-      </article>
-    </section>
+        <h3 class="mt-5 text-lg font-extrabold">{{ emptyTitle }}</h3>
+        <p class="mt-1 max-w-sm text-sm leading-6 text-muted-foreground">{{ emptyText }}</p>
+        <button v-if="view !== 'completed'" class="btn-primary mt-5" @click="focusQuickAdd">添加第一条提醒</button>
+      </section>
 
-    <section v-else-if="view !== 'completed' && items.length" class="space-y-2">
-      <article
-        v-for="item in items"
-        :key="item.id"
-        class="reminder-row group"
-        :class="{ 'reminder-completed': !!item.completed_at, 'reminder-overdue': isOverdue(item) }"
-      >
-        <button
-          class="complete-button"
-          :class="{ 'cursor-default': item.kind === 'note' }"
-          :disabled="item.kind === 'note'"
-          :aria-label="item.kind === 'note' ? '记事，无需完成' : item.completed_at ? '恢复提醒' : '完成提醒'"
-          @click.stop="toggleComplete(item)"
-        >
-          <svg v-if="item.completed_at" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <button class="min-w-0 flex-1 text-left" @click="editItem(item)">
-          <div class="flex items-center gap-2">
-            <!-- 任务标题用所属清单的颜色：侧栏圆点、这里的标题、日历色块三处同色。
-                 颜色在侧栏「编辑清单」里改，改完会广播数据变更，本页与日历立即刷新。 -->
-            <h3 class="truncate text-sm font-bold sm:text-[15px]" :style="{ color: listColor(item.list_color) }">{{ item.title }}</h3>
-            <span v-if="item.kind === 'note'" class="tiny-badge">记事</span>
-            <span v-if="item.priority" class="priority-mark" :class="`priority-${item.priority}`">{{ '!'.repeat(item.priority) }}</span>
-            <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ item.calendar === 'lunar' ? `农历${ruleLabel(item.repeat_rule)}` : ruleLabel(item.repeat_rule) }}</span>
-            <span v-if="item.repeat_notify_minutes" class="tiny-badge">过期提醒</span>
-          </div>
-          <p v-if="item.notes" class="mt-0.5 truncate text-xs text-muted-foreground sm:mt-1">{{ item.notes }}</p>
-          <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground sm:mt-2">
-            <span class="inline-flex items-center gap-1" :class="{ 'text-rose-500': isOverdue(item) }">
-              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7v5l3 2" stroke-width="1.8" stroke-linecap="round"/></svg>
-              {{ item.due_at ? formatDue(item.snoozed_until || item.due_at) : '无日期' }}
-            </span>
-            <span class="h-1 w-1 rounded-full bg-border"></span>
-            <span>{{ item.list_name }}</span>
-            <span v-if="item.channels?.length" class="h-1 w-1 rounded-full bg-border"></span>
-            <span v-if="item.channels?.length">{{ item.channels.map(channelName).join(' · ') }}</span>
-          </div>
-        </button>
-        <div class="row-actions">
-          <button v-if="!item.completed_at && item.due_at && item.kind !== 'note'" class="row-action" title="稍后提醒" @click="snooze(item, 10)">
-            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 8v4l3 2M5 3l-2 3m16-3 2 3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z" stroke-width="1.8" stroke-linecap="round"/></svg>
-          </button>
-          <button class="row-action hover:!text-rose-500" title="删除" @click="removeItem(item)">
-            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-        </div>
-      </article>
-    </section>
+      <!-- 提醒编辑器：与日历视图共用同一个组件，改一处两边同时生效 -->
+      <ReminderEditor
+        v-model="editorOpen"
+        :reminder-id="editingId"
+        :lists="navLists"
+        :channels="selectableChannels"
+        @saved="onEditorSaved"
+      />
 
-    <section v-else class="empty-state">
-      <div class="empty-art" aria-hidden="true">
-        <span class="empty-ring"></span>
-        <span class="empty-check"><svg viewBox="0 0 24 24" class="h-8 w-8" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        <span class="empty-dot dot-one"></span><span class="empty-dot dot-two"></span><span class="empty-dot dot-three"></span>
-      </div>
-      <h3 class="mt-5 text-lg font-extrabold">{{ emptyTitle }}</h3>
-      <p class="mt-1 max-w-sm text-sm leading-6 text-muted-foreground">{{ emptyText }}</p>
-      <button v-if="view !== 'completed'" class="btn-primary mt-5" @click="focusQuickAdd">添加第一条提醒</button>
-    </section>
+      <!-- 打印完成记录：勾选要打印的列，纸张方向/字号按列数自动适配 -->
+      <PrintDialog
+        v-model="printOpen"
+        :items="completedItems"
+        :range-label="completedSpan"
+        :list-label="completedFilterSummary"
+        :site-title="authStore.siteTitle || '工作序记'"
+      />
 
-    <!-- 提醒编辑器：与日历视图共用同一个组件，改一处两边同时生效 -->
-    <ReminderEditor
-      v-model="editorOpen"
-      :reminder-id="editingId"
-      :lists="lists"
-      :channels="selectableChannels"
-      @saved="onEditorSaved"
-    />
+      <Toast :message="toast.message" :type="toast.type" />
 
-    <!-- 打印完成记录：勾选要打印的列，纸张方向/字号按列数自动适配 -->
-    <PrintDialog
-      v-model="printOpen"
-      :items="completedItems"
-      :range-label="completedSpan"
-      :list-label="completedFilterSummary"
-      :site-title="authStore.siteTitle || '工作序记'"
-    />
-
-    <Toast :message="toast.message" :type="toast.type" />
-
-    <ConfirmDialog
-      v-model="removeVisible"
-      danger
-      title="删除这条提醒？"
-      :message="`「${removeTarget?.title || ''}」删除后无法恢复。`"
-      confirm-text="删除"
-      loading-text="删除中…"
-      :loading="removeLoading"
-      @confirm="confirmRemove"
-    />
+      <ConfirmDialog
+        v-model="removeVisible"
+        danger
+        title="删除这条提醒？"
+        :message="`「${removeTarget?.title || ''}」删除后无法恢复。`"
+        confirm-text="删除"
+        loading-text="删除中…"
+        :loading="removeLoading"
+        @confirm="confirmRemove"
+      />
+    </template>
   </div>
 </template>
 
@@ -374,7 +390,7 @@ const printOpen = ref(false)
 const completedFilterSummary = computed(() => {
   const ids = completedListFilter.value
   if (!ids.length) return ''
-  const names = lists.value.filter((l) => ids.includes(l.id)).map((l) => l.name)
+  const names = navLists.value.filter((l) => ids.includes(l.id)).map((l) => l.name)
   return names.length ? names.join('、') : `${ids.length} 个清单`
 })
 const completedRange = ref<CompletedRangeOption>('all')
@@ -441,6 +457,11 @@ let quickChannelsTouched = false
 const view = computed(() => String(route.meta.reminderView || 'today'))
 const selectedListID = computed(() => route.name === 'ReminderList' ? Number(route.params.id) : undefined)
 const selectedList = computed(() => lists.value.find(x => x.id === selectedListID.value))
+// 「信用卡账单」是固定栏目：这一页只渲染卡片面板（见模板最上面那一支），
+// 快速新建、提醒列表、完成记录筛选都不出现。栏目被后台关掉时不认这一页。
+const isCardBucketPage = computed(() => selectedList.value?.template === 'credit_card' && authStore.creditCardEnabled)
+// 下拉/筛选里能选的只有普通清单（卡片栏目不是「清单」，不该出现在这些地方）
+const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card'))
 const pageTitle = computed(() => selectedList.value?.name || String(route.meta.title || '今天'))
 const eyebrow = computed(() => selectedList.value ? '我的清单' : view.value === 'today' ? '此刻最重要' : '工作序记')
 const accentColor = computed(() => selectedList.value ? listColor(selectedList.value.color) : view.value === 'completed' ? '#10b981' : '#3182f6')
@@ -467,7 +488,7 @@ const quickDateAnchor = ref<HTMLElement | null>(null)
 //   - 今天 / 计划 / 全部 / 已完成       → 用后台设置的默认清单。
 // 只依赖「路由里的清单」和「后台默认清单」这两个来源，别依赖整个 lists 数组：
 // 别人同步过来的实时刷新会重取清单列表，那样会把用户刚手动选的清单冲掉。
-const defaultListID = computed(() => lists.value.find(x => x.is_default)?.id || lists.value[0]?.id || 0)
+const defaultListID = computed(() => navLists.value.find(x => x.is_default)?.id || navLists.value[0]?.id || 0)
 const quickTargetListID = computed(() => selectedListID.value || defaultListID.value || 0)
 watch([selectedListID, defaultListID], () => {
   quick.list_id = quickTargetListID.value
@@ -546,6 +567,8 @@ async function loadRouteData() {
       await loadData()
       return
     }
+    // 信用卡账单页只有卡片：这一页不需要（也不该）拉提醒列表。
+    if (isCardBucketPage.value) return
     await loadItems()
   } catch (err: any) {
     showToast(err.response?.data?.message || '读取提醒失败', 'error')
@@ -554,6 +577,8 @@ async function loadRouteData() {
   }
 }
 async function loadItems() {
+  // 信用卡账单页不显示提醒列表；卡片面板自己会去拉卡片与本周待还。
+  if (isCardBucketPage.value) return
   if (view.value === 'completed') {
     const res = await getCompletedHistory({
       range: completedRange.value,
@@ -820,7 +845,7 @@ function ruleLabel(rule: string) { return ({ daily: '每天', weekly: '每周', 
 function listColor(color: string) { return listColorHex(color) }
 
 // 快速新建里那个清单下拉当前选中项的色名（色点跟清单同色）
-const quickListColor = computed(() => lists.value.find((l) => l.id === quick.list_id)?.color || 'blue')
+const quickListColor = computed(() => navLists.value.find((l) => l.id === quick.list_id)?.color || 'blue')
 function changed() { window.dispatchEvent(new CustomEvent('reminder-data-changed')) }
 function showToast(message: string, type: 'success' | 'error' = 'success') { toast.message = ''; setTimeout(() => Object.assign(toast, { message, type }), 0) }
 
@@ -829,6 +854,13 @@ function refreshRealtimeData() {
   clockNow.value = Date.now()
   void loadItems()
 }
+
+// 管理员在后台把「信用卡账单」栏目关掉后，还停在那一页的窗口要送回「今天」。
+watch([selectedList, () => authStore.creditCardEnabled], () => {
+  if (selectedList.value?.template === 'credit_card' && !authStore.creditCardEnabled) {
+    void router.replace('/admin')
+  }
+})
 
 onMounted(() => {
   loadData()

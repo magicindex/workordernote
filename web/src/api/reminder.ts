@@ -37,6 +37,8 @@ export interface ReminderList {
   is_default: boolean
   open_count: number
   template?: 'general' | 'credit_card'
+  /** 信用卡账单栏目才有：这一栏里有几张卡（侧栏角标用） */
+  card_count?: number
   card_name?: string
   card_bank?: string
   card_no?: string
@@ -408,6 +410,34 @@ export const createCard = (data: CardInput) => request.post('/api/reminder/cards
 export const updateCard = (id: number, data: CardInput) => request.patch(`/api/reminder/cards/${id}`, data)
 export const deleteCard = (id: number) => request.delete(`/api/reminder/cards/${id}`)
 export const regenerateCardPlan = (id: number) => request.post(`/api/reminder/cards/${id}/plan`)
+
+// 「本周待还」：信用卡栏目页那条长条卡片右半边用的数据。
+export interface WeekDueCard {
+  card_id: number
+  bank: string
+  name: string
+  color: string
+  tail: string
+  period: string
+  due_date: string
+  days_left: number
+  overdue: boolean
+  amount_cents: number
+  minimum_cents: number
+}
+
+export interface WeekDue {
+  today: string
+  weekday: string
+  week_start: string
+  week_end: string
+  count: number
+  overdue: number
+  total_cents: number
+  cards: WeekDueCard[]
+}
+
+export const getWeekDueCards = () => request.get('/api/reminder/cards/week')
 export const getCardSchedule = (id: number, months = 12) =>
   request.get(`/api/reminder/cards/${id}/schedule?months=${months}`)
 export const saveCardStatement = (id: number, period: string, data: { amount_cents: number; minimum_cents?: number; note?: string }) =>

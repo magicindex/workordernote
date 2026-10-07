@@ -129,6 +129,7 @@ const emit = defineEmits<{
 const groupTitleMap: Record<string, string> = {
   general: '站点设置',
   access: '访问控制',
+  features: '功能开关',
   appearance: '外观',
   system: '系统维护',
   android: '安卓客户端',

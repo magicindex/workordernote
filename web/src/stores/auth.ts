@@ -47,6 +47,9 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<any>(null)
   const requireLogin = ref(true)
   const allowRegister = ref(true)
+  // 后台偏好「信用卡账单栏目」：侧栏那个固定栏目在不在，由它决定。
+  // 留在 store 里是为了「管理员刚保存偏好、侧栏立刻跟着变」，不用重进页面。
+  const creditCardEnabled = ref(true)
   const setupRequired = ref(false)
   const siteTitle = ref('工作序记')
   // 飞牛部署下授权登录要用的两个信息，随启动引导一起取回，登录/注册页不再
@@ -98,6 +101,7 @@ export const useAuthStore = defineStore('auth', () => {
     const configs = data.configs || {}
     requireLogin.value = configs.require_login !== 'false'
     allowRegister.value = configs.allow_register !== 'false'
+    creditCardEnabled.value = configs.credit_card_enabled !== 'false'
     if (configs.site_title) siteTitle.value = configs.site_title
     if (data.service_port) servicePort.value = data.service_port
     // 服务端运行形态是按钮显隐的唯一权威；字段缺席（旧后端）时保留编译期
@@ -309,5 +313,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { token, user, requireLogin, allowRegister, setupRequired, siteTitle, hasSecurityQuestions, securityPromptDismissed, servicePort, fnosGatewayEntry, fnosApp, sessionSource, followsFnOSSession, isAuthenticated, isAdmin, init, resetInit, setToken, setUser, endSession, logout, dropIfFnOSSessionGone, checkSetupRequired, dismissSecurityPrompt, refreshSecurityQuestions }
+  function setCreditCardEnabled(on: boolean) {
+    creditCardEnabled.value = on
+  }
+
+  return { token, user, requireLogin, allowRegister, creditCardEnabled, setCreditCardEnabled, setupRequired, siteTitle, hasSecurityQuestions, securityPromptDismissed, servicePort, fnosGatewayEntry, fnosApp, sessionSource, followsFnOSSession, isAuthenticated, isAdmin, init, resetInit, setToken, setUser, endSession, logout, dropIfFnOSSessionGone, checkSetupRequired, dismissSecurityPrompt, refreshSecurityQuestions }
 })
