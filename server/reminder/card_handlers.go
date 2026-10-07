@@ -77,11 +77,6 @@ func cardColor(name string) string {
 func handleListCards(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := currentUserID(c)
-		// 栏目被这个用户关掉时：卡片数据还在，但这一栏不对外开放（前端也不会显示入口）。
-		if !creditCardFeatureEnabled(db, userID) {
-			response.Success(c, []CardDTO{})
-			return
-		}
 		listID, _ := strconv.Atoi(c.Query("list_id"))
 		if listID == 0 {
 			bucket, err := ensureCardBucket(db, userID)
@@ -104,10 +99,6 @@ func handleListCards(db *gorm.DB) gin.HandlerFunc {
 func handleWeekDueCards(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := currentUserID(c)
-		if !creditCardFeatureEnabled(db, userID) {
-			response.Success(c, WeekDueDTO{Cards: []WeekDueCard{}})
-			return
-		}
 		out, err := weekDueCards(db, userID, time.Now())
 		if err != nil {
 			response.ErrorInternal(c, "读取本周待还失败")
@@ -133,10 +124,9 @@ func handleCreateCard(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		userID := currentUserID(c)
-		if !creditCardFeatureEnabled(db, userID) {
-			response.ErrorBadRequest(c, "「信用卡账单」栏目还没打开，请先到偏好设置 → 功能开关里打开")
-			return
-		}
+		// 注意：个人开关只管**显示**（侧栏那一行、卡片页、以及卡片提醒要不要出现在列表/日历里），
+		// 不是接口权限——所以关着开关也允许建卡。否则同步/导入带过来的账号（还没打开开关）
+		// 连卡都建不了，而同步本身又会把卡片直接落库，语义就自相矛盾了。
 		bucket, err := ensureCardBucket(db, userID)
 		if err != nil {
 			response.ErrorInternal(c, "准备信用卡账单栏目失败")
