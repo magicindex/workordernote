@@ -1120,7 +1120,9 @@ func listCalendarItems(db *gorm.DB, userID uint, from, to time.Time, listIDs []u
 			DueAt: *at, DueDate: at.In(loc).Format("2006-01-02"),
 			AllDay: r.AllDay && r.Kind == KindTask, Completed: r.CompletedAt != nil,
 			Kind: r.Kind, Priority: r.Priority, RepeatRule: r.RepeatRule,
-			Notes: r.Notes, CompletedAt: r.CompletedAt, CardRole: r.CardRole,
+			// CardID / CardRole 都要带上：日历靠 card_role 上色，靠 card_id 才能关联回卡片
+			// （之前只带了 CardRole，card_id 一直是空的——由 verify-097 的日历断言抓出来）。
+			Notes: r.Notes, CompletedAt: r.CompletedAt, CardRole: r.CardRole, CardID: r.CardID,
 		}
 		if l, ok := listByID[r.ListID]; ok {
 			item.ListName = l.Name

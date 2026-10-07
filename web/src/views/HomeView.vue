@@ -14,7 +14,8 @@
           <p class="mt-2 hidden text-sm text-muted-foreground sm:block">卡片、账单日与本周待还都在这一页；一个栏目装下所有卡。</p>
           <p class="truncate text-xs text-muted-foreground sm:hidden">卡片与本周待还都在这一页</p>
         </div>
-        <div class="min-w-0 w-full lg:max-w-[34rem]">
+        <!-- 宽度放到最大：占满标题右侧剩下的空间（不再设上限），窄屏自动折到标题下方 -->
+        <div class="min-w-0 w-full lg:flex-1">
           <WeekDueStrip :refresh-key="weekRefreshKey" />
         </div>
       </section>
@@ -223,7 +224,9 @@
           </template>
         </p>
         <!-- 选择显示哪些清单的完成记录；不选=全部。选择记在本地。 -->
-        <ListFilter v-model="completedListFilter" :lists="navLists" class="mt-3" />
+        <!-- 筛选用**全部**清单（含「信用卡账单」栏目）：卡片提醒也会出现在完成记录里，
+             能按它筛；而「新建提醒的清单下拉」仍用 navLists（不能往卡片栏目里塞任务）。 -->
+        <ListFilter v-model="completedListFilter" :lists="lists" class="mt-3" />
         <div v-if="completedRange === 'custom'" class="mt-3 flex flex-wrap items-center gap-2">
           <input v-model="customFrom" type="date" class="compact-input !w-auto" aria-label="开始日期" />
           <span class="text-xs text-muted-foreground">至</span>
@@ -402,7 +405,7 @@ const printOpen = ref(false)
 const completedFilterSummary = computed(() => {
   const ids = completedListFilter.value
   if (!ids.length) return ''
-  const names = navLists.value.filter((l) => ids.includes(l.id)).map((l) => l.name)
+  const names = lists.value.filter((l) => ids.includes(l.id)).map((l) => l.name)
   return names.length ? names.join('、') : `${ids.length} 个清单`
 })
 const completedRange = ref<CompletedRangeOption>('all')

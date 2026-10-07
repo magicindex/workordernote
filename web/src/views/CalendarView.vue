@@ -21,7 +21,8 @@
       </div>
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
         <!-- 选择哪些清单显示在日历里；不选=全部。选择记在本地。 -->
-        <ListFilter v-model="listFilter" :lists="navLists" />
+        <!-- 用全部清单：信用卡账单栏目的提醒（账单日/还款日/提前提醒）也在日历里，要能按它筛 -->
+        <ListFilter v-model="listFilter" :lists="lists" />
         <div class="flex items-center gap-3 text-[11px] font-semibold text-muted-foreground sm:text-xs">
           <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-brand-500"></i>未完成 {{ openCount }}</span>
           <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-emerald-500"></i>已完成 {{ doneCount }}</span>
@@ -322,7 +323,7 @@ const printOpen = ref(false)
 // 顶部说明里的清单筛选文案：没勾 = 全部，勾了就列名字
 const printListLabel = computed(() => {
   if (!listFilter.value.length) return '全部'
-  return navLists.value.filter((l) => listFilter.value.includes(l.id)).map((l) => l.name).join('、') || '全部'
+  return lists.value.filter((l) => listFilter.value.includes(l.id)).map((l) => l.name).join('、') || '全部'
 })
 
 // 编码器需要清单与通知渠道列表

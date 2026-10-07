@@ -173,6 +173,17 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 	if len(week) == 0 {
 		t.Fatal("开启时日历里应该有卡片提醒")
 	}
+	// 日历项要带上 card_id：前端靠 card_role 上色、靠 card_id 关联回卡片。
+	// （这个字段曾被漏掉，返回的 card_id 一直是空——由 verify-097 的日历断言抓出来。）
+	linked := false
+	for _, c := range week {
+		if c.CardID == card.ID && c.CardRole != "" {
+			linked = true
+		}
+	}
+	if !linked {
+		t.Fatalf("日历项应带上 card_id 与 card_role：%+v", week[:min(3, len(week))])
+	}
 
 	setCardFeature(t, userID, false)
 	if creditCardFeatureEnabled(appDB, userID) {

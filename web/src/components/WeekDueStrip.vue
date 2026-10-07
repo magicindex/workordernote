@@ -101,7 +101,7 @@ watch(() => props.refreshKey, () => { void load() }, { immediate: true })
 <style scoped>
 /* 时间卡片：整体可换行——页面窄时「今天」与小卡面自动分行，小卡面之间也会换行。 */
 .week-strip {
-  @apply flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-border/70 bg-surface px-4 py-2.5;
+  @apply flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-2xl border border-border/70 bg-surface px-4 py-2.5;
 }
 /* 缩略小卡面：沿用大卡面的渐变，只是缩小 */
 .week-mini-card {
