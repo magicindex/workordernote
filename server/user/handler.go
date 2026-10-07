@@ -398,15 +398,27 @@ func handleBootstrap(db *gorm.DB, fnOSApp bool, servicePort string) gin.HandlerF
 		}
 
 		// 个人偏好（ScopeUser，例如「信用卡账单栏目」开关）要以**当前登录用户**的值
-		// 为准：GetPublicConfigs 只按「公开」取，拿到的是默认行。这里把该用户自己的
-		// 值并进来（只并用户级键，不会覆盖系统级配置）。未登录时跳过。
+		// 为准，没设置就用注册表默认值。
+		//
+		// 为什么不能直接用 GetPublicConfigs 的结果：它按「public」取行，system_configs
+		// 里可能残留 user_id=0 的旧行（某个键从系统级改成用户级之后，老行还在），
+		// 那样读到的默认值会被带偏（实测：信用卡开关改成个人偏好后，未登录仍读到 true，
+		// 与后端按注册表默认算出的 false 不一致 —— 侧栏冒出一行、页面里却是空的）。
+		// 所以这里对**所有**用户级公开键都重算一遍：该用户的值 → 注册表默认。
+		mine := map[string]string{}
 		if uid := c.GetUint("userID"); uid > 0 {
-			if mine, err := sysconfig.GetUserConfigs(db, uid); err == nil {
-				for key, value := range mine {
-					if def, ok := sysconfig.GetConfigDef(key); ok && def.Scope == sysconfig.ScopeUser {
-						configs[key] = value
-					}
-				}
+			if rows, err := sysconfig.GetUserConfigs(db, uid); err == nil {
+				mine = rows
+			}
+		}
+		for _, def := range sysconfig.ListConfigs(sysconfig.ScopeUser) {
+			if def.Internal || !def.Public {
+				continue
+			}
+			if value := mine[def.Key]; value != "" {
+				configs[def.Key] = value
+			} else {
+				configs[def.Key] = def.Default
 			}
 		}
 

@@ -212,6 +212,12 @@ func TestBootstrapReturnsStartupState(t *testing.T) {
 	if !ok || len(configs) == 0 {
 		t.Fatalf("bootstrap must include public configs, got %v", data["configs"])
 	}
+	// 用户级公开配置（「信用卡账单栏目」开关）必须报**注册表默认**，不能受
+	// system_configs 里可能残留的 user_id=0 旧行影响：后端按默认算出「关」，
+	// 前端却读到「开」的话，侧栏会冒出一行而页面是空的。
+	if got := configs["credit_card_enabled"]; got != "false" {
+		t.Fatalf("匿名 bootstrap 的信用卡开关应为注册表默认 false，实际 %v", got)
+	}
 	auth := data["auth"].(map[string]interface{})
 	if auth["authenticated"] != false {
 		t.Fatalf("anonymous bootstrap must not be authenticated")
