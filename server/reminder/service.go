@@ -26,8 +26,11 @@ type SaveReminderInput struct {
 	Notes string `json:"notes"`
 	// Kind is "task" (default) or "note". A note ignores every scheduling
 	// field and is stored as already completed.
-	Kind       string     `json:"kind"`
-	ListID     uint       `json:"list_id"`
+	Kind   string `json:"kind"`
+	ListID uint   `json:"list_id"`
+	// CardRole 只由信用卡还款计划生成时写入（statement/due），
+	// 普通新建与编辑不传，保持原值。
+	CardRole   string     `json:"card_role"`
 	Priority   int        `json:"priority"`
 	DueAt      *time.Time `json:"due_at"`
 	AllDay     bool       `json:"all_day"`
@@ -203,6 +206,7 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 		}
 		created = Reminder{
 			UserID: userID, ListID: in.ListID, Title: in.Title, Notes: in.Notes,
+			CardRole: in.CardRole,
 			Kind:     in.Kind,
 			Priority: in.Priority, DueAt: in.DueAt, AllDay: in.AllDay,
 			RepeatRule: in.RepeatRule, Calendar: in.Calendar, LunarAnchor: in.LunarAnchor,
@@ -1110,7 +1114,7 @@ func listCalendarItems(db *gorm.DB, userID uint, from, to time.Time, listIDs []u
 			DueAt: *at, DueDate: at.In(loc).Format("2006-01-02"),
 			AllDay: r.AllDay && r.Kind == KindTask, Completed: r.CompletedAt != nil,
 			Kind: r.Kind, Priority: r.Priority, RepeatRule: r.RepeatRule,
-			Notes: r.Notes, CompletedAt: r.CompletedAt,
+			Notes: r.Notes, CompletedAt: r.CompletedAt, CardRole: r.CardRole,
 		}
 		if l, ok := listByID[r.ListID]; ok {
 			item.ListName = l.Name

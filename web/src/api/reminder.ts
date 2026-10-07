@@ -28,6 +28,15 @@ export interface CompletedItem {
   reminder_exists: boolean
 }
 
+/** 信用卡清单的倒计时摘要（后端按当前时间算好）。 */
+export interface CardSummary {
+  statement_date: string
+  due_date: string
+  days_to_statement: number
+  days_to_due: number
+  grace_days: number
+}
+
 export interface ReminderList {
   id: number
   name: string
@@ -36,6 +45,16 @@ export interface ReminderList {
   position: number
   is_default: boolean
   open_count: number
+  /** general（默认）或 credit_card：一个清单 = 一张卡 */
+  template?: 'general' | 'credit_card'
+  card_name?: string
+  card_bank?: string
+  card_no?: string
+  card_statement_day?: number
+  card_due_day?: number
+  card_notes?: string
+  card_auto_repeat?: boolean
+  card_summary?: CardSummary | null
 }
 
 export interface ReminderItem {
@@ -124,6 +143,8 @@ export interface CalendarItem {
   repeat_rule: string
   /** 备注原文（日历界面不展示，导出「本月」时带上） */
   notes?: string
+  /** 信用卡还款计划生成的项：statement=账单日、due=还款日（日历里两色标记） */
+  card_role?: '' | 'statement' | 'due'
   /**
    * 完成时间。任务用它填导出表格的「完成时间」列；记事没有到期时间，
    * 它的**记录时间**放在 due_at 里（后端取 completed_at），导出时写进完成时间列。
@@ -167,11 +188,25 @@ export interface ChannelStatus {
 
 export const getSummary = () => request.get('/api/reminder/summary')
 export const getLists = () => request.get('/api/reminder/lists')
-export const createList = (data: { name: string; color?: string; icon?: string }) =>
+export interface ListCardInput {
+  template?: 'general' | 'credit_card'
+  card_name?: string
+  card_bank?: string
+  card_no?: string
+  card_statement_day?: number
+  card_due_day?: number
+  card_notes?: string
+  card_auto_repeat?: boolean
+  regenerate_plan?: boolean
+}
+
+export const createList = (data: { name: string; color?: string; icon?: string } & ListCardInput) =>
   request.post('/api/reminder/lists', data)
-export const updateList = (id: number, data: Partial<ReminderList>) =>
+export const updateList = (id: number, data: Partial<ReminderList> & ListCardInput) =>
   request.patch(`/api/reminder/lists/${id}`, data)
 export const deleteList = (id: number) => request.delete(`/api/reminder/lists/${id}`)
+/** 信用卡：重建还款计划（账单日 + 还款日两条提醒） */
+export const regenerateCardPlan = (id: number) => request.post(`/api/reminder/lists/${id}/card-plan`)
 
 /**
  * status='all' 表示连已完成的也返回（列表页「未完成 / 全部」开关的「全部」）。

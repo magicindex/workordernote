@@ -35,16 +35,26 @@ type syncUser struct {
 }
 
 type syncList struct {
-	UID       string    `json:"uid"`
-	Owner     string    `json:"owner"`
-	Name      string    `json:"name"`
-	Color     string    `json:"color"`
-	Icon      string    `json:"icon"`
-	Position  int       `json:"position"`
-	IsDefault bool      `json:"is_default"`
-	Deleted   bool      `json:"deleted"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	UID       string `json:"uid"`
+	Owner     string `json:"owner"`
+	Name      string `json:"name"`
+	Color     string `json:"color"`
+	Icon      string `json:"icon"`
+	Position  int    `json:"position"`
+	IsDefault bool   `json:"is_default"`
+	// 信用卡清单的卡片信息：不同步的话，另一台机器上就只剩一个空清单，
+	// 看不到卡号/账单日，也生成不了还款计划。
+	Template         string    `json:"template,omitempty"`
+	CardName         string    `json:"card_name,omitempty"`
+	CardBank         string    `json:"card_bank,omitempty"`
+	CardNo           string    `json:"card_no,omitempty"`
+	CardStatementDay int       `json:"card_statement_day,omitempty"`
+	CardDueDay       int       `json:"card_due_day,omitempty"`
+	CardNotes        string    `json:"card_notes,omitempty"`
+	CardAutoRepeat   bool      `json:"card_auto_repeat,omitempty"`
+	Deleted          bool      `json:"deleted"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type syncReminder struct {
@@ -53,6 +63,7 @@ type syncReminder struct {
 	ListUID             string     `json:"list_uid"`
 	Title               string     `json:"title"`
 	Notes               string     `json:"notes"`
+	CardRole            string     `json:"card_role,omitempty"`
 	Kind                string     `json:"kind"`
 	Priority            int        `json:"priority"`
 	DueAt               *time.Time `json:"due_at,omitempty"`

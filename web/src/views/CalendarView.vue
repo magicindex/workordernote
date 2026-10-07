@@ -90,6 +90,16 @@
                 class="mt-0.5 truncate text-[9px] font-semibold leading-none sm:text-[10px]"
                 :class="lunarClass(cell)"
               >{{ lunarLabel(cell) }}</span>
+              <!-- 信用卡：账单日（琥珀）/ 还款日（玫红）各一个小点，一眼看出这个月这两天在哪 -->
+              <span v-if="cardMarks(cell).length" class="mt-0.5 flex shrink-0 gap-0.5" data-card-marks>
+                <i
+                  v-for="role in cardMarks(cell)"
+                  :key="role"
+                  class="h-1.5 w-1.5 rounded-full"
+                  :style="{ background: role === 'statement' ? '#f59e0b' : '#f43f5e' }"
+                  :title="role === 'statement' ? '信用卡账单日' : '信用卡还款日'"
+                ></i>
+              </span>
             </div>
 
             <!-- 桌面：显示提醒标题；手机：只显示圆点 -->
@@ -99,11 +109,11 @@
                 :key="item.id"
                 class="cal-task flex min-w-0 items-center gap-1 rounded-md px-1 py-[1px] font-semibold leading-tight"
                 :class="{ 'opacity-55 line-through': item.completed && item.kind !== 'note' }"
-                :style="{ background: tint(item.list_color), color: ink(item.list_color) }"
+                :style="chipStyle(item)"
               >
                 <!-- 记事用「记」字标记而不是清单圆点：一眼区分「记录」和「要做的事」 -->
                 <i v-if="item.kind === 'note'" class="cal-note-mark shrink-0">记</i>
-                <i v-else class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ background: dot(item.list_color) }"></i>
+                <i v-else class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ background: chipDot(item) }"></i>
                 <span class="truncate">{{ item.title }}</span>
               </span>
               <span v-if="extraCount(cell) > 0" class="cal-task px-1 font-bold text-muted-foreground">+{{ extraCount(cell) }}</span>
@@ -417,6 +427,32 @@ function dayNumberClass(c: LunarDayInfo) {
 const tint = listTint
 const ink = listInk
 const dot = listInk
+
+// 信用卡的两个日子用固定双色（账单日琥珀、还款日玫红），其余提醒仍用清单色——
+// 这样即使在同一个清单里，这两天也能一眼分出来。
+const CARD_STATEMENT_COLOR = 'amber'
+const CARD_DUE_COLOR = 'rose'
+function cardColorRole(item: CalendarItem): string | null {
+  if (item.card_role === 'statement') return CARD_STATEMENT_COLOR
+  if (item.card_role === 'due') return CARD_DUE_COLOR
+  return null
+}
+function chipStyle(item: CalendarItem) {
+  const role = cardColorRole(item)
+  const colorName = role || item.list_color
+  return { background: tint(colorName), color: ink(colorName) }
+}
+function chipDot(item: CalendarItem) {
+  return ink(cardColorRole(item) || item.list_color)
+}
+/** 这一天里有哪些信用卡标记（账单日/还款日），按固定顺序返回。 */
+function cardMarks(cell: LunarDayInfo) {
+  const roles = new Set((byDate.value.get(cellKey(cell)) || []).map((i) => i.card_role).filter(Boolean) as string[])
+  const out: string[] = []
+  if (roles.has('statement')) out.push('statement')
+  if (roles.has('due')) out.push('due')
+  return out
+}
 
 function timeLabel(item: CalendarItem) {
   // 记事的 due_at 是它的记录时间（后端取 completed_at），说「记录」比「到期」准确。

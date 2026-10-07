@@ -71,13 +71,6 @@
             </button>
           </div>
 
-          <form v-if="creatingList" class="mx-2 mt-3 rounded-xl border border-brand-500/20 bg-brand-500/5 p-2" @submit.prevent="submitList">
-            <input ref="listInput" v-model="newListName" class="w-full bg-transparent px-2 py-1 text-sm outline-none" maxlength="40" placeholder="清单名称" @keydown.esc="creatingList = false" />
-            <div class="mt-2 flex justify-end gap-1">
-              <button type="button" class="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted" @click="creatingList = false">取消</button>
-              <button class="rounded-lg bg-brand-500 px-2 py-1 text-xs font-semibold text-white">创建</button>
-            </div>
-          </form>
 
           <RouterLink
             to="/admin/all"
@@ -124,7 +117,16 @@
                 @keydown.esc.prevent="cancelRename"
                 @blur="commitRename(list)"
               />
-              <span v-else class="flex-1 truncate">{{ list.name }}</span>
+              <span v-else class="flex min-w-0 flex-1 items-center gap-1">
+                <span class="truncate">{{ list.name }}</span>
+                <!-- 信用卡清单：一个小卡标记，和普通清单一眼区分 -->
+                <span
+                  v-if="list.template === 'credit_card'"
+                  class="rail-hide shrink-0 rounded-md bg-rose-500/12 px-1 text-[10px] font-bold leading-4 text-rose-500"
+                  data-card-badge
+                  title="信用卡清单：自动生成账单日与还款日提醒"
+                >卡</span>
+              </span>
               <!-- 默认清单标识；改默认清单在「偏好设置」里操作 -->
               <span v-if="list.is_default" class="rail-hide shrink-0 text-amber-400" title="默认清单" aria-label="默认清单">
                 <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor"><path d="m12 3.6 2.6 5.27 5.82.85-4.21 4.1.99 5.8L12 16.87l-5.2 2.75.99-5.8-4.21-4.1 5.82-.85L12 3.6Z"/></svg>
@@ -284,6 +286,13 @@
     <!-- 版本信息与迭代说明 -->
     <VersionDialog v-model="versionOpen" :version="appVersion" :build-time="appBuildTime" />
 
+    <!-- 新建清单：先选模板（通用 / 信用卡），信用卡填完卡片信息自动生成还款计划 -->
+    <ListCreateDialog
+      v-model="creatingList"
+      :default-color="['blue', 'violet', 'rose', 'amber', 'emerald'][lists.length % 5]"
+      @created="onListCreated"
+    />
+
     <!-- 清单行的右键 / 长按菜单 -->
     <ContextMenu
       v-model:open="listMenu.open"
@@ -364,6 +373,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import VersionDialog from '../components/VersionDialog.vue'
 import Modal from '../components/Modal.vue'
+import ListCreateDialog from '../components/ListCreateDialog.vue'
 import ContextMenu from '../components/ContextMenu.vue'
 import { isNarrowNow, useIsNarrow } from '../utils/use-narrow'
 import type { ContextMenuItem } from '../components/ContextMenu.vue'
@@ -373,7 +383,6 @@ import ReminderAlert from '../components/ReminderAlert.vue'
 import { useAuthStore } from '../stores/auth'
 import {
   completeReminder,
-  createList,
   getLists,
   getNotifications,
   getRevision,
@@ -411,8 +420,6 @@ const settingsOpen = ref(lsGet('ui_settings_open') === '1')
 const lists = ref<ReminderList[]>([])
 const summary = ref<Record<string, number>>({})
 const creatingList = ref(false)
-const newListName = ref('')
-const listInput = ref<HTMLInputElement | null>(null)
 const realtimeToast = ref('')
 const appVersion = ref('')
 const appBuildTime = ref('')
@@ -444,12 +451,6 @@ const greeting = computed(() => {
 })
 const dayLabel = computed(() => new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date()))
 
-watch(creatingList, async (open) => {
-  if (open) {
-    await nextTick()
-    listInput.value?.focus()
-  }
-})
 function isActive(to: string) {
   return to === '/admin' ? route.path === '/admin' : route.path === to
 }
@@ -737,12 +738,10 @@ async function submitListEditor() {
   }
 }
 
-async function submitList() {
-  if (!newListName.value.trim()) return
-  await createList({ name: newListName.value.trim(), color: ['blue', 'violet', 'rose', 'amber', 'emerald'][lists.value.length % 5] })
-  newListName.value = ''
-  creatingList.value = false
+// 新建清单成功后：刷新侧栏，并直接进这个清单（信用卡清单进去就能看到还款计划）
+async function onListCreated(created: { id: number }) {
   await refreshNavigation()
+  if (created?.id) await router.push(`/admin/list/${created.id}`)
 }
 async function refreshNavigation() {
   try {

@@ -19,6 +19,9 @@
       </label>
     </section>
 
+    <!-- 信用卡清单：卡片信息 + 账单日/还款日倒计时（普通清单不显示） -->
+    <CreditCardPanel v-if="selectedList" :list="selectedList" @changed="loadData" />
+
     <section v-if="view !== 'completed'" class="quick-card" :class="{ 'quick-card-expanded': quickExpanded }">
       <div class="flex items-start gap-3">
         <button class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-brand-500/25 text-brand-500" aria-label="新提醒">
@@ -346,6 +349,7 @@ import ListFilter from '../components/ListFilter.vue'
 import LunarDatePicker from '../components/LunarDatePicker.vue'
 import RepeatNotifySelect from '../components/RepeatNotifySelect.vue'
 import PrintDialog from '../components/PrintDialog.vue'
+import CreditCardPanel from '../components/CreditCardPanel.vue'
 import { listColorHex } from '../utils/list-colors'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import {

@@ -62,16 +62,24 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 	for _, l := range lists {
 		listUID[l.ID] = l.SyncUID
 		snap.Lists = append(snap.Lists, syncList{
-			UID:       l.SyncUID,
-			Owner:     users[l.UserID],
-			Name:      l.Name,
-			Color:     l.Color,
-			Icon:      l.Icon,
-			Position:  l.Position,
-			IsDefault: l.IsDefault,
-			Deleted:   l.DeletedAt != nil,
-			CreatedAt: l.CreatedAt,
-			UpdatedAt: l.UpdatedAt,
+			UID:              l.SyncUID,
+			Owner:            users[l.UserID],
+			Name:             l.Name,
+			Color:            l.Color,
+			Icon:             l.Icon,
+			Position:         l.Position,
+			IsDefault:        l.IsDefault,
+			Template:         l.Template,
+			CardName:         l.CardName,
+			CardBank:         l.CardBank,
+			CardNo:           l.CardNo,
+			CardStatementDay: l.CardStatementDay,
+			CardDueDay:       l.CardDueDay,
+			CardNotes:        l.CardNotes,
+			CardAutoRepeat:   l.CardAutoRepeat,
+			Deleted:          l.DeletedAt != nil,
+			CreatedAt:        l.CreatedAt,
+			UpdatedAt:        l.UpdatedAt,
 		})
 	}
 
@@ -91,6 +99,7 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 			ListUID:             listUID[r.ListID],
 			Title:               r.Title,
 			Notes:               r.Notes,
+			CardRole:            r.CardRole,
 			Kind:                r.Kind,
 			Priority:            r.Priority,
 			DueAt:               r.DueAt,

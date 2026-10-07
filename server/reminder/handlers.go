@@ -23,6 +23,8 @@ func setupAuthRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	group.GET("/lists", handleListLists(db))
 	group.POST("/lists", handleCreateList(db))
 	group.PATCH("/lists/:id", handleUpdateList(db))
+	// 信用卡：手动重建还款计划（改完卡片信息或想重来一遍时用）
+	group.POST("/lists/:id/card-plan", handleRegenerateCardPlan(db))
 	group.DELETE("/lists/:id", handleDeleteList(db))
 
 	group.GET("/items", handleListReminders(db))
@@ -148,7 +150,7 @@ func handleListLists(db *gorm.DB) gin.HandlerFunc {
 		}
 		result := make([]ListDTO, 0, len(lists))
 		for _, list := range lists {
-			result = append(result, ListDTO{List: list, OpenCount: openCounts[list.ID]})
+			result = append(result, ListDTO{List: list, OpenCount: openCounts[list.ID], CardSummary: cardSummary(list, time.Now())})
 		}
 		response.Success(c, result)
 	}
@@ -160,12 +162,26 @@ func handleCreateList(db *gorm.DB) gin.HandlerFunc {
 			Name  string `json:"name"`
 			Color string `json:"color"`
 			Icon  string `json:"icon"`
+			// 模板：general（通用，默认）或 credit_card（信用卡，一个清单一张卡）
+			Template         string `json:"template"`
+			CardName         string `json:"card_name"`
+			CardBank         string `json:"card_bank"`
+			CardNo           string `json:"card_no"`
+			CardStatementDay int    `json:"card_statement_day"`
+			CardDueDay       int    `json:"card_due_day"`
+			CardNotes        string `json:"card_notes"`
+			CardAutoRepeat   *bool  `json:"card_auto_repeat"`
 		}
 		if err := c.ShouldBindJSON(&in); err != nil {
 			response.ErrorBadRequest(c, "清单参数无效")
 			return
 		}
 		in.Name = strings.TrimSpace(in.Name)
+		template := normalizeListTemplate(in.Template)
+		// 信用卡清单允许不填清单名：自动用「银行 + 卡名」当清单名，省得再想一遍
+		if in.Name == "" && template == listTemplateCard {
+			in.Name = strings.TrimSpace(in.CardBank + in.CardName)
+		}
 		if in.Name == "" || len([]rune(in.Name)) > 40 {
 			response.ErrorBadRequest(c, "清单名称应为 1–40 个字符")
 			return
@@ -180,15 +196,36 @@ func handleCreateList(db *gorm.DB) gin.HandlerFunc {
 		if in.Icon == "" {
 			in.Icon = "list"
 		}
+		autoRepeat := true
+		if in.CardAutoRepeat != nil {
+			autoRepeat = *in.CardAutoRepeat
+		}
+		if template == listTemplateCard {
+			if !validCardDay(in.CardStatementDay) || !validCardDay(in.CardDueDay) {
+				response.ErrorBadRequest(c, "信用卡请填写账单日与还款日（每月 1–31 号）")
+				return
+			}
+		}
 		var maxPosition int
 		_ = db.Model(&List{}).Where("user_id = ?", currentUserID(c)).Select("COALESCE(MAX(position), 0)").Scan(&maxPosition).Error
-		list := List{UserID: currentUserID(c), Name: in.Name, Color: in.Color, Icon: in.Icon, Position: maxPosition + 1}
+		list := List{
+			UserID: currentUserID(c), Name: in.Name, Color: in.Color, Icon: in.Icon, Position: maxPosition + 1,
+			Template: template, CardName: strings.TrimSpace(in.CardName), CardBank: strings.TrimSpace(in.CardBank),
+			CardNo: strings.TrimSpace(in.CardNo), CardStatementDay: in.CardStatementDay, CardDueDay: in.CardDueDay,
+			CardNotes: strings.TrimSpace(in.CardNotes), CardAutoRepeat: autoRepeat,
+		}
 		if err := db.Create(&list).Error; err != nil {
 			response.ErrorInternal(c, "创建清单失败")
 			return
 		}
+		if template == listTemplateCard {
+			if _, err := generateCardPlan(db, &list, time.Now()); err != nil {
+				response.ErrorInternal(c, err.Error())
+				return
+			}
+		}
 		publishDataChanged(list.UserID, "list", "created", list.ID, originClientID(c))
-		response.Success(c, list)
+		response.Success(c, ListDTO{List: list, CardSummary: cardSummary(list, time.Now())})
 	}
 }
 
@@ -204,6 +241,17 @@ func handleUpdateList(db *gorm.DB) gin.HandlerFunc {
 			Icon      string `json:"icon"`
 			Position  *int   `json:"position"`
 			IsDefault *bool  `json:"is_default"`
+			// 信用卡字段：传了才改（用指针区分「没传」和「传了 0/空」）
+			Template         *string `json:"template"`
+			CardName         *string `json:"card_name"`
+			CardBank         *string `json:"card_bank"`
+			CardNo           *string `json:"card_no"`
+			CardStatementDay *int    `json:"card_statement_day"`
+			CardDueDay       *int    `json:"card_due_day"`
+			CardNotes        *string `json:"card_notes"`
+			CardAutoRepeat   *bool   `json:"card_auto_repeat"`
+			// 明确要求重建还款计划（改了账单日/还款日之后前端会带上）
+			RegeneratePlan bool `json:"regenerate_plan"`
 		}
 		if err := c.ShouldBindJSON(&in); err != nil {
 			response.ErrorBadRequest(c, "清单参数无效")
@@ -243,13 +291,70 @@ func handleUpdateList(db *gorm.DB) gin.HandlerFunc {
 		if in.Position != nil {
 			updates["position"] = *in.Position
 		}
+
+		// 信用卡字段：改完账单日/还款日要能重建还款计划，所以先把新值算出来。
+		newStatement, newDue := list.CardStatementDay, list.CardDueDay
+		newAutoRepeat := list.CardAutoRepeat
+		if in.Template != nil {
+			updates["template"] = normalizeListTemplate(*in.Template)
+		}
+		if in.CardName != nil {
+			updates["card_name"] = strings.TrimSpace(*in.CardName)
+		}
+		if in.CardBank != nil {
+			updates["card_bank"] = strings.TrimSpace(*in.CardBank)
+		}
+		if in.CardNo != nil {
+			updates["card_no"] = strings.TrimSpace(*in.CardNo)
+		}
+		if in.CardStatementDay != nil {
+			if !validCardDay(*in.CardStatementDay) {
+				response.ErrorBadRequest(c, "账单日应为每月 1–31 号")
+				return
+			}
+			updates["card_statement_day"] = *in.CardStatementDay
+			newStatement = *in.CardStatementDay
+		}
+		if in.CardDueDay != nil {
+			if !validCardDay(*in.CardDueDay) {
+				response.ErrorBadRequest(c, "还款日应为每月 1–31 号")
+				return
+			}
+			updates["card_due_day"] = *in.CardDueDay
+			newDue = *in.CardDueDay
+		}
+		if in.CardNotes != nil {
+			updates["card_notes"] = strings.TrimSpace(*in.CardNotes)
+		}
+		if in.CardAutoRepeat != nil {
+			updates["card_auto_repeat"] = *in.CardAutoRepeat
+			newAutoRepeat = *in.CardAutoRepeat
+		}
+
 		if err := db.Model(&list).Updates(updates).Error; err != nil {
 			response.ErrorInternal(c, "更新清单失败")
 			return
 		}
 		db.First(&list, id)
+		// 账单日/还款日/自动循环变了，或前端明确要求：重建还款计划。
+		// （只改备注之类的不用重建，免得每次编辑都换一批提醒 ID。）
+		daysChanged := newStatement != list.CardStatementDay || newDue != list.CardDueDay
+		list.CardStatementDay, list.CardDueDay = newStatement, newDue
+		list.CardAutoRepeat = newAutoRepeat
+		list.Template = func() string {
+			if t, ok := updates["template"].(string); ok {
+				return t
+			}
+			return list.Template
+		}()
+		if normalizeListTemplate(list.Template) == listTemplateCard && (in.RegeneratePlan || daysChanged || in.CardAutoRepeat != nil) {
+			if _, err := generateCardPlan(db, &list, time.Now()); err != nil {
+				response.ErrorBadRequest(c, err.Error())
+				return
+			}
+		}
 		publishDataChanged(list.UserID, "list", "updated", list.ID, originClientID(c))
-		response.Success(c, list)
+		response.Success(c, ListDTO{List: list, CardSummary: cardSummary(list, time.Now())})
 	}
 }
 
@@ -719,5 +824,31 @@ func handleReadAllNotifications(db *gorm.DB) gin.HandlerFunc {
 		}
 		publishDataChanged(currentUserID(c), "notification", "read-all", 0, originClientID(c))
 		response.Success(c, gin.H{"read": true})
+	}
+}
+
+// handleRegenerateCardPlan 重建某张信用卡的还款计划（账单日 + 还款日两条提醒）。
+func handleRegenerateCardPlan(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		var list List
+		if err := db.Where("id = ? AND user_id = ? AND deleted_at IS NULL", id, currentUserID(c)).First(&list).Error; err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		created, err := generateCardPlan(db, &list, time.Now())
+		if err != nil {
+			response.ErrorBadRequest(c, err.Error())
+			return
+		}
+		publishDataChanged(list.UserID, "reminder", "created", list.ID, originClientID(c))
+		response.Success(c, gin.H{
+			"list":      ListDTO{List: list, CardSummary: cardSummary(list, time.Now())},
+			"reminders": created,
+			"generated": len(created),
+		})
 	}
 }
