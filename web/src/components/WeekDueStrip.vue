@@ -4,14 +4,15 @@
        卡片整体 width 有上限（见使用处的 max-w），内容按页面宽度自动换行。
        小卡面的配色复用大卡面的 urgencyOf()，所以缩略图与对应大卡永远同色同字色。 -->
   <section class="week-strip" data-week-strip>
+    <!-- 左侧固定三行：① 今天 + 日期 ② 星期 + 本周区间 ③ 待还张数 + 合计 -->
     <div class="min-w-0">
-      <p class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+      <p class="flex items-baseline gap-x-2">
         <span class="text-[11px] font-bold uppercase tracking-[.18em] text-muted-foreground">今天</span>
         <span class="font-display text-xl font-extrabold leading-none tracking-tight" data-week-today>{{ todayLabel }}</span>
-        <span class="text-[12px] font-semibold text-muted-foreground" data-week-weekday>
-          {{ week?.weekday || '' }}
-          <span v-if="week" class="font-medium">· 本周 {{ shortRange }}</span>
-        </span>
+      </p>
+      <p class="mt-1.5 text-[12px] font-semibold text-muted-foreground" data-week-weekday>
+        {{ week?.weekday || '' }}
+        <span v-if="week" class="font-medium">· 本周 {{ shortRange }}</span>
       </p>
       <p class="mt-1 text-[12px] font-semibold" :class="week && week.overdue ? 'text-rose-500' : 'text-muted-foreground'">
         <template v-if="week && week.count">
