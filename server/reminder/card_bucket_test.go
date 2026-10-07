@@ -233,6 +233,9 @@ func TestWeekDueCards(t *testing.T) {
 	overdue := makeCard("逾期卡", 6)
 	// 下周才到期（10-14）
 	nextWeek := makeCard("下周卡", 14)
+	// 本周内到期但**还没记金额**：也要出现（金额显示 0 → 前端显示「—」）。
+	// 故意不给它 upsertStatement。
+	makeCard("未记金额卡", 8)
 
 	if _, err := upsertStatement(appDB, userID, inWeek, "2026-10", 123456, 0, ""); err != nil {
 		t.Fatal(err)
@@ -254,8 +257,8 @@ func TestWeekDueCards(t *testing.T) {
 	if out.Weekday != "星期三" || out.Today != "2026-10-07" {
 		t.Fatalf("日期信息不对：%s %s", out.Today, out.Weekday)
 	}
-	if out.Count != 2 {
-		t.Fatalf("本周待还应是 2 张（本周内 + 逾期），实际 %d：%+v", out.Count, out.Cards)
+	if out.Count != 3 {
+		t.Fatalf("本周待还应是 3 张（本周内 + 逾期 + 未记金额），实际 %d：%+v", out.Count, out.Cards)
 	}
 	if out.TotalCents != 128456 {
 		t.Fatalf("合计金额不对：%d", out.TotalCents)
@@ -276,6 +279,9 @@ func TestWeekDueCards(t *testing.T) {
 	if _, ok := byName["下周卡"]; ok {
 		t.Fatal("下周到期的卡不该出现在本周待还里")
 	}
+	if c, ok := byName["未记金额卡"]; !ok || c.AmountCents != 0 || c.DaysLeft != 1 {
+		t.Fatalf("没记金额但本周到期的卡也应出现（金额 0）：%+v ok=%v", c, ok)
+	}
 
 	// 还完本期后就不再出现
 	if _, err := payStatement(appDB, userID, inWeek, "2026-10", 123456, now); err != nil {
@@ -285,8 +291,8 @@ func TestWeekDueCards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Count != 1 || out.Cards[0].Name != "逾期卡" {
-		t.Fatalf("还完后本周待还应只剩逾期卡，实际 %+v", out.Cards)
+	if out.Count != 2 || byName2(out.Cards, "逾期卡") == nil || byName2(out.Cards, "未记金额卡") == nil {
+		t.Fatalf("还完后本周待还应剩逾期卡与未记金额卡，实际 %+v", out.Cards)
 	}
 }
 
@@ -407,4 +413,14 @@ func TestSyncCreatesCardBucketWithTemplate(t *testing.T) {
 	if list.Name != cardBucketListName {
 		t.Fatalf("栏目名不对：%q", list.Name)
 	}
+}
+
+// byName2 在切片里按名字找一张卡（测试里用）。
+func byName2(cards []WeekDueCard, name string) *WeekDueCard {
+	for i := range cards {
+		if cards[i].Name == name {
+			return &cards[i]
+		}
+	}
+	return nil
 }

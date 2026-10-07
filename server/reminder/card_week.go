@@ -68,24 +68,46 @@ func weekDueCards(db *gorm.DB, userID uint, now time.Time) (WeekDueDTO, error) {
 		return out, err
 	}
 	for _, card := range cards {
+		// 每张卡取「最紧的那一期」：
+		//   · 有未还账单（含逾期）→ 取最早的那一期，金额用账单里记的；
+		//   · 没有未还账单     → 看当期：已还的不出现；**还没记金额的也要出现**
+		//     （卡这周到期就该提醒，不该因为「还没填金额」被漏掉）。
+		var (
+			period  string
+			due     time.Time
+			amount  int64
+			minimum int64
+		)
 		unpaid, err := unpaidStatements(db, userID, card.ID)
 		if err != nil {
 			return out, err
 		}
-		if len(unpaid) == 0 {
-			continue
+		if len(unpaid) > 0 {
+			// unpaidStatements 已按还款日升序：第一条就是最紧的那一期。
+			nearest := unpaid[0]
+			period, due, amount, minimum = nearest.Period, nearest.DueDate, nearest.Amount, nearest.Minimum
+		} else {
+			curPeriod, _, curDue := currentPeriod(card, now)
+			var row CardStatement
+			err := db.Where("user_id = ? AND card_id = ? AND period = ? AND deleted_at IS NULL",
+				userID, card.ID, curPeriod).First(&row).Error
+			if err == nil {
+				if row.PaidAt != nil {
+					continue // 这一期已经还了
+				}
+				amount, minimum = row.Amount, row.Minimum
+			}
+			period, due = curPeriod, curDue
 		}
-		// unpaidStatements 已按还款日升序：第一条就是最紧的那一期。
-		nearest := unpaid[0]
-		due := time.Date(nearest.DueDate.Year(), nearest.DueDate.Month(), nearest.DueDate.Day(), 0, 0, 0, 0, loc)
+		due = time.Date(due.Year(), due.Month(), due.Day(), 0, 0, 0, 0, loc)
 		if !due.Before(weekEnd) {
 			continue // 下周或更晚，不算本周
 		}
 		item := WeekDueCard{
 			CardID: card.ID, Bank: card.Bank, Name: card.Name, Color: card.Color,
-			Tail: cardTailNo(card.No), Period: nearest.Period,
+			Tail: cardTailNo(card.No), Period: period,
 			DueDate: due.Format("2006-01-02"), DaysLeft: int(due.Sub(today).Hours() / 24),
-			AmountCents: nearest.Amount, MinimumCents: nearest.Minimum,
+			AmountCents: amount, MinimumCents: minimum,
 		}
 		item.Overdue = item.DaysLeft < 0
 		if item.Overdue {
