@@ -42,7 +42,7 @@
           :key="item.card_id"
           class="week-mini-card"
           :class="{ 'week-mini-card-overdue': item.overdue }"
-          :style="{ background: gradientOf(item.color) }"
+          :style="{ background: item.overdue ? URGENT_GRADIENT : DEFAULT_GRADIENT }"
           :data-week-card="item.card_id"
         >
           <p class="truncate text-[11px] font-extrabold leading-4">{{ [item.bank, item.name].filter(Boolean).join('') || '信用卡' }}</p>
@@ -61,39 +61,57 @@
       还没有卡片。点「+ 新建卡片」填银行、卡名、账单日与还款日，系统会自动生成账单日/还款日提醒。
     </p>
 
-    <div class="grid gap-3 lg:grid-cols-2">
+    <!-- 一行三张（窄屏一张、中屏两张），卡片靠银行标志区分 -->
+    <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       <article v-for="card in cards" :key="card.id" class="surface rounded-2xl p-3" :data-card-item="card.id">
-        <!-- 卡面：用卡片配色做渐变，尽量像一张真卡 -->
+        <!-- 卡面：所有卡默认同一套配色 + 银行标志区分；
+             账单日之后黄→橘，还款日前 3 天（含逾期）变红。 -->
         <div
-          class="relative overflow-hidden rounded-2xl px-4 py-3.5 text-white shadow-lg"
-          :style="{ background: gradientOf(card.color) }"
+          class="relative overflow-hidden rounded-2xl px-4 py-3.5 shadow-lg"
+          :style="{ background: urgencyOf(card).gradient, color: urgencyOf(card).ink }"
           :data-card-face="card.id"
+          :data-card-urgency="urgencyOf(card).level"
         >
           <span class="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10"></span>
           <span class="pointer-events-none absolute -bottom-10 -left-4 h-24 w-24 rounded-full bg-black/10"></span>
           <div class="relative flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <p class="flex items-baseline gap-2">
-                <span class="truncate text-sm font-extrabold tracking-wide">{{ cardTitle(card) }}</span>
-                <span v-if="card.holder" class="text-[11px] text-white/70">{{ card.holder }}</span>
-              </p>
-              <p class="mt-1 font-mono text-[15px] tracking-[.18em] text-white/90" data-card-number>
-                {{ maskNo(card.no) }}
-              </p>
+            <div class="flex min-w-0 items-center gap-2.5">
+              <!-- 银行标志：白底圆片，卡面靠它区分（认不出就退回银行名首字） -->
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/95 p-1 shadow-sm" data-card-face-logo>
+                <img v-if="logoOf(card)" :src="logoOf(card)" alt="" class="h-full w-full object-contain" />
+                <span v-else class="text-[13px] font-black text-slate-600">{{ initialOf(card) }}</span>
+              </span>
+              <div class="min-w-0">
+                <p class="flex items-baseline gap-2">
+                  <span class="truncate text-sm font-extrabold tracking-wide">{{ cardTitle(card) }}</span>
+                  <span v-if="card.holder" class="text-[11px] opacity-70">{{ card.holder }}</span>
+                </p>
+                <p class="mt-1 font-mono text-[15px] tracking-[.18em] opacity-90" data-card-number>
+                  {{ maskNo(card.no) }}
+                </p>
+              </div>
             </div>
-            <div class="shrink-0 text-right text-[11px] leading-4 text-white/80">
+            <div class="shrink-0 text-right text-[11px] leading-4 opacity-85">
               <p>账单日 每月 {{ card.statement_day }} 号</p>
               <p>还款日 每月 {{ card.due_day }} 号</p>
-              <p v-if="card.limit_cents">额度 ¥{{ formatCents(card.limit_cents) }}</p>
+              <p data-card-limit>
+                <template v-if="card.limit_cents">信用额度 ¥{{ formatCents(card.limit_cents) }}</template>
+                <template v-else>额度未填</template>
+              </p>
             </div>
           </div>
           <!-- 芯片 -->
           <span class="relative mt-3 block h-6 w-8 rounded-md bg-gradient-to-br from-amber-200/90 to-amber-400/70"></span>
-          <p class="relative mt-2 text-[11px] text-white/75">
+          <p class="relative mt-2 text-[11px] opacity-80">
             免息期 {{ summaryOf(card).grace }} 天
             <span v-if="card.advance_days > 0"> · 还款日前 {{ card.advance_days }} 天提醒</span>
             <span v-if="!card.auto_repeat"> · 未开自动循环</span>
           </p>
+          <!-- 账期进度：账单日 → 还款日前三天；进了最后 3 天整条变红 -->
+          <div class="relative mt-2.5 h-1.5 overflow-hidden rounded-full bg-black/15">
+            <span class="block h-full rounded-full" :style="{ width: urgencyOf(card).barWidth, background: urgencyOf(card).barColor }"></span>
+          </div>
+          <p class="relative mt-1 text-[11px] font-extrabold" data-card-status>{{ urgencyOf(card).status }}</p>
         </div>
 
         <!-- 本期应还 + 还款闭环 -->
@@ -198,7 +216,7 @@ import {
   deleteCard, getCards, getWeekDueCards, payCardStatement, saveCardStatement, unpayCardStatement,
   type CreditCard, type ReminderList, type WeekDue,
 } from '../api/reminder'
-import { listColorHex } from '../utils/list-colors'
+import { bankLogoOf } from '../utils/banks'
 import { cardTail, daysUntil, formatCardDate, formatCents, graceDays, nextDayOccurrence, parseYuanToCents } from '../utils/card'
 
 const props = defineProps<{ list: ReminderList }>()
@@ -233,18 +251,103 @@ function maskNo(no: string) {
   const tail = cardTail(no)
   return tail ? `**** **** **** ${tail}` : '**** **** **** ----'
 }
-function gradientOf(color: string) {
-  const hex = listColorHex(color)
-  return `linear-gradient(135deg, ${hex} 0%, ${shade(hex, -22)} 100%)`
+// ---- 卡面配色：默认统一，按「账单日 → 还款日前 3 天」由黄转橘，最后 3 天转红 ----
+// 以前的每卡配色取消了：卡多了颜色记不住，用户要求「默认颜色一致、用银行标志区分」。
+const DEFAULT_FROM = '#64748b' // slate-500
+const DEFAULT_TO = '#1e293b'   // slate-800
+const SOON_FROM = '#facc15'    // yellow-400（账单日刚过）
+const SOON_TO = '#f97316'      // orange-500（离还款日 3 天）
+const URGENT_FROM = '#ef4444'  // red-500
+const URGENT_TO = '#991b1b'    // red-800
+const DEFAULT_GRADIENT = `linear-gradient(135deg, ${DEFAULT_FROM} 0%, ${DEFAULT_TO} 100%)`
+const URGENT_GRADIENT = `linear-gradient(135deg, ${URGENT_FROM} 0%, ${URGENT_TO} 100%)`
+
+function clamp01(v: number) { return Math.max(0, Math.min(1, v)) }
+
+/** 两个 #rrggbb 之间插值（t=0 → a，t=1 → b）。 */
+function lerpHex(a: string, b: string, t: number) {
+  const pa = parseInt(a.slice(1), 16); const pb = parseInt(b.slice(1), 16)
+  const k = clamp01(t)
+  const ch = (shift: number) => {
+    const va = (pa >> shift) & 255; const vb = (pb >> shift) & 255
+    return Math.round(va + (vb - va) * k)
+  }
+  return `rgb(${ch(16)}, ${ch(8)}, ${ch(0)})`
 }
-/** 把颜色加暗一点做渐变的下半段（不引额外依赖，手算即可）。 */
-function shade(hex: string, delta: number) {
+
+/** 底色亮的时候用深色字（黄色卡面上白字看不清）。 */
+function inkFor(hex: string) {
   const n = parseInt(hex.replace('#', ''), 16)
-  const clamp = (v: number) => Math.max(0, Math.min(255, v))
-  const r = clamp(((n >> 16) & 255) + delta)
-  const g = clamp(((n >> 8) & 255) + delta)
-  const b = clamp((n & 255) + delta)
-  return `rgb(${r}, ${g}, ${b})`
+  const r = (n >> 16) & 255; const g = (n >> 8) & 255; const b = n & 255
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.62 ? '#0f172a' : '#ffffff'
+}
+
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+/** 今天 0 点（本地），用于「离还款日还有几天」的判断 */
+function today0() { return startOfDay(new Date()) }
+
+export type UrgencyLevel = 'paid' | 'normal' | 'soon' | 'urgent' | 'overdue'
+
+/**
+ * 卡片当前处于哪个阶段：
+ *   paid    本期已还                → 默认色
+ *   normal  账单日还没到（或没数据）→ 默认色
+ *   soon    账单日已过、离还款日 >3 天 → 黄色→橘色（按进度插值）
+ *   urgent  离还款日 ≤3 天          → 红色
+ *   overdue 还款日已过且没还        → 红色
+ */
+function urgencyOf(card: CreditCard) {
+  const cur = card.current
+  const base = { gradient: DEFAULT_GRADIENT, ink: '#ffffff', barWidth: '0%', barColor: 'rgba(255,255,255,.85)', status: '账单日未到' }
+  if (!cur?.due_date) {
+    return { ...base, level: 'normal' as UrgencyLevel }
+  }
+  const due = startOfDay(new Date(cur.due_date))
+  const days = Math.round((due.getTime() - today0().getTime()) / 86400000)
+  if (cur.paid_at) {
+    return { ...base, level: 'paid' as UrgencyLevel, status: `本期已还 · 下次还款 ${formatCardDate(due)}` }
+  }
+  if (days < 0) {
+    return {
+      level: 'overdue' as UrgencyLevel, gradient: URGENT_GRADIENT, ink: '#ffffff',
+      barWidth: '100%', barColor: '#fecaca', status: `已逾期 ${-days} 天 · 应还 ¥${formatCents(cur.amount_cents)}`,
+    }
+  }
+  if (days <= 3) {
+    return {
+      level: 'urgent' as UrgencyLevel, gradient: URGENT_GRADIENT, ink: '#ffffff',
+      barWidth: '100%', barColor: '#fecaca',
+      status: days === 0 ? `今天到期 · 应还 ¥${formatCents(cur.amount_cents)}` : `${days} 天后到期 · 应还 ¥${formatCents(cur.amount_cents)}`,
+    }
+  }
+  // 账单日还没到 → 默认色；已过账单日 → 黄转橘
+  const st = cur.statement_date ? startOfDay(new Date(cur.statement_date)) : null
+  if (!st || today0().getTime() < st.getTime()) {
+    return { ...base, level: 'normal' as UrgencyLevel, status: `还有 ${days} 天到还款日` }
+  }
+  const windowEnd = new Date(due.getTime() - 3 * 86400000)
+  const span = Math.max(1, windowEnd.getTime() - st.getTime())
+  const progress = clamp01((today0().getTime() - st.getTime()) / span)
+  const from = lerpHex(SOON_FROM, SOON_TO, progress)
+  const to = lerpHex(SOON_TO, '#c2410c', progress)
+  return {
+    level: 'soon' as UrgencyLevel,
+    gradient: `linear-gradient(135deg, ${from} 0%, ${to} 100%)`,
+    ink: inkFor(from),
+    barWidth: `${Math.round(progress * 100)}%`,
+    barColor: 'rgba(255,255,255,.9)',
+    status: `账单已出 · 还有 ${days} 天到还款日 · 应还 ¥${formatCents(cur.amount_cents)}`,
+  }
+}
+
+function logoOf(card: CreditCard): string {
+  return bankLogoOf(card.bank) || ''
+}
+function initialOf(card: CreditCard) {
+  return (card.bank || card.name || '卡').trim().slice(0, 1)
 }
 /** 倒计时按本地时间实时算（后端也给，前端这份是为了不依赖刷新）。 */
 function summaryOf(card: CreditCard) {

@@ -1125,6 +1125,7 @@ func listCalendarItems(db *gorm.DB, userID uint, from, to time.Time, listIDs []u
 		if l, ok := listByID[r.ListID]; ok {
 			item.ListName = l.Name
 			item.ListColor = l.Color
+			item.ListIcon = normalizeListIcon(l.Icon)
 		}
 		result = append(result, item)
 	}

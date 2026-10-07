@@ -121,7 +121,14 @@
               :class="{ 'nav-row-active': route.path === `/admin/list/${list.id}` }"
               @click="mobileOpen = false"
             >
-              <span class="h-2.5 w-2.5 rounded-full ring-4 ring-current/10" :style="{ color: listColor(list.color), background: listColor(list.color) }"></span>
+              <!-- 图标（形状识别清单）+ 清单色着色；原来是同色圆点，颜色一多就分不清 -->
+              <span
+                class="nav-list-icon"
+                :style="{ color: listColor(list.color), background: listColor(list.color) + '1f' }"
+                :data-list-icon="list.icon || 'list'"
+              >
+                <ListIcon :name="list.icon" :size="14" />
+              </span>
               <!-- 重命名就地改：回车保存、Esc 取消，不弹窗 -->
               <input
                 v-if="renamingListId === list.id"
@@ -354,6 +361,7 @@
               type="button"
               role="radio"
               :aria-checked="listEditorColor === color"
+              :data-list-color="color"
               :aria-label="listColorLabel(color)"
               :title="listColorLabel(color)"
               class="flex h-9 w-9 items-center justify-center rounded-full border-2 transition"
@@ -361,6 +369,32 @@
               @click="listEditorColor = color"
             >
               <span class="h-6 w-6 rounded-full" :style="{ background: listColor(color) }"></span>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <span class="text-xs font-bold text-foreground">图标</span>
+          <p class="mt-1 text-[11px] leading-4 text-muted-foreground">
+            侧栏与日历里用这个图标标识清单；颜色仍用于任务标题与日历色块。
+          </p>
+          <div class="mt-2 grid grid-cols-8 gap-1.5 sm:grid-cols-10" role="radiogroup" aria-label="清单图标">
+            <button
+              v-for="icon in LIST_ICONS"
+              :key="icon.key"
+              type="button"
+              role="radio"
+              :aria-checked="listEditorIcon === icon.key"
+              :aria-label="icon.label"
+              :title="icon.label"
+              class="flex h-8 w-8 items-center justify-center rounded-lg border transition"
+              :class="listEditorIcon === icon.key
+                ? 'border-brand-500 bg-brand-500/12 text-brand-600 dark:text-brand-300'
+                : 'border-border text-muted-foreground hover:border-brand-500/40 hover:text-foreground'"
+              :data-list-icon-option="icon.key"
+              @click="listEditorIcon = icon.key"
+            >
+              <ListIcon :name="icon.key" :size="16" />
             </button>
           </div>
         </div>
@@ -385,6 +419,8 @@ import Toast from '../components/Toast.vue'
 import VersionDialog from '../components/VersionDialog.vue'
 import Modal from '../components/Modal.vue'
 import ListCreateDialog from '../components/ListCreateDialog.vue'
+import ListIcon from '../components/ListIcon.vue'
+import { LIST_ICONS } from '../utils/list-icons'
 import ContextMenu from '../components/ContextMenu.vue'
 import { isNarrowNow, useIsNarrow } from '../utils/use-narrow'
 import type { ContextMenuItem } from '../components/ContextMenu.vue'
@@ -710,11 +746,15 @@ const listEditorOriginalName = ref('')
 const listEditorName = ref('')
 const listEditorColor = ref<string>('blue')
 const listEditorOriginalColor = ref<string>('blue')
+const listEditorIcon = ref<string>('list')
+const listEditorOriginalIcon = ref<string>('list')
 const listEditorSaving = ref(false)
 const listEditorError = ref('')
 
 const listEditorDirty = computed(() =>
-  listEditorName.value.trim() !== listEditorOriginalName.value || listEditorColor.value !== listEditorOriginalColor.value,
+  listEditorName.value.trim() !== listEditorOriginalName.value
+  || listEditorColor.value !== listEditorOriginalColor.value
+  || listEditorIcon.value !== listEditorOriginalIcon.value,
 )
 
 function openListEditor(list: ReminderList) {
@@ -723,6 +763,8 @@ function openListEditor(list: ReminderList) {
   listEditorName.value = list.name
   listEditorColor.value = list.color || 'blue'
   listEditorOriginalColor.value = list.color || 'blue'
+  listEditorIcon.value = list.icon || 'list'
+  listEditorOriginalIcon.value = list.icon || 'list'
   listEditorError.value = ''
   listEditorOpen.value = true
 }
@@ -737,7 +779,7 @@ async function submitListEditor() {
   listEditorSaving.value = true
   listEditorError.value = ''
   try {
-    await updateList(listEditorId.value, { name, color: listEditorColor.value })
+    await updateList(listEditorId.value, { name, color: listEditorColor.value, icon: listEditorIcon.value })
     listEditorOpen.value = false
     await refreshNavigation()
     // 广播「数据变了」：HomeView 与 CalendarView 监听 reminder-realtime 重拉自己的
@@ -1115,6 +1157,8 @@ onBeforeUnmount(() => {
 .nav-row { @apply my-0.5 flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-foreground/80 transition-all hover:bg-muted hover:text-foreground; }
 .nav-row-active { @apply bg-brand-500/10 text-brand-600 shadow-[inset_3px_0_0_rgb(var(--color-brand-500))] dark:text-brand-300; }
 .nav-symbol { @apply flex h-8 w-8 items-center justify-center rounded-[10px]; }
+/* 清单行的图标块：比原来的小圆点占位大一点，但比 nav-symbol 小，免得跟「智能清单」抢视线 */
+.nav-list-icon { @apply flex h-6 w-6 shrink-0 items-center justify-center rounded-lg; }
 .nav-symbol :deep(svg), .mobile-tab :deep(svg) { width: 18px; height: 18px; }
 .nav-count { @apply min-w-6 rounded-full bg-muted px-1.5 py-0.5 text-center text-[10px] font-bold text-muted-foreground; }
 .tiny-add { @apply flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground; }

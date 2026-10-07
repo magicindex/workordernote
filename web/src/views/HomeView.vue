@@ -21,7 +21,13 @@
       <section class="mb-3 flex flex-col gap-2.5 sm:mb-6 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div class="min-w-0">
           <div class="mb-2 hidden items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-muted-foreground sm:flex">
-            <span class="h-2 w-2 rounded-full" :style="{ background: accentColor }"></span>
+            <ListIcon
+              v-if="selectedList"
+              :name="selectedList.icon"
+              :size="14"
+              :style="{ color: accentColor }"
+            />
+            <span v-else class="h-2 w-2 rounded-full" :style="{ background: accentColor }"></span>
             {{ eyebrow }}
           </div>
           <div class="flex flex-wrap items-baseline gap-x-2">
@@ -362,6 +368,7 @@ import { useAuthStore } from '../stores/auth'
 import Toast from '../components/Toast.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import ListFilter from '../components/ListFilter.vue'
+import ListIcon from '../components/ListIcon.vue'
 import LunarDatePicker from '../components/LunarDatePicker.vue'
 import RepeatNotifySelect from '../components/RepeatNotifySelect.vue'
 import PrintDialog from '../components/PrintDialog.vue'

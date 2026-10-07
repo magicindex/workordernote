@@ -124,6 +124,8 @@ export interface CalendarItem {
   list_name: string
   /** 色名（blue/violet/rose/amber/emerald），沿用侧栏那套映射上色 */
   list_color: string
+  /** 清单图标的 key（见 utils/list-icons.ts）：日历格子用图标代替圆点 */
+  list_icon: string
   due_at: string
   /** 到期日在上海时区下的 YYYY-MM-DD，日历按它归格，避免浏览器时区导致跨天错位 */
   due_date: string

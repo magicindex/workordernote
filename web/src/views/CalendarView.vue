@@ -111,21 +111,30 @@
                 :class="{ 'opacity-55 line-through': item.completed && item.kind !== 'note' }"
                 :style="chipStyle(item)"
               >
-                <!-- 记事用「记」字标记而不是清单圆点：一眼区分「记录」和「要做的事」 -->
+                <!-- 记事用「记」字标记；任务是清单图标（形状识别清单，替代原来的圆点）；
+                     信用卡的账单日/还款日/提前提醒沿用固定双色圆点，因为它们不是「清单」语义。 -->
                 <i v-if="item.kind === 'note'" class="cal-note-mark shrink-0">记</i>
+                <ListIcon
+                  v-else-if="!item.card_role"
+                  :name="item.list_icon"
+                  :size="11"
+                  class="shrink-0"
+                  :style="{ color: chipDot(item) }"
+                />
                 <i v-else class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ background: chipDot(item) }"></i>
                 <span class="truncate">{{ item.title }}</span>
               </span>
               <span v-if="extraCount(cell) > 0" class="cal-task px-1 font-bold text-muted-foreground">+{{ extraCount(cell) }}</span>
             </div>
             <div class="mt-auto flex flex-wrap gap-0.5 pt-0.5 sm:hidden">
-              <i
+              <ListIcon
                 v-for="item in visibleItems(cell).slice(0, 4)"
                 :key="item.id"
-                class="h-1.5 w-1.5 rounded-full"
+                :name="item.card_role ? 'list' : item.list_icon"
+                :size="10"
                 :class="{ 'opacity-45': item.completed }"
-                :style="{ background: dot(item.list_color) }"
-              ></i>
+                :style="{ color: dot(item.list_color) }"
+              />
             </div>
           </button>
         </div>
@@ -186,7 +195,7 @@
                 <span v-if="item.repeat_rule && item.repeat_rule !== 'none'" class="tiny-badge">{{ ruleLabel(item.repeat_rule) }}</span>
               </div>
               <div class="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                <i class="h-2 w-2 shrink-0 rounded-full" :style="{ background: dot(item.list_color) }"></i>
+                <ListIcon :name="item.list_icon" :size="13" class="shrink-0" :style="{ color: dot(item.list_color) }" />
                 <span class="truncate">{{ item.list_name }}</span>
               </div>
             </button>
@@ -265,6 +274,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useIsNarrow } from '../utils/use-narrow'
 import ListFilter from '../components/ListFilter.vue'
+import ListIcon from '../components/ListIcon.vue'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import Toast from '../components/Toast.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'

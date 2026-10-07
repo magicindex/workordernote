@@ -203,9 +203,7 @@ func handleCreateList(db *gorm.DB) gin.HandlerFunc {
 			response.ErrorBadRequest(c, err.Error())
 			return
 		}
-		if in.Icon == "" {
-			in.Icon = "list"
-		}
+		in.Icon = normalizeListIcon(in.Icon)
 		var maxPosition int
 		_ = db.Model(&List{}).Where("user_id = ?", currentUserID(c)).Select("COALESCE(MAX(position), 0)").Scan(&maxPosition).Error
 		list := List{
@@ -277,8 +275,12 @@ func handleUpdateList(db *gorm.DB) gin.HandlerFunc {
 			}
 			updates["color"] = in.Color
 		}
-		if in.Icon != "" {
-			updates["icon"] = in.Icon
+		if strings.TrimSpace(in.Icon) != "" {
+			if !validListIcon(strings.TrimSpace(in.Icon)) {
+				response.ErrorBadRequest(c, "清单图标不在可选范围内")
+				return
+			}
+			updates["icon"] = strings.TrimSpace(in.Icon)
 		}
 		if in.Position != nil {
 			updates["position"] = *in.Position

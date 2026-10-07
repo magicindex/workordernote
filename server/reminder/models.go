@@ -276,8 +276,10 @@ type CalendarItemDTO struct {
 	ListName string `json:"list_name"`
 	// ListColor 是清单的色名（blue/violet/rose/amber/emerald），前端沿用
 	// 侧栏那套 listColor 映射上色，保证同一清单处处同色。
-	ListColor string    `json:"list_color"`
-	DueAt     time.Time `json:"due_at"`
+	ListColor string `json:"list_color"`
+	// ListIcon 是清单的图标 key（见 list_icons.go）：日历格子用图标代替原来的圆点。
+	ListIcon string    `json:"list_icon"`
+	DueAt    time.Time `json:"due_at"`
 	// DueDate 是到期日在上海时区下的 YYYY-MM-DD。日历按这个字符串归格，
 	// 不走浏览器时区换算——否则用户在非 +08 时区打开会整体错一天。
 	DueDate    string `json:"due_date"`
