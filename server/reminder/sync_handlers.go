@@ -66,6 +66,8 @@ func setupSyncPublicRoutes(api *gin.RouterGroup, db *gorm.DB) {
 
 	peer := api.Group("/reminder/sync", requireSyncToken(db))
 	peer.GET("/info", handleSyncInfo(db))
+	// 账号概览：给对端的「新设备导入」向导看有哪些账号、各有多少数据
+	peer.GET("/profiles", handleSyncProfiles(db))
 	peer.GET("/snapshot", handleSyncSnapshot(db))
 	peer.POST("/apply", handleSyncApply(db))
 }
@@ -73,6 +75,9 @@ func setupSyncPublicRoutes(api *gin.RouterGroup, db *gorm.DB) {
 func setupSyncAdminRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	group := api.Group("/reminder/admin/sync")
 	group.GET("", handleSyncSettings(db))
+	// 新设备导入：预览对端账号 / 执行导入（建账号 + 写设置 + 立刻拉一次）
+	group.POST("/import/preview", handleSyncImportPreview(db))
+	group.POST("/import", handleSyncImport(db))
 	group.PUT("", handleSyncSaveSettings(db))
 	group.POST("/test", handleSyncTest(db))
 	group.POST("/run", handleSyncRun(db))

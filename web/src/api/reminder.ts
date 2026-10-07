@@ -317,3 +317,35 @@ export const uploadAndroidApk = (file: File, version: string) => {
 
 /** 管理员下架安装包。 */
 export const deleteAndroidApk = () => request.delete('/api/reminder/admin/android/apk')
+
+// ---- 新设备导入（从另一台设备搬清单与内容） ----
+export interface SyncProfileUser {
+  username: string
+  role: string
+  lists: number
+  reminders: number
+  completions: number
+  exists_local: boolean
+}
+
+export interface SyncProfiles {
+  instance_id: string
+  app_name: string
+  version: string
+  users: SyncProfileUser[]
+}
+
+/** 用对端地址 + 同步令牌看对端有哪些账号、各有多少数据。 */
+export const previewSyncImport = (data: { peer_url: string; token: string }) =>
+  request.post('/api/reminder/admin/sync/import/preview', data, { timeout: 60000 })
+
+/** 执行导入：按需建同名账号 + 写同步设置 + 立刻拉一次全量。 */
+export const runSyncImport = (data: {
+  peer_url: string
+  token: string
+  usernames: string[]
+  passwords?: Record<string, string>
+  create_missing?: boolean
+  direction?: string
+  interval_minutes?: number
+}) => request.post('/api/reminder/admin/sync/import', data, { timeout: 300000 })

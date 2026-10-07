@@ -11,9 +11,12 @@
     </div>
 
     <div v-else class="space-y-4 sm:space-y-6">
+      <!-- 新设备初始化：连上老设备 → 选账号 → 一键把清单与内容搬过来 -->
+      <SyncImportWizard @imported="reload" />
+
       <!-- 双机同步不走 ConfigGroupList：它有密钥、方向、连通性测试与结果明细，
            不是「一个键一个值」能表达的（见 components/SyncPanel.vue）。 -->
-      <SyncPanel />
+      <SyncPanel ref="syncPanelRef" />
 
       <ConfigGroupList
         ref="listRef"
@@ -33,11 +36,19 @@ import { onMounted, ref } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfigGroupList from '../components/ConfigGroupList.vue'
 import SyncPanel from '../components/SyncPanel.vue'
+import SyncImportWizard from '../components/SyncImportWizard.vue'
 import AndroidApkUploader from '../components/AndroidApkUploader.vue'
 import { getSystemConfigMeta, updateConfig } from '../api/config'
 import type { ConfigMeta } from '../api/config'
 
 const items = ref<ConfigMeta[]>([])
+const syncPanelRef = ref<InstanceType<typeof SyncPanel> | null>(null)
+
+// 导入向导完成后：同步设置刚被改写，刷新面板显示最新状态
+async function reload() {
+  await loadMeta()
+  syncPanelRef.value?.reload?.()
+}
 const loading = ref(false)
 const errorMsg = ref('')
 const listRef = ref<InstanceType<typeof ConfigGroupList> | null>(null)

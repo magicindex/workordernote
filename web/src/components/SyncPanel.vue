@@ -46,6 +46,7 @@
           <input
             v-model.trim="form.peer_url"
             type="text"
+            data-sync-peer-url
             inputmode="url"
             class="input-field !py-2 mt-1.5 font-mono text-xs"
             placeholder="http://192.168.3.201:8906"
