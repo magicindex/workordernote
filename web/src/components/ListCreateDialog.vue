@@ -129,7 +129,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import Modal from './Modal.vue'
-import { createList } from '../api/reminder'
+import { createCard, createList } from '../api/reminder'
 import { LIST_COLOR_NAMES, listColorHex, listColorLabel, type ListColorName } from '../utils/list-colors'
 import { daysUntil, formatCardDate, graceDays, nextDayOccurrence } from '../utils/card'
 
@@ -202,20 +202,23 @@ async function submit() {
     const res = await createList({
       name: listName,
       color: pickedColor.value,
-      ...(template.value === 'credit_card'
-        ? {
-            template: 'credit_card' as const,
-            card_name: cardName.value.trim(),
-            card_bank: cardBank.value.trim(),
-            card_no: cardNo.value.trim(),
-            card_statement_day: statementDay.value,
-            card_due_day: dueDay.value,
-            card_notes: cardNotes.value.trim(),
-            card_auto_repeat: autoRepeat.value,
-          }
-        : {}),
+      ...(template.value === 'credit_card' ? { template: 'credit_card' as const } : {}),
     })
     const created = res.data?.data
+    // 信用卡清单：清单建好后紧接着把第一张卡建起来（卡片是独立实体，一个清单可以有多张）
+    if (template.value === 'credit_card' && created?.id) {
+      await createCard({
+        list_id: created.id,
+        bank: cardBank.value.trim(),
+        name: cardName.value.trim(),
+        no: cardNo.value.trim(),
+        statement_day: statementDay.value,
+        due_day: dueDay.value,
+        advance_days: 3,
+        auto_repeat: autoRepeat.value,
+        notes: cardNotes.value.trim(),
+      })
+    }
     emit('created', created)
     emit('update:modelValue', false)
   } catch (err: any) {

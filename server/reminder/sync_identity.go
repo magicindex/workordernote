@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"strconv"
 	"time"
 
 	"smallgo/server/database"
@@ -58,6 +59,11 @@ func (l *List) BeforeCreate(*gorm.DB) error       { return ensureSyncUID(&l.Sync
 func (r *Reminder) BeforeCreate(*gorm.DB) error   { return ensureSyncUID(&r.SyncUID) }
 func (c *Completion) BeforeCreate(*gorm.DB) error { return ensureSyncUID(&c.SyncUID) }
 
+// 信用卡：卡片与账单期也要有同步标识，否则快照里 UID 为空、对端整批跳过
+// （卡片就同步不过去，提醒也会丢掉 card_id —— 踩过）。
+func (c *Card) BeforeCreate(*gorm.DB) error          { return ensureSyncUID(&c.SyncUID) }
+func (s *CardStatement) BeforeCreate(*gorm.DB) error { return ensureSyncUID(&s.SyncUID) }
+
 // syncDigest 把若干字段拼成一个确定性摘要（32 位十六进制）。字段之间用 0x1f
 // 分隔，避免 ("ab","c") 与 ("a","bc") 撞成同一个值。
 func syncDigest(parts ...string) string {
@@ -88,6 +94,32 @@ func BackfillSyncUIDs(db *gorm.DB) error {
 	usernames, err := usernameByID(db)
 	if err != nil {
 		return err
+	}
+
+	// ---- 信用卡（卡片按 用户+银行+卡名+创建时间 生成稳定摘要）----
+	var cards []Card
+	if err := db.Where("sync_uid IS NULL OR sync_uid = ''").Find(&cards).Error; err != nil {
+		return err
+	}
+	for i := range cards {
+		uid := syncDigest("card", usernames[cards[i].UserID], cards[i].Bank, cards[i].Name,
+			strconv.FormatUint(uint64(cards[i].ListID), 10), digestStamp(&cards[i].CreatedAt))
+		if err := db.Model(&Card{}).Where("id = ?", cards[i].ID).
+			UpdateColumn("sync_uid", uid).Error; err != nil {
+			return err
+		}
+	}
+	var statements []CardStatement
+	if err := db.Where("sync_uid IS NULL OR sync_uid = ''").Find(&statements).Error; err != nil {
+		return err
+	}
+	for i := range statements {
+		uid := syncDigest("card_statement", usernames[statements[i].UserID],
+			strconv.FormatUint(uint64(statements[i].CardID), 10), statements[i].Period)
+		if err := db.Model(&CardStatement{}).Where("id = ?", statements[i].ID).
+			UpdateColumn("sync_uid", uid).Error; err != nil {
+			return err
+		}
 	}
 
 	// ---- 清单 ----

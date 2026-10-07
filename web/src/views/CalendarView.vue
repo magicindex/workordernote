@@ -96,8 +96,8 @@
                   v-for="role in cardMarks(cell)"
                   :key="role"
                   class="h-1.5 w-1.5 rounded-full"
-                  :style="{ background: role === 'statement' ? '#f59e0b' : '#f43f5e' }"
-                  :title="role === 'statement' ? '信用卡账单日' : '信用卡还款日'"
+                  :style="{ background: role === 'statement' ? '#f59e0b' : role === 'advance' ? '#fb923c' : '#f43f5e' }"
+                  :title="role === 'statement' ? '信用卡账单日' : role === 'advance' ? '信用卡还款提醒' : '信用卡还款日'"
                 ></i>
               </span>
             </div>
@@ -432,17 +432,23 @@ const dot = listInk
 // 这样即使在同一个清单里，这两天也能一眼分出来。
 const CARD_STATEMENT_COLOR = 'amber'
 const CARD_DUE_COLOR = 'rose'
+// 提前提醒没有对应的清单色名，直接给固定色（橙），与账单日/还款日再区分一层
+const CARD_ADVANCE_HEX = '#fb923c'
 function cardColorRole(item: CalendarItem): string | null {
   if (item.card_role === 'statement') return CARD_STATEMENT_COLOR
   if (item.card_role === 'due') return CARD_DUE_COLOR
   return null
 }
 function chipStyle(item: CalendarItem) {
+  if (item.card_role === 'advance') {
+    return { background: 'rgba(251, 146, 60, 0.14)', color: '#c2410c' }
+  }
   const role = cardColorRole(item)
   const colorName = role || item.list_color
   return { background: tint(colorName), color: ink(colorName) }
 }
 function chipDot(item: CalendarItem) {
+  if (item.card_role === 'advance') return CARD_ADVANCE_HEX
   return ink(cardColorRole(item) || item.list_color)
 }
 /** 这一天里有哪些信用卡标记（账单日/还款日），按固定顺序返回。 */
@@ -451,6 +457,7 @@ function cardMarks(cell: LunarDayInfo) {
   const out: string[] = []
   if (roles.has('statement')) out.push('statement')
   if (roles.has('due')) out.push('due')
+  if (roles.has('advance')) out.push('advance')
   return out
 }
 

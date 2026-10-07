@@ -1,193 +1,339 @@
 <template>
-  <!-- 信用卡清单的卡片面板：账单日/还款日倒计时、免息期、卡号尾号与备注，
-       外加「重新生成还款计划」与「编辑卡片信息」。只在信用卡清单上显示。 -->
-  <section v-if="isCard" class="surface mb-3 rounded-2xl p-3 sm:p-4" data-card-panel>
-    <div class="flex flex-wrap items-start gap-3">
-      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/12 text-rose-500">
-        <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" aria-hidden="true">
-          <rect x="2.5" y="5" width="19" height="14" rx="2.5" stroke-width="1.7"/>
-          <path d="M2.5 10h19M6 15h4" stroke-width="1.7" stroke-linecap="round"/>
-        </svg>
-      </span>
-      <div class="min-w-0 flex-1">
-        <p class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span class="text-sm font-extrabold">{{ cardTitle }}</span>
-          <span v-if="tail" class="text-[11px] font-bold text-muted-foreground">尾号 {{ tail }}</span>
-        </p>
-
-        <!-- 倒计时：账单日与还款日各一个，颜色与日历里的标记一致 -->
-        <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-semibold">
-          <span class="inline-flex items-center gap-1.5" style="color: #d97706" data-card-countdown="statement">
-            <i class="h-2 w-2 rounded-full" style="background: #f59e0b"></i>
-            账单日 {{ summary.statementText }}
-            <b>{{ summary.daysToStatement === 0 ? '就是今天' : `还有 ${summary.daysToStatement} 天` }}</b>
-          </span>
-          <span class="inline-flex items-center gap-1.5" style="color: #e11d48" data-card-countdown="due">
-            <i class="h-2 w-2 rounded-full" style="background: #f43f5e"></i>
-            还款日 {{ summary.dueText }}
-            <b>{{ summary.daysToDue === 0 ? '就是今天' : `还有 ${summary.daysToDue} 天` }}</b>
-          </span>
-          <span class="inline-flex items-center gap-1.5 text-muted-foreground" data-card-grace>
-            免息期 <b class="text-foreground">{{ summary.grace }}</b> 天
-          </span>
-          <span v-if="!autoRepeat" class="text-muted-foreground">· 未开自动循环</span>
-        </div>
-
-        <p v-if="list.card_notes" class="mt-1.5 whitespace-pre-line text-[12px] leading-5 text-muted-foreground" data-card-notes>{{ list.card_notes }}</p>
-      </div>
-
-      <div class="flex shrink-0 flex-wrap items-center gap-2">
-        <button class="btn-secondary !h-8 !px-3 !text-[11px]" :disabled="busy" data-card-edit @click="openEditor">编辑卡片信息</button>
-        <button class="btn-secondary !h-8 !px-3 !text-[11px]" :disabled="busy" data-card-regenerate @click="regenerate">
-          {{ busy ? '处理中…' : '重新生成还款计划' }}
+  <!-- 信用卡清单：一张张卡（卡面样式）+ 本期应还 + 还款闭环 + 还款计划入口 -->
+  <section v-if="isCardList" class="mb-3" data-card-panel>
+    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+      <h3 class="flex items-center gap-2 text-sm font-extrabold">
+        我的卡片
+        <span class="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">{{ cards.length }} 张</span>
+      </h3>
+      <div class="flex flex-wrap items-center gap-2">
+        <button class="btn-secondary !h-8 !px-3 !text-[11px]" :disabled="loading" data-card-refresh @click="load">
+          {{ loading ? '读取中…' : '刷新' }}
         </button>
+        <button class="btn-primary !h-8 !px-3 !text-[11px]" data-card-add @click="openCreate">+ 添加卡片</button>
       </div>
     </div>
 
-    <p v-if="message" class="mt-2 text-[11px] font-semibold" :class="ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'" data-card-message>{{ message }}</p>
+    <p v-if="!cards.length && !loading" class="surface rounded-2xl px-4 py-6 text-center text-sm text-muted-foreground" data-card-empty>
+      还没有卡片。点「+ 添加卡片」填银行、卡名、账单日与还款日，系统会自动生成账单日/还款日提醒。
+    </p>
 
-    <!-- 编辑卡片信息：改完直接重建还款计划 -->
-    <Modal v-model="editorOpen" size="md" title="编辑卡片信息">
+    <div class="grid gap-3 lg:grid-cols-2">
+      <article v-for="card in cards" :key="card.id" class="surface rounded-2xl p-3" :data-card-item="card.id">
+        <!-- 卡面：用卡片配色做渐变，尽量像一张真卡 -->
+        <div
+          class="relative overflow-hidden rounded-2xl px-4 py-3.5 text-white shadow-lg"
+          :style="{ background: gradientOf(card.color) }"
+          :data-card-face="card.id"
+        >
+          <span class="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10"></span>
+          <span class="pointer-events-none absolute -bottom-10 -left-4 h-24 w-24 rounded-full bg-black/10"></span>
+          <div class="relative flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="flex items-baseline gap-2">
+                <span class="truncate text-sm font-extrabold tracking-wide">{{ cardTitle(card) }}</span>
+                <span v-if="card.holder" class="text-[11px] text-white/70">{{ card.holder }}</span>
+              </p>
+              <p class="mt-1 font-mono text-[15px] tracking-[.18em] text-white/90" data-card-number>
+                {{ maskNo(card.no) }}
+              </p>
+            </div>
+            <div class="shrink-0 text-right text-[11px] leading-4 text-white/80">
+              <p>账单日 每月 {{ card.statement_day }} 号</p>
+              <p>还款日 每月 {{ card.due_day }} 号</p>
+              <p v-if="card.limit_cents">额度 ¥{{ formatCents(card.limit_cents) }}</p>
+            </div>
+          </div>
+          <!-- 芯片 -->
+          <span class="relative mt-3 block h-6 w-8 rounded-md bg-gradient-to-br from-amber-200/90 to-amber-400/70"></span>
+          <p class="relative mt-2 text-[11px] text-white/75">
+            免息期 {{ summaryOf(card).grace }} 天
+            <span v-if="card.advance_days > 0"> · 还款日前 {{ card.advance_days }} 天提醒</span>
+            <span v-if="!card.auto_repeat"> · 未开自动循环</span>
+          </p>
+        </div>
+
+        <!-- 本期应还 + 还款闭环 -->
+        <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] font-semibold" data-card-current="period">
+          <span class="text-muted-foreground">本期（{{ card.current?.period || '—' }}）</span>
+          <span v-if="card.current?.paid_at" class="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400" data-card-paid>
+            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="m5 13 4 4L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            已还 ¥{{ formatCents(card.current.paid_amount_cents || card.current.amount_cents) }}
+            <span v-if="card.current.paid_at" class="text-muted-foreground">· {{ card.current.paid_at.slice(0, 10) }}</span>
+          </span>
+          <span v-else class="text-foreground" data-card-amount>
+            应还 <b class="text-[14px]">¥{{ formatCents(card.current?.amount_cents) }}</b>
+            <span v-if="!card.current?.amount_cents" class="text-[11px] font-medium text-muted-foreground">（还没填金额）</span>
+          </span>
+          <span class="inline-flex items-center gap-1.5" style="color: #e11d48" data-card-due-countdown>
+            <i class="h-2 w-2 rounded-full" style="background: #f43f5e"></i>
+            还款日 {{ summaryOf(card).dueText }}（{{ summaryOf(card).daysToDue === 0 ? '就是今天' : `还有 ${summaryOf(card).daysToDue} 天` }}）
+          </span>
+          <span v-if="card.unpaid_count > 1" class="rounded-full bg-amber-500/12 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400" data-card-unpaid>
+            另有 {{ card.unpaid_count - 1 }} 期未还 · 合计 ¥{{ formatCents(card.unpaid_total_cents) }}
+          </span>
+          <span v-if="isOverdue(card)" class="rounded-full bg-rose-500/12 px-2 py-0.5 text-[11px] font-bold text-rose-500" data-card-overdue>已逾期</span>
+        </div>
+
+        <div class="mt-2.5 flex flex-wrap items-center gap-2">
+          <button
+            v-if="!card.current?.paid_at"
+            class="btn-primary !h-8 !px-3 !text-[11px]"
+            :disabled="busyId === card.id"
+            :data-card-pay="card.id"
+            @click="pay(card)"
+          >标记已还</button>
+          <button
+            v-else
+            class="btn-secondary !h-8 !px-3 !text-[11px]"
+            :disabled="busyId === card.id"
+            :data-card-unpay="card.id"
+            @click="unpay(card)"
+          >撤销已还</button>
+          <button class="btn-secondary !h-8 !px-3 !text-[11px]" :data-card-set-amount="card.id" @click="openAmount(card)">
+            {{ card.current?.amount_cents ? '改本期金额' : '填本期金额' }}
+          </button>
+          <button class="btn-secondary !h-8 !px-3 !text-[11px]" :data-card-schedule="card.id" @click="openSchedule(card)">还款计划</button>
+          <button class="btn-secondary !h-8 !px-3 !text-[11px]" :data-card-edit="card.id" @click="openEdit(card)">编辑</button>
+          <button class="btn-ghost !h-8 !px-2 !text-[11px] text-rose-500" :data-card-delete="card.id" @click="askDelete(card)">删除</button>
+        </div>
+
+        <p v-if="card.notes" class="mt-2 whitespace-pre-line text-[11px] leading-5 text-muted-foreground" data-card-notes>{{ card.notes }}</p>
+        <p v-if="messageId === card.id && message" class="mt-2 text-[11px] font-semibold" :class="ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'" data-card-message>{{ message }}</p>
+      </article>
+    </div>
+
+    <!-- 填/改本期金额 -->
+    <Modal v-model="amountOpen" size="md" :title="`本期金额${amountCard ? ` · ${amountCard.current?.period || ''}` : ''}`">
       <div class="grid gap-3 sm:grid-cols-2">
         <label class="block">
-          <span class="text-xs font-bold text-foreground">银行</span>
-          <input v-model="draft.bank" class="input-field mt-1.5 !py-2" maxlength="30" data-edit-bank />
+          <span class="text-xs font-bold text-foreground">本期应还（元）</span>
+          <input v-model="amountYuan" class="input-field mt-1.5 !py-2" inputmode="decimal" placeholder="例如 1234.56" data-amount-input />
         </label>
         <label class="block">
-          <span class="text-xs font-bold text-foreground">卡名</span>
-          <input v-model="draft.name" class="input-field mt-1.5 !py-2" maxlength="30" data-edit-name />
+          <span class="text-xs font-bold text-foreground">最低还款（元，可选）</span>
+          <input v-model="minimumYuan" class="input-field mt-1.5 !py-2" inputmode="decimal" placeholder="例如 123.45" data-minimum-input />
         </label>
         <label class="block sm:col-span-2">
-          <span class="text-xs font-bold text-foreground">卡号</span>
-          <input v-model="draft.no" class="input-field mt-1.5 !py-2" maxlength="32" data-edit-no />
-        </label>
-        <label class="block">
-          <span class="text-xs font-bold text-foreground">账单日</span>
-          <select v-model.number="draft.statementDay" class="compact-input mt-1.5" data-edit-statement>
-            <option v-for="d in 31" :key="d" :value="d">{{ d }} 号</option>
-          </select>
-        </label>
-        <label class="block">
-          <span class="text-xs font-bold text-foreground">还款日</span>
-          <select v-model.number="draft.dueDay" class="compact-input mt-1.5" data-edit-due>
-            <option v-for="d in 31" :key="d" :value="d">{{ d }} 号</option>
-          </select>
-        </label>
-        <label class="block sm:col-span-2">
-          <span class="text-xs font-bold text-foreground">备注</span>
-          <textarea v-model="draft.notes" class="input-field mt-1.5 !py-2" rows="2" maxlength="300" data-edit-notes></textarea>
+          <span class="text-xs font-bold text-foreground">备注（可选）</span>
+          <input v-model="amountNote" class="input-field mt-1.5 !py-2" maxlength="120" placeholder="例如 本期有分期" data-amount-note />
         </label>
       </div>
-      <label class="mt-3 flex items-center gap-2 text-xs font-semibold text-foreground">
-        <input v-model="draft.autoRepeat" type="checkbox" class="h-4 w-4 rounded border-border" data-edit-repeat />
-        自动循环（每月都生成账单日与还款日提醒）
-      </label>
-      <p class="mt-2 text-[11px] leading-4 text-muted-foreground">
-        保存后会自动重建这两条提醒（旧的自动生成项会被删掉）；只改备注不会动提醒。
-      </p>
       <div class="mt-4 flex items-center gap-3">
-        <button class="btn-secondary flex-1" @click="editorOpen = false">取消</button>
-        <button class="btn-primary flex-1" :disabled="busy" data-edit-save @click="save">
-          {{ busy ? '保存中…' : '保存并重建' }}
-        </button>
+        <button class="btn-secondary flex-1" @click="amountOpen = false">取消</button>
+        <button class="btn-primary flex-1" :disabled="busyId !== null" data-amount-save @click="saveAmount">保存</button>
       </div>
     </Modal>
+
+    <CardEditorDialog
+      v-model="editorOpen"
+      :card="editingCard"
+      :list-id="list.id"
+      @saved="onSaved"
+    />
+    <CardScheduleDialog v-model="scheduleOpen" :card="scheduleCard" />
+
+    <ConfirmDialog
+      v-model="deleteOpen"
+      danger
+      title="删除这张卡？"
+      :message="`「${deleteTarget ? cardTitle(deleteTarget) : ''}」的账单日/还款日提醒会一起删除，账单金额与还款记录也会隐藏。`"
+      confirm-text="删除卡片"
+      :loading="busyId !== null"
+      @confirm="confirmDelete"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import Modal from './Modal.vue'
-import { regenerateCardPlan, updateList, type ReminderList } from '../api/reminder'
-import { cardTail, daysUntil, formatCardDate, graceDays, nextDayOccurrence } from '../utils/card'
+import ConfirmDialog from './ConfirmDialog.vue'
+import CardEditorDialog from './CardEditorDialog.vue'
+import CardScheduleDialog from './CardScheduleDialog.vue'
+import {
+  deleteCard, getCards, payCardStatement, saveCardStatement, unpayCardStatement,
+  type CreditCard, type ReminderList,
+} from '../api/reminder'
+import { listColorHex } from '../utils/list-colors'
+import { cardTail, daysUntil, formatCardDate, formatCents, graceDays, nextDayOccurrence, parseYuanToCents } from '../utils/card'
 
 const props = defineProps<{ list: ReminderList }>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
 
-const isCard = computed(() => props.list?.template === 'credit_card')
-const tail = computed(() => cardTail(props.list?.card_no))
-const autoRepeat = computed(() => props.list?.card_auto_repeat !== false)
-const cardTitle = computed(() => {
-  const t = `${props.list?.card_bank || ''}${props.list?.card_name || ''}`.trim()
-  return t || props.list?.name || '信用卡'
-})
+const isCardList = computed(() => props.list?.template === 'credit_card')
+const cards = ref<CreditCard[]>([])
+const loading = ref(false)
+const busyId = ref<number | null>(null)
+const message = ref('')
+const messageId = ref<number | null>(null)
+const ok = ref(true)
 
-/** 倒计时按本地时间实时算（后端也会给一份，前端这份是为了不依赖刷新）。 */
-const summary = computed(() => {
-  const s = props.list?.card_statement_day || 1
-  const d = props.list?.card_due_day || 1
+const editorOpen = ref(false)
+const editingCard = ref<CreditCard | null>(null)
+const amountOpen = ref(false)
+const amountCard = ref<CreditCard | null>(null)
+const amountYuan = ref('')
+const minimumYuan = ref('')
+const amountNote = ref('')
+const scheduleOpen = ref(false)
+const scheduleCard = ref<CreditCard | null>(null)
+const deleteOpen = ref(false)
+const deleteTarget = ref<CreditCard | null>(null)
+
+function cardTitle(card: CreditCard) {
+  return `${card.bank || ''}${card.name || ''}`.trim() || '信用卡'
+}
+function maskNo(no: string) {
+  const tail = cardTail(no)
+  return tail ? `**** **** **** ${tail}` : '**** **** **** ----'
+}
+function gradientOf(color: string) {
+  const hex = listColorHex(color)
+  return `linear-gradient(135deg, ${hex} 0%, ${shade(hex, -22)} 100%)`
+}
+/** 把颜色加暗一点做渐变的下半段（不引额外依赖，手算即可）。 */
+function shade(hex: string, delta: number) {
+  const n = parseInt(hex.replace('#', ''), 16)
+  const clamp = (v: number) => Math.max(0, Math.min(255, v))
+  const r = clamp(((n >> 16) & 255) + delta)
+  const g = clamp(((n >> 8) & 255) + delta)
+  const b = clamp((n & 255) + delta)
+  return `rgb(${r}, ${g}, ${b})`
+}
+/** 倒计时按本地时间实时算（后端也给，前端这份是为了不依赖刷新）。 */
+function summaryOf(card: CreditCard) {
   const now = new Date()
-  const statement = nextDayOccurrence(s, now)
-  const due = nextDayOccurrence(d, now)
+  const statement = nextDayOccurrence(card.statement_day, now)
+  const due = nextDayOccurrence(card.due_day, now)
   return {
     statementText: formatCardDate(statement),
     dueText: formatCardDate(due),
-    daysToStatement: daysUntil(statement, now),
     daysToDue: daysUntil(due, now),
-    grace: graceDays(s, d, now),
+    grace: graceDays(card.statement_day, card.due_day, now),
   }
-})
+}
+function isOverdue(card: CreditCard) {
+  const cur = card.current
+  if (!cur || cur.paid_at) return false
+  return new Date(cur.due_date).getTime() < new Date(new Date().toDateString()).getTime()
+}
 
-const editorOpen = ref(false)
-const busy = ref(false)
-const message = ref('')
-const ok = ref(true)
-const draft = reactive({ bank: '', name: '', no: '', statementDay: 5, dueDay: 25, notes: '', autoRepeat: true })
+function notify(id: number, text: string, success = true) {
+  messageId.value = id
+  message.value = text
+  ok.value = success
+}
 
-function openEditor() {
-  draft.bank = props.list?.card_bank || ''
-  draft.name = props.list?.card_name || ''
-  draft.no = props.list?.card_no || ''
-  draft.statementDay = props.list?.card_statement_day || 5
-  draft.dueDay = props.list?.card_due_day || 25
-  draft.notes = props.list?.card_notes || ''
-  draft.autoRepeat = autoRepeat.value
-  message.value = ''
+async function load() {
+  if (!isCardList.value) return
+  loading.value = true
+  try {
+    const res = await getCards(props.list.id)
+    cards.value = res.data?.data || []
+  } catch {
+    cards.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+function openCreate() {
+  editingCard.value = null
   editorOpen.value = true
 }
+function openEdit(card: CreditCard) {
+  editingCard.value = card
+  editorOpen.value = true
+}
+async function onSaved() {
+  await load()
+  emit('changed')
+}
 
-async function save() {
-  busy.value = true
-  message.value = ''
+function openAmount(card: CreditCard) {
+  amountCard.value = card
+  amountYuan.value = card.current?.amount_cents ? formatCents(card.current.amount_cents) : ''
+  minimumYuan.value = card.current?.minimum_cents ? formatCents(card.current.minimum_cents) : ''
+  amountNote.value = card.current?.note || ''
+  amountOpen.value = true
+}
+async function saveAmount() {
+  const card = amountCard.value
+  if (!card?.current?.period) return
+  busyId.value = card.id
   try {
-    const daysChanged = draft.statementDay !== props.list?.card_statement_day || draft.dueDay !== props.list?.card_due_day
-    await updateList(props.list.id, {
-      card_bank: draft.bank,
-      card_name: draft.name,
-      card_no: draft.no,
-      card_statement_day: draft.statementDay,
-      card_due_day: draft.dueDay,
-      card_notes: draft.notes,
-      card_auto_repeat: draft.autoRepeat,
-      // 账单日/还款日变了才重建；只改备注不动提醒
-      regenerate_plan: daysChanged,
+    await saveCardStatement(card.id, card.current.period, {
+      amount_cents: parseYuanToCents(amountYuan.value),
+      minimum_cents: parseYuanToCents(minimumYuan.value),
+      note: amountNote.value.trim(),
     })
-    ok.value = true
-    message.value = daysChanged ? '已保存并重建还款计划' : '已保存'
-    editorOpen.value = false
+    amountOpen.value = false
+    await load()
+    notify(card.id, '本期金额已保存')
     emit('changed')
   } catch (err: any) {
-    ok.value = false
-    message.value = err.response?.data?.message || '保存失败'
+    notify(card.id, err.response?.data?.message || '保存失败', false)
   } finally {
-    busy.value = false
+    busyId.value = null
   }
 }
 
-async function regenerate() {
-  busy.value = true
-  message.value = ''
+async function pay(card: CreditCard) {
+  if (!card.current?.period) return
+  busyId.value = card.id
   try {
-    const res = await regenerateCardPlan(props.list.id)
-    const n = res.data?.data?.generated ?? 0
-    ok.value = true
-    message.value = `已重新生成 ${n} 条提醒`
+    await payCardStatement(card.id, card.current.period, card.current.amount_cents || 0)
+    await load()
+    notify(card.id, '已标记这一期还清（完成记录里也留了一笔）')
     emit('changed')
   } catch (err: any) {
-    ok.value = false
-    message.value = err.response?.data?.message || '生成失败'
+    notify(card.id, err.response?.data?.message || '操作失败', false)
   } finally {
-    busy.value = false
+    busyId.value = null
   }
 }
+
+async function unpay(card: CreditCard) {
+  if (!card.current?.period) return
+  busyId.value = card.id
+  try {
+    await unpayCardStatement(card.id, card.current.period)
+    await load()
+    notify(card.id, '已撤销「已还」标记')
+    emit('changed')
+  } catch (err: any) {
+    notify(card.id, err.response?.data?.message || '操作失败', false)
+  } finally {
+    busyId.value = null
+  }
+}
+
+function openSchedule(card: CreditCard) {
+  scheduleCard.value = card
+  scheduleOpen.value = true
+}
+
+function askDelete(card: CreditCard) {
+  deleteTarget.value = card
+  deleteOpen.value = true
+}
+async function confirmDelete() {
+  const card = deleteTarget.value
+  if (!card) return
+  busyId.value = card.id
+  try {
+    await deleteCard(card.id)
+    deleteOpen.value = false
+    await load()
+    emit('changed')
+  } catch (err: any) {
+    notify(card.id, err.response?.data?.message || '删除失败', false)
+  } finally {
+    busyId.value = null
+  }
+}
+
+watch(() => props.list?.id, () => { void load() }, { immediate: true })
+watch(isCardList, (v) => { if (v) void load() })
 </script>

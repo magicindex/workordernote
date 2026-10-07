@@ -50,20 +50,8 @@ type List struct {
 	Icon      string `gorm:"size:32;not null;default:list" json:"icon"`
 	Position  int    `gorm:"not null;default:0;index:idx_reminder_lists_user_position" json:"position"`
 	IsDefault bool   `gorm:"not null;default:false" json:"is_default"`
-
-	// 「清单一 = 一张卡」：通用清单这些字段为空；信用卡清单带上卡片信息，
-	// 由后端按账单日/还款日自动生成（或按月循环）还款计划。
-	Template         string `gorm:"size:16;not null;default:general" json:"template"`
-	CardName         string `gorm:"size:60" json:"card_name"`
-	CardBank         string `gorm:"size:60" json:"card_bank"`
-	CardNo           string `gorm:"size:32" json:"card_no"`
-	CardStatementDay int    `json:"card_statement_day"`
-	CardDueDay       int    `json:"card_due_day"`
-	CardNotes        string `gorm:"type:text" json:"card_notes"`
-	// 注意 default:false 而不是 true：GORM 对「带 default 标签的零值字段」会跳过写入，
-	// 于是「不勾自动循环」会被数据库默认值悄悄改成 true（踩过）。
-	// 新建时的默认值由接口层给（没传就是 true），这里只需要不吞掉 false。
-	CardAutoRepeat bool `gorm:"not null;default:false" json:"card_auto_repeat"`
+	// 模板：general（普通清单）或 credit_card（信用卡清单，里面放卡片实体）
+	Template string `gorm:"size:16;not null;default:general" json:"template"`
 
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
@@ -77,8 +65,9 @@ type Reminder struct {
 	ListID  uint   `gorm:"not null;index" json:"list_id"`
 	Title   string `gorm:"size:200;not null" json:"title"`
 	Notes   string `gorm:"type:text" json:"notes"`
-	// 信用卡计划生成的提醒：statement=账单日、due=还款日，其余为空。
-	// 日历与列表据此给这两天不同的标记色。
+	// 信用卡生成的提醒：CardID 指向卡片；CardRole 是 statement（账单日）/
+	// due（还款日）/ advance（还款日前几天提醒）。日历与列表据此给不同标记色。
+	CardID   uint   `gorm:"index" json:"card_id,omitempty"`
 	CardRole string `gorm:"size:16" json:"card_role"`
 	// Kind is "task" (default) or "note"; see the KindTask / KindNote
 	// constants. The column default keeps every pre-existing row on task
@@ -242,8 +231,8 @@ func validateListColor(color string) error {
 type ListDTO struct {
 	List
 	OpenCount int64 `json:"open_count"`
-	// 信用卡清单才有：下一次账单日/还款日与倒计时（前端显示「距还款日 N 天」）
-	CardSummary *CardSummary `json:"card_summary,omitempty"`
+	// 信用卡清单才有：这张清单里有几张卡（卡片详情走 /api/reminder/cards）
+	CardCount int64 `json:"card_count,omitempty"`
 }
 
 // CompletedItemDTO 是「已完成」视图的一行。它有两个来源：
@@ -302,10 +291,11 @@ type CalendarItemDTO struct {
 	// CompletedAt 只对任务有意义，用于导出表格的「完成时间」列；
 	// 记事的记录时间放在 DueAt 里，见 listCalendarItems。
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
-	// CardRole 是信用卡还款计划生成的项：statement=账单日、due=还款日。
-	// 日历据此给这两天固定的双色标记（账单日琥珀 / 还款日玫红），
-	// 与清单色区分开——同一张卡的两个日子要一眼分得清。
+	// CardRole 是信用卡生成的项：statement=账单日、due=还款日、advance=提前提醒。
+	// 日历据此给这些日子固定配色（账单日琥珀 / 还款日玫红 / 提前提醒橙色），
+	// 与清单色区分开——同一张卡的几个日子要一眼分得清。
 	CardRole string `json:"card_role,omitempty"`
+	CardID   uint   `json:"card_id,omitempty"`
 }
 
 type ChannelStatus struct {

@@ -14,16 +14,58 @@ const syncFormat = 1
 // 可靠的游标（含删除墓碑、时钟偏差、首次同步补历史），任何一处出错都会造成
 // 静默的数据缺失。全量交换是自愈的：每次同步都用对端的现状校正本机。
 type syncSnapshot struct {
-	Format      int              `json:"format"`
-	InstanceID  string           `json:"instance_id"`
-	AppName     string           `json:"app_name"`
-	AppVersion  string           `json:"app_version"`
-	SiteTitle   string           `json:"site_title"`
-	GeneratedAt time.Time        `json:"generated_at"`
-	Users       []syncUser       `json:"users"`
-	Lists       []syncList       `json:"lists"`
-	Reminders   []syncReminder   `json:"reminders"`
-	Completions []syncCompletion `json:"completions"`
+	Format         int                 `json:"format"`
+	InstanceID     string              `json:"instance_id"`
+	AppName        string              `json:"app_name"`
+	AppVersion     string              `json:"app_version"`
+	SiteTitle      string              `json:"site_title"`
+	GeneratedAt    time.Time           `json:"generated_at"`
+	Users          []syncUser          `json:"users"`
+	Lists          []syncList          `json:"lists"`
+	Cards          []syncCard          `json:"cards"`
+	Reminders      []syncReminder      `json:"reminders"`
+	CardStatements []syncCardStatement `json:"card_statements"`
+	Completions    []syncCompletion    `json:"completions"`
+}
+
+// syncCard 是一张信用卡。卡片挂在清单下，所以用 list_uid 指过去。
+type syncCard struct {
+	UID          string    `json:"uid"`
+	Owner        string    `json:"owner"`
+	ListUID      string    `json:"list_uid"`
+	Name         string    `json:"name"`
+	Bank         string    `json:"bank"`
+	No           string    `json:"no"`
+	Holder       string    `json:"holder"`
+	Limit        int64     `json:"limit_cents"`
+	StatementDay int       `json:"statement_day"`
+	DueDay       int       `json:"due_day"`
+	AdvanceDays  int       `json:"advance_days"`
+	AutoRepeat   bool      `json:"auto_repeat"`
+	Notes        string    `json:"notes"`
+	Color        string    `json:"color"`
+	Position     int       `json:"position"`
+	Deleted      bool      `json:"deleted"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// syncCardStatement 是某张卡某一期的账单（金额与还款状态）。
+type syncCardStatement struct {
+	UID           string     `json:"uid"`
+	Owner         string     `json:"owner"`
+	CardUID       string     `json:"card_uid"`
+	Period        string     `json:"period"`
+	StatementDate time.Time  `json:"statement_date"`
+	DueDate       time.Time  `json:"due_date"`
+	Amount        int64      `json:"amount_cents"`
+	Minimum       int64      `json:"minimum_cents"`
+	PaidAt        *time.Time `json:"paid_at,omitempty"`
+	PaidAmount    int64      `json:"paid_amount_cents"`
+	Note          string     `json:"note"`
+	Deleted       bool       `json:"deleted"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 // syncUser 只用于「对端有哪些账号、本机能配上几个」的展示与跳过统计。
@@ -58,12 +100,14 @@ type syncList struct {
 }
 
 type syncReminder struct {
-	UID                 string     `json:"uid"`
-	Owner               string     `json:"owner"`
-	ListUID             string     `json:"list_uid"`
-	Title               string     `json:"title"`
-	Notes               string     `json:"notes"`
-	CardRole            string     `json:"card_role,omitempty"`
+	UID      string `json:"uid"`
+	Owner    string `json:"owner"`
+	ListUID  string `json:"list_uid"`
+	Title    string `json:"title"`
+	Notes    string `json:"notes"`
+	CardRole string `json:"card_role,omitempty"`
+	// 信用卡生成的提醒属于哪张卡：用 UID 指过去（对端要换成自己的卡片 ID）
+	CardUID             string     `json:"card_uid,omitempty"`
 	Kind                string     `json:"kind"`
 	Priority            int        `json:"priority"`
 	DueAt               *time.Time `json:"due_at,omitempty"`
@@ -96,15 +140,22 @@ type syncCompletion struct {
 
 // syncApplyStats 是对端应用一份报文后的回执，也是本机展示「同步了什么」的依据。
 type syncApplyStats struct {
-	ListsCreated       int      `json:"lists_created"`
-	ListsUpdated       int      `json:"lists_updated"`
-	ListsDeleted       int      `json:"lists_deleted"`
-	RemindersCreated   int      `json:"reminders_created"`
-	RemindersUpdated   int      `json:"reminders_updated"`
-	RemindersDeleted   int      `json:"reminders_deleted"`
-	CompletionsCreated int      `json:"completions_created"`
-	Skipped            int      `json:"skipped"`
-	UnmappedUsers      []string `json:"unmapped_users,omitempty"`
+	ListsCreated       int `json:"lists_created"`
+	ListsUpdated       int `json:"lists_updated"`
+	ListsDeleted       int `json:"lists_deleted"`
+	RemindersCreated   int `json:"reminders_created"`
+	RemindersUpdated   int `json:"reminders_updated"`
+	RemindersDeleted   int `json:"reminders_deleted"`
+	CompletionsCreated int `json:"completions_created"`
+
+	CardsCreated          int      `json:"cards_created"`
+	CardsUpdated          int      `json:"cards_updated"`
+	CardsDeleted          int      `json:"cards_deleted"`
+	CardStatementsCreated int      `json:"card_statements_created"`
+	CardStatementsUpdated int      `json:"card_statements_updated"`
+	CardStatementsDeleted int      `json:"card_statements_deleted"`
+	Skipped               int      `json:"skipped"`
+	UnmappedUsers         []string `json:"unmapped_users,omitempty"`
 
 	// AffectedUsers 不发给对端，只用于本机在同步落地后推送实时刷新事件。
 	AffectedUsers []uint `json:"-"`
@@ -118,6 +169,12 @@ func (s *syncApplyStats) add(other syncApplyStats) {
 	s.RemindersUpdated += other.RemindersUpdated
 	s.RemindersDeleted += other.RemindersDeleted
 	s.CompletionsCreated += other.CompletionsCreated
+	s.CardsCreated += other.CardsCreated
+	s.CardsUpdated += other.CardsUpdated
+	s.CardsDeleted += other.CardsDeleted
+	s.CardStatementsCreated += other.CardStatementsCreated
+	s.CardStatementsUpdated += other.CardStatementsUpdated
+	s.CardStatementsDeleted += other.CardStatementsDeleted
 	s.Skipped += other.Skipped
 	if len(other.UnmappedUsers) > 0 {
 		seen := make(map[string]bool, len(s.UnmappedUsers))

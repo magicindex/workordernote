@@ -53,3 +53,17 @@ export function cardTail(no?: string | null): string {
   const digits = String(no || '').replace(/\D/g, '')
   return digits.length > 4 ? digits.slice(-4) : digits
 }
+
+
+/** 分 → 元（两位小数，带千分位）。金额一律用「分」在前后端传递，避免浮点误差。 */
+export function formatCents(cents?: number | null): string {
+  const n = Number(cents || 0) / 100
+  return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/** 元（用户输入的字符串）→ 分。非法输入按 0 处理。 */
+export function parseYuanToCents(input: string | number): number {
+  const n = typeof input === 'number' ? input : Number(String(input).replace(/[^\d.-]/g, ''))
+  if (!Number.isFinite(n)) return 0
+  return Math.round(n * 100)
+}

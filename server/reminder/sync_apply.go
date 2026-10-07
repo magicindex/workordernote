@@ -50,8 +50,15 @@ func applySyncSnapshot(db *gorm.DB, snap syncSnapshot) (syncApplyStats, error) {
 		if err != nil {
 			return err
 		}
-		reminderID, err := applySyncReminders(tx, snap, users, listID, settings.InstanceID, &stats)
+		cardID, err := applySyncCards(tx, snap, users, listID, settings.InstanceID, &stats)
 		if err != nil {
+			return err
+		}
+		reminderID, err := applySyncReminders(tx, snap, users, listID, cardID, settings.InstanceID, &stats)
+		if err != nil {
+			return err
+		}
+		if err := applySyncCardStatements(tx, snap, users, cardID, settings.InstanceID, &stats); err != nil {
 			return err
 		}
 		return applySyncCompletions(tx, snap, users, reminderID, &stats)
@@ -125,23 +132,15 @@ func applySyncLists(tx *gorm.DB, snap syncSnapshot, users map[string]database.Us
 				continue
 			}
 			row := List{
-				SyncUID:          incoming.UID,
-				UserID:           owner.ID,
-				Name:             incoming.Name,
-				Color:            incoming.Color,
-				Icon:             incoming.Icon,
-				Position:         incoming.Position,
-				IsDefault:        false,
-				Template:         incoming.Template,
-				CardName:         incoming.CardName,
-				CardBank:         incoming.CardBank,
-				CardNo:           incoming.CardNo,
-				CardStatementDay: incoming.CardStatementDay,
-				CardDueDay:       incoming.CardDueDay,
-				CardNotes:        incoming.CardNotes,
-				CardAutoRepeat:   incoming.CardAutoRepeat,
-				CreatedAt:        incoming.CreatedAt,
-				UpdatedAt:        incoming.UpdatedAt,
+				SyncUID:   incoming.UID,
+				UserID:    owner.ID,
+				Name:      incoming.Name,
+				Color:     incoming.Color,
+				Icon:      incoming.Icon,
+				Position:  incoming.Position,
+				IsDefault: false,
+				CreatedAt: incoming.CreatedAt,
+				UpdatedAt: incoming.UpdatedAt,
 			}
 			// 默认清单是「本机偏好」，只在新建时采纳对端的标记，而且必须
 			// 确认本机此刻还没有默认清单——否则会出现两个默认清单，
@@ -209,10 +208,7 @@ func applySyncLists(tx *gorm.DB, snap syncSnapshot, users map[string]database.Us
 				Updates(map[string]interface{}{
 					"name": incoming.Name, "color": incoming.Color, "icon": incoming.Icon,
 					"position": incoming.Position, "deleted_at": nil, "updated_at": incoming.UpdatedAt,
-					"template": normalizeListTemplate(incoming.Template), "card_name": incoming.CardName,
-					"card_bank": incoming.CardBank, "card_no": incoming.CardNo,
-					"card_statement_day": incoming.CardStatementDay, "card_due_day": incoming.CardDueDay,
-					"card_notes": incoming.CardNotes, "card_auto_repeat": incoming.CardAutoRepeat,
+					"template": normalizeListTemplate(incoming.Template),
 				}).Error; err != nil {
 				return nil, err
 			}
@@ -224,10 +220,7 @@ func applySyncLists(tx *gorm.DB, snap syncSnapshot, users map[string]database.Us
 			Updates(map[string]interface{}{
 				"name": incoming.Name, "color": incoming.Color, "icon": incoming.Icon,
 				"position": incoming.Position, "updated_at": incoming.UpdatedAt,
-				"template": normalizeListTemplate(incoming.Template), "card_name": incoming.CardName,
-				"card_bank": incoming.CardBank, "card_no": incoming.CardNo,
-				"card_statement_day": incoming.CardStatementDay, "card_due_day": incoming.CardDueDay,
-				"card_notes": incoming.CardNotes, "card_auto_repeat": incoming.CardAutoRepeat,
+				"template": normalizeListTemplate(incoming.Template),
 			}).Error; err != nil {
 			return nil, err
 		}
@@ -293,7 +286,7 @@ func repointOrphanReminders(tx *gorm.DB, listIDs []uint) error {
 	return nil
 }
 
-func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]database.User, listIDs map[string]uint, myInstance string, stats *syncApplyStats) (map[string]uint, error) {
+func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]database.User, listIDs map[string]uint, cardIDs map[string]uint, myInstance string, stats *syncApplyStats) (map[string]uint, error) {
 	var locals []Reminder
 	if err := tx.Find(&locals).Error; err != nil {
 		return nil, err
@@ -337,6 +330,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 			row := Reminder{
 				SyncUID: incoming.UID, UserID: owner.ID, ListID: listID,
 				Title: incoming.Title, Notes: incoming.Notes, CardRole: incoming.CardRole,
+				CardID:   cardIDs[incoming.CardUID],
 				Kind:     normalizeKind(incoming.Kind),
 				Priority: incoming.Priority, DueAt: incoming.DueAt, AllDay: incoming.AllDay,
 				RepeatRule: incoming.RepeatRule, Calendar: incoming.Calendar,
@@ -413,8 +407,8 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 		if err := tx.Model(&Reminder{}).Where("id = ?", existing.ID).
 			Updates(map[string]interface{}{
 				"list_id": listID, "title": incoming.Title, "notes": incoming.Notes,
-				"card_role": incoming.CardRole,
-				"kind":      normalizeKind(incoming.Kind), "priority": incoming.Priority,
+				"card_role": incoming.CardRole, "card_id": cardIDs[incoming.CardUID],
+				"kind": normalizeKind(incoming.Kind), "priority": incoming.Priority,
 				"due_at": incoming.DueAt, "all_day": incoming.AllDay,
 				"repeat_rule": incoming.RepeatRule, "calendar": incoming.Calendar,
 				"lunar_anchor":          incoming.LunarAnchor,
@@ -558,13 +552,6 @@ func sameList(local *List, incoming syncList) bool {
 		local.Icon == incoming.Icon &&
 		local.Position == incoming.Position &&
 		local.Template == normalizeListTemplate(incoming.Template) &&
-		local.CardName == incoming.CardName &&
-		local.CardBank == incoming.CardBank &&
-		local.CardNo == incoming.CardNo &&
-		local.CardStatementDay == incoming.CardStatementDay &&
-		local.CardDueDay == incoming.CardDueDay &&
-		local.CardNotes == incoming.CardNotes &&
-		local.CardAutoRepeat == incoming.CardAutoRepeat &&
 		(local.DeletedAt != nil) == incoming.Deleted
 }
 
@@ -572,7 +559,6 @@ func sameReminder(local *Reminder, incoming syncReminder, listID uint, channels 
 	return local.ListID == listID &&
 		local.Title == incoming.Title &&
 		local.Notes == incoming.Notes &&
-		local.CardRole == incoming.CardRole &&
 		local.Kind == normalizeKind(incoming.Kind) &&
 		local.Priority == incoming.Priority &&
 		equalTimePtr(local.DueAt, incoming.DueAt) &&

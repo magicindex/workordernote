@@ -72,8 +72,10 @@ func TestListListsUsesFixedQueryCount(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", recorder.Code, recorder.Body.String())
 	}
-	if got := queryCount.Load(); got != 3 {
-		t.Fatalf("expected 3 fixed queries, got %d", got)
+	// 3 条固定查询：清单列表 + 未完成数聚合 + 卡片数聚合。
+	// 关键是「固定」——再加多少清单也还是这几条（防的是 N+1，不是条数本身）。
+	if got := queryCount.Load(); got != 4 {
+		t.Fatalf("expected 4 fixed queries, got %d", got)
 	}
 }
 

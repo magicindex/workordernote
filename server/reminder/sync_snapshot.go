@@ -62,24 +62,50 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 	for _, l := range lists {
 		listUID[l.ID] = l.SyncUID
 		snap.Lists = append(snap.Lists, syncList{
-			UID:              l.SyncUID,
-			Owner:            users[l.UserID],
-			Name:             l.Name,
-			Color:            l.Color,
-			Icon:             l.Icon,
-			Position:         l.Position,
-			IsDefault:        l.IsDefault,
-			Template:         l.Template,
-			CardName:         l.CardName,
-			CardBank:         l.CardBank,
-			CardNo:           l.CardNo,
-			CardStatementDay: l.CardStatementDay,
-			CardDueDay:       l.CardDueDay,
-			CardNotes:        l.CardNotes,
-			CardAutoRepeat:   l.CardAutoRepeat,
-			Deleted:          l.DeletedAt != nil,
-			CreatedAt:        l.CreatedAt,
-			UpdatedAt:        l.UpdatedAt,
+			UID:       l.SyncUID,
+			Owner:     users[l.UserID],
+			Name:      l.Name,
+			Color:     l.Color,
+			Icon:      l.Icon,
+			Position:  l.Position,
+			IsDefault: l.IsDefault,
+			Template:  l.Template,
+			Deleted:   l.DeletedAt != nil,
+			CreatedAt: l.CreatedAt,
+			UpdatedAt: l.UpdatedAt,
+		})
+	}
+
+	// 信用卡与账单期：卡片用 list_uid 指清单；账单期用 card_uid 指卡片。
+	var cards []Card
+	if err := db.Find(&cards).Error; err != nil {
+		return snap, err
+	}
+	cardUID := make(map[uint]string, len(cards))
+	snap.Cards = make([]syncCard, 0, len(cards))
+	for _, card := range cards {
+		cardUID[card.ID] = card.SyncUID
+		snap.Cards = append(snap.Cards, syncCard{
+			UID: card.SyncUID, Owner: users[card.UserID], ListUID: listUID[card.ListID],
+			Name: card.Name, Bank: card.Bank, No: card.No, Holder: card.Holder, Limit: card.Limit,
+			StatementDay: card.StatementDay, DueDay: card.DueDay,
+			AdvanceDays: card.AdvanceDays, AutoRepeat: card.AutoRepeat,
+			Notes: card.Notes, Color: card.Color, Position: card.Position,
+			Deleted: card.DeletedAt != nil, CreatedAt: card.CreatedAt, UpdatedAt: card.UpdatedAt,
+		})
+	}
+
+	var statements []CardStatement
+	if err := db.Find(&statements).Error; err != nil {
+		return snap, err
+	}
+	snap.CardStatements = make([]syncCardStatement, 0, len(statements))
+	for _, st := range statements {
+		snap.CardStatements = append(snap.CardStatements, syncCardStatement{
+			UID: st.SyncUID, Owner: users[st.UserID], CardUID: cardUID[st.CardID],
+			Period: st.Period, StatementDate: st.StatementDate, DueDate: st.DueDate,
+			Amount: st.Amount, Minimum: st.Minimum, PaidAt: st.PaidAt, PaidAmount: st.PaidAmount,
+			Note: st.Note, Deleted: st.DeletedAt != nil, CreatedAt: st.CreatedAt, UpdatedAt: st.UpdatedAt,
 		})
 	}
 
@@ -100,6 +126,7 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 			Title:               r.Title,
 			Notes:               r.Notes,
 			CardRole:            r.CardRole,
+			CardUID:             cardUID[r.CardID],
 			Kind:                r.Kind,
 			Priority:            r.Priority,
 			DueAt:               r.DueAt,

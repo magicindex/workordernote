@@ -28,15 +28,6 @@ export interface CompletedItem {
   reminder_exists: boolean
 }
 
-/** 信用卡清单的倒计时摘要（后端按当前时间算好）。 */
-export interface CardSummary {
-  statement_date: string
-  due_date: string
-  days_to_statement: number
-  days_to_due: number
-  grace_days: number
-}
-
 export interface ReminderList {
   id: number
   name: string
@@ -45,7 +36,6 @@ export interface ReminderList {
   position: number
   is_default: boolean
   open_count: number
-  /** general（默认）或 credit_card：一个清单 = 一张卡 */
   template?: 'general' | 'credit_card'
   card_name?: string
   card_bank?: string
@@ -54,7 +44,6 @@ export interface ReminderList {
   card_due_day?: number
   card_notes?: string
   card_auto_repeat?: boolean
-  card_summary?: CardSummary | null
 }
 
 export interface ReminderItem {
@@ -144,7 +133,7 @@ export interface CalendarItem {
   /** 备注原文（日历界面不展示，导出「本月」时带上） */
   notes?: string
   /** 信用卡还款计划生成的项：statement=账单日、due=还款日（日历里两色标记） */
-  card_role?: '' | 'statement' | 'due'
+  card_role?: '' | 'statement' | 'due' | 'advance'
   /**
    * 完成时间。任务用它填导出表格的「完成时间」列；记事没有到期时间，
    * 它的**记录时间**放在 due_at 里（后端取 completed_at），导出时写进完成时间列。
@@ -188,25 +177,12 @@ export interface ChannelStatus {
 
 export const getSummary = () => request.get('/api/reminder/summary')
 export const getLists = () => request.get('/api/reminder/lists')
-export interface ListCardInput {
-  template?: 'general' | 'credit_card'
-  card_name?: string
-  card_bank?: string
-  card_no?: string
-  card_statement_day?: number
-  card_due_day?: number
-  card_notes?: string
-  card_auto_repeat?: boolean
-  regenerate_plan?: boolean
-}
-
-export const createList = (data: { name: string; color?: string; icon?: string } & ListCardInput) =>
+export const createList = (data: { name: string; color?: string; icon?: string; template?: 'general' | 'credit_card' }) =>
   request.post('/api/reminder/lists', data)
-export const updateList = (id: number, data: Partial<ReminderList> & ListCardInput) =>
+export const updateList = (id: number, data: Partial<ReminderList>) =>
   request.patch(`/api/reminder/lists/${id}`, data)
 export const deleteList = (id: number) => request.delete(`/api/reminder/lists/${id}`)
-/** 信用卡：重建还款计划（账单日 + 还款日两条提醒） */
-export const regenerateCardPlan = (id: number) => request.post(`/api/reminder/lists/${id}/card-plan`)
+
 
 /**
  * status='all' 表示连已完成的也返回（列表页「未完成 / 全部」开关的「全部」）。
@@ -349,3 +325,94 @@ export const runSyncImport = (data: {
   direction?: string
   interval_minutes?: number
 }) => request.post('/api/reminder/admin/sync/import', data, { timeout: 300000 })
+
+
+// ---- 信用卡（一个清单可以放多张卡） ----
+export interface CardSummary {
+  statement_date: string
+  due_date: string
+  days_to_statement: number
+  days_to_due: number
+  grace_days: number
+  advance_date?: string
+  advance_days: number
+}
+
+export interface CardStatement {
+  id?: number
+  card_id: number
+  period: string
+  statement_date: string
+  due_date: string
+  amount_cents: number
+  minimum_cents: number
+  paid_at?: string | null
+  paid_amount_cents: number
+  note: string
+}
+
+export interface CreditCard {
+  id: number
+  list_id: number
+  name: string
+  bank: string
+  no: string
+  holder: string
+  limit_cents: number
+  statement_day: number
+  due_day: number
+  advance_days: number
+  auto_repeat: boolean
+  notes: string
+  color: string
+  position: number
+  summary: CardSummary | null
+  current: CardStatement | null
+  unpaid_total_cents: number
+  unpaid_count: number
+}
+
+export interface CardPeriod {
+  period: string
+  statement_date: string
+  due_date: string
+  amount_cents: number
+  minimum_cents: number
+  paid: boolean
+  paid_at?: string
+  paid_amount_cents: number
+  overdue: boolean
+  current: boolean
+  note?: string
+}
+
+export type CardInput = {
+  list_id?: number
+  name?: string
+  bank?: string
+  no?: string
+  holder?: string
+  limit_cents?: number
+  statement_day?: number
+  due_day?: number
+  advance_days?: number
+  auto_repeat?: boolean
+  notes?: string
+  color?: string
+  regenerate_plan?: boolean
+}
+
+export const getCards = (listId?: number) =>
+  request.get('/api/reminder/cards' + (listId ? `?list_id=${listId}` : ''))
+export const createCard = (data: CardInput) => request.post('/api/reminder/cards', data)
+export const updateCard = (id: number, data: CardInput) => request.patch(`/api/reminder/cards/${id}`, data)
+export const deleteCard = (id: number) => request.delete(`/api/reminder/cards/${id}`)
+export const regenerateCardPlan = (id: number) => request.post(`/api/reminder/cards/${id}/plan`)
+export const getCardSchedule = (id: number, months = 12) =>
+  request.get(`/api/reminder/cards/${id}/schedule?months=${months}`)
+export const saveCardStatement = (id: number, period: string, data: { amount_cents: number; minimum_cents?: number; note?: string }) =>
+  request.put(`/api/reminder/cards/${id}/statements/${period}`, data)
+export const payCardStatement = (id: number, period: string, amountCents?: number) =>
+  request.post(`/api/reminder/cards/${id}/statements/${period}/pay`, { amount_cents: amountCents || 0 })
+export const unpayCardStatement = (id: number, period: string) =>
+  request.post(`/api/reminder/cards/${id}/statements/${period}/unpay`)
