@@ -43,7 +43,7 @@ func TestPlannedViewOnlyPresets(t *testing.T) {
 	mk("跨两小时的时间段", SaveReminderInput{StartAt: &rangeStart, EndAt: &rangeEnd})
 	mk("记事", SaveReminderInput{Kind: KindNote})
 
-	planned, err := listReminders(appDB, userID, "planned", "", nil, false)
+	planned, err := listReminders(appDB, userID, "planned", "", nil, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestPlannedViewOnlyPresets(t *testing.T) {
 		}
 	}
 
-	today, err := listReminders(appDB, userID, "today", "", nil, false)
+	today, err := listReminders(appDB, userID, "today", "", nil, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,4 +214,107 @@ func keysOf(m map[string]bool) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// 「全部」页按月翻页 + 计划页「全部」只收本月已完成。
+func TestMonthScopedViews(t *testing.T) {
+	withShanghaiLocal(t)
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const userID = 73
+	list, err := ensureDefaultList(appDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loc := shanghai()
+	now := time.Now().In(loc)
+	thisMonth := time.Date(now.Year(), now.Month(), 10, 10, 0, 0, 0, loc)
+	lastMonth := thisMonth.AddDate(0, -1, 0)
+
+	mk := func(title string, due time.Time, repeat string) Reminder {
+		dto, err := createReminder(appDB, userID, SaveReminderInput{
+			Title: title, ListID: list.ID, DueAt: &due, RepeatRule: repeat, Channels: []string{ChannelInApp},
+		})
+		if err != nil {
+			t.Fatalf("建 %q 失败：%v", title, err)
+		}
+		var row Reminder
+		if err := appDB.Where("id = ?", dto.ID).First(&row).Error; err != nil {
+			t.Fatal(err)
+		}
+		return row
+	}
+	mk("上月未完成", lastMonth, "none")
+	mk("本月未完成", thisMonth, "none")
+	thisDone := mk("本月已完成", thisMonth.AddDate(0, 0, 1), "none")
+	if _, err := completeReminder(appDB, userID, thisDone.ID); err != nil {
+		t.Fatal(err)
+	}
+	lastDone := mk("上月已完成", lastMonth.AddDate(0, 0, 1), "none")
+	if _, err := completeReminder(appDB, userID, lastDone.ID); err != nil {
+		t.Fatal(err)
+	}
+	// 把「上月已完成」的完成时间挪回上个月（completeReminder 只会写成当下）
+	if err := appDB.Model(&Reminder{}).Where("id = ?", lastDone.ID).
+		UpdateColumn("completed_at", lastMonth.AddDate(0, 0, 2)).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	month := now.Format("2006-01")
+	titles := func(rows []ReminderDTO) map[string]bool {
+		out := map[string]bool{}
+		for _, r := range rows {
+			out[r.Title] = true
+		}
+		return out
+	}
+
+	// 「全部」页：带月份 → 只有当月；不带月份 → 全都要有（导出用的就是这条路径）
+	scoped, err := listReminders(appDB, userID, "all", "", nil, true, month)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := titles(scoped)
+	if !got["本月未完成"] || !got["本月已完成"] {
+		t.Errorf("按月筛选少了本月条目：%v", keysOf(got))
+	}
+	if got["上月未完成"] || got["上月已完成"] {
+		t.Errorf("按月筛选混进了上月条目：%v", keysOf(got))
+	}
+	unscoped, err := listReminders(appDB, userID, "all", "", nil, true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := titles(unscoped)
+	for _, want := range []string{"上月未完成", "本月未完成", "本月已完成", "上月已完成"} {
+		if !all[want] {
+			t.Errorf("不带月份时少了 %q（导出必须能拿到所有数据）", want)
+		}
+	}
+
+	// 计划页的「全部」：本月完成的**预设**（循环任务）要出现，上月完成的不出现
+	presetDone := mk("本月完成的例行", thisMonth, "daily")
+	if _, err := completeReminder(appDB, userID, presetDone.ID); err != nil {
+		t.Fatal(err)
+	}
+	oldPreset := mk("上月完成的例行", lastMonth, "daily")
+	if _, err := completeReminder(appDB, userID, oldPreset.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := appDB.Model(&Reminder{}).Where("id = ?", oldPreset.ID).
+		UpdateColumn("completed_at", lastMonth.AddDate(0, 0, 3)).Error; err != nil {
+		t.Fatal(err)
+	}
+	planned, err := listReminders(appDB, userID, "planned", "", nil, true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pgot := titles(planned)
+	if !pgot["本月完成的例行"] {
+		t.Errorf("计划页「全部」应包含本月已完成的预设：%v", keysOf(pgot))
+	}
+	if pgot["上月完成的例行"] {
+		t.Errorf("计划页「全部」不该包含上个月完成的条目：%v", keysOf(pgot))
+	}
 }

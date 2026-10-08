@@ -50,7 +50,7 @@ func TestNoteIsCompletedOnCreationAndNeverSchedules(t *testing.T) {
 
 	// 记事只应出现在「已完成」，不得进入任何未完成视图。
 	for _, view := range []string{"all", "today", "planned"} {
-		rows, err := listReminders(appDB, 7, view, "", nil, false)
+		rows, err := listReminders(appDB, 7, view, "", nil, false, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,7 +58,7 @@ func TestNoteIsCompletedOnCreationAndNeverSchedules(t *testing.T) {
 			t.Fatalf("view=%s 不该出现记事，实际有 %d 条", view, len(rows))
 		}
 	}
-	done, err := listReminders(appDB, 7, "completed", "", nil, false)
+	done, err := listReminders(appDB, 7, "completed", "", nil, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}

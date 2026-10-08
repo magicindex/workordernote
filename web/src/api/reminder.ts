@@ -201,8 +201,12 @@ export const deleteList = (id: number) => request.delete(`/api/reminder/lists/${
  * status='all' 表示连已完成的也返回（列表页「未完成 / 全部」开关的「全部」）。
  * 记事创建即完成，所以「我的清单」想看见记事就得打开这个开关。
  */
-export const getReminders = (params: { view?: string; list_id?: number; q?: string; status?: 'all' }) =>
+export const getReminders = (params: { view?: string; list_id?: number; q?: string; status?: 'all'; month?: string }) =>
   request.get('/api/reminder/items', { params })
+
+/** 有数据的月份范围（首/末月）：给「全部」页底部左右翻月用，只在两端之间可翻。 */
+export const getReminderMonths = () =>
+  request.get('/api/reminder/items/months')
 
 /** 多清单筛选参数：把 id 数组拼成后端认的 list_ids=1,2,3。 */
 export function listIdsParam(ids: number[]): string | undefined {

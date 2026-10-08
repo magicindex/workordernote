@@ -28,6 +28,8 @@ func setupAuthRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	group.DELETE("/lists/:id", handleDeleteList(db))
 
 	group.GET("/items", handleListReminders(db))
+	// 有数据的月份范围：给「全部」页底部的左右翻月用（用户要求只在有数据的月份之间翻）。
+	group.GET("/items/months", handleItemMonths(db))
 	// 「已完成」单独一个接口：它读的是 completions 历史 ∪ reminders 的完成，
 	// 返回结构（CompletedItemDTO）与 /items 不同，并且支持时间段筛选。
 	group.GET("/completed", handleCompletedHistory(db))
@@ -361,13 +363,62 @@ func parseListFilter(c *gin.Context) []uint {
 func handleListReminders(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		items, err := listReminders(db, currentUserID(c), c.DefaultQuery("view", "today"),
-			c.Query("q"), parseListFilter(c), wantCompleted(c))
+			c.Query("q"), parseListFilter(c), wantCompleted(c), strings.TrimSpace(c.Query("month")))
 		if err != nil {
 			response.ErrorInternal(c, "读取提醒失败")
 			return
 		}
 		response.Success(c, items)
 	}
+}
+
+// GET /items/months —— 这个账号有数据的月份范围（首/末月）。
+//
+// 「全部」页按月翻页时，左右箭头只在这两端之间可用（用户要求：只在有数据的月份
+// 之间翻）。归月口径要与列表一致：有到期时间按 due_at，记事没有到期时间就按它的
+// 记录时间 completed_at。没有任何数据时返回空串，前端据此禁用翻月。
+func handleItemMonths(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := currentUserID(c)
+		// 用两次「排序取一条」而不是 MIN/MAX + Scan：SQLite 把时间存成带偏移量的
+		// 文本，聚合函数回来的字符串 GORM 解析不进 *time.Time（实测 500）。
+		// 归月口径与列表一致：有到期时间按 due_at，记事按它的记录时间 completed_at。
+		effective := "COALESCE(due_at, completed_at, created_at)"
+		var oldest, newest Reminder
+		if err := db.Select("due_at, completed_at, created_at").
+			Where("user_id = ? AND deleted_at IS NULL", userID).
+			Order(effective + " ASC").First(&oldest).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				response.Success(c, gin.H{"first": "", "last": ""})
+				return
+			}
+			response.ErrorInternal(c, "读取月份范围失败")
+			return
+		}
+		if err := db.Select("due_at, completed_at, created_at").
+			Where("user_id = ? AND deleted_at IS NULL", userID).
+			Order(effective + " DESC").First(&newest).Error; err != nil {
+			response.ErrorInternal(c, "读取月份范围失败")
+			return
+		}
+		loc := shanghai()
+		response.Success(c, gin.H{
+			"first": effectiveTime(oldest).In(loc).Format("2006-01"),
+			"last":  effectiveTime(newest).In(loc).Format("2006-01"),
+		})
+	}
+}
+
+// effectiveTime 取一条提醒「归月」用的时间：优先到期时间，其次完成时间，最后创建时间
+// （记事没有到期时间，用的是它创建即完成的时间）。
+func effectiveTime(r Reminder) time.Time {
+	if r.DueAt != nil {
+		return *r.DueAt
+	}
+	if r.CompletedAt != nil {
+		return *r.CompletedAt
+	}
+	return r.CreatedAt
 }
 
 func handleGetReminder(db *gorm.DB) gin.HandlerFunc {

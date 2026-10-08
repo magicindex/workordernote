@@ -381,6 +381,18 @@
         <button v-if="view !== 'completed'" class="btn-primary mt-5" @click="focusQuickAdd">添加第一条提醒</button>
       </section>
 
+      <!-- 「全部」页按月翻页：底部左右切换月份。用户要求每页只显示当月内容，
+           避免数据量把页面拖垮；箭头只在有数据的最早/最晚月之间可用。 -->
+      <div
+        v-if="view === 'all' && !isCardBucketPage"
+        class="mt-4 flex items-center justify-center gap-2 sm:gap-4"
+        data-month-nav
+      >
+        <button class="btn-ghost !h-9 !px-3 text-xs sm:text-sm" :disabled="!canPrevMonth" data-month-prev @click="shiftMonth(-1)">‹ 上个月</button>
+        <span class="min-w-[7rem] text-center text-sm font-extrabold" data-month-label>{{ monthLabel }}</span>
+        <button class="btn-ghost !h-9 !px-3 text-xs sm:text-sm" :disabled="!canNextMonth" data-month-next @click="shiftMonth(1)">下个月 ›</button>
+      </div>
+
       <!-- 提醒编辑器：与日历视图共用同一个组件，改一处两边同时生效 -->
       <ReminderEditor
         v-model="editorOpen"
@@ -432,7 +444,7 @@ import { listColorHex } from '../utils/list-colors'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import {
   completeReminder, createReminder, deleteReminder, exportReminders, getChannelStatuses, getCompletedHistory, getLists,
-  getReminder, getReminders, listIdsParam, restoreReminder, snoozeReminder, updateReminder,
+  getReminder, getReminderMonths, getReminders, listIdsParam, restoreReminder, snoozeReminder, updateReminder,
   type ChannelStatus, type CompletedItem, type CompletedRangeOption, type ReminderChannel,
   type ReminderItem, type ReminderKind, type ReminderList, type SaveReminderInput
 } from '../api/reminder'
@@ -455,7 +467,8 @@ const completedFilterSummary = computed(() => {
   const names = lists.value.filter((l) => ids.includes(l.id)).map((l) => l.name)
   return names.length ? names.join('、') : `${ids.length} 个清单`
 })
-const completedRange = ref<CompletedRangeOption>('all')
+// 用户要求：已完成页默认显示「本月」全部清单的已完成内容（原来默认「全部」）。
+const completedRange = ref<CompletedRangeOption>('month')
 // 已完成页显示哪些清单；空数组 = 全部
 const COMPLETED_FILTER_KEY = 'ui_completed_lists'
 // 「未完成 / 全部」开关记在本地：这类偏好跟人走、跟设备走，不必上服务端。
@@ -514,6 +527,32 @@ const blankInput = (): SaveReminderInput => ({
   all_day: false, repeat_rule: 'none', calendar: 'solar', repeat_notify_minutes: 0, channels: ['inapp'],
 })
 const quick = reactive<SaveReminderInput>(blankInput())
+// 「全部」页的月份游标（YYYY-MM）与可翻范围（有数据的最早/最晚月，用户要求只在
+// 有数据的月份之间翻）。范围由 /items/months 提供，翻到两端时箭头置灰。
+const monthCursor = ref(new Date().toISOString().slice(0, 7))
+const monthRange = ref<{ first: string; last: string }>({ first: '', last: '' })
+const monthLabel = computed(() => {
+  const [y, m] = monthCursor.value.split('-')
+  return `${y} 年 ${Number(m)} 月`
+})
+const canPrevMonth = computed(() => !!monthRange.value.first && monthCursor.value > monthRange.value.first)
+const canNextMonth = computed(() => !!monthRange.value.last && monthCursor.value < monthRange.value.last)
+function shiftMonth(delta: number) {
+  const [y, m] = monthCursor.value.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  monthCursor.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  void loadItems()
+}
+async function loadMonthRange() {
+  try {
+    const res = await getReminderMonths()
+    const data = res.data?.data || {}
+    monthRange.value = { first: data.first || '', last: data.last || '' }
+    // 首次进入时如果当月超出范围（比如数据是往月的），挪到范围内最近的月份
+    if (data.first && monthCursor.value < data.first) monthCursor.value = data.first
+    if (data.last && monthCursor.value > data.last) monthCursor.value = data.last
+  } catch { /* 拿不到范围就保持现状：箭头置灰、只看当月 */ }
+}
 const editingId = ref<number | null>(null)
 let quickChannelsTouched = false
 
@@ -656,6 +695,9 @@ async function loadData() {
       if (!quick.channels.length) quick.channels = ['inapp']
     }
     // 清单选择框的默认值由 quickTargetListID 的 watcher 统一负责（进具体清单跟随、其余用后台默认）
+    // 「全部」页要按月翻：每次（含首屏 onMounted → loadData 这条路径）先拿一次可用月份范围，
+    // 否则首屏进来 monthRange 是空的、两个箭头都置灰（翻月点击无效）。
+    if (view.value === 'all') await loadMonthRange()
     await loadItems()
   } catch (err: any) {
     showToast(err.response?.data?.message || '读取提醒失败', 'error')
@@ -672,6 +714,8 @@ async function loadRouteData() {
     }
     // 信用卡账单页只有卡片：这一页不需要（也不该）拉提醒列表。
     if (isCardBucketPage.value) return
+    // 「全部」页要按月翻：进页先拿一次可用月份范围（只在两端之间可翻）
+    if (view.value === 'all') await loadMonthRange()
     await loadItems()
   } catch (err: any) {
     showToast(err.response?.data?.message || '读取提醒失败', 'error')
@@ -704,6 +748,9 @@ async function loadItems() {
     list_id: selectedListID.value,
     q: search.value || undefined,
     status: showCompleted.value ? 'all' : undefined,
+    // 「全部」页按月翻页（用户要求：每页只显示当月，避免数据量把页面拖垮）；
+    // 其它视图不带 month，口径不变。导出也**不带** month —— 导出要所有数据。
+    month: view.value === 'all' ? monthCursor.value : undefined,
   })
   items.value = res.data.data || []
 }

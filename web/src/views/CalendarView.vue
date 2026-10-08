@@ -71,14 +71,16 @@
         </div>
 
         <div v-else class="grid flex-1 auto-rows-fr grid-cols-[repeat(7,minmax(0,1fr))] gap-1">
-          <button
+          <div
             v-for="cell in cells"
             :key="cellKey(cell)"
-            type="button"
-            class="cal-cell group flex flex-col rounded-xl border p-1 text-left transition sm:p-1.5"
+            role="button"
+            tabindex="0"
+            class="cal-cell group relative flex flex-col rounded-xl border p-1 text-left transition sm:p-1.5"
             :class="cellClass(cell)"
             @click="selectedDate = cellKey(cell)"
             @dblclick="openCreateForDate(cellKey(cell))"
+            @keydown.enter.prevent="selectedDate = cellKey(cell)"
             :title="`双击在这天新建提醒`"
             :data-cal-date="cellKey(cell)"
           >
@@ -117,6 +119,16 @@
                      普通提醒用清单图标，信用卡的账单日/还款日/提前提醒用**银行卡图标**（缩到 11px），
                      颜色仍按角色区分（账单日琥珀 / 还款日玫红 / 提前提醒橙）。 -->
                 <i v-if="item.kind === 'note'" class="cal-note-mark shrink-0">记</i>
+                <!-- 信用卡的账单日/还款日/提前提醒：图标加一块底色（参考「记」字底色），
+                     底色按角色区分（账单日琥珀 / 还款日玫红 / 提前提醒橙）。 -->
+                <span
+                  v-else-if="item.card_role"
+                  class="cal-card-mark shrink-0"
+                  :style="{ background: chipDot(item) }"
+                  :title="item.card_role === 'statement' ? '信用卡账单日' : item.card_role === 'advance' ? '信用卡还款提醒' : '信用卡还款日'"
+                >
+                  <ListIcon name="card" :size="10" class="text-white" />
+                </span>
                 <ListIcon
                   v-else
                   :name="iconOf(item)"
@@ -126,7 +138,36 @@
                 />
                 <span class="truncate">{{ item.title }}</span>
               </span>
-              <span v-if="extraCount(cell) > 0" class="cal-task px-1 font-bold text-muted-foreground">+{{ extraCount(cell) }}</span>
+              <!-- 超过上限的条目收进「+N 条」下拉里（用户要求：数量做限制，
+                   超了改成下拉弹窗）。点条目直接打开编辑，点空白处收回。 -->
+              <button
+                v-if="extraCount(cell) > 0"
+                type="button"
+                class="cal-task w-full px-1 text-left font-bold text-muted-foreground hover:text-brand-600"
+                data-cal-more
+                @click.stop="toggleOverflow(cell)"
+              >+{{ extraCount(cell) }} 条…</button>
+            </div>
+            <div
+              v-if="overflowFor === cellKey(cell)"
+              class="absolute inset-x-1 top-full z-30 mt-1 max-h-56 overflow-auto rounded-xl border border-border bg-surface p-1 shadow-xl"
+              data-cal-overflow
+              @click.stop
+            >
+              <button
+                v-for="item in overflowItems(cell)"
+                :key="item.id"
+                type="button"
+                class="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[11px] font-semibold hover:bg-muted"
+                @click.stop="openEditor(item); overflowFor = ''"
+              >
+                <i v-if="item.kind === 'note'" class="cal-note-mark shrink-0">记</i>
+                <span v-else-if="item.card_role" class="cal-card-mark shrink-0" :style="{ background: chipDot(item) }">
+                  <ListIcon name="card" :size="10" class="text-white" />
+                </span>
+                <ListIcon v-else :name="iconOf(item)" :size="11" class="shrink-0" :style="{ color: chipDot(item) }" />
+                <span class="truncate">{{ item.title }}</span>
+              </button>
             </div>
             <div class="mt-auto flex flex-wrap gap-0.5 pt-0.5 sm:hidden">
               <ListIcon
@@ -138,7 +179,7 @@
                 :style="{ color: dot(item.list_color) }"
               />
             </div>
-          </button>
+          </div>
         </div>
       </section>
 
@@ -332,6 +373,15 @@ const lists = ref<ReminderList[]>([])
 const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card'))
 const channels = ref<ChannelStatus[]>([])
 const editorOpen = ref(false)
+// 超过 MAX_CHIPS 的条目收在下拉里：记住当前展开的是哪一天
+const overflowFor = ref('')
+function overflowItems(c: LunarDayInfo) {
+  return (byDate.value.get(cellKey(c)) || []).slice(MAX_CHIPS)
+}
+function toggleOverflow(c: LunarDayInfo) {
+  const key = cellKey(c)
+  overflowFor.value = overflowFor.value === key ? '' : key
+}
 const editingId = ref<number | null>(null)
 // 新建模式的预填内容；非空即表示这次打开是「新建」而不是编辑。
 const createPreset = ref<SaveReminderInput | null>(null)

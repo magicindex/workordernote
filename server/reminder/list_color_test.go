@@ -33,7 +33,7 @@ func TestListRemindersCarriesListColor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	items, err := listReminders(appDB, userID, "all", "", nil, false)
+	items, err := listReminders(appDB, userID, "all", "", nil, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestListRemindersCarriesListColor(t *testing.T) {
 		UpdateColumn("color", "amber").Error; err != nil {
 		t.Fatal(err)
 	}
-	items, err = listReminders(appDB, userID, "all", "", nil, false)
+	items, err = listReminders(appDB, userID, "all", "", nil, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}

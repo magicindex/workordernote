@@ -159,7 +159,7 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 	setCardFeature(t, userID, true)
 
 	// 开着的时候：4 条（3 条卡片提醒 + 1 条普通任务），日历里也应该有卡片提醒。
-	items, err := listReminders(appDB, userID, "all", "", nil, false)
+	items, err := listReminders(appDB, userID, "all", "", nil, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 		t.Fatal("关掉之后读取应为关闭")
 	}
 
-	items, err = listReminders(appDB, userID, "all", "", nil, false)
+	items, err = listReminders(appDB, userID, "all", "", nil, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 	}
 
 	setCardFeature(t, userID, true)
-	items, err = listReminders(appDB, userID, "all", "", nil, false)
+	items, err = listReminders(appDB, userID, "all", "", nil, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}

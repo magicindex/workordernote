@@ -187,8 +187,9 @@ func handleExportReminders(db *gorm.DB) gin.HandlerFunc {
 			rows = completedExportRows(items, loc)
 			filename = "completed-list.csv"
 		case "active":
+			// 导出不带月份：用户要求「导出内容则导出所有数据」，不受页面按月翻页影响。
 			items, err := listReminders(db, userID, c.DefaultQuery("view", "all"),
-				c.Query("q"), parseListFilter(c), wantCompleted(c))
+				c.Query("q"), parseListFilter(c), wantCompleted(c), "")
 			if err != nil {
 				response.ErrorInternal(c, "读取提醒失败")
 				return
