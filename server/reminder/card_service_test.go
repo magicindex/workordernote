@@ -1,8 +1,13 @@
 package reminder
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func cardTestLoc(t *testing.T) *time.Location {
@@ -293,5 +298,74 @@ func TestCardSchedulePeriods(t *testing.T) {
 	}
 	if current != 1 || paid != 1 {
 		t.Errorf("计划里应有 1 个当期、1 个已还，实际 %d / %d", current, paid)
+	}
+}
+
+// 删除卡片必须把它名下的账单期一起软删。
+//
+// 起因：回归用例删掉 3 张测试卡后，沙箱的 card_statements 比生产多 6 条
+// 「没有卡的账单期」——界面上看不见，但它们是活行，会一直跟着同步快照发给对端。
+func TestDeleteCardSoftDeletesStatements(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	withFreshCardFeature(t)
+
+	const userID = 95
+	loc := cardTestLoc(t)
+	list, err := ensureCardBucket(appDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := Card{
+		UserID: userID, ListID: list.ID, Name: "白金刚", Bank: "招商银行",
+		StatementDay: 5, DueDay: 25, AutoRepeat: true,
+	}
+	if err := appDB.Create(&card).Error; err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, time.October, 8, 10, 0, 0, 0, loc)
+	if _, err := generateCardPlan(appDB, &card, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := upsertStatement(appDB, userID, card, "2026-09", 123456, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := upsertStatement(appDB, userID, card, "2026-10", 200000, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	// 走 handler 删卡（路由里的那条路径）
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodDelete, "/api/reminder/cards/1", nil)
+	context.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(uint64(card.ID), 10)}}
+	context.Set("userID", uint(userID))
+	handleDeleteCard(appDB)(context)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("删卡返回 %d：%s", recorder.Code, recorder.Body.String())
+	}
+
+	var aliveStatements int64
+	if err := appDB.Model(&CardStatement{}).
+		Where("card_id = ? AND deleted_at IS NULL", card.ID).Count(&aliveStatements).Error; err != nil {
+		t.Fatal(err)
+	}
+	if aliveStatements != 0 {
+		t.Fatalf("删卡后还剩 %d 条未软删的账单期（应全部软删）", aliveStatements)
+	}
+	var aliveReminders int64
+	if err := appDB.Model(&Reminder{}).
+		Where("card_id = ? AND deleted_at IS NULL", card.ID).Count(&aliveReminders).Error; err != nil {
+		t.Fatal(err)
+	}
+	if aliveReminders != 0 {
+		t.Fatalf("删卡后还剩 %d 条未软删的卡片提醒", aliveReminders)
+	}
+	var reloaded Card
+	if err := appDB.Where("id = ?", card.ID).First(&reloaded).Error; err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.DeletedAt == nil {
+		t.Fatal("卡片本身没有被软删")
 	}
 }

@@ -312,6 +312,15 @@ func handleDeleteCard(db *gorm.DB) gin.HandlerFunc {
 				Updates(map[string]interface{}{"deleted_at": now, "updated_at": now}).Error; err != nil {
 				return err
 			}
+			// 账单期（card_statements）必须一起软删：之前只删卡片和它的提醒，
+			// 账单期留在库里成了「没有卡的账单期」——界面上看不见，却会一直跟着
+			// 同步快照发给对端（实测：回归里删掉 3 张测试卡后，沙箱多出 6 条孤儿
+			// 账单期，生产 14 条而沙箱 20 条）。
+			if err := tx.Model(&CardStatement{}).
+				Where("user_id = ? AND card_id = ? AND deleted_at IS NULL", userID, card.ID).
+				Updates(map[string]interface{}{"deleted_at": now, "updated_at": now}).Error; err != nil {
+				return err
+			}
 			return tx.Model(&Card{}).Where("id = ?", card.ID).
 				Updates(map[string]interface{}{"deleted_at": now, "updated_at": now}).Error
 		})
