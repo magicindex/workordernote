@@ -685,12 +685,12 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		// （见 performance_test.go 的 TestSummaryUsesTwoAggregateQueries）。
 		hiddenCards := hiddenCardListIDs(db, userID)
 		completedExpr := `COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
-					+ (SELECT COUNT(*) FROM completions WHERE user_id = ?)`
+					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND deleted_at IS NULL)`
 		selectArgs := []interface{}{endToday, userID, now}
 		if len(hiddenCards) > 0 {
 			// 栏目关掉时，它那些卡片提醒的完成记录也不该再计入角标。
 			completedExpr = `COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
-					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND reminder_id NOT IN (SELECT id FROM reminders WHERE list_id IN ?))`
+					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND deleted_at IS NULL AND reminder_id NOT IN (SELECT id FROM reminders WHERE list_id IN ?))`
 			selectArgs = []interface{}{endToday, userID, hiddenCards, now}
 		}
 		q := db.Model(&Reminder{}).

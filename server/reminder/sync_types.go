@@ -136,6 +136,10 @@ type syncCompletion struct {
 	TitleSnapshot string     `json:"title_snapshot"`
 	ScheduledFor  *time.Time `json:"scheduled_for,omitempty"`
 	CompletedAt   time.Time  `json:"completed_at"`
+	// Deleted 是墓碑：这条完成记录在源端被撤回了（例如「撤销已还」），
+	// 对端收到后要把自己那份也撤回。老版本不认识这个字段，收到也只是当普通记录跳过，
+	// 不会把「撤销」当成「又完成了一次」。
+	Deleted bool `json:"deleted,omitempty"`
 }
 
 // syncApplyStats 是对端应用一份报文后的回执，也是本机展示「同步了什么」的依据。
@@ -147,6 +151,7 @@ type syncApplyStats struct {
 	RemindersUpdated   int `json:"reminders_updated"`
 	RemindersDeleted   int `json:"reminders_deleted"`
 	CompletionsCreated int `json:"completions_created"`
+	CompletionsDeleted int `json:"completions_deleted"`
 
 	CardsCreated          int      `json:"cards_created"`
 	CardsUpdated          int      `json:"cards_updated"`
@@ -169,6 +174,7 @@ func (s *syncApplyStats) add(other syncApplyStats) {
 	s.RemindersUpdated += other.RemindersUpdated
 	s.RemindersDeleted += other.RemindersDeleted
 	s.CompletionsCreated += other.CompletionsCreated
+	s.CompletionsDeleted += other.CompletionsDeleted
 	s.CardsCreated += other.CardsCreated
 	s.CardsUpdated += other.CardsUpdated
 	s.CardsDeleted += other.CardsDeleted
@@ -195,7 +201,9 @@ func (s *syncApplyStats) add(other syncApplyStats) {
 func (s syncApplyStats) total() int {
 	return s.ListsCreated + s.ListsUpdated + s.ListsDeleted +
 		s.RemindersCreated + s.RemindersUpdated + s.RemindersDeleted +
-		s.CompletionsCreated
+		s.CompletionsCreated + s.CompletionsDeleted +
+		s.CardsCreated + s.CardsUpdated + s.CardsDeleted +
+		s.CardStatementsCreated + s.CardStatementsUpdated + s.CardStatementsDeleted
 }
 
 // syncResult 是一次同步的完整结果，序列化后存进 sync_last_detail 并返回给前端。

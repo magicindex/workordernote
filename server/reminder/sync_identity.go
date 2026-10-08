@@ -161,8 +161,9 @@ func BackfillSyncUIDs(db *gorm.DB) error {
 	}
 
 	// ---- 完成历史 ----
+	// 用 Unscoped：被撤回（软删）的完成记录同样要靠 UID 才能把墓碑同步出去。
 	var completions []Completion
-	if err := db.Where("sync_uid IS NULL OR sync_uid = ''").Find(&completions).Error; err != nil {
+	if err := db.Unscoped().Where("sync_uid IS NULL OR sync_uid = ''").Find(&completions).Error; err != nil {
 		return err
 	}
 	for i := range completions {

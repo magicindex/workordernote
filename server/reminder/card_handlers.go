@@ -492,6 +492,9 @@ func retractCardPayment(tx *gorm.DB, card Card, dueDate time.Time) (Reminder, bo
 		return item, false, err
 	}
 	// 完成记录里的 scheduled_for 就是当时那条提醒的 due_at，按自然日匹配。
+	//
+	// 注意这里是**软删**（Completion 有 DeletedAt）：删掉的行会作为墓碑进快照，
+	// 对端收到后才会把那条幽灵记录一并撤回。硬删在同步里表达不出来。
 	res := tx.Where("user_id = ? AND reminder_id = ? AND scheduled_for >= ? AND scheduled_for < ?",
 		card.UserID, item.ID, dueDate, dueDate.AddDate(0, 0, 1)).Delete(&Completion{})
 	if res.Error != nil {

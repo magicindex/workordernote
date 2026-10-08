@@ -146,8 +146,10 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 		})
 	}
 
+	// 完成记录要**连软删的一起发**：deleted_at 就是「这条被撤回了」的墓碑，
+	// 用 Unscoped 才看得到（普通查询会被 GORM 自动过滤掉）。
 	var completions []Completion
-	if err := db.Find(&completions).Error; err != nil {
+	if err := db.Unscoped().Find(&completions).Error; err != nil {
 		return snap, err
 	}
 	reminderUID := make(map[uint]string, len(reminders))
@@ -163,6 +165,7 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 			TitleSnapshot: c.TitleSnapshot,
 			ScheduledFor:  c.ScheduledFor,
 			CompletedAt:   c.CompletedAt,
+			Deleted:       c.DeletedAt.Valid,
 		})
 	}
 	return snap, nil

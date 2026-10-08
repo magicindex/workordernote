@@ -13,6 +13,13 @@ export interface SyncApplyStats {
   reminders_updated: number
   reminders_deleted: number
   completions_created: number
+  completions_deleted: number
+  cards_created?: number
+  cards_updated?: number
+  cards_deleted?: number
+  card_statements_created?: number
+  card_statements_updated?: number
+  card_statements_deleted?: number
   skipped: number
   unmapped_users?: string[]
 }

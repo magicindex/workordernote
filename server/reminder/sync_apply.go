@@ -446,17 +446,40 @@ func applySyncCompletions(tx *gorm.DB, snap syncSnapshot, users map[string]datab
 	if len(snap.Completions) == 0 {
 		return nil
 	}
+	// 本机已有的完成记录：**连软删的一起读**，否则墓碑找不到对应的行，
+	// 会以为「本机从来没有过这条」而跳过。
 	var locals []Completion
-	if err := tx.Where("sync_uid IS NOT NULL AND sync_uid <> ''").Find(&locals).Error; err != nil {
+	if err := tx.Unscoped().Where("sync_uid IS NOT NULL AND sync_uid <> ''").Find(&locals).Error; err != nil {
 		return err
 	}
-	known := make(map[string]bool, len(locals))
-	for _, c := range locals {
-		known[c.SyncUID] = true
+	byUID := make(map[string]*Completion, len(locals))
+	for i := range locals {
+		byUID[locals[i].SyncUID] = &locals[i]
 	}
 	for _, incoming := range snap.Completions {
-		if incoming.UID == "" || known[incoming.UID] {
-			// 完成历史是既成事实，不做合并：同一条记录重复到达时直接跳过。
+		if incoming.UID == "" {
+			stats.Skipped++
+			continue
+		}
+		existing := byUID[incoming.UID]
+		if existing != nil {
+			// 撤回是幂等的：对端说这条撤了，本机也把它撤掉（已经撤过就跳过）。
+			// 完成历史本身仍不做合并——重复到达的「新增」直接跳过。
+			if incoming.Deleted && !existing.DeletedAt.Valid {
+				now := time.Now()
+				if err := tx.Model(&Completion{}).Where("id = ?", existing.ID).
+					Update("deleted_at", now).Error; err != nil {
+					return err
+				}
+				stats.CompletionsDeleted++
+				stats.AffectedUsers = append(stats.AffectedUsers, existing.UserID)
+			} else {
+				stats.Skipped++
+			}
+			continue
+		}
+		if incoming.Deleted {
+			// 本机从来没有过这条，对方的撤回对本机没有意义。
 			stats.Skipped++
 			continue
 		}
@@ -480,7 +503,7 @@ func applySyncCompletions(tx *gorm.DB, snap syncSnapshot, users map[string]datab
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
-		known[incoming.UID] = true
+		byUID[incoming.UID] = &row
 		stats.CompletionsCreated++
 		stats.AffectedUsers = append(stats.AffectedUsers, owner.ID)
 	}

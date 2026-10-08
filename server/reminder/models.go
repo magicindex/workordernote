@@ -3,6 +3,8 @@ package reminder
 import (
 	"errors"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 const (
@@ -122,6 +124,18 @@ type Completion struct {
 	ScheduledFor  *time.Time `json:"scheduled_for"`
 	CompletedAt   time.Time  `gorm:"index" json:"completed_at"`
 	TitleSnapshot string     `gorm:"size:200;not null" json:"title"`
+
+	// DeletedAt 让完成记录可以「撤回」：标记已还之后又点撤销时，这一步写下的历史
+	// 要能跟着撤回（见 card_handlers.go 的 retractCardPayment）。
+	//
+	// **必须是软删除**：硬删除在同步里表达不出来（快照按行发，删掉的行没有任何痕迹），
+	// 于是「标记已还 → 同步到对端 → 再撤销已还」会在对端留下一条幽灵记录。
+	// 有 deleted_at 之后，快照会把它当作墓碑带上（`Deleted: true`），对端据此一并撤回。
+	//
+	// 这里用 gorm.DeletedAt（而不是本项目其它模型的 *time.Time）：完成记录在所有读取
+	// 路径上都必须「看不见被撤回的」，交给 GORM 自动加 `deleted_at IS NULL` 最省心；
+	// 快照/落地/补 UID 那三处需要看到墓碑，显式写 Unscoped() 即可。
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 type ChannelBinding struct {

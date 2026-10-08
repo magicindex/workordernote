@@ -473,8 +473,10 @@ const lsSet = (key: string, value: string) => { try { localStorage.setItem(key, 
 const railCollapsed = ref(lsGet('ui_rail_collapsed') === '1')
 const railForced = ref(false)
 const railActive = computed(() => railCollapsed.value || railForced.value)
-// 底部「设置」组默认折叠，给清单列表腾出更多竖向空间。
-const settingsOpen = ref(lsGet('ui_settings_open') === '1')
+// 底部「设置」组**默认收起**，给清单列表腾出更多竖向空间；
+// 而且**不记状态**：展开只是为了点一次里面的入口，刷新/重进页面就回到收起
+// （用户要求：「点击刷新默认状态收起状态」）。
+const settingsOpen = ref(false)
 
 const lists = ref<ReminderList[]>([])
 // 侧栏「我的清单」里只列普通清单：信用卡账单是上面那个固定栏目，不混在里面。
@@ -562,8 +564,8 @@ function toggleSidebar() {
   }
 }
 function toggleSettings() {
+  // 只在内存里开合，不落 localStorage —— 刷新后回到默认（收起）。
   settingsOpen.value = !settingsOpen.value
-  lsSet('ui_settings_open', settingsOpen.value ? '1' : '0')
 }
 // 切到其它页面时把手机抽屉收起（点导航项已经处理，这里兜住路由变化）
 watch(() => route.fullPath, () => { mobileOpen.value = false })
