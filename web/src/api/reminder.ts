@@ -385,6 +385,8 @@ export interface CreditCard {
   position: number
   summary: CardSummary | null
   current: CardStatement | null
+  /** 最近一次已还款的那一期：当期推进到下一期后，卡片仍要能显示并撤销它 */
+  last_paid?: CardStatement | null
   unpaid_total_cents: number
   unpaid_count: number
 }

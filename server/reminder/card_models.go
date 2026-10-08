@@ -98,6 +98,9 @@ type CardDTO struct {
 	// UnpaidTotal：还没还的期数金额合计（含之前漏还的），前端显示「待还合计」。
 	UnpaidTotal int64 `json:"unpaid_total_cents"`
 	UnpaidCount int64 `json:"unpaid_count"`
+	// LastPaid：最近一次「已还款」的那一期。当期已经推进到下一期之后，卡片上仍要能看到
+	// 「本期已还 ¥x」并提供「撤销已还」——否则点了还款就没法撤销了。
+	LastPaid *CardStatementDTO `json:"last_paid,omitempty"`
 }
 
 // CardStatementDTO 是账单期 + 它属于哪张卡（排期列表里要显示卡名）。

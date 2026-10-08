@@ -57,14 +57,11 @@
                   <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" stroke-width="1.6" />
                   <path d="M2.5 10h19M6 13.5h4" stroke-width="1.6" stroke-linecap="round" />
                 </svg>
-                <p class="min-w-0 truncate text-sm font-extrabold tracking-wide" data-card-title>{{ cardTitle(card) }}</p>
+                <!-- 卡名允许换行：窄屏/长卡名不再被省略号截断（用户要求「页面缩小时卡片名称自动换行」） -->
+                <p class="min-w-0 text-sm font-extrabold leading-5 tracking-wide" data-card-title>{{ cardTitle(card) }}</p>
               </div>
-              <!-- 卡号：窄屏缩字距 + 允许换行，**绝不截断**——用户报过「看不到信用卡尾号」
-                   （0.14.0 给它加了 truncate，19 个字符在窄列里被省略号吃掉，尾号反而看不见）。
-                   maskNo 只留后四位，所以只要不截断，尾号一定看得见。 -->
-              <p class="font-mono text-[13px] leading-5 tracking-[.04em] opacity-90 sm:text-[15px] sm:tracking-[.16em]" data-card-number>
-                {{ maskNo(card.no) }}
-              </p>
+              <!-- 持卡人挪到卡名下面（原来在右下角）：把右下那一行腾给卡号 -->
+              <p v-if="card.holder" class="text-[11px] font-semibold opacity-80" data-card-holder>{{ card.holder }}</p>
             </div>
             <div class="shrink-0 text-right text-[11px] leading-4 opacity-85">
               <p>账单日 每月 {{ card.statement_day }} 号</p>
@@ -75,9 +72,10 @@
               </p>
             </div>
           </div>
-          <!-- 持卡人单独一行、靠右下：卡名再长也不会把它挤掉（原来跟卡名同一行） -->
-          <p v-if="card.holder" class="relative mt-2.5 text-right text-[11px] font-semibold opacity-80" data-card-holder>
-            {{ card.holder }}
+          <!-- 卡号单独一行、靠右下（原来是持卡人的位置）：位置换一下之后卡号不再跟卡名抢宽度，
+               窄屏也能完整显示尾号（用户要求「卡号和持卡人交换位置」）。 -->
+          <p class="relative mt-2.5 text-right font-mono text-[13px] leading-5 tracking-[.04em] opacity-90 sm:text-[14px] sm:tracking-[.12em]" data-card-number>
+            {{ maskNo(card.no) }}
           </p>
           <p class="relative mt-2 text-[11px] opacity-80">
             免息期 {{ summaryOf(card).grace }} 天
@@ -107,6 +105,23 @@
             <i class="h-2 w-2 rounded-full" style="background: #f43f5e"></i>
             还款日 {{ summaryOf(card).dueText }}（{{ summaryOf(card).daysToDue === 0 ? '就是今天' : `还有 ${summaryOf(card).daysToDue} 天` }}）
           </span>
+          <!-- 刚还过的那一期：当期已经跳到下一期了，这里保留一行「已还 + 撤销」，
+               否则点完还款就没法撤销（用户报过点完已还款之后的状态问题）。 -->
+          <span
+            v-if="card.last_paid"
+            class="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"
+            data-card-paid
+          >
+            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="m5 13 4 4L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            {{ card.last_paid.period }} 已还 ¥{{ formatCents(card.last_paid.paid_amount_cents || card.last_paid.amount_cents) }}
+          </span>
+          <button
+            v-if="card.last_paid"
+            class="!h-6 rounded-full border border-border px-2 text-[11px] font-semibold text-muted-foreground hover:text-rose-500"
+            :disabled="busyId === card.id"
+            :data-card-unpay="card.id"
+            @click="unpay(card)"
+          >撤销已还</button>
           <span v-if="card.unpaid_count > 1" class="rounded-full bg-amber-500/12 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400" data-card-unpaid>
             另有 {{ card.unpaid_count - 1 }} 期未还 · 合计 ¥{{ formatCents(card.unpaid_total_cents) }}
           </span>
@@ -121,19 +136,33 @@
             :data-card-pay="card.id"
             @click="pay(card)"
           >标记已还</button>
-          <button
-            v-else
-            class="btn-secondary !h-8 !px-3 !text-[11px]"
-            :disabled="busyId === card.id"
-            :data-card-unpay="card.id"
-            @click="unpay(card)"
-          >撤销已还</button>
           <button class="btn-secondary !h-8 !px-3 !text-[11px]" :data-card-set-amount="card.id" @click="openAmount(card)">
             {{ card.current?.amount_cents ? '改本期金额' : '填本期金额' }}
           </button>
-          <button class="btn-secondary !h-8 !px-3 !text-[11px]" :data-card-schedule="card.id" @click="openSchedule(card)">还款计划</button>
-          <button class="btn-secondary !h-8 !px-3 !text-[11px]" :data-card-edit="card.id" @click="openEdit(card)">编辑</button>
-          <button class="btn-ghost !h-8 !px-2 !text-[11px] text-rose-500" :data-card-delete="card.id" @click="askDelete(card)">删除</button>
+          <!-- 次要操作收进抽屉：桌面鼠标移上去自动展开、移开自动收缩；触屏点一下展开
+               （用户要求：解决手机端按钮太多换行占空间的问题）。 -->
+          <div
+            class="relative ml-auto"
+            data-card-actions
+            @mouseenter="drawerOpen = card.id"
+            @mouseleave="drawerOpen = null"
+          >
+            <button
+              class="btn-secondary !h-8 !px-3 !text-[11px]"
+              :data-card-more="card.id"
+              :aria-expanded="drawerOpen === card.id"
+              @click="drawerOpen = drawerOpen === card.id ? null : card.id"
+            >⋯ 更多</button>
+            <div
+              v-show="drawerOpen === card.id"
+              class="absolute right-0 top-full z-20 mt-1 flex min-w-max flex-col gap-1 rounded-xl border border-border bg-surface p-1 shadow-xl"
+              data-card-drawer
+            >
+              <button class="btn-secondary !h-8 !justify-start !px-3 !text-[11px]" :data-card-schedule="card.id" @click="openSchedule(card)">还款计划</button>
+              <button class="btn-secondary !h-8 !justify-start !px-3 !text-[11px]" :data-card-edit="card.id" @click="openEdit(card)">编辑</button>
+              <button class="btn-ghost !h-8 !justify-start !px-3 !text-[11px] text-rose-500" :data-card-delete="card.id" @click="askDelete(card)">删除</button>
+            </div>
+          </div>
         </div>
 
         <p v-if="card.notes" class="mt-2 whitespace-pre-line text-[11px] leading-5 text-muted-foreground" data-card-notes>{{ card.notes }}</p>
@@ -250,8 +279,11 @@ function logoOf(card: CreditCard): string {
 /** 倒计时按本地时间实时算（后端也给，前端这份是为了不依赖刷新）。 */
 function summaryOf(card: CreditCard) {
   const now = new Date()
-  const statement = nextDayOccurrence(card.statement_day, now)
-  const due = nextDayOccurrence(card.due_day, now)
+  // 优先跟**当前这一期**走：还过款之后后端会把当期推到下一期，倒计时与排序都跟着变
+  // （用户报的「已还款后倒计时没跳到下一周期」）。没有当期时退回「下一个还款日号」。
+  const cur = card.current
+  const statement = cur?.statement_date ? new Date(cur.statement_date) : nextDayOccurrence(card.statement_day, now)
+  const due = cur?.due_date ? new Date(cur.due_date) : nextDayOccurrence(card.due_day, now)
   return {
     statementText: formatCardDate(statement),
     dueText: formatCardDate(due),
@@ -349,10 +381,13 @@ async function pay(card: CreditCard) {
 }
 
 async function unpay(card: CreditCard) {
-  if (!card.current?.period) return
+  // 撤销的是**刚还过的那一期**：还完款之后 current 已经推进到下一期，
+  // 用 current.period 去撤销会打在没还过的期上（撤销无效）。
+  const period = card.last_paid?.period || card.current?.period
+  if (!period) return
   busyId.value = card.id
   try {
-    await unpayCardStatement(card.id, card.current.period)
+    await unpayCardStatement(card.id, period)
     await load()
     notify(card.id, '已撤销「已还」标记')
     emit('changed')
@@ -393,6 +428,8 @@ async function confirmDelete() {
 type SortMode = 'smart' | 'statement' | 'due'
 const SORT_KEY = 'ui_card_sort'
 const sortMode = ref<SortMode>((localStorage.getItem(SORT_KEY) as SortMode) || 'smart')
+// 卡片次要操作的抽屉：桌面靠悬停、手机靠点击（见模板里的 @mouseenter/@click）
+const drawerOpen = ref<number | null>(null)
 const sortMenu = reactive({ open: false, x: 0, y: 0 })
 const sortItems: { key: SortMode; label: string; hint: string }[] = [
   { key: 'smart', label: '智能排序（默认）', hint: '还款日近的在前（逾期 / ≤3 天最前），再按账单日' },

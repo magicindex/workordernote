@@ -194,8 +194,13 @@ func TestCardStatementPayFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dto.Current.PaidAt == nil || dto.Current.PaidAmount != 123456 {
-		t.Errorf("标记已还后应记录 paid_at 与金额，实际 %+v", dto.Current)
+	// 还款之后当期会**推进到下一期**（用户要求：还完就清空应还额度、倒计时跳下一周期），
+	// 刚还的那一期改从 LastPaid 读，卡片上据此显示「已还 + 撤销已还」。
+	if dto.LastPaid == nil || dto.LastPaid.Period != "2026-10" || dto.LastPaid.PaidAt == nil || dto.LastPaid.PaidAmount != 123456 {
+		t.Errorf("标记已还后应在 LastPaid 里记下 paid_at 与金额，实际 %+v", dto.LastPaid)
+	}
+	if dto.Current.Period == "2026-10" || dto.Current.PaidAt != nil || dto.Current.Amount != 0 {
+		t.Errorf("还完当期应推进到下一期且应还清零，实际 %+v", dto.Current)
 	}
 	if dto.UnpaidTotal != 0 || dto.UnpaidCount != 0 {
 		t.Errorf("已还后待还合计应为 0，实际 %d / %d", dto.UnpaidTotal, dto.UnpaidCount)
@@ -391,5 +396,76 @@ func TestDeleteCardSoftDeletesStatements(t *testing.T) {
 	}
 	if reloadedNotification.ReadAt == nil {
 		t.Fatal("删卡后那条未读的到点通知仍是未读（弹窗会弹出来且点不掉）")
+	}
+}
+
+// 点过「已还款」之后，卡片要跳到下一期：倒计时/日期跟着走，应还额度也随之清零
+// （用户报的「交通银行手工点了已还款，还款倒计时没有跳到下一周期，导致排序错误」）。
+func TestPaidPeriodAdvancesToNextCycle(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	withFreshCardFeature(t)
+
+	const userID = 96
+	list, err := ensureCardBucket(appDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := Card{
+		UserID: userID, ListID: list.ID, Name: "VISA", Bank: "交通银行",
+		StatementDay: 25, DueDay: 19, AutoRepeat: true,
+	}
+	if err := appDB.Create(&card).Error; err != nil {
+		t.Fatal(err)
+	}
+	loc := shanghai()
+	// 以 2026-10-08 为例：账单日 25 / 还款日 19 的当期是 2026-09（9-25 出账、10-19 还款）
+	now := time.Date(2026, time.October, 8, 10, 0, 0, 0, loc)
+	if _, err := generateCardPlan(appDB, &card, now); err != nil {
+		t.Fatal(err)
+	}
+	before, err := buildCardDTO(appDB, card, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Current == nil || before.Current.Period != "2026-09" {
+		t.Fatalf("当期应为 2026-09，实际 %+v", before.Current)
+	}
+	if before.Summary == nil || before.Summary.DueDate != "2026-10-19" {
+		t.Fatalf("倒计时应指向 10-19，实际 %+v", before.Summary)
+	}
+
+	// 记金额并标记已还
+	if _, err := upsertStatement(appDB, userID, card, "2026-09", 123456, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := payStatement(appDB, userID, card, "2026-09", 123456, now); err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := buildCardDTO(appDB, card, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Current == nil {
+		t.Fatal("还款后应给出下一期")
+	}
+	if after.Current.Period == "2026-09" {
+		t.Fatalf("还款后当期还停在已还的那一期：%+v", after.Current)
+	}
+	if after.Current.PaidAt != nil {
+		t.Fatalf("下一期不该带已还标记：%+v", after.Current)
+	}
+	if after.Current.Amount != 0 {
+		t.Fatalf("下一期还没有金额，应还额度应清零，实际 %d", after.Current.Amount)
+	}
+	if after.Current.DueDate.Format("2006-01-02") != "2026-11-19" {
+		t.Fatalf("下一期还款日应为 2026-11-19，实际 %s", after.Current.DueDate.Format("2006-01-02"))
+	}
+	if after.Summary == nil || after.Summary.DueDate != "2026-11-19" {
+		t.Fatalf("倒计时应跟着跳到 2026-11-19，实际 %+v", after.Summary)
+	}
+	if after.UnpaidCount != 0 || after.UnpaidTotal != 0 {
+		t.Fatalf("已还的期不该再算进未还合计：%d 期 / %d 分", after.UnpaidCount, after.UnpaidTotal)
 	}
 }

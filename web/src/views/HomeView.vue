@@ -195,10 +195,10 @@
           </span>
         </div>
         <div class="list-toolbar-actions">
-          <!-- 未完成 / 全部：记事创建即完成，想在这个页面看见记事就得切到「全部」。
-               选择记在本地（跟人走、跟设备走），与清单筛选一致。 -->
+          <!-- 未完成 / 全部：只有「全部」页需要它（用户要求：今天页与计划页取消这个开关，
+               一律只显示未完成）。选择记在本地（跟人走、跟设备走），与清单筛选一致。 -->
           <div
-            v-if="view !== 'completed'"
+            v-if="view === 'all'"
             class="seg-group"
             role="group"
             aria-label="显示范围"
@@ -747,7 +747,8 @@ async function loadItems() {
     view: view.value,
     list_id: selectedListID.value,
     q: search.value || undefined,
-    status: showCompleted.value ? 'all' : undefined,
+    // 今天页与计划页固定只看未完成（开关已经取消）；「全部」页才跟随 未完成/全部。
+    status: view.value !== 'all' ? undefined : (showCompleted.value ? 'all' : undefined),
     // 「全部」页按月翻页（用户要求：每页只显示当月，避免数据量把页面拖垮）；
     // 其它视图不带 month，口径不变。导出也**不带** month —— 导出要所有数据。
     month: view.value === 'all' ? monthCursor.value : undefined,
@@ -772,7 +773,8 @@ async function handleExport() {
       list_id: completed && !completedListFilter.value.length ? selectedListID.value : undefined,
       q: search.value || undefined,
       // 导出必须和屏幕上这一份一致：开关在「全部」时连已完成的一起导出。
-      status: !completed && showCompleted.value ? 'all' : undefined,
+      // 只有「全部」页有 未完成/全部 开关（今天/计划固定未完成），导出跟随它。
+      status: !completed && view.value === 'all' && showCompleted.value ? 'all' : undefined,
     })
     const filename = completed ? 'completed-list.csv' : 'task-list.csv'
     const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8' }))

@@ -95,6 +95,15 @@ func currentPeriod(card Card, now time.Time) (period string, statement, due time
 	return periodOf(s), s, d
 }
 
+// nextPeriod 返回「再往后一期」的账期与起止日期。账期标识沿用开始那一天的月份，
+// 与 currentPeriod/parsePeriodDates 保持一致（跨月卡也不例外）。
+func nextPeriod(card Card, statement time.Time) (period string, nextStatement, due time.Time) {
+	loc := statement.Location()
+	m := statement.AddDate(0, 1, 0)
+	nextStatement, due = statementDates(card, m.Year(), m.Month(), loc)
+	return periodOf(nextStatement), nextStatement, due
+}
+
 func cardDisplayName(card Card) string {
 	name := strings.TrimSpace(card.Bank + card.Name)
 	if name == "" {
@@ -256,15 +265,44 @@ func buildCardDTO(db *gorm.DB, card Card, now time.Time) (CardDTO, error) {
 	var row CardStatement
 	err := db.Where("user_id = ? AND card_id = ? AND period = ? AND deleted_at IS NULL", card.UserID, card.ID, period).
 		First(&row).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return dto, err
+	}
+	if err == nil {
+		// 本期已经点过「已还款」：应还额度就算结清了，卡片要**跳到下一期**。
+		// 不跳的话读秒还停在刚还过的那一期（用户报的「交通银行手工点了已还款，
+		// 还款倒计时没有跳到下一周期，导致排序错误」），而且它还会一直以「快到还款日」
+		// 的身份排在前面。
+		if row.PaidAt != nil {
+			period, statement, due = nextPeriod(card, statement)
+			row = CardStatement{}
+			err = db.Where("user_id = ? AND card_id = ? AND period = ? AND deleted_at IS NULL", card.UserID, card.ID, period).
+				First(&row).Error
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return dto, err
+			}
+		}
+	}
 	if err == nil {
 		dto.Current = &CardStatementDTO{CardStatement: row}
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return dto, err
 	} else {
 		// 本期还没填过金额：给出算好的日期，前端可以直接填
 		dto.Current = &CardStatementDTO{CardStatement: CardStatement{
 			CardID: card.ID, UserID: card.UserID, Period: period, StatementDate: statement, DueDate: due,
 		}}
+	}
+	// 倒计时/日期跟着**当前这一期**走：还过款之后要指向下一期。原来 cardSummary 算的是
+	// 「下一个还款日号」，刚还完 10-19 也还显示 10-19，用户看到的「倒计时没跳到下一周期」
+	// 就是这个（同时也会让排序把已还的卡排在前面）。
+	if dto.Summary != nil {
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		dto.Summary.StatementDate = statement.Format("2006-01-02")
+		dto.Summary.DueDate = due.Format("2006-01-02")
+		dto.Summary.DaysToStatement = int(statement.Sub(today).Hours() / 24)
+		dto.Summary.DaysToDue = int(due.Sub(today).Hours() / 24)
+		if card.AdvanceDays > 0 {
+			dto.Summary.AdvanceDate = due.AddDate(0, 0, -card.AdvanceDays).Format("2006-01-02")
+		}
 	}
 	if err := db.Model(&CardStatement{}).
 		Where("user_id = ? AND card_id = ? AND deleted_at IS NULL AND paid_at IS NULL", card.UserID, card.ID).
@@ -274,6 +312,14 @@ func buildCardDTO(db *gorm.DB, card Card, now time.Time) (CardDTO, error) {
 	if err := db.Model(&CardStatement{}).
 		Where("user_id = ? AND card_id = ? AND deleted_at IS NULL AND paid_at IS NULL", card.UserID, card.ID).
 		Count(&dto.UnpaidCount).Error; err != nil {
+		return dto, err
+	}
+	// 最近一次已还款的那一期（卡片上显示「本期已还 + 撤销已还」用）
+	var lastPaid CardStatement
+	if err := db.Where("user_id = ? AND card_id = ? AND deleted_at IS NULL AND paid_at IS NOT NULL", card.UserID, card.ID).
+		Order("paid_at DESC").First(&lastPaid).Error; err == nil {
+		dto.LastPaid = &CardStatementDTO{CardStatement: lastPaid}
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return dto, err
 	}
 	return dto, nil
