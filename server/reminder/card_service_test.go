@@ -64,6 +64,30 @@ func TestCardCurrentPeriod(t *testing.T) {
 	}
 }
 
+// 跨月卡（账单日 25 / 还款日 19）：10-08 的当期是 **9 月**那一期（9-25 出账、10-19 还款），
+// 不是 10 月那一期（10-25 出账、11-19 还款）。用户报的「颜色没变」就是这个口径错了。
+func TestCardCurrentPeriodCrossMonth(t *testing.T) {
+	loc := cardTestLoc(t)
+	card := Card{StatementDay: 25, DueDay: 19}
+
+	period, statement, due := currentPeriod(card, time.Date(2026, time.October, 8, 9, 0, 0, 0, loc))
+	if period != "2026-09" || statement.Format("2006-01-02") != "2026-09-25" || due.Format("2006-01-02") != "2026-10-19" {
+		t.Errorf("10-08 时跨月卡当期应为 2026-09 / 09-25 / 10-19，实际 %s / %s / %s",
+			period, statement.Format("2006-01-02"), due.Format("2006-01-02"))
+	}
+	// 10-20：这一期已经过了还款日 → 顺延到 10 月那一期（10-25 出账 / 11-19 还款）
+	period, statement, due = currentPeriod(card, time.Date(2026, time.October, 20, 9, 0, 0, 0, loc))
+	if period != "2026-10" || statement.Format("2006-01-02") != "2026-10-25" || due.Format("2006-01-02") != "2026-11-19" {
+		t.Errorf("10-20 时跨月卡当期应为 2026-10 / 10-25 / 11-19，实际 %s / %s / %s",
+			period, statement.Format("2006-01-02"), due.Format("2006-01-02"))
+	}
+	// 同月卡不受影响：账单日 5 / 还款日 25，10-08 仍是 10 月那一期
+	period, _, due = currentPeriod(Card{StatementDay: 5, DueDay: 25}, time.Date(2026, time.October, 8, 9, 0, 0, 0, loc))
+	if period != "2026-10" || due.Format("2006-01-02") != "2026-10-25" {
+		t.Errorf("同月卡 10-08 应为 2026-10 / 10-25，实际 %s / %s", period, due.Format("2006-01-02"))
+	}
+}
+
 // 跨月卡（账单日 25 / 还款日 10）：10 月账单的还款日在 11-10。
 func TestCardCrossMonthDue(t *testing.T) {
 	loc := cardTestLoc(t)

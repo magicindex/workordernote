@@ -20,8 +20,11 @@ import (
 func registerCardRoutes(group *gin.RouterGroup, db *gorm.DB) {
 	group.GET("/cards", handleListCards(db))
 	group.POST("/cards", handleCreateCard(db))
-	// 首页那条「本周待还」长条卡片的数据
-	group.GET("/cards/week", handleWeekDueCards(db))
+	// 信用卡页头部那条时间卡片的数据：**账单已出、当期未还**的卡（含逾期）
+	group.GET("/cards/billing", handleBillingCards(db))
+	// 0.13.x 的老路径保留一个版本：升级瞬间浏览器可能还揣着旧前端，
+	// 直接 404 会让头部卡片空掉（下个版本可以删）。
+	group.GET("/cards/week", handleBillingCards(db))
 	group.PATCH("/cards/:id", handleUpdateCard(db))
 	group.DELETE("/cards/:id", handleDeleteCard(db))
 	// 重建这张卡的提醒（账单日/还款日/提前提醒）
@@ -95,13 +98,13 @@ func handleListCards(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// GET /cards/week —— 首页那条长条卡片用：本周（周一到周日）要还的卡片 + 已逾期的卡片。
-func handleWeekDueCards(db *gorm.DB) gin.HandlerFunc {
+// GET /cards/billing —— 头部时间卡片：账单已出、当期未还的卡（含逾期），已排好序。
+func handleBillingCards(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := currentUserID(c)
-		out, err := weekDueCards(db, userID, time.Now())
+		out, err := billingCards(db, userID, time.Now())
 		if err != nil {
-			response.ErrorInternal(c, "读取本周待还失败")
+			response.ErrorInternal(c, "读取待还卡片失败")
 			return
 		}
 		response.Success(c, out)

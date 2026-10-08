@@ -413,33 +413,37 @@ export const updateCard = (id: number, data: CardInput) => request.patch(`/api/r
 export const deleteCard = (id: number) => request.delete(`/api/reminder/cards/${id}`)
 export const regenerateCardPlan = (id: number) => request.post(`/api/reminder/cards/${id}/plan`)
 
-// 「本周待还」：信用卡栏目页那条长条卡片右半边用的数据。
-export interface WeekDueCard {
+// 「账单已出、当期未还」的卡：信用卡页头部那条时间卡片右半边用的数据。
+// 口径见后端 card_billing.go：账单日过了且这一期没还的卡才进来，逾期与「还款日前 3 天」
+// 的（红色）排最前，其余按账单日由早到晚。
+export interface BillingCard {
   card_id: number
   bank: string
   name: string
   color: string
   tail: string
   period: string
+  statement_date: string
   due_date: string
   days_left: number
   overdue: boolean
+  /** 逾期或离还款日 ≤3 天：卡面是红色 */
+  urgent: boolean
   amount_cents: number
   minimum_cents: number
 }
 
-export interface WeekDue {
+export interface Billing {
   today: string
   weekday: string
-  week_start: string
-  week_end: string
   count: number
   overdue: number
+  urgent: number
   total_cents: number
-  cards: WeekDueCard[]
+  cards: BillingCard[]
 }
 
-export const getWeekDueCards = () => request.get('/api/reminder/cards/week')
+export const getBillingCards = () => request.get('/api/reminder/cards/billing')
 export const getCardSchedule = (id: number, months = 12) =>
   request.get(`/api/reminder/cards/${id}/schedule?months=${months}`)
 export const saveCardStatement = (id: number, period: string, data: { amount_cents: number; minimum_cents?: number; note?: string }) =>

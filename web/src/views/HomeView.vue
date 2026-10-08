@@ -16,10 +16,10 @@
         </div>
         <!-- 宽度放到最大：占满标题右侧剩下的空间（不再设上限），窄屏自动折到标题下方 -->
         <div class="min-w-0 w-full lg:flex-1">
-          <WeekDueStrip :refresh-key="weekRefreshKey" />
+          <BillingStrip :refresh-key="weekRefreshKey" />
         </div>
       </section>
-      <CreditCardPanel v-if="selectedList" :list="selectedList" @changed="onCardsChanged" />
+      <CreditCardPanel v-if="selectedList" :list="selectedList" @changed="onCardsChanged" @refresh-strip="weekRefreshKey += 1" />
     </template>
 
     <template v-else>
@@ -376,7 +376,7 @@ import Toast from '../components/Toast.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import ListFilter from '../components/ListFilter.vue'
 import ListIcon from '../components/ListIcon.vue'
-import WeekDueStrip from '../components/WeekDueStrip.vue'
+import BillingStrip from '../components/BillingStrip.vue'
 import LunarDatePicker from '../components/LunarDatePicker.vue'
 import RepeatNotifySelect from '../components/RepeatNotifySelect.vue'
 import PrintDialog from '../components/PrintDialog.vue'
@@ -474,7 +474,7 @@ const selectedListID = computed(() => route.name === 'ReminderList' ? Number(rou
 const selectedList = computed(() => lists.value.find(x => x.id === selectedListID.value))
 // 「信用卡账单」是固定栏目：这一页只渲染卡片面板（见模板最上面那一支），
 // 快速新建、提醒列表、完成记录筛选都不出现。栏目被后台关掉时不认这一页。
-// 卡片有增删改时 +1，时间卡片据此重新拉一次（它自己管数据）
+// 卡片有增删改时 +1，头部时间卡片据此重新拉一次（它自己管数据）
 const weekRefreshKey = ref(0)
 function onCardsChanged() {
   weekRefreshKey.value += 1

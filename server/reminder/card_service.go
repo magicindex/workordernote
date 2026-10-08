@@ -72,11 +72,19 @@ func statementDates(card Card, year int, month time.Month, loc *time.Location) (
 	return statement, due
 }
 
-// currentPeriod 是「现在该看的那一期」：还款日还没过的那一期（都过了就看下一期）。
+// currentPeriod 是「现在该看的那一期」：**还款日还没过、且最早的那一期**。
+//
+// 循环要从**上一个月**开始（i = -1）：跨月卡的账期是「本月账单日 → 下月还款日」
+// （还款日 ≤ 账单日时），所以 10-08 看到的那一期其实是 **9 月**的账单（9-25 出账、10-19 还款）。
+// 以前从当月开始找，会直接跳到 10 月的账单（10-25 出账、11-19 还款），于是：
+//
+//	· 本期金额记到了错误的期数上；
+//	· 卡片颜色停在「账单未出」（黄→橘的那一段永远不出现）——
+//	  用户报的「上个月 25 号账单日、这个月 19 号还款日，颜色没变」就是这个 bug。
 func currentPeriod(card Card, now time.Time) (period string, statement, due time.Time) {
 	loc := now.Location()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
-	for i := 0; i < 3; i++ {
+	for i := -1; i < 3; i++ {
 		m := today.AddDate(0, i, 0)
 		s, d := statementDates(card, m.Year(), m.Month(), loc)
 		if !d.Before(today) {

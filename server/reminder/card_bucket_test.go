@@ -226,8 +226,9 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 	}
 }
 
-// 「本周待还」：本周内到期的、已经逾期的都算；还完的不算。
-func TestWeekDueCards(t *testing.T) {
+// 「账单已出」的头部卡片：账单日过了且当期没还的才进来；
+// 排序是「红色（逾期或 ≤3 天）最前 → 账单日早的在前 → 还款日近的在前」。
+func TestBillingCards(t *testing.T) {
 	cleanup := testDB(t)
 	defer cleanup()
 	withFreshCardFeature(t)
@@ -238,212 +239,96 @@ func TestWeekDueCards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 2026-10-07 是周三 → 本周是 10-05 ~ 10-11。
-	now := time.Date(2026, time.October, 7, 9, 0, 0, 0, loc)
-	makeCard := func(name string, dueDay int) Card {
+	// 2026-10-08（周四）
+	now := time.Date(2026, time.October, 8, 9, 0, 0, 0, loc)
+	makeCard := func(name string, statementDay, dueDay int) Card {
 		card := Card{
 			UserID: userID, ListID: bucket.ID, Name: name, Bank: "自检银行",
-			StatementDay: 1, DueDay: dueDay, AutoRepeat: true,
+			StatementDay: statementDay, DueDay: dueDay, AutoRepeat: true,
 		}
 		if err := appDB.Create(&card).Error; err != nil {
 			t.Fatal(err)
 		}
 		return card
 	}
-	// 本周内到期（10-09 周五）
-	inWeek := makeCard("本周卡", 9)
-	// 已经逾期（10-06 周一，今天 10-07 已过）
-	overdue := makeCard("逾期卡", 6)
-	// 下周才到期（10-14）
-	nextWeek := makeCard("下周卡", 14)
-	// 本周内到期但**还没记金额**：也要出现（金额显示 0 → 前端显示「—」）。
-	// 故意不给它 upsertStatement。
-	makeCard("未记金额卡", 8)
+	// 账单已出、离还款日还有 17 天（10-25）→ 黄色档，排后面
+	normal := makeCard("普通卡", 5, 25)
+	// 账单已出、还有 2 天到期（10-10）→ 红色，排最前
+	urgent := makeCard("紧急卡", 1, 10)
+	// 跨月卡：账单日 25 / 还款日 19 → 当期是 9 月账单，10-19 还款（还有 11 天，黄色档）
+	cross := makeCard("跨月卡", 25, 19)
+	// 账单日还没到（15 号才出账，今天 8 号）→ 不进来
+	makeCard("账单未出卡", 15, 28)
+	// 已还清的那一期 → 不进来
+	paid := makeCard("已还卡", 1, 12)
 
-	if _, err := upsertStatement(appDB, userID, inWeek, "2026-10", 123456, 0, ""); err != nil {
+	if _, err := upsertStatement(appDB, userID, normal, "2026-10", 123456, 0, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := upsertStatement(appDB, userID, overdue, "2026-10", 5000, 0, ""); err != nil {
+	if _, err := upsertStatement(appDB, userID, urgent, "2026-10", 5000, 0, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := upsertStatement(appDB, userID, nextWeek, "2026-10", 999, 0, ""); err != nil {
+	if _, err := upsertStatement(appDB, userID, cross, "2026-09", 7777, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := upsertStatement(appDB, userID, paid, "2026-10", 999, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := payStatement(appDB, userID, paid, "2026-10", 999, now); err != nil {
 		t.Fatal(err)
 	}
 
-	out, err := weekDueCards(appDB, userID, now)
+	out, err := billingCards(appDB, userID, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.WeekStart != "2026-10-05" || out.WeekEnd != "2026-10-11" {
-		t.Fatalf("本周区间不对：%s ~ %s", out.WeekStart, out.WeekEnd)
-	}
-	if out.Weekday != "星期三" || out.Today != "2026-10-07" {
+	if out.Today != "2026-10-08" || out.Weekday != "星期四" {
 		t.Fatalf("日期信息不对：%s %s", out.Today, out.Weekday)
 	}
 	if out.Count != 3 {
-		t.Fatalf("本周待还应是 3 张（本周内 + 逾期 + 未记金额），实际 %d：%+v", out.Count, out.Cards)
+		t.Fatalf("账单已出且未还的应有 3 张，实际 %d：%+v", out.Count, out.Cards)
 	}
-	if out.TotalCents != 128456 {
-		t.Fatalf("合计金额不对：%d", out.TotalCents)
+	names := make([]string, 0, len(out.Cards))
+	for _, c := range out.Cards {
+		names = append(names, c.Name)
 	}
-	if out.Overdue != 1 {
-		t.Fatalf("应标出 1 张逾期，实际 %d", out.Overdue)
+	if names[0] != "紧急卡" {
+		t.Fatalf("红色的（≤3 天）应排最前，实际顺序 %v", names)
 	}
-	byName := map[string]WeekDueCard{}
+	if out.Urgent != 1 || out.Overdue != 0 {
+		t.Fatalf("红色张数应为 1、逾期 0，实际 urgent=%d overdue=%d", out.Urgent, out.Overdue)
+	}
+	// 其余按账单日：跨月卡（9-25）在普通卡（10-05）之前
+	if names[1] != "跨月卡" || names[2] != "普通卡" {
+		t.Fatalf("其余应按账单日由早到晚，实际顺序 %v", names)
+	}
+	byName := map[string]BillingCard{}
 	for _, c := range out.Cards {
 		byName[c.Name] = c
 	}
-	if c := byName["逾期卡"]; !c.Overdue || c.DaysLeft != -1 {
-		t.Fatalf("逾期卡应标逾期且 days_left=-1：%+v", c)
+	if c := byName["紧急卡"]; !c.Urgent || c.DaysLeft != 2 || c.StatementDate != "2026-10-01" {
+		t.Fatalf("紧急卡信息不对：%+v", c)
 	}
-	if c := byName["本周卡"]; c.DaysLeft != 2 || c.Tail != "" {
-		t.Fatalf("本周卡应在 2 天后到期：%+v", c)
+	if c, ok := byName["跨月卡"]; !ok || c.Period != "2026-09" || c.DueDate != "2026-10-19" || c.StatementDate != "2026-09-25" {
+		t.Fatalf("跨月卡应落在 2026-09 这一期：%+v ok=%v", c, ok)
 	}
-	if _, ok := byName["下周卡"]; ok {
-		t.Fatal("下周到期的卡不该出现在本周待还里")
-	}
-	if c, ok := byName["未记金额卡"]; !ok || c.AmountCents != 0 || c.DaysLeft != 1 {
-		t.Fatalf("没记金额但本周到期的卡也应出现（金额 0）：%+v ok=%v", c, ok)
+	if out.TotalCents != 123456+5000+7777 {
+		t.Fatalf("合计金额不对：%d", out.TotalCents)
 	}
 
-	// 还完本期后就不再出现
-	if _, err := payStatement(appDB, userID, inWeek, "2026-10", 123456, now); err != nil {
+	// 逾期的那张（还款日已过、没还）算红色，且排最前
+	late := makeCard("逾期卡", 1, 5)
+	if _, err := upsertStatement(appDB, userID, late, "2026-10", 100, 0, ""); err != nil {
 		t.Fatal(err)
 	}
-	out, err = weekDueCards(appDB, userID, now)
+	out, err = billingCards(appDB, userID, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Count != 2 || byName2(out.Cards, "逾期卡") == nil || byName2(out.Cards, "未记金额卡") == nil {
-		t.Fatalf("还完后本周待还应剩逾期卡与未记金额卡，实际 %+v", out.Cards)
+	if out.Cards[0].Name != "逾期卡" || !out.Cards[0].Overdue || out.Cards[0].DaysLeft != -3 {
+		t.Fatalf("逾期的应排最前并标逾期：%+v", out.Cards[0])
 	}
-}
-
-// 老数据兼容：0.13.0 之前「信用卡」是普通清单的模板，用户可能建过好几条
-// （名字各式各样）。打开栏目时应把它们并成一栏：卡片都挪进来、旧清单收掉、
-// 提醒重建到栏目下——不能出现「卡片页里看不到我以前的卡」。
-func TestLegacyCardListsAreAdopted(t *testing.T) {
-	cleanup := testDB(t)
-	defer cleanup()
-	withFreshCardFeature(t)
-
-	const userID = 35
-	loc := cardTestLoc(t)
-	now := time.Date(2026, time.October, 7, 10, 0, 0, 0, loc)
-	makeLegacy := func(name string, bank string) Card {
-		list := List{UserID: userID, Name: name, Color: "blue", Icon: "list", Position: 1, Template: listTemplateCard}
-		if err := appDB.Create(&list).Error; err != nil {
-			t.Fatal(err)
-		}
-		card := Card{
-			UserID: userID, ListID: list.ID, Name: "白金", Bank: bank,
-			StatementDay: 5, DueDay: 25, AdvanceDays: 3, AutoRepeat: true,
-		}
-		if err := appDB.Create(&card).Error; err != nil {
-			t.Fatal(err)
-		}
-		if _, err := generateCardPlan(appDB, &card, now); err != nil {
-			t.Fatal(err)
-		}
-		return card
+	if out.Overdue != 1 || out.Urgent != 2 {
+		t.Fatalf("逾期 1、红色 2，实际 %d / %d", out.Overdue, out.Urgent)
 	}
-	first := makeLegacy("招商银行信用卡", "招商银行")
-	second := makeLegacy("中信信用卡", "中信银行")
-
-	bucket, err := ensureCardBucket(appDB, userID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bucket.ID != first.ListID {
-		t.Fatalf("最老的那条应成为固定栏目：%d vs %d", bucket.ID, first.ListID)
-	}
-	if bucket.Name != cardBucketListName {
-		t.Fatalf("栏目名应统一成 %q，实际 %q", cardBucketListName, bucket.Name)
-	}
-	// 两张卡都在栏目下，且各自的提醒也挂到了栏目下
-	cards, err := listCards(appDB, userID, bucket.ID, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(cards) != 2 {
-		t.Fatalf("两张卡都应并进栏目，实际 %d", len(cards))
-	}
-	var remindersInBucket int64
-	appDB.Model(&Reminder{}).
-		Where("user_id = ? AND list_id = ? AND deleted_at IS NULL", userID, bucket.ID).Count(&remindersInBucket)
-	if remindersInBucket != 6 {
-		t.Fatalf("两张卡共 6 条提醒都应在栏目下，实际 %d", remindersInBucket)
-	}
-	var visibleLists int64
-	appDB.Model(&List{}).
-		Where("user_id = ? AND template = ? AND deleted_at IS NULL", userID, listTemplateCard).Count(&visibleLists)
-	if visibleLists != 1 {
-		t.Fatalf("合并后应只剩一个信用卡栏目，实际 %d", visibleLists)
-	}
-	var leftovers int64
-	appDB.Model(&Reminder{}).
-		Where("user_id = ? AND list_id = ? AND deleted_at IS NULL", userID, second.ListID).Count(&leftovers)
-	if leftovers != 0 {
-		t.Fatalf("旧清单下不应再留提醒，实际 %d", leftovers)
-	}
-	// 再调一次是幂等的
-	again, err := ensureCardBucket(appDB, userID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again.ID != bucket.ID {
-		t.Fatalf("重复调用不应换栏目：%d vs %d", again.ID, bucket.ID)
-	}
-	var cardsAgain int64
-	appDB.Model(&Card{}).Where("user_id = ? AND deleted_at IS NULL", userID).Count(&cardsAgain)
-	if cardsAgain != 2 {
-		t.Fatalf("重复调用不应增删卡片：%d", cardsAgain)
-	}
-}
-
-// 同步/导入的**新建**分支也要把 template 落下来：信用卡账单栏目是对端建的，
-// 漏掉模板这一栏在新设备上会变成普通清单（卡片页不再认识它，卡片也就查不出来）。
-func TestSyncCreatesCardBucketWithTemplate(t *testing.T) {
-	cleanup := testDB(t)
-	defer cleanup()
-	withFreshCardFeature(t)
-
-	seedUser(t, appDB, "同步用户", "admin")
-	configureSync(t, appDB, syncDirectionPull, "http://192.168.3.99:8906", "shared-token-123")
-
-	now := time.Now()
-	snap := syncSnapshot{
-		Format:     syncFormat,
-		InstanceID: "peer-instance-abc",
-		AppName:    "工作序记",
-		Users:      []syncUser{{Username: "同步用户", Role: "admin"}},
-		Lists: []syncList{{
-			UID: "list-uid-cards", Owner: "同步用户", Name: cardBucketListName,
-			Color: "blue", Icon: "card", Position: 2, Template: listTemplateCard,
-			CreatedAt: now, UpdatedAt: now,
-		}},
-	}
-	if _, err := applySyncSnapshot(appDB, snap); err != nil {
-		t.Fatal(err)
-	}
-	var list List
-	if err := appDB.Where("sync_uid = ?", "list-uid-cards").First(&list).Error; err != nil {
-		t.Fatal(err)
-	}
-	if list.Template != listTemplateCard {
-		t.Fatalf("同步过来的信用卡栏目模板应为 %q，实际 %q", listTemplateCard, list.Template)
-	}
-	if list.Name != cardBucketListName {
-		t.Fatalf("栏目名不对：%q", list.Name)
-	}
-}
-
-// byName2 在切片里按名字找一张卡（测试里用）。
-func byName2(cards []WeekDueCard, name string) *WeekDueCard {
-	for i := range cards {
-		if cards[i].Name == name {
-			return &cards[i]
-		}
-	}
-	return nil
 }

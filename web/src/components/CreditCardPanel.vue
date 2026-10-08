@@ -3,26 +3,38 @@
        下面才是一张张银行卡（卡面）+ 本期应还 + 还款闭环 + 还款计划。
        这一页只做卡片相关的事：要加卡片就点右上角「新建卡片」。 -->
   <section v-if="isCardList" class="mb-3" data-card-panel>
-    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+    <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
       <h3 class="flex items-center gap-2 text-sm font-extrabold">
         我的卡片
         <span class="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">{{ cards.length }} 张</span>
       </h3>
       <div class="flex flex-wrap items-center gap-2">
-        <button class="btn-secondary !h-8 !px-3 !text-[11px]" :disabled="loading" data-card-refresh @click="load">
+        <button class="btn-secondary !h-8 !px-3 !text-[11px]" data-card-sort @click="openSortMenu">
+          排序：{{ sortLabel }}
+        </button>
+        <button class="btn-secondary !h-8 !px-3 !text-[11px]" :disabled="loading" data-card-refresh @click="refreshAll">
           {{ loading ? '读取中…' : '刷新' }}
         </button>
         <button class="btn-primary !h-8 !px-3 !text-[11px]" data-card-add @click="openCreate">+ 新建卡片</button>
       </div>
     </div>
 
+    <!-- 卡面配色说明：账单日前后与最后 3 天的颜色规则（用户要求写清楚） -->
+    <p class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-muted-foreground" data-card-legend>
+      <span>卡面配色：</span>
+      <span class="inline-flex items-center gap-1"><i class="h-2.5 w-2.5 rounded-full" style="background:#64748b"></i>账单日前默认色</span>
+      <span class="inline-flex items-center gap-1"><i class="h-2.5 w-2.5 rounded-full" style="background:#facc15"></i>账单日已出转黄</span>
+      <span class="inline-flex items-center gap-1"><i class="h-2.5 w-2.5 rounded-full" style="background:#f97316"></i>越接近还款日越橘</span>
+      <span class="inline-flex items-center gap-1"><i class="h-2.5 w-2.5 rounded-full" style="background:#ef4444"></i>还款日前 3 天（含逾期）转红</span>
+    </p>
+
     <p v-if="!cards.length && !loading" class="surface rounded-2xl px-4 py-6 text-center text-sm text-muted-foreground" data-card-empty>
       还没有卡片。点「+ 新建卡片」填银行、卡名、账单日与还款日，系统会自动生成账单日/还款日提醒。
     </p>
 
-    <!-- 一行三张（窄屏一张、中屏两张），卡片靠银行标志区分 -->
+    <!-- 一行三张（窄屏一张、中屏两张），卡片靠银行标志区分；顺序见 sortedCards() -->
     <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-      <article v-for="card in cards" :key="card.id" class="surface rounded-2xl p-3" :data-card-item="card.id">
+      <article v-for="card in sortedCards" :key="card.id" class="surface rounded-2xl p-3" :data-card-item="card.id">
         <!-- 卡面：所有卡默认同一套配色 + 银行标志区分；
              账单日之后黄→橘，还款日前 3 天（含逾期）变红。 -->
         <div
@@ -41,10 +53,7 @@
                 <span v-else class="text-[13px] font-black text-slate-600">{{ initialOf(card) }}</span>
               </span>
               <div class="min-w-0">
-                <p class="flex items-baseline gap-2">
-                  <span class="truncate text-sm font-extrabold tracking-wide">{{ cardTitle(card) }}</span>
-                  <span v-if="card.holder" class="text-[11px] opacity-70">{{ card.holder }}</span>
-                </p>
+                <p class="truncate text-sm font-extrabold tracking-wide" data-card-title>{{ cardTitle(card) }}</p>
                 <p class="mt-1 font-mono text-[15px] tracking-[.18em] opacity-90" data-card-number>
                   {{ maskNo(card.no) }}
                 </p>
@@ -59,8 +68,10 @@
               </p>
             </div>
           </div>
-          <!-- 芯片 -->
-          <span class="relative mt-3 block h-6 w-8 rounded-md bg-gradient-to-br from-amber-200/90 to-amber-400/70"></span>
+          <!-- 持卡人单独一行、靠右下：卡名再长也不会把它挤掉（原来跟卡名同一行） -->
+          <p v-if="card.holder" class="relative mt-2.5 text-right text-[11px] font-semibold opacity-80" data-card-holder>
+            {{ card.holder }}
+          </p>
           <p class="relative mt-2 text-[11px] opacity-80">
             免息期 {{ summaryOf(card).grace }} 天
             <span v-if="card.advance_days > 0"> · 还款日前 {{ card.advance_days }} 天提醒</span>
@@ -153,6 +164,16 @@
     />
     <CardScheduleDialog v-model="scheduleOpen" :card="scheduleCard" />
 
+    <!-- 排序设定菜单（与清单右键菜单同一个组件） -->
+    <ContextMenu
+      v-model:open="sortMenu.open"
+      :x="sortMenu.x"
+      :y="sortMenu.y"
+      heading="卡片排序"
+      :items="sortMenuItems"
+      @select="onSortSelect"
+    />
+
     <ConfirmDialog
       v-model="deleteOpen"
       danger
@@ -166,21 +187,26 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import Modal from './Modal.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import CardEditorDialog from './CardEditorDialog.vue'
 import CardScheduleDialog from './CardScheduleDialog.vue'
+import ContextMenu from './ContextMenu.vue'
 import {
   deleteCard, getCards, payCardStatement, saveCardStatement, unpayCardStatement,
   type CreditCard, type ReminderList,
 } from '../api/reminder'
 import { bankLogoOf } from '../utils/banks'
-import { urgencyOf } from '../utils/card-urgency'
+import { daysFromToday, urgencyOf } from '../utils/card-urgency'
 import { cardTail, daysUntil, formatCardDate, formatCents, graceDays, nextDayOccurrence, parseYuanToCents } from '../utils/card'
 
 const props = defineProps<{ list: ReminderList }>()
-const emit = defineEmits<{ (e: 'changed'): void }>()
+const emit = defineEmits<{
+  (e: 'changed'): void
+  /** 手动「刷新」时顺带让头部时间卡片也重拉一次（它自己管数据） */
+  (e: 'refresh-strip'): void
+}>()
 
 const isCardList = computed(() => props.list?.template === 'credit_card')
 const cards = ref<CreditCard[]>([])
@@ -253,6 +279,12 @@ async function load() {
   }
 }
 
+
+/** 刷新：卡片 + 头部时间卡片一起刷新（只刷卡片的话，头部还显示旧的口径） */
+async function refreshAll() {
+  await load()
+  emit('refresh-strip')
+}
 
 function openCreate() {
   editingCard.value = null
@@ -349,6 +381,59 @@ async function confirmDelete() {
     busyId.value = null
   }
 }
+
+// ---- 卡片排序：默认「智能」（红色最前 → 账单日 → 还款日），可选按账单日 / 按还款日；
+// 选择记在本地（显示偏好，跟设备走，不参与同步）。
+type SortMode = 'smart' | 'statement' | 'due'
+const SORT_KEY = 'ui_card_sort'
+const sortMode = ref<SortMode>((localStorage.getItem(SORT_KEY) as SortMode) || 'smart')
+const sortMenu = reactive({ open: false, x: 0, y: 0 })
+const sortItems: { key: SortMode; label: string; hint: string }[] = [
+  { key: 'smart', label: '智能排序（默认）', hint: '红色（≤3 天/逾期）最前，再按账单日、还款日' },
+  { key: 'statement', label: '按账单日', hint: '账单日早的在前' },
+  { key: 'due', label: '按还款日', hint: '离还款日近的在前' },
+]
+const sortLabel = computed(() => sortItems.find((i) => i.key === sortMode.value)?.label.replace('（默认）', '') || '智能')
+const sortMenuItems = computed(() => sortItems.map((i) => ({
+  key: i.key,
+  label: i.key === sortMode.value ? `${i.label} ✓` : i.label,
+  title: i.hint,
+})))
+
+function openSortMenu(e: MouseEvent) {
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  sortMenu.x = rect.left
+  sortMenu.y = rect.bottom + 6
+  sortMenu.open = true
+}
+function onSortSelect(key: string) {
+  sortMode.value = key as SortMode
+  localStorage.setItem(SORT_KEY, sortMode.value)
+  sortMenu.open = false
+}
+
+/** 还款日还剩几天；没有当期就排到最后。 */
+function daysToDue(card: CreditCard) {
+  return card.current?.due_date ? daysFromToday(card.current.due_date) : 9999
+}
+const isRed = (card: CreditCard) => ['overdue', 'urgent'].includes(urgencyOf(card).level)
+
+const sortedCards = computed(() => {
+  const list = [...cards.value]
+  list.sort((a, b) => {
+    if (sortMode.value === 'due') {
+      return daysToDue(a) - daysToDue(b) || a.statement_day - b.statement_day
+    }
+    if (sortMode.value === 'statement') {
+      return a.statement_day - b.statement_day || daysToDue(a) - daysToDue(b)
+    }
+    // 智能：红色最前 → 账单日早的在前 → 还款日近的在前
+    return Number(isRed(b)) - Number(isRed(a))
+      || a.statement_day - b.statement_day
+      || daysToDue(a) - daysToDue(b)
+  })
+  return list
+})
 
 watch(() => props.list?.id, () => { void load() }, { immediate: true })
 watch(isCardList, (v) => { if (v) void load() })
