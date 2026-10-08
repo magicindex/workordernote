@@ -36,7 +36,7 @@ export interface ReminderList {
   position: number
   is_default: boolean
   open_count: number
-  template?: 'general' | 'credit_card'
+  template?: 'general' | 'credit_card' | 'notebook'
   /** 信用卡账单栏目才有：这一栏里有几张卡（侧栏角标用） */
   card_count?: number
   card_name?: string
@@ -200,8 +200,13 @@ export const deleteList = (id: number) => request.delete(`/api/reminder/lists/${
 /**
  * status='all' 表示连已完成的也返回（列表页「未完成 / 全部」开关的「全部」）。
  * 记事创建即完成，所以「我的清单」想看见记事就得打开这个开关。
+ *
+ * 时间窗口二选一：
+ *   month=YYYY-MM      旧的按月翻页（兼容保留）
+ *   from/to=YYYY-MM-DD 泛化区间（含起不含止）；记事本页不带时间窗口
+ * sort=created_desc 用于记事本页（按创建/记录时间倒序）
  */
-export const getReminders = (params: { view?: string; list_id?: number; q?: string; status?: 'all'; month?: string }) =>
+export const getReminders = (params: { view?: string; list_id?: number; q?: string; status?: 'all'; month?: string; from?: string; to?: string; sort?: string }) =>
   request.get('/api/reminder/items', { params })
 
 /** 有数据的月份范围（首/末月）：给「全部」页底部左右翻月用，只在两端之间可翻。 */
@@ -242,6 +247,13 @@ export function exportReminders(params: {
   status?: 'all'
   /** 日历导出用：YYYY-MM，缺省当月 */
   month?: string
+  /**
+   * 导出对话框的清单多选：`1,2,3`（缺省＝全部清单，含信用卡/记事本系统栏目）。
+   * 与旧的 list_ids/list_id 等价，新参数优先。
+   */
+  lists?: string
+  /** 导出对话框的列多选：`title,due,...`（缺省＝全部列，与旧版一致） */
+  columns?: string
 }) {
   return request.get('/api/reminder/export', { params, responseType: 'blob' })
 }

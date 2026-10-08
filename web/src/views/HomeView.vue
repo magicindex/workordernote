@@ -144,7 +144,7 @@
                 更多
               </button>
             </template>
-            <span v-if="quick.kind === 'note'" class="ml-auto text-xs font-semibold text-muted-foreground">记事保存后直接归入「已完成」</span>
+            <span v-if="quick.kind === 'note'" class="ml-auto text-xs font-semibold text-muted-foreground">记事保存后进入「记事本」</span>
             <span v-else-if="quick.due_at" class="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-300">{{ formatDue(quick.due_at) }}</span>
           </div>
 
@@ -195,10 +195,31 @@
           </span>
         </div>
         <div class="list-toolbar-actions">
+          <!-- 「全部」页的时间范围条：今天 / 昨天 / 本周 / 上周 / 本月 / 今年 / 自定义。
+               默认「本月」（旧的按月翻页），状态开关与它各自独立。
+               导出**不受**这里影响——导出永远是所有数据（见 runExport）。 -->
+          <div v-if="isAllPage" class="flex flex-wrap items-center gap-1" data-range-bar>
+            <button
+              v-for="opt in listRangeOptions"
+              :key="opt.value"
+              type="button"
+              class="quick-chip !h-7"
+              :class="{ active: listRange === opt.value }"
+              :data-range="opt.value"
+              @click="setListRange(opt.value)"
+            >{{ opt.label }}</button>
+            <template v-if="listRange === 'custom'">
+              <input v-model="rangeFrom" type="date" class="compact-input !h-8 !w-auto" aria-label="开始日期" data-range-from />
+              <span class="text-[11px] text-muted-foreground">至</span>
+              <input v-model="rangeTo" type="date" class="compact-input !h-8 !w-auto" aria-label="结束日期" data-range-to />
+              <button class="quick-chip !h-7" :disabled="!rangeFrom || !rangeTo" @click="loadItems">查询</button>
+            </template>
+          </div>
           <!-- 未完成 / 全部：只有「全部」页需要它（用户要求：今天页与计划页取消这个开关，
-               一律只显示未完成）。选择记在本地（跟人走、跟设备走），与清单筛选一致。 -->
+               一律只显示未完成）。选择记在本地（跟人走、跟设备走），与清单筛选一致。
+               记事本页固定显示全部记事，所以那里也收起这个开关。 -->
           <div
-            v-if="view === 'all'"
+            v-if="view === 'all' && !isNoteBucketPage"
             class="seg-group"
             role="group"
             aria-label="显示范围"
@@ -231,10 +252,11 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span>刷新</span>
           </button>
-          <!-- 导出表格：手机上不提供（屏幕小、CSV 也不好用），电脑上照旧 -->
-          <button class="toolbar-btn hidden sm:inline-flex" :class="{ 'is-spinning': exporting }" :disabled="exporting" @click="handleExport">
+          <!-- 导出表格：手机上不提供（屏幕小、CSV 也不好用），电脑上照旧。
+               点开的是导出对话框（选清单与列），不再直接下载。 -->
+          <button data-export-open class="toolbar-btn hidden sm:inline-flex" @click="exportOpen = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>{{ exporting ? '导出中…' : '导出表格' }}</span>
+            <span>导出表格</span>
           </button>
           <button
             v-if="view === 'completed'"
@@ -381,10 +403,10 @@
         <button v-if="view !== 'completed'" class="btn-primary mt-5" @click="focusQuickAdd">添加第一条提醒</button>
       </section>
 
-      <!-- 「全部」页按月翻页：底部左右切换月份。用户要求每页只显示当月内容，
-           避免数据量把页面拖垮；箭头只在有数据的最早/最晚月之间可用。 -->
+      <!-- 月份翻页：只在「按月看」时出现——「全部」页选了「本月」，或普通清单页
+           （记事本页按记录时间倒序看全部，不分月，所以不出现）。 -->
       <div
-        v-if="view === 'all' && !isCardBucketPage"
+        v-if="monthScoped"
         class="mt-4 flex items-center justify-center gap-2 sm:gap-4"
         data-month-nav
       >
@@ -410,6 +432,9 @@
         :list-label="completedFilterSummary"
         :site-title="authStore.siteTitle || '工作序记'"
       />
+
+      <!-- 导出对话框：选清单与列。导出永远是所有数据（不带页面上的月份/时间范围）。 -->
+      <ExportDialog v-model="exportOpen" :lists="lists" @confirm="runExport" />
 
       <Toast :message="toast.message" :type="toast.type" />
 
@@ -439,6 +464,7 @@ import BillingStrip from '../components/BillingStrip.vue'
 import LunarDatePicker from '../components/LunarDatePicker.vue'
 import RepeatNotifySelect from '../components/RepeatNotifySelect.vue'
 import PrintDialog from '../components/PrintDialog.vue'
+import ExportDialog from '../components/ExportDialog.vue'
 import CreditCardPanel from '../components/CreditCardPanel.vue'
 import { listColorHex } from '../utils/list-colors'
 import ReminderEditor from '../components/ReminderEditor.vue'
@@ -557,6 +583,81 @@ const editingId = ref<number | null>(null)
 let quickChannelsTouched = false
 
 const view = computed(() => String(route.meta.reminderView || 'today'))
+// 「全部」页的时间范围条。默认「本月」（＝原来的按月翻页），其余范围用 from/to 请求。
+// **不**写进 localStorage：范围描述的是「这一屏在看什么」，刷新回到默认「本月」才不会
+// 让人以为数据丢了（状态开关那种长期偏好才需要记住）。
+type ListRangeOption = 'today' | 'yesterday' | 'week' | 'lastweek' | 'month' | 'year' | 'custom'
+const isAllPage = computed(() => route.name === 'AllReminders')
+const listRange = ref<ListRangeOption>('month')
+const listRangeOptions: { value: ListRangeOption; label: string }[] = [
+  { value: 'today', label: '今天' },
+  { value: 'yesterday', label: '昨天' },
+  { value: 'week', label: '本周' },
+  { value: 'lastweek', label: '上周' },
+  { value: 'month', label: '本月' },
+  { value: 'year', label: '今年' },
+  { value: 'custom', label: '自定义' },
+]
+const rangeFrom = ref('')
+const rangeTo = ref('')
+function dateKey(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+function startOfDay(d: Date): Date { return new Date(d.getFullYear(), d.getMonth(), d.getDate()) }
+function addDays(d: Date, n: number): Date { const x = new Date(d); x.setDate(x.getDate() + n); return x }
+// 选中的范围换算成 from/to（YYYY-MM-DD，含起不含止，与后端口径一致）。
+// 「本月」返回空对象——它走原来的 month=YYYY-MM 与底部翻月。
+const rangeWindow = computed<{ from?: string; to?: string }>(() => {
+  const today = startOfDay(new Date())
+  switch (listRange.value) {
+    case 'today':
+      return { from: dateKey(today), to: dateKey(addDays(today, 1)) }
+    case 'yesterday':
+      return { from: dateKey(addDays(today, -1)), to: dateKey(today) }
+    case 'week': {
+      const monday = addDays(today, -((today.getDay() + 6) % 7))
+      return { from: dateKey(monday), to: dateKey(addDays(monday, 7)) }
+    }
+    case 'lastweek': {
+      const monday = addDays(today, -((today.getDay() + 6) % 7) - 7)
+      return { from: dateKey(monday), to: dateKey(addDays(monday, 7)) }
+    }
+    case 'year':
+      return { from: `${today.getFullYear()}-01-01`, to: `${today.getFullYear() + 1}-01-01` }
+    case 'custom': {
+      const from = rangeFrom.value || undefined
+      const to = rangeTo.value ? dateKey(addDays(new Date(`${rangeTo.value}T00:00:00`), 1)) : undefined
+      return { from, to }
+    }
+    default:
+      return {}
+  }
+})
+function setListRange(value: ListRangeOption) {
+  listRange.value = value
+  if (value === 'custom') {
+    // 自定义先给「本月」的初值，用户改完再点「查询」，避免先请求一次空区间。
+    if (!rangeFrom.value) {
+      const today = startOfDay(new Date())
+      rangeFrom.value = dateKey(new Date(today.getFullYear(), today.getMonth(), 1))
+      rangeTo.value = dateKey(today)
+    }
+    return
+  }
+  if (value === 'month') {
+    // 回到「本月」时刷新一次可翻月份范围：中间切走过其它范围后，箭头才不会停在
+    // 之前那份（或空的）范围上。
+    void loadMonthRange().then(() => loadItems())
+    return
+  }
+  void loadItems()
+}
+// 什么时候按「月」看：全部页（非范围条模式）与普通清单页；记事本页按记录时间倒序
+// 看全部，不分月。
+const monthScoped = computed(() => view.value === 'all' && !isNoteBucketPage.value && (!isAllPage.value || listRange.value === 'month'))
+// 只有「全部」页选了非「本月」范围时才带 from/to。导出**不**受它影响。
+const dateWindow = computed(() => (isAllPage.value && listRange.value !== 'month' ? rangeWindow.value : {}))
 // 计划页的输入窗口与今天页不同：只用自定义时间/时间段，没有任何相对快捷项，
 // 也没有「记事」（计划里只有任务）。见模板里的 v-if="isPlanned" 一支。
 const isPlanned = computed(() => view.value === 'planned')
@@ -602,12 +703,16 @@ function onCardsChanged() {
   void loadData()
 }
 const isCardBucketPage = computed(() => selectedList.value?.template === 'credit_card' && authStore.creditCardEnabled)
-// 下拉/筛选里能选的只有普通清单（卡片栏目不是「清单」，不该出现在这些地方）
-const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card'))
+// 「记事本」也是固定栏目：它不是卡片页那种特殊页面，而是一个内容全是记事的普通清单页
+// （按记录时间倒序、固定显示全部）。偏好关掉时不认这一页。
+const isNoteBucketPage = computed(() => selectedList.value?.template === 'notebook' && authStore.notebookEnabled)
+// 下拉/筛选里能选的只有普通清单（信用卡/记事本栏目不是「清单」，不该出现在这些地方）
+const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card' && l.template !== 'notebook'))
 const pageTitle = computed(() => selectedList.value?.name || String(route.meta.title || '今天'))
 const eyebrow = computed(() => selectedList.value ? '我的清单' : view.value === 'today' ? '此刻最重要' : '工作序记')
 const accentColor = computed(() => selectedList.value ? listColor(selectedList.value.color) : view.value === 'completed' ? '#10b981' : '#3182f6')
 const subtitle = computed(() => {
+  if (isNoteBucketPage.value) return `${items.value.length} 条记事，按记录时间倒序`
   if (selectedList.value) return `${selectedList.value.open_count || 0} 件事情正在等你`
   if (view.value === 'today') return new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
   if (view.value === 'planned') return '按时间整理好接下来的安排'
@@ -714,8 +819,8 @@ async function loadRouteData() {
     }
     // 信用卡账单页只有卡片：这一页不需要（也不该）拉提醒列表。
     if (isCardBucketPage.value) return
-    // 「全部」页要按月翻：进页先拿一次可用月份范围（只在两端之间可翻）
-    if (view.value === 'all') await loadMonthRange()
+    // 需要按「月」看的视图先拿一次可用月份范围（只在两端之间可翻）。
+    if (monthScoped.value) await loadMonthRange()
     await loadItems()
   } catch (err: any) {
     showToast(err.response?.data?.message || '读取提醒失败', 'error')
@@ -747,18 +852,26 @@ async function loadItems() {
     view: view.value,
     list_id: selectedListID.value,
     q: search.value || undefined,
-    // 今天页与计划页固定只看未完成（开关已经取消）；「全部」页才跟随 未完成/全部。
-    status: view.value !== 'all' ? undefined : (showCompleted.value ? 'all' : undefined),
-    // 「全部」页按月翻页（用户要求：每页只显示当月，避免数据量把页面拖垮）；
-    // 其它视图不带 month，口径不变。导出也**不带** month —— 导出要所有数据。
-    month: view.value === 'all' ? monthCursor.value : undefined,
+    // 今天页与计划页固定只看未完成（开关已经取消）；「全部」页才跟随 未完成/全部；
+    // 记事本页固定看全部——记事创建即完成，不开「全部」的话这一页会永远是空的。
+    status: isNoteBucketPage.value
+      ? 'all'
+      : view.value !== 'all' ? undefined : (showCompleted.value ? 'all' : undefined),
+    // 时间窗口二选一：普通视图按 month 翻月；「全部」页选了其它范围时用 from/to。
+    // 记事本页不带时间窗口（记的是流水账，不该被月份藏起来）。
+    month: monthScoped.value ? monthCursor.value : undefined,
+    from: dateWindow.value.from,
+    to: dateWindow.value.to,
+    // 记事本按生效时间倒序（记事没有 due_at，默认排序会把它们甩到最后）。
+    sort: isNoteBucketPage.value ? 'created_desc' : undefined,
   })
   items.value = res.data.data || []
 }
-// 导出「当前屏幕上这一份筛选结果」。已完成页带时间段与清单筛选，列表页带视图/清单/搜索，
-// 参数与 loadItems 完全一致，避免导出内容和看到的列表对不上。
+// 导出对话框：选清单（默认全选，含信用卡/记事本系统栏目）与列（默认全选）。
+// 导出永远是**所有数据**：不带页面上的月份与时间范围（用户要求）。
+const exportOpen = ref(false)
 const exporting = ref(false)
-async function handleExport() {
+async function runExport(payload: { lists: number[]; columns: string[] }) {
   if (exporting.value) return
   exporting.value = true
   const completed = view.value === 'completed'
@@ -769,11 +882,12 @@ async function handleExport() {
       range: completed ? completedRange.value : undefined,
       from: completed && completedRange.value === 'custom' ? customFrom.value || undefined : undefined,
       to: completed && completedRange.value === 'custom' ? customTo.value || undefined : undefined,
-      list_ids: listIdsParam(completed ? completedListFilter.value : (selectedListID.value ? [selectedListID.value] : [])),
-      list_id: completed && !completedListFilter.value.length ? selectedListID.value : undefined,
+      // 清单筛选来自对话框（默认全选；空数组不会发生——确定键在未选时禁用）。
+      lists: listIdsParam(payload.lists),
+      columns: payload.columns.join(','),
       q: search.value || undefined,
-      // 导出必须和屏幕上这一份一致：开关在「全部」时连已完成的一起导出。
-      // 只有「全部」页有 未完成/全部 开关（今天/计划固定未完成），导出跟随它。
+      // 「未完成 / 全部」开关不是时间范围，导出仍跟随它：这是列表页既有的口径，
+      // 旧用例（verify-040）与界面「导出所见即所得」都依赖它。
       status: !completed && view.value === 'all' && showCompleted.value ? 'all' : undefined,
     })
     const filename = completed ? 'completed-list.csv' : 'task-list.csv'
@@ -803,7 +917,7 @@ async function submitQuick() {
     // 没设日期的提醒不会出现在按到期时间过滤的「今天 / 计划」视图里：留在原地
     // 重新拉取会让用户以为没保存成功（接口 200、列表却毫无变化），所以切到
     // 「全部」并说明原因；已经在「全部 / 清单」里时行为不变。
-    // 记事属于「已完成」，任何列表视图都不会出现它，所以单独说明去处，
+    // 记事一律进「记事本」固定栏目（后端 createReminder 归一），所以单独说明去处，
     // 并且保持「记事」模式不变，方便连着记好几条。
     const isNote = quick.kind === 'note'
     const planned = isPlanned.value
@@ -825,8 +939,9 @@ async function submitQuick() {
     quickExpanded.value = false
     quickFocused.value = false
     if (isNote) {
-      if (view.value === 'completed') await loadItems()
-      showToast('记事已保存到「已完成」')
+      // 记事本页要立刻把新记的这条显示出来（其它视图它本来就不出现）。
+      await loadItems()
+      showToast('记事已保存到「记事本」')
     } else if (undated && !selectedListID.value && (view.value === 'today' || view.value === 'planned')) {
       await router.push({ name: 'AllReminders' })
       showToast('已保存到「全部」：这条提醒没有设置日期')
@@ -854,8 +969,17 @@ function setQuickKind(kind: ReminderKind) {
     quick.repeat_notify_minutes = 0
     preset.value = ''
     quickExpanded.value = false
+  } else if (isNoteBucketPage.value) {
+    // 记事本页的目标清单是栏目本身（不在下拉的普通清单里）；改成任务时要挪回
+    // 默认清单，否则下拉框显示不出选中项。
+    quick.list_id = defaultListID.value
   }
 }
+// 记事本页快速新建默认就是「记事」：这一页做的主要是记一笔。离开时恢复「任务」。
+watch(isNoteBucketPage, (on) => {
+  if (on) setQuickKind('note')
+  else if (quick.kind === 'note') quick.kind = 'task'
+}, { immediate: true })
 // 已完成页的时间段选项。「全部」放第一个并作为默认，这样角标数字和列表条数
 // 从一开始就是一致的；其余按时间由近到远排；自定义需要选完起止日期再点查询。
 const rangeOptions: { value: CompletedRangeOption; label: string }[] = [
@@ -1033,9 +1157,14 @@ function refreshRealtimeData() {
   void loadItems()
 }
 
-// 管理员在后台把「信用卡账单」栏目关掉后，还停在那一页的窗口要送回「今天」。
-watch([selectedList, () => authStore.creditCardEnabled], () => {
-  if (selectedList.value?.template === 'credit_card' && !authStore.creditCardEnabled) {
+// 管理员/用户在偏好里把「信用卡账单」或「记事本」栏目关掉后，还停在那一页的窗口
+// 要送回「今天」。
+watch([selectedList, () => authStore.creditCardEnabled, () => authStore.notebookEnabled], () => {
+  const template = selectedList.value?.template
+  if (template === 'credit_card' && !authStore.creditCardEnabled) {
+    void router.replace('/admin')
+  }
+  if (template === 'notebook' && !authStore.notebookEnabled) {
     void router.replace('/admin')
   }
 })

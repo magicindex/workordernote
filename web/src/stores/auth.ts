@@ -48,9 +48,12 @@ export const useAuthStore = defineStore('auth', () => {
   const requireLogin = ref(true)
   const allowRegister = ref(true)
   // 个人偏好「信用卡账单栏目」：侧栏那个固定栏目在不在，由它决定。
-  // **每人一份、默认关**（不是所有人都用信用卡，要用的人自己在偏好设置里打开）。
+  // **每人一份、默认开**（用户要求：信用卡账单与记事本都默认开启；
+  // 不想用的人在偏好设置里关掉）。
   // 留在 store 里是为了「刚保存偏好、侧栏立刻跟着变」，不用重进页面。
-  const creditCardEnabled = ref(false)
+  const creditCardEnabled = ref(true)
+  // 个人偏好「记事本栏目」：与信用卡同一套范式，默认开。记事一律收在这一栏里。
+  const notebookEnabled = ref(true)
   // 提醒频率（分钟）：未处理的提醒多久再弹一次；点「知道了」之后多久再提醒（0 = 第二天）
   const reminderNotifyMinutes = ref(10)
   const reminderAckMinutes = ref(0)
@@ -106,6 +109,7 @@ export const useAuthStore = defineStore('auth', () => {
     requireLogin.value = configs.require_login !== 'false'
     allowRegister.value = configs.allow_register !== 'false'
     creditCardEnabled.value = configs.credit_card_enabled !== 'false'
+    notebookEnabled.value = configs.notebook_enabled !== 'false'
     reminderNotifyMinutes.value = Number(configs.reminder_notify_minutes || 10) || 10
     reminderAckMinutes.value = Number(configs.reminder_ack_minutes || 0) || 0
     if (configs.site_title) siteTitle.value = configs.site_title
@@ -336,11 +340,15 @@ export const useAuthStore = defineStore('auth', () => {
     creditCardEnabled.value = on
   }
 
+  function setNotebookEnabled(on: boolean) {
+    notebookEnabled.value = on
+  }
+
   function setReminderFrequencies(notifyMinutes: number, ackMinutes: number) {
     if (notifyMinutes > 0) reminderNotifyMinutes.value = notifyMinutes
     if (ackMinutes >= 0) reminderAckMinutes.value = ackMinutes
   }
 
-  return { token, user, requireLogin, allowRegister, creditCardEnabled, setCreditCardEnabled, reloadBootstrap,
+  return { token, user, requireLogin, allowRegister, creditCardEnabled, setCreditCardEnabled, notebookEnabled, setNotebookEnabled, reloadBootstrap,
     reminderNotifyMinutes, reminderAckMinutes, setReminderFrequencies, setupRequired, siteTitle, hasSecurityQuestions, securityPromptDismissed, servicePort, fnosGatewayEntry, fnosApp, sessionSource, followsFnOSSession, isAuthenticated, isAdmin, init, resetInit, setToken, setUser, endSession, logout, dropIfFnOSSessionGone, checkSetupRequired, dismissSecurityPrompt, refreshSecurityQuestions }
 })

@@ -3,6 +3,7 @@ package reminder
 import (
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -134,6 +135,32 @@ func handleListLists(db *gorm.DB) gin.HandlerFunc {
 			response.ErrorInternal(c, "读取清单失败")
 			return
 		}
+		// 「记事本」是侧栏里的固定栏目：偏好开着却没有这一行时补建一次，
+		// 保证它默认就在（否则要等用户先记一笔才冒出来）。关掉偏好时不建、也不显示，
+		// 数据一条不删。只在确实缺行时才多查一次库，稳态下与改动前一致。
+		if notebookFeatureEnabled(db, userID) {
+			hasNoteBucket := false
+			for _, l := range lists {
+				if l.Template == listTemplateNote {
+					hasNoteBucket = true
+					break
+				}
+			}
+			if !hasNoteBucket {
+				if bucket, err := ensureNoteBucket(db, userID); err == nil {
+					lists = append(lists, bucket)
+					sort.SliceStable(lists, func(i, j int) bool {
+						if lists[i].IsDefault != lists[j].IsDefault {
+							return lists[i].IsDefault
+						}
+						if lists[i].Position != lists[j].Position {
+							return lists[i].Position < lists[j].Position
+						}
+						return lists[i].ID < lists[j].ID
+					})
+				}
+			}
+		}
 		type openCountRow struct {
 			ListID    uint
 			OpenCount int64
@@ -168,10 +195,13 @@ func handleListLists(db *gorm.DB) gin.HandlerFunc {
 		}
 		result := make([]ListDTO, 0, len(lists))
 		for _, list := range lists {
-			// 信用卡栏目在侧栏与页面标题上恒叫「信用卡账单」：老数据里它可能是用户
-			// 自己起的名字（例如「招商银行信用卡」），这里统一成固定栏目的名字。
+			// 信用卡/记事本栏目在侧栏与页面标题上恒用固定名字：老数据里它可能是用户
+			// 自己起的名字，这里统一成固定栏目的名字。
 			if list.Template == listTemplateCard {
 				list.Name = cardBucketListName
+			}
+			if list.Template == listTemplateNote {
+				list.Name = noteBucketListName
 			}
 			result = append(result, ListDTO{List: list, OpenCount: openCounts[list.ID], CardCount: cardCounts[list.ID]})
 		}
@@ -337,6 +367,13 @@ func parseListFilter(c *gin.Context) []uint {
 	if raw == "" {
 		raw = strings.TrimSpace(c.Query("list_id"))
 	}
+	return parseUintCSV(raw)
+}
+
+// parseUintCSV 解析 "1,2,3" 这类正整数列表：跳过非法项与重复项，全空/全非法
+// 返回 nil（调用方一律把 nil 当作「不筛选」）。
+func parseUintCSV(raw string) []uint {
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
 	}
@@ -360,10 +397,30 @@ func parseListFilter(c *gin.Context) []uint {
 	return ids
 }
 
+// handleListReminders 列出提醒/记事。
+//
+// 时间窗口参数有两种写法，二选一：
+//
+//	month=YYYY-MM     旧的按月翻页（兼容保留；内部换算成 from/to）
+//	from=&to=         泛化后的区间（YYYY-MM-DD，上海时区，含起不含止）
+//
+// from/to 与 month 都给时以 from/to 为准。sort=created_desc 用于记事本页
+// （按生效时间倒序，最新的在最上面）。
 func handleListReminders(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		from := strings.TrimSpace(c.Query("from"))
+		to := strings.TrimSpace(c.Query("to"))
+		if from == "" && to == "" {
+			from, to = monthWindow(c.Query("month"))
+		}
+		// 先校验一次日期，非法参数明确 400（否则会被 listReminders 当成内部错误）。
+		if _, err := parseListWindow(from, to); err != nil {
+			response.ErrorBadRequest(c, err.Error())
+			return
+		}
 		items, err := listReminders(db, currentUserID(c), c.DefaultQuery("view", "today"),
-			c.Query("q"), parseListFilter(c), wantCompleted(c), strings.TrimSpace(c.Query("month")))
+			c.Query("q"), parseListFilter(c), wantCompleted(c), from, to,
+			strings.TrimSpace(c.Query("sort")))
 		if err != nil {
 			response.ErrorInternal(c, "读取提醒失败")
 			return

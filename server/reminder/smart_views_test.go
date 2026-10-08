@@ -43,7 +43,7 @@ func TestPlannedViewOnlyPresets(t *testing.T) {
 	mk("跨两小时的时间段", SaveReminderInput{StartAt: &rangeStart, EndAt: &rangeEnd})
 	mk("记事", SaveReminderInput{Kind: KindNote})
 
-	planned, err := listReminders(appDB, userID, "planned", "", nil, false, "")
+	planned, err := listReminders(appDB, userID, "planned", "", nil, false, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestPlannedViewOnlyPresets(t *testing.T) {
 		}
 	}
 
-	today, err := listReminders(appDB, userID, "today", "", nil, false, "")
+	today, err := listReminders(appDB, userID, "today", "", nil, false, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,8 @@ func TestMonthScopedViews(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	month := now.Format("2006-01")
+	// 旧的 month 兼容参数换算成 from/to，与接口路径一致。
+	windowFrom, windowTo := monthWindow(now.Format("2006-01"))
 	titles := func(rows []ReminderDTO) map[string]bool {
 		out := map[string]bool{}
 		for _, r := range rows {
@@ -270,8 +271,8 @@ func TestMonthScopedViews(t *testing.T) {
 		return out
 	}
 
-	// 「全部」页：带月份 → 只有当月；不带月份 → 全都要有（导出用的就是这条路径）
-	scoped, err := listReminders(appDB, userID, "all", "", nil, true, month)
+	// 「全部」页：带时间窗口 → 只有当月；不带窗口 → 全都要有（导出用的就是这条路径）
+	scoped, err := listReminders(appDB, userID, "all", "", nil, true, windowFrom, windowTo, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +283,7 @@ func TestMonthScopedViews(t *testing.T) {
 	if got["上月未完成"] || got["上月已完成"] {
 		t.Errorf("按月筛选混进了上月条目：%v", keysOf(got))
 	}
-	unscoped, err := listReminders(appDB, userID, "all", "", nil, true, "")
+	unscoped, err := listReminders(appDB, userID, "all", "", nil, true, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +307,7 @@ func TestMonthScopedViews(t *testing.T) {
 		UpdateColumn("completed_at", lastMonth.AddDate(0, 0, 3)).Error; err != nil {
 		t.Fatal(err)
 	}
-	planned, err := listReminders(appDB, userID, "planned", "", nil, true, "")
+	planned, err := listReminders(appDB, userID, "planned", "", nil, true, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

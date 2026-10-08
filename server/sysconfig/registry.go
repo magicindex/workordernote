@@ -214,14 +214,28 @@ func init() {
 	// 信用卡账单：侧栏里那个**固定栏目**，不是普通清单——不用在「新建清单」里选模板，
 	// 卡片一律归到这一栏里。
 	//
-	// **这是每个人的个人偏好，不是系统开关**：不是所有人都用信用卡，所以默认关，
-	// 需要的人在「偏好设置」里自己打开。关掉后栏目与卡片提醒一起隐藏，数据保留
-	// （见 server/reminder/card_bucket.go）。
+	// **这是每个人的个人偏好，不是系统开关**。默认开（用户要求：信用卡账单与记事本
+	// 都默认开启）；不想用的人在「偏好设置」里关掉即可。关掉后栏目与卡片提醒一起隐藏，
+	// 数据保留（见 server/reminder/card_bucket.go）。
+	//
+	// 注意：这里改的是「注册表默认值」。库里已经显式写过这一行的用户（true/false）
+	// 一切照旧——读取路径一律「用户自己的值 → 没写过才用默认」（见 reminder 包的
+	// userConfigValue / handleBootstrap），所以老用户的显式选择不会被这次改默认值覆盖。
 	RegisterConfig(ConfigDef{
 		Key: "credit_card_enabled", Scope: ScopeUser, Type: TypeBool,
-		Default: "false", Public: true,
+		Default: "true", Public: true,
 		Group: "features", Label: "信用卡账单栏目",
 		Description: "在侧栏显示固定的「信用卡账单」栏目（新建卡片都在这里）；关掉后栏目与卡片提醒一起隐藏，数据保留",
+	})
+	// 记事本：侧栏里另一个**固定栏目**（不是普通清单），放的是 kind=note 的记事。
+	//
+	// 与信用卡同一套范式（见 server/reminder/note_bucket.go）：模板 notebook、
+	// 个人偏好 notebook_enabled 控制显示、关掉只隐藏不删数据。默认开。
+	RegisterConfig(ConfigDef{
+		Key: "notebook_enabled", Scope: ScopeUser, Type: TypeBool,
+		Default: "true", Public: true,
+		Group: "features", Label: "记事本栏目",
+		Description: "在侧栏显示固定的「记事本」栏目（新建的记事都收在这里）；关掉后栏目隐藏，记事数据保留",
 	})
 	RegisterConfig(ConfigDef{
 		Key: "log_retention_days", Scope: ScopeSystem, Type: TypeInt,

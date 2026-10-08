@@ -223,7 +223,16 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 	}
 	var created Reminder
 	err := db.Transaction(func(tx *gorm.DB) error {
-		if in.ListID == 0 {
+		// 记事一律落到「记事本」栏目：它是侧栏里的固定栏目（见 note_bucket.go），
+		// 用户不需要（也选不到）自己指定清单；旧客户端仍带着 list_id 也归一到这里，
+		// 保证「记事本里就是全部记事，其它清单里不会混进记事」。
+		if in.Kind == KindNote {
+			bucket, err := ensureNoteBucket(tx, userID)
+			if err != nil {
+				return err
+			}
+			in.ListID = bucket.ID
+		} else if in.ListID == 0 {
 			list, err := ensureDefaultList(tx, userID)
 			if err != nil {
 				return err
@@ -278,7 +287,14 @@ func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) 
 		if in.Version > 0 && existing.Version != in.Version {
 			return errVersionConflict
 		}
-		if in.ListID == 0 {
+		// 改成记事就挪进「记事本」栏目（与新建记事同一口径）；改回任务时留在原清单。
+		if in.Kind == KindNote {
+			bucket, err := ensureNoteBucket(tx, userID)
+			if err != nil {
+				return err
+			}
+			in.ListID = bucket.ID
+		} else if in.ListID == 0 {
 			in.ListID = existing.ListID
 		}
 		if err := assertListOwner(tx, userID, in.ListID); err != nil {
@@ -451,13 +467,69 @@ func parseChannelTargets(raw string) []uint {
 	return ids
 }
 
+// listWindow 是列表/记事本页的时间窗口，两端左闭右开（上海时区）；
+// nil 表示那一端不限。解析口径与日历 from/to 一致。
+type listWindow struct {
+	start *time.Time
+	end   *time.Time
+}
+
+// parseListWindow 把 from / to（YYYY-MM-DD，可空）解析成上海时区的时间窗口。
+// 两端都可单独给出；都给时必须 to 晚于 from（含起不含止）。
+func parseListWindow(from, to string) (listWindow, error) {
+	loc := shanghai()
+	var out listWindow
+	if raw := strings.TrimSpace(from); raw != "" {
+		parsed, err := time.ParseInLocation("2006-01-02", raw, loc)
+		if err != nil {
+			return listWindow{}, errors.New("开始日期无效，应为 YYYY-MM-DD")
+		}
+		out.start = &parsed
+	}
+	if raw := strings.TrimSpace(to); raw != "" {
+		parsed, err := time.ParseInLocation("2006-01-02", raw, loc)
+		if err != nil {
+			return listWindow{}, errors.New("结束日期无效，应为 YYYY-MM-DD")
+		}
+		out.end = &parsed
+	}
+	if out.start != nil && out.end != nil && !out.end.After(*out.start) {
+		return listWindow{}, errors.New("结束日期必须晚于开始日期")
+	}
+	return out, nil
+}
+
+// monthWindow 把兼容用的旧参数 month=YYYY-MM 换算成 from/to 两个日期串
+// （当月 1 日 → 下月 1 日，与原来「按整月筛选」的口径完全一致）。
+func monthWindow(month string) (string, string) {
+	month = strings.TrimSpace(month)
+	if month == "" {
+		return "", ""
+	}
+	start, err := time.ParseInLocation("2006-01", month, shanghai())
+	if err != nil {
+		return "", ""
+	}
+	return start.Format("2006-01-02"), start.AddDate(0, 1, 0).Format("2006-01-02")
+}
+
 // listReminders 列出一屏提醒/记事。
 //
 // includeCompleted 对应界面上「未完成 / 全部」开关的「全部」：打开后已完成的行也
 // 一起返回（记事创建即完成，所以「我的清单」想看见记事就必须打开它）。
 // view=completed（「已完成」页）走的是另一个接口，这里不受开关影响。
-func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint, includeCompleted bool, month string) ([]ReminderDTO, error) {
+//
+// from / to（YYYY-MM-DD，可空，上海时区，含起不含止）是泛化后的时间窗口：
+// 「全部」页的时间范围条与旧的按月翻页都走它。旧的 month=YYYY-MM 由
+// handleListReminders 换算成 from/to，本函数不再单独认 month。
+// sort=created_desc 时按生效时间倒序（记事本页专用：记事没有 due_at，
+// 默认排序会把它们甩到最后，而记事本要「最新的在最上面」）。
+func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint, includeCompleted bool, from, to, sort string) ([]ReminderDTO, error) {
 	var rows []Reminder
+	window, err := parseListWindow(from, to)
+	if err != nil {
+		return nil, err
+	}
 	q := db.Where("user_id = ? AND deleted_at IS NULL", userID)
 	// 「信用卡账单」栏目被后台关掉时，它自动生成的账单日/还款日提醒也不出现在这里
 	// （栏目本身、卡片与金额都还在，重新打开偏好就回来）。
@@ -471,15 +543,6 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 	openOnly := "completed_at IS NULL AND "
 	if includeCompleted && view != "completed" {
 		openOnly = ""
-	}
-	// month（"2026-10"，可空）：只在「全部」页左右翻月时传。空串＝不限月份，
-	// 导出走的就是不限月份（用户要求导出所有数据）。归月口径：有到期时间按
-	// due_at，记事没有到期时间就按它的记录时间 completed_at。
-	var monthStart time.Time
-	if month != "" {
-		if parsed, perr := time.ParseInLocation("2006-01", month, loc); perr == nil {
-			monthStart = parsed
-		}
 	}
 	// 计划页的「全部」只收**本月**已完成的预设：不加这个窗口的话完成记录会一直
 	// 滚下去，页面就不再是「计划」了（用户要求：全部应包含本月已完成项目）。
@@ -508,11 +571,13 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 			q = q.Where("completed_at IS NULL")
 		}
 	}
-	if !monthStart.IsZero() {
-		// 全部页按月翻页：这一页只看这个月的内容（用户要求：为了不让数据量把页面拖垮，
-		// 每页只显示当月，底部左右切换月份）。
-		q = q.Where("COALESCE(due_at, completed_at, created_at) >= ? AND COALESCE(due_at, completed_at, created_at) < ?",
-			monthStart, monthStart.AddDate(0, 1, 0))
+	// 时间窗口（from/to）：归月/归日口径与原来一致——有到期时间按 due_at，
+	// 记事没有到期时间按它的记录时间 completed_at，最后兜底 created_at。
+	if window.start != nil {
+		q = q.Where("COALESCE(due_at, completed_at, created_at) >= ?", *window.start)
+	}
+	if window.end != nil {
+		q = q.Where("COALESCE(due_at, completed_at, created_at) < ?", *window.end)
 	}
 	if len(listIDs) > 0 {
 		q = q.Where("list_id IN ?", listIDs)
@@ -525,6 +590,12 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 	order := "CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, priority DESC, position ASC, id DESC"
 	if includeCompleted && view != "completed" {
 		order = "CASE WHEN completed_at IS NULL THEN 0 ELSE 1 END, " + order
+	}
+	// 记事本页：记事没有 due_at（保存时被清空），默认排序会把它们甩到最后，
+	// 而记事本是流水账——最新的要排在最上面。按生效时间倒序（记事取 completed_at，
+	// 也就等于创建时间）。
+	if sort == "created_desc" {
+		order = "COALESCE(due_at, completed_at, created_at) DESC, id DESC"
 	}
 	if err := q.Order(order).Find(&rows).Error; err != nil {
 		return nil, err

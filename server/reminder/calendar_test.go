@@ -245,7 +245,7 @@ func TestListRemindersIncludeCompleted(t *testing.T) {
 	}
 
 	// 关着开关：只看未完成，记事不出现。
-	openOnly, err := listReminders(appDB, userID, "all", "", nil, false, "")
+	openOnly, err := listReminders(appDB, userID, "all", "", nil, false, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +254,7 @@ func TestListRemindersIncludeCompleted(t *testing.T) {
 	}
 
 	// 打开开关：三条都在，已完成的（任务与记事）排在后面。
-	all, err := listReminders(appDB, userID, "all", "", nil, true, "")
+	all, err := listReminders(appDB, userID, "all", "", nil, true, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +273,7 @@ func TestListRemindersIncludeCompleted(t *testing.T) {
 		t.Fatalf("记事应出现在「全部」里，实际 %v", titlesOf(all))
 	}
 	// 「已完成」页的开关打开也不该改变它自己的口径（它本来就只看已完成）。
-	doneView, err := listReminders(appDB, userID, "completed", "", nil, true, "")
+	doneView, err := listReminders(appDB, userID, "completed", "", nil, true, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

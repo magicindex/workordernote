@@ -5,10 +5,15 @@ import (
 	"time"
 )
 
-// 清单模板：general（普通）或 credit_card（信用卡清单，里面放卡片实体）。
+// 清单模板：general（普通）、credit_card（信用卡栏目，里面放卡片实体）
+// 或 notebook（记事本栏目，里面放 kind=note 的记事）。
+//
+// 后两者都是侧栏里的**固定系统栏目**：不在「新建清单」里选，也不混进「我的清单」，
+// 各自的显示由个人偏好控制（见 card_bucket.go / note_bucket.go）。
 const (
 	listTemplateGeneral = "general"
 	listTemplateCard    = "credit_card"
+	listTemplateNote    = "notebook"
 )
 
 func normalizeListTemplate(t string) string {

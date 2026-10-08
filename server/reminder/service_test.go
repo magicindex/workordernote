@@ -245,7 +245,7 @@ func TestListRemindersLoadsRelatedDataInConstantQueries(t *testing.T) {
 	creditCardFeatureEnabled(appDB, userID)
 	queryCount.Store(0)
 
-	items, err := listReminders(appDB, userID, "all", "", nil, false, "")
+	items, err := listReminders(appDB, userID, "all", "", nil, false, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

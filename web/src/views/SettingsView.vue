@@ -147,9 +147,12 @@ async function handleSave(key: string, value: string) {
       if (idx >= 0) {
         items.value[idx] = { ...items.value[idx], value }
       }
-      // 「信用卡账单栏目」是个人开关：侧栏那一行要立刻跟着变，不用重进页面。
+      // 「信用卡账单 / 记事本栏目」是个人开关：侧栏那两行要立刻跟着变，不用重进页面。
       if (key === 'credit_card_enabled') {
         authStore.setCreditCardEnabled(value !== 'false')
+      }
+      if (key === 'notebook_enabled') {
+        authStore.setNotebookEnabled(value !== 'false')
       }
       listRef.value?.markSaved(key)
       if (key === 'theme_mode') {

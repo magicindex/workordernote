@@ -101,6 +101,23 @@
             <span v-if="cardBucket.card_count" class="nav-count">{{ cardBucket.card_count }}</span>
           </RouterLink>
 
+          <!-- 记事本：与「信用卡账单」并列的固定栏目，由个人偏好 notebook_enabled 控制显示。
+               记事一律收在这一栏里，不需要（也不能）自己建这个清单。 -->
+          <RouterLink
+            v-if="authStore.notebookEnabled && noteBucket"
+            :to="`/admin/list/${noteBucket.id}`"
+            class="nav-row"
+            :class="{ 'nav-row-active': route.path === `/admin/list/${noteBucket.id}` }"
+            :title="railActive ? '记事本' : '记事本：新建的记事都收在这里'"
+            data-nav-notebook
+            @click="mobileOpen = false"
+          >
+            <span class="nav-symbol h-5 w-5 bg-emerald-500/12 text-emerald-500">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 6.5C10.5 5.3 8.3 4.8 5 4.8v12.4c3.3 0 5.5.5 7 1.7 1.5-1.2 3.7-1.7 7-1.7V4.8c-3.3 0-5.5.5-7 1.7Z" stroke-width="1.7"/><path d="M12 6.5v12.4" stroke-width="1.7"/></svg>
+            </span>
+            <span class="flex-1">记事本</span>
+          </RouterLink>
+
           <!-- 清单行不再挂「笔」图标：右键（桌面）或长按（触屏）弹出菜单，里面有重命名 / 修改 / 删除。
                右键菜单藏起来的入口，所以这里不摆任何常驻按钮，侧栏更干净。 -->
           <div
@@ -492,9 +509,11 @@ const railActive = computed(() => railCollapsed.value || railForced.value)
 const settingsOpen = ref(false)
 
 const lists = ref<ReminderList[]>([])
-// 侧栏「我的清单」里只列普通清单：信用卡账单是上面那个固定栏目，不混在里面。
-const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card'))
+// 侧栏「我的清单」里只列普通清单：信用卡账单与记事本是上面那两个固定栏目，
+// 不混在里面（也不出现在「新建提醒的清单下拉」里）。
+const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card' && l.template !== 'notebook'))
 const cardBucket = computed(() => lists.value.find((l) => l.template === 'credit_card') || null)
+const noteBucket = computed(() => lists.value.find((l) => l.template === 'notebook') || null)
 const summary = ref<Record<string, number>>({})
 const creatingList = ref(false)
 const realtimeToast = ref('')

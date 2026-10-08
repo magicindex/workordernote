@@ -63,6 +63,16 @@ func TestListListsUsesFixedQueryCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// 「记事本」固定栏目在偏好开着但库里还没这一行时会补建一次（见 handleListLists）。
+	// 那一次是**一次性**的（每个用户只建一条），不计入「稳态固定查询数」；
+	// 先跑一次把栏目与偏好缓存都烘热，再清零计数，统计的才是后续请求的稳定态。
+	warmRecorder := httptest.NewRecorder()
+	warmCtx, _ := gin.CreateTestContext(warmRecorder)
+	warmCtx.Request = httptest.NewRequest(http.MethodGet, "/api/reminder/lists", nil)
+	warmCtx.Set("userID", uint(userID))
+	handleListLists(appDB)(warmCtx)
+	queryCount.Store(0)
+
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
 	context.Request = httptest.NewRequest(http.MethodGet, "/api/reminder/lists", nil)

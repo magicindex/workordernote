@@ -2,6 +2,7 @@ package reminder
 
 import (
 	"encoding/csv"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -244,5 +245,84 @@ func TestExportRemindersHandler(t *testing.T) {
 	handleExportReminders(appDB)(context)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("非法 scope 返回 %d，期望 400", recorder.Code)
+	}
+}
+
+// 导出对话框的两个新参数：lists= 只导这些清单、columns= 只导这些列；
+// 都不传时必须与旧行为逐字节一致（缺省＝全部清单 + 全部列）。
+func TestExportSelectedListsAndColumns(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	gin.SetMode(gin.TestMode)
+	withShanghaiLocal(t)
+
+	const userID = 22
+	listA := List{UserID: userID, Name: "工作", IsDefault: true}
+	listB := List{UserID: userID, Name: "生活"}
+	if err := appDB.Create(&listA).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := appDB.Create(&listB).Error; err != nil {
+		t.Fatal(err)
+	}
+	due := time.Now().Add(-time.Hour).Truncate(time.Second)
+	if _, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "工作里的任务", ListID: listA.ID, DueAt: &due, RepeatRule: "none",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "生活里的任务", ListID: listB.ID, DueAt: &due, RepeatRule: "none",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// 记事创建即完成，一律落到「记事本」栏目。
+	if _, err := createReminder(appDB, userID, SaveReminderInput{Title: "一条记事", Kind: KindNote}); err != nil {
+		t.Fatal(err)
+	}
+	bucket, err := findNoteBucket(appDB, userID, false)
+	if err != nil || bucket == nil {
+		t.Fatalf("记事本栏目应存在：%v %v", bucket, err)
+	}
+
+	// 只选两列：表头与每行列宽都必须与所选一致。
+	records, _ := exportRows(t, "scope=active&view=all&status=all&columns=title,due", userID)
+	if got := strings.Join(records[0], ","); got != "标题,到期时间" {
+		t.Fatalf("按列导出表头 = %q", got)
+	}
+	for i, row := range records[1:] {
+		if len(row) != 2 {
+			t.Fatalf("第 %d 行有 %d 列，期望 2：%v", i, len(row), row)
+		}
+	}
+
+	// columns 全非法 / 缺省 → 回落到全部列（旧客户端行为不变）。
+	records, _ = exportRows(t, "scope=active&view=all&status=all&columns=bogus", userID)
+	if got := strings.Join(records[0], ","); got != "标题,类型,清单,状态,到期时间,完成时间,重复,备注" {
+		t.Fatalf("非法 columns 应回落全部列，实际表头 = %q", got)
+	}
+
+	// lists= 只导出一个清单：另一个清单与记事本都不出现。
+	only := func(query string) map[string]bool {
+		rows, _ := exportRows(t, query, userID)
+		out := map[string]bool{}
+		for _, row := range rows[1:] {
+			out[row[0]] = true
+		}
+		return out
+	}
+	got := only(fmt.Sprintf("scope=active&view=all&status=all&lists=%d", listA.ID))
+	if !got["工作里的任务"] || got["生活里的任务"] || got["一条记事"] {
+		t.Fatalf("按清单 lists=%d 导出不对：%v", listA.ID, got)
+	}
+	// lists= 记事本栏目 id：只剩记事。
+	got = only(fmt.Sprintf("scope=active&view=all&status=all&lists=%d", bucket.ID))
+	if !got["一条记事"] || got["工作里的任务"] || got["生活里的任务"] {
+		t.Fatalf("按记事本 lists=%d 导出不对：%v", bucket.ID, got)
+	}
+	// 旧参数 list_ids 仍然有效（兼容）。
+	got = only(fmt.Sprintf("scope=active&view=all&status=all&list_ids=%d", listB.ID))
+	if !got["生活里的任务"] || got["工作里的任务"] {
+		t.Fatalf("旧的 list_ids 导出不对：%v", got)
 	}
 }

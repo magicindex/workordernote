@@ -151,15 +151,15 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 默认是**关**的（个人偏好，不是所有人都用信用卡）：先确认这一点，
-	// 再打开它看卡片提醒回来。
-	if creditCardFeatureEnabled(appDB, userID) {
-		t.Fatal("个人偏好默认应为关闭")
+	// 注册表默认是**开**的（用户要求：信用卡账单与记事本都默认开启；每个用户
+	// 仍可在偏好设置里关掉）。先确认默认值，再关掉/打开验证「关掉只是隐藏」。
+	if !creditCardFeatureEnabled(appDB, userID) {
+		t.Fatal("个人偏好注册表默认应为开启")
 	}
 	setCardFeature(t, userID, true)
 
 	// 开着的时候：4 条（3 条卡片提醒 + 1 条普通任务），日历里也应该有卡片提醒。
-	items, err := listReminders(appDB, userID, "all", "", nil, false, "")
+	items, err := listReminders(appDB, userID, "all", "", nil, false, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 		t.Fatal("关掉之后读取应为关闭")
 	}
 
-	items, err = listReminders(appDB, userID, "all", "", nil, false, "")
+	items, err = listReminders(appDB, userID, "all", "", nil, false, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 	}
 
 	setCardFeature(t, userID, true)
-	items, err = listReminders(appDB, userID, "all", "", nil, false, "")
+	items, err = listReminders(appDB, userID, "all", "", nil, false, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
