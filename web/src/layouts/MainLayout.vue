@@ -323,6 +323,7 @@
       :ack-hint="ackHint"
       @ack="ackCurrentAlert"
       @snooze="snoozeCurrentAlert"
+      @dismiss="dismissCurrentAlert"
     />
 
     <!-- 版本信息与迭代说明 -->
@@ -937,10 +938,34 @@ async function runAlertAction(action: () => Promise<unknown>) {
     refreshNavigation()
     window.dispatchEvent(new CustomEvent('reminder-data-changed'))
   } catch (error: any) {
+    // 提醒已经不在了（删掉卡片/提醒后，服务端可能还留着没处理的到点通知）：
+    // 这时「知道了 / 稍后提醒」都会 404「提醒或清单不存在」，弹窗原来会卡死
+    // —— 用户报的就是这个（点知道了提示不存在、对话框再也关不掉）。
+    // 目标都没了，这条通知就没意义了：直接标已读并关掉弹窗。
+    if (isReminderGone(error)) {
+      await acknowledgeCurrentAlert()
+      shiftAlert()
+      refreshNavigation()
+      window.dispatchEvent(new CustomEvent('reminder-data-changed'))
+      realtimeToast.value = '这条提醒已经不在了，弹窗已为你关掉'
+      return
+    }
     alertError.value = error?.response?.data?.message || '操作失败，请重试'
   } finally {
     alertBusy.value = false
   }
+}
+
+/** 服务端 404 的统一文案是「提醒或清单不存在」；拿不到状态码时兜底看文案。 */
+function isReminderGone(error: any): boolean {
+  const status = error?.response?.status
+  const message = String(error?.response?.data?.message || '')
+  return status === 404 || /不存在/.test(message)
+}
+
+/** 操作失败时的兜底出口：只关掉这条弹窗（不动提醒），保证用户不会被困住。 */
+function dismissCurrentAlert() {
+  void acknowledgeCurrentAlert().finally(() => shiftAlert())
 }
 
 // 处理过的站内提醒标记为已读，未读小红点才会跟着消失。

@@ -307,6 +307,24 @@ func handleDeleteCard(db *gorm.DB) gin.HandlerFunc {
 		}
 		now := time.Now()
 		err := db.Transaction(func(tx *gorm.DB) error {
+			// 这些提醒马上要软删，它们名下还没处理的「到点」通知必须一起标为已读：
+			// 否则弹窗照样会弹出来，用户点「知道了」时提醒已经不在了 —— 服务端返回
+			// 404「提醒或清单不存在」，弹窗就卡在那儿关不掉（用户实际报过）。
+			// 单条提醒删除走的是 deleteReminder()，它内部会调 retireDueNotifications；
+			// 删卡片是批量软删，必须在这里自己补上。
+			var reminderIDs []uint
+			if err := tx.Model(&Reminder{}).
+				Where("user_id = ? AND card_id = ? AND deleted_at IS NULL", userID, card.ID).
+				Pluck("id", &reminderIDs).Error; err != nil {
+				return err
+			}
+			if len(reminderIDs) > 0 {
+				if err := tx.Model(&Notification{}).
+					Where("user_id = ? AND reminder_id IN ? AND type = ? AND read_at IS NULL", userID, reminderIDs, "reminder_due").
+					Update("read_at", &now).Error; err != nil {
+					return err
+				}
+			}
 			if err := tx.Model(&Reminder{}).
 				Where("user_id = ? AND card_id = ? AND deleted_at IS NULL", userID, card.ID).
 				Updates(map[string]interface{}{"deleted_at": now, "updated_at": now}).Error; err != nil {

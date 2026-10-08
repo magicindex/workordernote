@@ -301,10 +301,13 @@ func TestCardSchedulePeriods(t *testing.T) {
 	}
 }
 
-// 删除卡片必须把它名下的账单期一起软删。
+// 删除卡片必须把它名下的账单期一起软删，并把没处理的到点通知标为已读。
 //
-// 起因：回归用例删掉 3 张测试卡后，沙箱的 card_statements 比生产多 6 条
-// 「没有卡的账单期」——界面上看不见，但它们是活行，会一直跟着同步快照发给对端。
+// 起因两条（都是实际踩到的）：
+//  1. 回归用例删掉 3 张测试卡后，沙箱的 card_statements 比生产多 6 条「没有卡的
+//     账单期」——界面上看不见，但它们是活行，会一直跟着同步快照发给对端。
+//  2. 用户收到「自检第二卡 还款提醒」的弹窗，点「知道了」提示「不存在」，
+//     弹窗还关不掉：卡片删了，提醒删了，可那条未读通知还在，点操作必然 404。
 func TestDeleteCardSoftDeletesStatements(t *testing.T) {
 	cleanup := testDB(t)
 	defer cleanup()
@@ -331,6 +334,19 @@ func TestDeleteCardSoftDeletesStatements(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := upsertStatement(appDB, userID, card, "2026-10", 200000, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	// 造一条「到点」未读通知挂在这张卡的某条提醒上（弹窗会把它弹出来）
+	var cardReminder Reminder
+	if err := appDB.Where("card_id = ? AND deleted_at IS NULL", card.ID).First(&cardReminder).Error; err != nil {
+		t.Fatal(err)
+	}
+	notification := Notification{
+		UserID: userID, ReminderID: &cardReminder.ID, Type: "reminder_due",
+		Title: "白金刚 还款提醒（还有 3 天）", CreatedAt: now,
+	}
+	if err := appDB.Create(&notification).Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -367,5 +383,13 @@ func TestDeleteCardSoftDeletesStatements(t *testing.T) {
 	}
 	if reloaded.DeletedAt == nil {
 		t.Fatal("卡片本身没有被软删")
+	}
+	// 通知必须变成已读，否则弹窗还会弹，而点「知道了」时提醒已经没了 → 弹窗卡死
+	var reloadedNotification Notification
+	if err := appDB.Where("id = ?", notification.ID).First(&reloadedNotification).Error; err != nil {
+		t.Fatal(err)
+	}
+	if reloadedNotification.ReadAt == nil {
+		t.Fatal("删卡后那条未读的到点通知仍是未读（弹窗会弹出来且点不掉）")
 	}
 }

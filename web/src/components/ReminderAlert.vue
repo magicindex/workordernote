@@ -45,6 +45,18 @@
               <button type="button" class="btn-ghost w-full" :disabled="busy" @click="emit('snooze')">
                 {{ snoozeText }}
               </button>
+              <!-- 兜底出口：操作失败时（网络断了、服务端报错）总得能关掉，
+                   否则用户被困在这个弹窗里出不去（用户报过这种「取消不掉」）。 -->
+              <button
+                v-if="error"
+                type="button"
+                class="w-full rounded-xl px-4 py-2 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-white/[0.06]"
+                :disabled="busy"
+                data-alert-dismiss
+                @click="emit('dismiss')"
+              >
+                关闭弹窗
+              </button>
               <p class="text-center text-[11px] leading-4 text-muted-foreground">{{ hint }}</p>
             </div>
           </div>
@@ -93,6 +105,8 @@ const emit = defineEmits<{
   /** 知道了：当天不再提示（服务端按偏好里的「知道了后的提醒频率」顺延） */
   ack: []
   snooze: []
+  /** 兜底：「操作失败」时只把弹窗关掉，不改动提醒 */
+  dismiss: []
 }>()
 
 const snoozeText = computed(() => props.snoozeLabel || '稍后提醒')

@@ -58,7 +58,10 @@
               </span>
               <div class="min-w-0">
                 <p class="truncate text-sm font-extrabold tracking-wide" data-card-title>{{ cardTitle(card) }}</p>
-                <p class="mt-1 truncate font-mono text-[14px] tracking-[.1em] opacity-90 sm:text-[15px] sm:tracking-[.18em]" data-card-number>
+                <!-- 卡号：窄屏缩字距 + 允许换行，**绝不截断**——用户报过「看不到信用卡尾号」
+                     （0.14.0 给它加了 truncate，19 个字符在窄列里被省略号吃掉，尾号反而看不见）。
+                     maskNo 只留后四位，所以只要不截断，尾号一定看得见。 -->
+                <p class="mt-1 font-mono text-[13px] leading-5 tracking-[.04em] opacity-90 sm:text-[15px] sm:tracking-[.16em]" data-card-number>
                   {{ maskNo(card.no) }}
                 </p>
               </div>
