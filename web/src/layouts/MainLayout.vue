@@ -216,7 +216,7 @@
 
     <div v-if="mobileOpen" class="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-sm lg:hidden" @click="mobileOpen = false"></div>
 
-    <div class="min-h-screen" :class="railActive ? 'lg:pl-14' : 'lg:pl-[292px]'">
+    <div class="shell min-h-screen" :class="railActive ? 'lg:pl-14' : 'lg:pl-[292px]'">
       <header class="topbar">
         <button class="icon-button" :aria-label="railCollapsed ? '展开侧栏' : '收起侧栏'" @click="toggleSidebar">
           <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M4 7h16M4 12h16M4 17h16" stroke-width="2" stroke-linecap="round"/></svg>
@@ -292,10 +292,21 @@
         <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5" stroke-width="1.8"/><path d="M2.5 10h19M6 13.5h4" stroke-width="1.8" stroke-linecap="round"/></svg></span>
         <small>信用卡</small>
       </RouterLink>
-      <button v-if="canCreate" class="mobile-add" aria-label="新建提醒" @click="openQuickAdd"><svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2.2" stroke-linecap="round"/></svg></button>
       <RouterLink to="/admin/notifications" class="mobile-tab" :class="{ active: route.path === '/admin/notifications' }"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke-width="1.8" stroke-linecap="round"/></svg></span><small>通知</small></RouterLink>
       <RouterLink to="/admin/channels" class="mobile-tab" :class="{ active: route.path === '/admin/channels' }"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 12h8m-8 4h5m6-11H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4l3 3 3-3h4a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z" stroke-width="1.8"/></svg></span><small>方式</small></RouterLink>
     </nav>
+
+    <!-- 手机端「新建」改成**悬浮按钮**：脱离底部标签栏，右下角悬浮，键盘弹起/滚动时收起 -->
+    <button
+      v-if="canCreate"
+      class="mobile-fab"
+      :class="{ 'mobile-fab-hidden': keyboardOpen }"
+      aria-label="新建提醒"
+      data-mobile-fab
+      @click="openQuickAdd"
+    >
+      <svg viewBox="0 0 24 24" class="h-7 w-7" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2.4" stroke-linecap="round"/></svg>
+    </button>
 
     <Toast :message="realtimeToast" type="success" :duration="5000" />
 
@@ -308,9 +319,10 @@
       :pending-count="pendingAlertCount"
       :busy="alertBusy"
       :error="alertError"
-      @complete="completeCurrentAlert"
+      :snooze-label="`稍后提醒（${notifyMinutes} 分钟后）`"
+      :ack-hint="ackHint"
+      @ack="ackCurrentAlert"
       @snooze="snoozeCurrentAlert"
-      @dismiss="dismissCurrentAlert"
     />
 
     <!-- 版本信息与迭代说明 -->
@@ -888,7 +900,12 @@ const alertBusy = ref(false)
 const alertError = ref('')
 const currentAlert = computed(() => alertQueue.value[0] || null)
 const pendingAlertCount = computed(() => Math.max(alertQueue.value.length - 1, 0))
-const SNOOZE_MINUTES = 10
+// 提醒频率来自偏好设置（个人偏好）：未处理多久再提醒、点「知道了」后多久再提醒
+const notifyMinutes = computed(() => authStore.reminderNotifyMinutes || 10)
+const ackMinutes = computed(() => authStore.reminderAckMinutes || 0)
+const ackHint = computed(() => (ackMinutes.value > 0
+  ? `点「知道了」后 ${ackMinutes.value} 分钟再提醒；要完成请到列表里勾选`
+  : '点「知道了」后今天不再提示，明天同一时间继续提醒；要完成请到列表里勾选'))
 
 function enqueueDueAlert(notification: ReminderRealtimeEvent['notification']) {
   if (!notification || notification.type !== 'reminder_due') return
@@ -937,11 +954,21 @@ async function acknowledgeCurrentAlert() {
   }
 }
 
-function completeCurrentAlert() {
+/** 「知道了」之后什么时刻再提醒：按偏好（0 = 第二天同一时刻）。 */
+function ackUntil(): string {
+  if (ackMinutes.value > 0) return new Date(Date.now() + ackMinutes.value * 60_000).toISOString()
+  const t = new Date()
+  t.setDate(t.getDate() + 1) // 明天同一时间
+  return t.toISOString()
+}
+
+// 「知道了」是弹窗的主操作：顺延到偏好设定的时间（默认第二天），当天不再提示；
+// 想真正完成就去列表里勾选——弹窗上不再放「完成」，避免误点把事办了。
+function ackCurrentAlert() {
   const alert = currentAlert.value
   if (!alert) return
   void runAlertAction(async () => {
-    if (alert.reminderID) await completeReminder(alert.reminderID)
+    if (alert.reminderID) await snoozeReminder(alert.reminderID, ackUntil())
   })
 }
 
@@ -950,18 +977,9 @@ function snoozeCurrentAlert() {
   if (!alert) return
   void runAlertAction(async () => {
     if (!alert.reminderID) return
-    const until = new Date(Date.now() + SNOOZE_MINUTES * 60_000).toISOString()
+    const until = new Date(Date.now() + notifyMinutes.value * 60_000).toISOString()
     await snoozeReminder(alert.reminderID, until)
   })
-}
-
-function dismissCurrentAlert() {
-  if (alertBusy.value) return
-  void (async () => {
-    await acknowledgeCurrentAlert()
-    shiftAlert()
-    refreshNavigation()
-  })()
 }
 
 function handleRealtimeEvent(event: ReminderRealtimeEvent) {
@@ -1132,6 +1150,8 @@ onBeforeUnmount(() => {
 .ambient-orb { position: absolute; border-radius: 999px; filter: blur(110px); opacity: .16; }
 .ambient-orb-one { width: 32rem; height: 32rem; left: 12%; top: -18rem; background: #60a5fa; }
 .ambient-orb-two { width: 28rem; height: 28rem; right: -10rem; bottom: -12rem; background: #a78bfa; opacity: .11; }
+/* 外壳禁止横向溢出：任何子元素意外撑宽都不会让整页能左右拖 */
+.shell { overflow-x: clip; }
 .sidebar { @apply fixed inset-y-0 left-0 z-50 w-[292px] -translate-x-full border-r border-border/80 bg-surface/90 backdrop-blur-2xl transition-transform duration-300; }
 /* 手机：抽屉打开 */
 .sidebar-open { @apply translate-x-0; }
@@ -1179,6 +1199,9 @@ onBeforeUnmount(() => {
 .sub-link { @apply ml-11 block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground; }
 .topbar { @apply sticky top-0 z-30 flex h-12 items-center border-b border-border/70 bg-background/75 px-3.5 backdrop-blur-xl sm:h-16 sm:px-6 lg:h-[76px] lg:px-8 xl:px-10; }
 .avatar { @apply flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-extrabold text-white shadow-sm sm:h-9 sm:w-9; }
+/* 悬浮「新建」：右下角，浮在底部标签栏之上；手机端才有 */
+.mobile-fab { @apply fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-[0_16px_34px_-10px_rgba(59,130,246,.95)] transition-all duration-200 active:scale-95 lg:hidden; bottom: calc(5rem + env(safe-area-inset-bottom)); }
+.mobile-fab-hidden { @apply pointer-events-none translate-y-24 opacity-0; }
 .mobile-tabbar { @apply fixed inset-x-2 bottom-[calc(0.5rem+env(safe-area-inset-bottom))] z-40 flex h-14 items-center justify-around rounded-2xl border border-white/30 bg-surface/90 px-1.5 shadow-[0_14px_40px_-18px_rgba(15,23,42,.45)] backdrop-blur-2xl transition-all duration-200 lg:hidden; }
 .mobile-tabbar-hidden { @apply pointer-events-none translate-y-28 opacity-0; }
 .mobile-tab { @apply flex w-14 flex-col items-center gap-0.5 text-muted-foreground transition; }

@@ -51,6 +51,9 @@ export const useAuthStore = defineStore('auth', () => {
   // **每人一份、默认关**（不是所有人都用信用卡，要用的人自己在偏好设置里打开）。
   // 留在 store 里是为了「刚保存偏好、侧栏立刻跟着变」，不用重进页面。
   const creditCardEnabled = ref(false)
+  // 提醒频率（分钟）：未处理的提醒多久再弹一次；点「知道了」之后多久再提醒（0 = 第二天）
+  const reminderNotifyMinutes = ref(10)
+  const reminderAckMinutes = ref(0)
   const setupRequired = ref(false)
   const siteTitle = ref('工作序记')
   // 飞牛部署下授权登录要用的两个信息，随启动引导一起取回，登录/注册页不再
@@ -103,6 +106,8 @@ export const useAuthStore = defineStore('auth', () => {
     requireLogin.value = configs.require_login !== 'false'
     allowRegister.value = configs.allow_register !== 'false'
     creditCardEnabled.value = configs.credit_card_enabled !== 'false'
+    reminderNotifyMinutes.value = Number(configs.reminder_notify_minutes || 10) || 10
+    reminderAckMinutes.value = Number(configs.reminder_ack_minutes || 0) || 0
     if (configs.site_title) siteTitle.value = configs.site_title
     if (data.service_port) servicePort.value = data.service_port
     // 服务端运行形态是按钮显隐的唯一权威；字段缺席（旧后端）时保留编译期
@@ -318,5 +323,11 @@ export const useAuthStore = defineStore('auth', () => {
     creditCardEnabled.value = on
   }
 
-  return { token, user, requireLogin, allowRegister, creditCardEnabled, setCreditCardEnabled, setupRequired, siteTitle, hasSecurityQuestions, securityPromptDismissed, servicePort, fnosGatewayEntry, fnosApp, sessionSource, followsFnOSSession, isAuthenticated, isAdmin, init, resetInit, setToken, setUser, endSession, logout, dropIfFnOSSessionGone, checkSetupRequired, dismissSecurityPrompt, refreshSecurityQuestions }
+  function setReminderFrequencies(notifyMinutes: number, ackMinutes: number) {
+    if (notifyMinutes > 0) reminderNotifyMinutes.value = notifyMinutes
+    if (ackMinutes >= 0) reminderAckMinutes.value = ackMinutes
+  }
+
+  return { token, user, requireLogin, allowRegister, creditCardEnabled, setCreditCardEnabled,
+    reminderNotifyMinutes, reminderAckMinutes, setReminderFrequencies, setupRequired, siteTitle, hasSecurityQuestions, securityPromptDismissed, servicePort, fnosGatewayEntry, fnosApp, sessionSource, followsFnOSSession, isAuthenticated, isAdmin, init, resetInit, setToken, setUser, endSession, logout, dropIfFnOSSessionGone, checkSetupRequired, dismissSecurityPrompt, refreshSecurityQuestions }
 })

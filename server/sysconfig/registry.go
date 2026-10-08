@@ -195,6 +195,22 @@ func init() {
 		Group: "appearance", Label: "默认首页",
 		Description: "打开应用时先进哪个视图；之后仍可随时用右上角按钮切换",
 	})
+	// 提醒频率：控制「到点的提醒多久再提醒一次」与「点『知道了』之后多久再提醒」。
+	// 都是个人偏好（每人一份），选项值是分钟数。
+	RegisterConfig(ConfigDef{
+		Key: "reminder_notify_minutes", Scope: ScopeUser, Type: TypeSelect,
+		Default: "10", Options: []string{"5", "10", "15", "30", "60"},
+		Public: true,
+		Group:  "reminder", Label: "提醒频率",
+		Description: "到点的提醒如果没处理，隔多久再弹一次（也是新建提醒时「过期提醒频率」的默认值）",
+	})
+	RegisterConfig(ConfigDef{
+		Key: "reminder_ack_minutes", Scope: ScopeUser, Type: TypeSelect,
+		Default: "0", Options: []string{"0", "30", "60", "120", "240"},
+		Public: true,
+		Group:  "reminder", Label: "点「知道了」后的提醒频率",
+		Description: "弹窗上点「知道了」之后多久再提醒；「第二天」表示当天不再提示、第二天同一时间继续提醒",
+	})
 	// 信用卡账单：侧栏里那个**固定栏目**，不是普通清单——不用在「新建清单」里选模板，
 	// 卡片一律归到这一栏里。
 	//

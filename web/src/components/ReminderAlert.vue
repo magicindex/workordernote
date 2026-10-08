@@ -34,19 +34,18 @@
 
             <p v-if="error" class="mt-3 text-[13px] text-rose-600 dark:text-rose-400">{{ error }}</p>
 
+            <!-- 只有两个动作：「知道了」=当天不再提示、第二天继续提醒；
+                 「稍后提醒」=按偏好里的提醒频率过一会儿再弹。**不再有「完成」**——
+                 要完成请到列表里勾选，免得误点把事办了。 -->
             <div class="mt-5 flex flex-col gap-2.5">
-              <div class="flex gap-2.5">
-                <button type="button" class="btn-ghost flex-1" :disabled="busy" @click="emit('snooze')">
-                  {{ snoozeText }}
-                </button>
-                <button ref="completeButtonRef" type="button" class="btn-brand flex-1" :disabled="busy" @click="emit('complete')">
-                  <svg v-if="busy" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                  {{ busy ? '处理中…' : '完成' }}
-                </button>
-              </div>
-              <button type="button" class="rounded-xl px-4 py-2 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60" :disabled="busy" @click="emit('dismiss')">
-                知道了
+              <button ref="ackButtonRef" type="button" class="btn-brand w-full" :disabled="busy" @click="emit('ack')">
+                <svg v-if="busy" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                {{ busy ? '处理中…' : '知道了' }}
               </button>
+              <button type="button" class="btn-ghost w-full" :disabled="busy" @click="emit('snooze')">
+                {{ snoozeText }}
+              </button>
+              <p class="text-center text-[11px] leading-4 text-muted-foreground">{{ hint }}</p>
             </div>
           </div>
         </section>
@@ -63,7 +62,7 @@
 // 屏幕中央的弹窗，必须由用户处理（完成 / 稍后提醒 / 知道了）才消失，PC 与手机
 // 一致。
 //
-// 可访问性：role=alertdialog + 打开时自动聚焦「完成」，Esc 等同于「知道了」。
+// 可访问性：role=alertdialog + 打开时自动聚焦「知道了」，Esc 等同于「知道了」。
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
@@ -75,6 +74,10 @@ const props = withDefaults(defineProps<{
   pendingCount?: number
   busy?: boolean
   error?: string
+  /** 「稍后提醒」按钮上的文案（按偏好里的提醒频率显示间隔） */
+  snoozeLabel?: string
+  /** 主按钮下面那行小字，说明「知道了」之后什么时候再提醒 */
+  ackHint?: string
 }>(), {
   title: '',
   body: '',
@@ -82,16 +85,19 @@ const props = withDefaults(defineProps<{
   pendingCount: 0,
   busy: false,
   error: '',
+  snoozeLabel: '稍后提醒',
+  ackHint: '',
 })
 
 const emit = defineEmits<{
-  complete: []
+  /** 知道了：当天不再提示（服务端按偏好里的「知道了后的提醒频率」顺延） */
+  ack: []
   snooze: []
-  dismiss: []
 }>()
 
-const snoozeText = '稍后提醒'
-const completeButtonRef = ref<HTMLButtonElement | null>(null)
+const snoozeText = computed(() => props.snoozeLabel || '稍后提醒')
+const hint = computed(() => props.ackHint || '')
+const ackButtonRef = ref<HTMLButtonElement | null>(null)
 
 const timeLabel = computed(() => {
   if (!props.createdAt) return '到点了'
@@ -106,14 +112,14 @@ function onKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
   event.stopPropagation()
   if (props.busy) return
-  emit('dismiss')
+  emit('ack')
 }
 
 watch(() => props.open, async (open) => {
   if (open) {
     window.addEventListener('keydown', onKeydown)
     await nextTick()
-    completeButtonRef.value?.focus()
+    ackButtonRef.value?.focus()
     return
   }
   window.removeEventListener('keydown', onKeydown)

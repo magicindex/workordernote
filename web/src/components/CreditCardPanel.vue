@@ -33,7 +33,7 @@
     </p>
 
     <!-- 一行三张（窄屏一张、中屏两张），卡片靠银行标志区分；顺序见 sortedCards() -->
-    <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       <article v-for="card in sortedCards" :key="card.id" class="surface rounded-2xl p-3" :data-card-item="card.id">
         <!-- 卡面：所有卡默认同一套配色 + 银行标志区分；
              账单日之后黄→橘，还款日前 3 天（含逾期）变红。 -->
@@ -45,16 +45,20 @@
         >
           <span class="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10"></span>
           <span class="pointer-events-none absolute -bottom-10 -left-4 h-24 w-24 rounded-full bg-black/10"></span>
-          <div class="relative flex items-start justify-between gap-3">
-            <div class="flex min-w-0 items-center gap-2.5">
-              <!-- 银行标志：白底圆片，卡面靠它区分（认不出就退回银行名首字） -->
-              <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/95 p-1 shadow-sm" data-card-face-logo>
-                <img v-if="logoOf(card)" :src="logoOf(card)" alt="" class="h-full w-full object-contain" />
-                <span v-else class="text-[13px] font-black text-slate-600">{{ initialOf(card) }}</span>
+          <div class="relative flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+            <div class="flex min-w-0 flex-1 items-center gap-2.5">
+              <!-- 银行标志：白底圆片 + **图标铺满整个圆**（不留内边距，用户要求「放大到整个圆形」）；
+                   认不出银行时**不显示文字**，改用通用银行卡图标（把卡名首字塞进圆里很难看）。 -->
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm" data-card-face-logo>
+                <img v-if="logoOf(card)" :src="logoOf(card)" alt="" class="h-full w-full object-cover" />
+                <svg v-else class="h-5 w-5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" stroke-width="1.6" />
+                  <path d="M2.5 10h19M6 13.5h4" stroke-width="1.6" stroke-linecap="round" />
+                </svg>
               </span>
               <div class="min-w-0">
                 <p class="truncate text-sm font-extrabold tracking-wide" data-card-title>{{ cardTitle(card) }}</p>
-                <p class="mt-1 font-mono text-[15px] tracking-[.18em] opacity-90" data-card-number>
+                <p class="mt-1 truncate font-mono text-[14px] tracking-[.1em] opacity-90 sm:text-[15px] sm:tracking-[.18em]" data-card-number>
                   {{ maskNo(card.no) }}
                 </p>
               </div>
@@ -238,9 +242,7 @@ function maskNo(no: string) {
 function logoOf(card: CreditCard): string {
   return bankLogoOf(card.bank) || ''
 }
-function initialOf(card: CreditCard) {
-  return (card.bank || card.name || '卡').trim().slice(0, 1)
-}
+
 /** 倒计时按本地时间实时算（后端也给，前端这份是为了不依赖刷新）。 */
 function summaryOf(card: CreditCard) {
   const now = new Date()
