@@ -383,7 +383,7 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 import ContextMenu from '../components/ContextMenu.vue'
 import CalendarPrintDialog from '../components/CalendarPrintDialog.vue'
 import type { ContextMenuItem } from '../components/ContextMenu.vue'
-import { getAllConfigs } from '../api/config'
+import { getAllConfigs, getPublicConfigs } from '../api/config'
 import {
   completeReminder, deleteReminder, exportReminders, getCalendarItems, getChannelStatuses, getLists,
   getLunarCalendar, listIdsParam, restoreReminder,
@@ -508,7 +508,9 @@ function setViewMode(mode: 'month' | 'week') {
 }
 async function loadWeekStart() {
   try {
-    const res = await getAllConfigs()
+    // 用公开配置：周起始日是**系统级**设置，公开接口里的就是权威值（管理员的
+    // /api/configs 会把用户作用域的键合并进来，历史上可能留下同名用户行）
+    const res = await getPublicConfigs()
     const v = String((res.data?.data as Record<string, unknown> | undefined)?.calendar_week_start || '')
     if (v === 'sunday' || v === 'monday') {
       weekStartPref.value = v

@@ -93,6 +93,12 @@ func handleGetAllConfigs(db *gorm.DB) gin.HandlerFunc {
 			result[k] = v
 		}
 		for k, v := range userConfigs {
+			// 只有「用户作用域」的键才允许用用户值覆盖系统值。历史上键还没登记时
+			// 写下的用户行会一直留着，并会把后来登记成 ScopeSystem 的键**盖住**
+			// （实测：后台把「周起始日」改成周日，接口却一直回周一）。
+			if def, ok := GetConfigDef(k); ok && def.Scope != ScopeUser {
+				continue
+			}
 			result[k] = v
 		}
 		response.Success(c, result)
