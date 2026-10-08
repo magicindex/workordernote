@@ -198,3 +198,114 @@ func countCompletions(db *gorm.DB, title string, withDeleted bool) int64 {
 	}
 	return n
 }
+
+// 卡片与账单期的**删除墓碑**要能落地：本机内容与对端墓碑完全一样时，
+// 也必须按「删除」处理——sameCard 少了删除标记比较就会把它当成「一致，跳过」。
+func TestCardTombstoneAppliesWhenContentUnchanged(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	withFreshCardFeature(t)
+
+	const username = "墓碑卡用户"
+	owner := seedUser(t, appDB, username, "admin")
+	configureSync(t, appDB, syncDirectionBoth, "http://192.168.3.93:8906", "shared-token-123")
+
+	dbB, err := database.InitDB(filepath.Join(t.TempDir(), "peer-card-tomb.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(dbB); err != nil {
+		t.Fatal(err)
+	}
+	defer database.CloseDB(dbB)
+	seedUser(t, dbB, username, "admin")
+	configureSync(t, dbB, syncDirectionBoth, "http://192.168.3.94:8906", "shared-token-123")
+
+	// A：建卡 + 记一期金额
+	bucket, err := ensureCardBucket(appDB, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := Card{
+		UserID: owner.ID, ListID: bucket.ID, Name: "墓碑卡", Bank: "招商银行",
+		StatementDay: 5, DueDay: 25, AdvanceDays: 3, AutoRepeat: true,
+	}
+	if err := appDB.Create(&card).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := generateCardPlan(appDB, &card, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := upsertStatement(appDB, owner.ID, card, "2026-10", 12345, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	snap1, err := buildSyncSnapshot(appDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap1.InstanceID = "peer-card-a"
+	if _, err := applySyncSnapshot(dbB, snap1); err != nil {
+		t.Fatal(err)
+	}
+	if got := countCards(dbB, "墓碑卡", false); got != 1 {
+		t.Fatalf("对端应先有这张卡，实际 %d", got)
+	}
+
+	// A：删卡（连带软删它的提醒）与那一期账单
+	now := time.Now()
+	if err := appDB.Model(&Reminder{}).Where("card_id = ?", card.ID).
+		Updates(map[string]interface{}{"deleted_at": now, "updated_at": now}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := appDB.Model(&Card{}).Where("id = ?", card.ID).
+		Updates(map[string]interface{}{"deleted_at": now, "updated_at": now}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := appDB.Model(&CardStatement{}).Where("card_id = ?", card.ID).
+		Updates(map[string]interface{}{"deleted_at": now, "updated_at": now}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	snap2, err := buildSyncSnapshot(appDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap2.InstanceID = "peer-card-a"
+	stats, err := applySyncSnapshot(dbB, snap2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.CardsDeleted != 1 {
+		t.Fatalf("对端应删除 1 张卡，实际 %d（%+v）", stats.CardsDeleted, stats)
+	}
+	if got := countCards(dbB, "墓碑卡", false); got != 0 {
+		t.Fatalf("删除后对端不该再有这张卡，实际 %d", got)
+	}
+	if got := countCards(dbB, "墓碑卡", true); got != 1 {
+		t.Fatalf("行应保留（软删当墓碑），实际 %d", got)
+	}
+	var stmts int64
+	// 注意：Card/CardStatement 的 DeletedAt 是 *time.Time（不是 gorm.DeletedAt），
+	// GORM 不会自动加过滤，这里必须自己写 deleted_at IS NULL。
+	if err := dbB.Model(&CardStatement{}).
+		Where("card_id = ? AND deleted_at IS NULL", card.ID).Count(&stmts).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stmts != 0 {
+		t.Fatalf("账单期也应跟着删掉，实际还剩 %d 行", stmts)
+	}
+}
+
+func countCards(db *gorm.DB, name string, withDeleted bool) int64 {
+	// Card.DeletedAt 是 *time.Time，GORM 不会自动过滤，未删的那种要显式带上条件。
+	q := db.Model(&Card{}).Where("name = ? AND deleted_at IS NULL", name)
+	if withDeleted {
+		q = db.Unscoped().Model(&Card{}).Where("name = ?", name)
+	}
+	var n int64
+	if err := q.Count(&n).Error; err != nil {
+		return -1
+	}
+	return n
+}

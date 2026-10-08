@@ -30,7 +30,11 @@ func sameCard(local *Card, incoming syncCard, listID uint) bool {
 		local.AutoRepeat == incoming.AutoRepeat &&
 		local.Notes == incoming.Notes &&
 		local.Color == incoming.Color &&
-		local.Position == incoming.Position
+		local.Position == incoming.Position &&
+		// 删除标记也要比！漏了这一条时，「对端删掉、本机内容一模一样」会被判成
+		// 「内容一致，跳过」，于是**删不掉**（真实数据上踩到：回归测试卡在 200 上留着）。
+		// 清单与提醒的 sameList/sameReminder 一直有这个比较，卡片和账单期漏了。
+		(local.DeletedAt != nil) == incoming.Deleted
 }
 
 func applySyncCards(tx *gorm.DB, snap syncSnapshot, users map[string]database.User, listIDs map[string]uint, myInstance string, stats *syncApplyStats) (map[string]uint, error) {
@@ -131,7 +135,9 @@ func sameCardStatement(local *CardStatement, incoming syncCardStatement, cardID 
 		local.Minimum == incoming.Minimum &&
 		local.Note == incoming.Note &&
 		equalTimePtr(local.PaidAt, incoming.PaidAt) &&
-		local.PaidAmount == incoming.PaidAmount
+		local.PaidAmount == incoming.PaidAmount &&
+		// 同上：账单期的删除墓碑也要参与「是否一致」的判断
+		(local.DeletedAt != nil) == incoming.Deleted
 }
 
 func applySyncCardStatements(tx *gorm.DB, snap syncSnapshot, users map[string]database.User, cardIDs map[string]uint, myInstance string, stats *syncApplyStats) error {

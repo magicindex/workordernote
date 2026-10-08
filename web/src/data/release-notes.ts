@@ -30,6 +30,16 @@ export const UPSTREAM = {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.13.2',
+    date: '2026-10-08',
+    title: '修复：删除卡片/账单期的同步墓碑不生效（对端会留着已删的卡）',
+    items: [
+      '**问题**：`sameCard` / `sameCardStatement` 判断「内容是否一致」时**漏了删除标记**，于是「对端把卡删掉、本机内容一模一样」会被判成「一致，跳过」——**删除同步不过去**，另一台机器上会一直留着已经被删掉的卡（实测：回归测试用的卡在 200 上留了 3 张）。清单与提醒的 `sameList` / `sameReminder` 一直有这个比较，卡片与账单期漏了。',
+      '**修法**：两处「是否一致」的比较都补上 `(local.DeletedAt != nil) == incoming.Deleted`，删除墓碑就能按正常优先级落地了。',
+      '验证：Go 新增 `TestCardTombstoneAppliesWhenContentUnchanged`（两个库跑完整往返：对端删掉内容未变的卡，本机必须删除并保留墓碑）；全包 ok；同步端到端 44/44；真机 201↔200 配对 15/15（并已用它清掉 200 上残留的 3 张测试卡）。',
+    ],
+  },
+  {
     version: '0.13.1',
     date: '2026-10-08',
     title: '信用卡页一批修正：跨月账期口径、账单已出头部卡片与排序、卡面细节；完成记录撤回可跨机',
