@@ -107,6 +107,12 @@ def subpaths(d: str):
     return boxes
 
 
+def total_head(clusters):
+    """所有簇的并集包围盒（--full 用）。"""
+    return [min(c[0] for c in clusters), min(c[1] for c in clusters),
+            max(c[2] for c in clusters), max(c[3] for c in clusters)]
+
+
 def merge(boxes):
     """把挨得很近的包围盒并成一个簇（图形常由好几段笔画组成）。"""
     clusters = [list(b) for b in boxes]
@@ -166,6 +172,10 @@ def decide(path: Path, vb, clusters):
 
 def main():
     dry = "--dry-run" in sys.argv
+    # --full：不再只留图形，而是把 viewBox 收紧到**整个标志**（图形 + 银行名文字）的
+    # 包围盒。卡面要的是「透明底 + 完整标志」：标志本身画在 1024×1024 画布中间的一条
+    # 横带上，不裁紧的话按高度显示只有几个像素高，等于看不见。
+    full = "--full" in sys.argv
     files = sorted(glob.glob(str(BANKS / "*.svg")))
     cropped = 0
     for f in files:
@@ -180,18 +190,27 @@ def main():
         for d in re.findall(r'<path[^>]*\bd="([^"]+)"', s):
             boxes += subpaths(d)
         clusters = merge(boxes)
-        crop, why, changed = decide(p, vb, clusters)
+        if full:
+            crop = [total_head(clusters)[0], total_head(clusters)[1], total_head(clusters)[2], total_head(clusters)[3]]
+            why = "收紧到整个标志（图形+文字）"
+            changed = 1
+        else:
+            crop, why, changed = decide(p, vb, clusters)
         w, h = crop[2] - crop[0], crop[3] - crop[1]
-        # 裁出来的块要尽量方：圆形里 object-cover 才不会又切掉内容
-        side = max(w, h) * 1.16  # 留一点边距，别顶到圆边
-        cx, cy = (crop[0] + crop[2]) / 2, (crop[1] + crop[3]) / 2
-        x0, y0 = cx - side / 2, cy - side / 2
-        new = (x0, y0, side, side)
+        if full:
+            # 保留真实宽高比，只留 2% 内边距（透明底，直接贴在卡面上）
+            pad = max(w, h) * 0.02
+            new = (crop[0] - pad, crop[1] - pad, w + 2 * pad, h + 2 * pad)
+        else:
+            # 裁出来的块要尽量方：圆形里 object-cover 才不会又切掉内容
+            side = max(w, h) * 1.16  # 留一点边距，别顶到圆边
+            cx, cy = (crop[0] + crop[2]) / 2, (crop[1] + crop[3]) / 2
+            new = (cx - side / 2, cy - side / 2, side, side)
         txt = "  ".join(f"{v:.0f}" for v in new)
         print(f"  {p.name:18s} 簇 {len(clusters):2d}  原 {vb[0]:.0f},{vb[1]:.0f},{vb[2]:.0f},{vb[3]:.0f} → "
               f"viewBox=\"{txt}\"  图形宽高比 {w/h if h else 0:.2f}  {why}")
         if changed and not dry:
-            new_vb = f'viewBox="{x0:.0f} {y0:.0f} {side:.0f} {side:.0f}"'
+            new_vb = f'viewBox="{new[0]:.0f} {new[1]:.0f} {new[2]:.0f} {new[3]:.0f}"'
             p.write_text(VIEWBOX.sub(new_vb, s, count=1))
             cropped += 1
     print(f"\n共 {len(files)} 个标志，{'（dry-run）' if dry else f'已裁 {cropped} 个'}")

@@ -216,6 +216,19 @@ export const useAuthStore = defineStore('auth', () => {
     initPromise = null
   }
 
+  /**
+   * 登录/注册成功后再拉一次启动引导。
+   *
+   * init() 只在「首次进页面」跑一次，而那次很可能是在**登录页**（还没有令牌）：
+   * 引导里的公开配置不会按用户回填，于是个人偏好 credit_card_enabled 停在默认的
+   * false —— 侧栏那个「信用卡账单」栏目要等用户进一次偏好设置（那里会读用户配置并
+   * 调 setCreditCardEnabled）才出现。用户报的就是这个「初次加载不显示、点一下开关才显示」。
+   */
+  async function reloadBootstrap() {
+    resetInit()
+    await init()
+  }
+
   function setToken(newToken: string, remember = true) {
     token.value = newToken
     if (remember) {
@@ -328,6 +341,6 @@ export const useAuthStore = defineStore('auth', () => {
     if (ackMinutes >= 0) reminderAckMinutes.value = ackMinutes
   }
 
-  return { token, user, requireLogin, allowRegister, creditCardEnabled, setCreditCardEnabled,
+  return { token, user, requireLogin, allowRegister, creditCardEnabled, setCreditCardEnabled, reloadBootstrap,
     reminderNotifyMinutes, reminderAckMinutes, setReminderFrequencies, setupRequired, siteTitle, hasSecurityQuestions, securityPromptDismissed, servicePort, fnosGatewayEntry, fnosApp, sessionSource, followsFnOSSession, isAuthenticated, isAdmin, init, resetInit, setToken, setUser, endSession, logout, dropIfFnOSSessionGone, checkSetupRequired, dismissSecurityPrompt, refreshSecurityQuestions }
 })

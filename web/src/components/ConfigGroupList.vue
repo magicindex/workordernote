@@ -36,7 +36,10 @@
             <div class="text-xs text-muted-foreground mt-1">{{ item.description || '—' }}</div>
           </div>
           <div class="flex items-center gap-2 sm:w-80">
-            <!-- bool: accessible toggle switch -->
+            <!-- bool: accessible toggle switch
+                 用 inline-flex + p-0.5 定位滑块：原来靠 inline-block 的 translate，
+                 button 默认 text-align:center 会先把滑块居中再位移，滑块整个被推到
+                 轨道右边、又被 overflow-hidden 裁掉一截（用户报的「开关按钮错位」）。 -->
             <button
               v-if="item.type === 'bool'"
               type="button"
@@ -46,15 +49,15 @@
               :disabled="getSaving(item)"
               @click="toggleAndSaveBool(item)"
               :class="[
-                'w-11 h-6 shrink-0 overflow-hidden rounded-full transition-colors focus:outline-none focus:ring-4 focus:ring-brand-500/20',
+                'inline-flex h-6 w-11 shrink-0 items-center overflow-hidden rounded-full p-0.5 transition-colors focus:outline-none focus:ring-4 focus:ring-brand-500/20',
                 getEditValue(item) === 'true' ? 'bg-brand-500' : 'bg-muted',
                 getSaving(item) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer',
               ]"
             >
               <span
                 :class="[
-                  'inline-block w-5 h-5 rounded-full bg-white shadow transform transition-transform mt-0.5',
-                  getEditValue(item) === 'true' ? 'translate-x-5' : 'translate-x-0.5',
+                  'h-5 w-5 shrink-0 rounded-full bg-white shadow transition-transform',
+                  getEditValue(item) === 'true' ? 'translate-x-5' : 'translate-x-0',
                 ]"
               ></span>
             </button>

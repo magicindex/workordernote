@@ -165,6 +165,9 @@ async function handleLogin() {
       if (fnosBindingRequired.value) clearFnOSTicket()
       authStore.setToken(res.data.data.token, remember.value)
       authStore.setUser(res.data.data.user)
+      // 重新拉一次启动引导：init() 在登录页那次是「未登录」跑的，个人偏好
+      // （信用卡栏目开关等）不会回填，侧栏会少东西（用户报过的初次加载 bug）。
+      await authStore.reloadBootstrap()
       router.push('/admin')
     } else {
       errorMsg.value = res.data?.message || '登录失败'
@@ -299,6 +302,7 @@ async function confirmFnOSLogin() {
     clearFnOSTicket()
     authStore.setToken(res.data.data.token)
     authStore.setUser(res.data.data.user)
+    await authStore.reloadBootstrap()
     router.push('/admin')
   } catch (err: any) {
     clearFnOSTicket()

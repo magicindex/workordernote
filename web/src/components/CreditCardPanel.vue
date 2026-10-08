@@ -46,25 +46,25 @@
           <span class="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10"></span>
           <span class="pointer-events-none absolute -bottom-10 -left-4 h-24 w-24 rounded-full bg-black/10"></span>
           <div class="relative flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
-            <div class="flex min-w-0 flex-1 items-center gap-2.5">
-              <!-- 银行标志：白底圆片 + **图标铺满整个圆**（不留内边距，用户要求「放大到整个圆形」）；
-                   认不出银行时**不显示文字**，改用通用银行卡图标（把卡名首字塞进圆里很难看）。 -->
-              <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm" data-card-face-logo>
-                <img v-if="logoOf(card)" :src="logoOf(card)" alt="" class="h-full w-full object-cover" />
-                <svg v-else class="h-5 w-5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <div class="flex min-w-0 flex-1 flex-col gap-1">
+              <!-- 银行标志（用户要求）：**完整标志（图形 + 银行名文字）直接放在卡面上、透明底**，
+                   后面直接接卡名并**下对齐**；卡名前面不再重复「XX银行」字样（标志里已经有了）。
+                   资产是按标志实际包围盒收紧过的 viewBox，否则 1024×1024 画布按高度显示只有几个像素高。
+                   认不出银行时用通用银行卡图标顶替。 -->
+              <div class="flex min-w-0 items-end gap-2" data-card-face-logo>
+                <img v-if="logoOf(card)" :src="logoOf(card)" alt="" class="h-6 w-auto max-w-[8.5rem] shrink-0 object-contain sm:h-7" />
+                <svg v-else class="h-6 w-6 shrink-0 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
                   <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" stroke-width="1.6" />
                   <path d="M2.5 10h19M6 13.5h4" stroke-width="1.6" stroke-linecap="round" />
                 </svg>
-              </span>
-              <div class="min-w-0">
-                <p class="truncate text-sm font-extrabold tracking-wide" data-card-title>{{ cardTitle(card) }}</p>
-                <!-- 卡号：窄屏缩字距 + 允许换行，**绝不截断**——用户报过「看不到信用卡尾号」
-                     （0.14.0 给它加了 truncate，19 个字符在窄列里被省略号吃掉，尾号反而看不见）。
-                     maskNo 只留后四位，所以只要不截断，尾号一定看得见。 -->
-                <p class="mt-1 font-mono text-[13px] leading-5 tracking-[.04em] opacity-90 sm:text-[15px] sm:tracking-[.16em]" data-card-number>
-                  {{ maskNo(card.no) }}
-                </p>
+                <p class="min-w-0 truncate text-sm font-extrabold tracking-wide" data-card-title>{{ cardTitle(card) }}</p>
               </div>
+              <!-- 卡号：窄屏缩字距 + 允许换行，**绝不截断**——用户报过「看不到信用卡尾号」
+                   （0.14.0 给它加了 truncate，19 个字符在窄列里被省略号吃掉，尾号反而看不见）。
+                   maskNo 只留后四位，所以只要不截断，尾号一定看得见。 -->
+              <p class="font-mono text-[13px] leading-5 tracking-[.04em] opacity-90 sm:text-[15px] sm:tracking-[.16em]" data-card-number>
+                {{ maskNo(card.no) }}
+              </p>
             </div>
             <div class="shrink-0 text-right text-[11px] leading-4 opacity-85">
               <p>账单日 每月 {{ card.statement_day }} 号</p>
@@ -236,7 +236,8 @@ const deleteOpen = ref(false)
 const deleteTarget = ref<CreditCard | null>(null)
 
 function cardTitle(card: CreditCard) {
-  return `${card.bank || ''}${card.name || ''}`.trim() || '信用卡'
+  // 只显示卡名：银行名由卡面上的**完整银行标志**表达（用户要求「图标后边不再加 XX银行字样」）。
+  return (card.name || '').trim() || card.bank || '信用卡'
 }
 function maskNo(no: string) {
   const tail = cardTail(no)
