@@ -57,6 +57,17 @@
     <div class="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_19rem]">
       <!-- 月历网格 -->
       <section class="surface flex min-h-0 flex-col overflow-hidden rounded-2xl p-2 sm:p-3">
+        <!-- 月 / 周 切换（周视图＝7 列天 × 纵向小时，用户要求） -->
+        <div class="mb-2 flex items-center gap-1.5" data-cal-view-toggle>
+          <button class="seg-btn" :class="{ 'seg-btn-on': viewMode === 'month' }" data-cal-view="month" @click="setViewMode('month')">月</button>
+          <button class="seg-btn" :class="{ 'seg-btn-on': viewMode === 'week' }" data-cal-view="week" @click="setViewMode('week')">周</button>
+          <template v-if="viewMode === 'week'">
+            <button class="btn-ghost !h-8 !px-2 text-xs" data-week-prev @click="shiftWeek(-1)">‹ 上一周</button>
+            <button class="btn-ghost !h-8 !px-2 text-xs" data-week-today @click="goThisWeek">本周</button>
+            <button class="btn-ghost !h-8 !px-2 text-xs" data-week-next @click="shiftWeek(1)">下一周 ›</button>
+            <span class="ml-1 text-xs font-extrabold" data-week-label>{{ weekLabel }}</span>
+          </template>
+        </div>
         <div class="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1 pb-1.5">
           <div
             v-for="(w, i) in weekdays"
@@ -66,11 +77,59 @@
           >{{ w }}</div>
         </div>
 
-        <div v-if="loading && !cells.length" class="grid flex-1 grid-cols-[repeat(7,minmax(0,1fr))] gap-1">
+        <!-- 周视图：左侧时刻列 + 7 天列；任务按时段画块，重叠的并排分栏 -->
+        <div v-if="viewMode === 'week'" class="min-h-0 flex-1 overflow-auto" data-week-grid>
+          <div class="grid" style="grid-template-columns: 3.25rem repeat(7, minmax(0, 1fr))">
+            <div></div>
+            <div
+              v-for="d in weekDays"
+              :key="'h' + dayKey(d)"
+              class="sticky top-0 z-10 bg-surface px-1 pb-1 text-center text-[11px] font-bold"
+            >{{ ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()] }} <span class="text-muted-foreground">{{ d.getMonth() + 1 }}/{{ d.getDate() }}</span></div>
+            <div class="relative">
+              <div v-for="h in 24" :key="'t' + h" class="pr-1 text-right text-[10px] text-muted-foreground" :style="{ height: HOUR_H + 'px' }">{{ pad(h - 1) }}:00</div>
+            </div>
+            <div
+              v-for="d in weekDays"
+              :key="dayKey(d)"
+              class="relative border-l border-border/60"
+              :style="{ height: 24 * HOUR_H + 'px' }"
+              :data-week-col="dayKey(d)"
+              @mousemove="onWeekMove($event, d)"
+              @mouseleave="hoverTime = null"
+              @dblclick="openCreateForSlot(d, $event)"
+              title="双击在鼠标所在时分新建任务"
+            >
+              <div v-for="h in 24" :key="h" class="border-t border-border/40" :style="{ height: HOUR_H + 'px' }"></div>
+              <div
+                v-for="b in (weekBlocks[dayKey(d)] || [])"
+                :key="b.item.id"
+                class="absolute overflow-hidden rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-white shadow"
+                :class="{ 'ring-2 ring-rose-300': b.overlap > 1, 'opacity-55 line-through': b.item.completed && b.item.kind !== 'note' }"
+                :style="{ top: b.top + 'px', height: b.height + 'px', left: (b.lane * 100) / b.lanes + '%', width: 100 / b.lanes + '%', background: listInk(b.item.list_color) }"
+                :data-week-block="b.item.id"
+                :data-overlap="b.overlap"
+                :title="`${b.item.title} · ${timeLabel(b.item)}${b.overlap > 1 ? ` · 与 ${b.overlap - 1} 条重叠（并排显示）` : ''}`"
+                @click.stop="openEditor(b.item)"
+              >
+                <span class="block truncate">{{ b.item.title }}</span>
+                <span class="block truncate opacity-85">{{ timeLabel(b.item) }}</span>
+              </div>
+              <div
+                v-if="hoverTime && hoverTime.day === dayKey(d)"
+                class="pointer-events-none absolute right-1 z-20 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-bold text-background"
+                :style="{ top: hoverTime.y + 'px' }"
+                data-week-hover
+              >{{ hoverTime.label }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="viewMode === 'month' && loading && !cells.length" class="grid flex-1 grid-cols-[repeat(7,minmax(0,1fr))] gap-1">
           <div v-for="n in 35" :key="n" class="min-h-[4.5rem] animate-pulse rounded-xl bg-muted/70"></div>
         </div>
 
-        <div v-else class="grid flex-1 auto-rows-fr grid-cols-[repeat(7,minmax(0,1fr))] gap-1">
+        <div v-else-if="viewMode === 'month'" class="grid flex-1 auto-rows-fr grid-cols-[repeat(7,minmax(0,1fr))] gap-1">
           <div
             v-for="cell in cells"
             :key="cellKey(cell)"
@@ -346,9 +405,117 @@ function showToast(message: string, type: 'success' | 'error' = 'success') {
   setTimeout(() => Object.assign(toast, { message, type }), 0)
 }
 
-const weekdays = ['一', '二', '三', '四', '五', '六', '日']
 const pad = (n: number) => String(n).padStart(2, '0')
 const keyOf = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`
+const dayKey = (d: Date) => keyOf(d.getFullYear(), d.getMonth() + 1, d.getDate())
+
+// 月视图 / 周视图。周视图＝7 列（天）× 纵向小时，任务按它的时段画成块，
+// 重叠的并排分栏；鼠标在时间线上移动显示时分，双击按所在时分新建。
+const viewMode = ref<'month' | 'week'>('month')
+// 后台「周起始日」（系统配置，默认周一）：月历表头与周视图第一列都跟着它
+const weekStartPref = ref<'monday' | 'sunday'>('monday')
+const weekdays = computed(() => (weekStartPref.value === 'sunday'
+  ? ['日', '一', '二', '三', '四', '五', '六']
+  : ['一', '二', '三', '四', '五', '六', '日']))
+function startOfWeek(d: Date) {
+  const day = d.getDay() // 0=周日
+  const offset = weekStartPref.value === 'sunday' ? day : (day === 0 ? 6 : day - 1)
+  const s = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  s.setDate(s.getDate() - offset)
+  return s
+}
+const weekStart = ref(startOfWeek(new Date()))
+const weekDays = computed(() => Array.from({ length: 7 }, (_, i) => {
+  const d = new Date(weekStart.value)
+  d.setDate(d.getDate() + i)
+  return d
+}))
+const weekLabel = computed(() => {
+  const a = weekDays.value[0], b = weekDays.value[6]
+  const f = (d: Date) => `${d.getMonth() + 1}月${d.getDate()}日`
+  return `${a.getFullYear()} 年 ${f(a)} – ${f(b)}`
+})
+const HOUR_H = 44
+const weekBlocks = computed<Record<string, Array<{ item: CalendarItem; top: number; height: number; lane: number; lanes: number; overlap: number }>>>(() => {
+  const out: Record<string, Array<{ item: CalendarItem; top: number; height: number; lane: number; lanes: number; overlap: number }>> = {}
+  for (const d of weekDays.value) out[dayKey(d)] = []
+  const byDay: Record<string, CalendarItem[]> = {}
+  for (const it of items.value) {
+    if (it.all_day || !it.due_at) continue
+    const k = String(it.due_date || '').slice(0, 10)
+    if (!(k in out)) continue
+    ;(byDay[k] ||= []).push(it)
+  }
+  for (const [k, list] of Object.entries(byDay)) {
+    const spans = list.map((it) => {
+      const start = new Date(it.due_at as string)
+      const startMin = start.getHours() * 60 + start.getMinutes()
+      const end = it.end_at ? new Date(it.end_at) : null
+      let endMin = end ? end.getHours() * 60 + end.getMinutes() : startMin + 60
+      // 跨天的时段先截到当天结束（周视图一天一列，不跨列画）
+      if (end && end.toDateString() !== start.toDateString()) endMin = 24 * 60
+      if (endMin <= startMin) endMin = startMin + 30
+      return { it, startMin, endMin }
+    }).sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin)
+    // 贪心分道：同一天里重叠的并排分栏（各占 1/lanes 宽）
+    const laneEnds: number[] = []
+    const placed = spans.map((sp) => {
+      let lane = laneEnds.findIndex((end) => end <= sp.startMin)
+      if (lane === -1) { laneEnds.push(sp.endMin); lane = laneEnds.length - 1 } else laneEnds[lane] = sp.endMin
+      return { ...sp, lane }
+    })
+    for (const a of placed) {
+      const overlapGroup = placed.filter((b) => b.startMin < a.endMin && a.startMin < b.endMin)
+      const lanes = Math.max(1, ...overlapGroup.map((b) => b.lane + 1))
+      out[k].push({
+        item: a.it,
+        top: (a.startMin / 60) * HOUR_H,
+        height: Math.max(22, ((a.endMin - a.startMin) / 60) * HOUR_H - 2),
+        lane: a.lane, lanes, overlap: overlapGroup.length,
+      })
+    }
+  }
+  return out
+})
+const hoverTime = ref<{ day: string; y: number; label: string } | null>(null)
+function minutesFromEvent(e: MouseEvent, cols = 4) {
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const y = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top))
+  const step = 60 / cols
+  return Math.floor((y / HOUR_H) * 60 / step) * step
+}
+function onWeekMove(e: MouseEvent, d: Date) {
+  const minutes = minutesFromEvent(e)
+  hoverTime.value = { day: dayKey(d), y: (minutes / 60) * HOUR_H, label: `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}` }
+}
+function shiftWeek(delta: number) {
+  const d = new Date(weekStart.value)
+  d.setDate(d.getDate() + delta * 7)
+  weekStart.value = d
+  void load()
+}
+function goThisWeek() {
+  weekStart.value = startOfWeek(new Date())
+  void load()
+}
+function setViewMode(mode: 'month' | 'week') {
+  viewMode.value = mode
+  if (mode === 'week') {
+    const base = /^\d{4}-\d{2}-\d{2}$/.test(selectedDate.value) ? new Date(`${selectedDate.value}T00:00:00`) : new Date()
+    weekStart.value = startOfWeek(base)
+  }
+  void load()
+}
+async function loadWeekStart() {
+  try {
+    const res = await getAllConfigs()
+    const v = String((res.data?.data as Record<string, unknown> | undefined)?.calendar_week_start || '')
+    if (v === 'sunday' || v === 'monday') {
+      weekStartPref.value = v
+      weekStart.value = startOfWeek(weekStart.value)
+    }
+  } catch { /* 拿不到就用默认周一 */ }
+}
 
 const now = new Date()
 const cursor = ref({ year: now.getFullYear(), month: now.getMonth() + 1 })
@@ -594,7 +761,16 @@ async function load() {
   loading.value = true
   errorMsg.value = ''
   try {
-    // 农历接口直接返回「周一起始、整周对齐」的网格，含相邻月份的格子，
+    if (viewMode.value === 'week') {
+      // 周视图：直接按这一周取（含起不含止的下一天），不拉农历格子
+      const from = dayKey(weekDays.value[0])
+      const end = new Date(weekDays.value[6])
+      end.setDate(end.getDate() + 1)
+      const res = await getCalendarItems({ from, to: dayKey(end), list_ids: listIdsParam(listFilter.value) })
+      items.value = res.data?.data || []
+      return
+    }
+    // 农历接口直接返回「整周对齐」的网格，含相邻月份的格子，
     // 所以日历网格不用自己算，节气/节日标签也是现成的。
     const lunarRes = await getLunarCalendar(cursor.value.year, cursor.value.month)
     cells.value = lunarRes.data?.data?.days || []
@@ -658,6 +834,27 @@ async function onEditorSaved() {
  * 预填那天 20:00 —— 与首页「今天」默认 20:00 的约定保持一致。
  * 清单沿用当前选中清单，没选就用默认清单，与首页快速新建同规则。
  */
+/**
+ * 周视图双击：按鼠标所在的时分（15 分钟粒度）新建一个 **1 小时时段**的任务。
+ * 任务按清单上色、允许重叠（重叠的会并排分栏显示，见 weekBlocks）。
+ */
+function openCreateForSlot(d: Date, e: MouseEvent) {
+  const minutes = minutesFromEvent(e)
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(minutes / 60), minutes % 60, 0, 0)
+  const end = new Date(start.getTime() + 60 * 60 * 1000)
+  editingId.value = null
+  createPreset.value = {
+    title: '', notes: '', kind: 'task',
+    list_id: listFilter.value.length === 1
+      ? listFilter.value[0]
+      : lists.value.find(x => x.is_default)?.id || lists.value[0]?.id || 0,
+    priority: 0,
+    due_at: toLocalIso(start), start_at: toLocalIso(start), end_at: toLocalIso(end),
+    all_day: false, repeat_rule: 'none', calendar: 'solar', repeat_notify_minutes: 0, channels: ['inapp'],
+  }
+  editorOpen.value = true
+}
+
 function openCreateForDate(dateKey: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return
   const [y, m, d] = dateKey.split('-').map(Number)
@@ -769,6 +966,7 @@ function refreshFromEvent() {
 }
 
 onMounted(() => {
+  void loadWeekStart()
   loadEditorContext()
   load()
   window.addEventListener('reminder-realtime', refreshFromEvent)

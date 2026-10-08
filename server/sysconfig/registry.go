@@ -190,6 +190,13 @@ func init() {
 		Description: "日历视图里每天那些任务文字的字体大小",
 	})
 	RegisterConfig(ConfigDef{
+		Key: "calendar_week_start", Scope: ScopeSystem, Type: TypeSelect,
+		Default: "monday", Options: []string{"monday", "sunday"},
+		Public: true,
+		Group:  "appearance", Label: "周起始日",
+		Description: "日历里一周从哪天开始（周一或周日），周视图的第一列也跟着它",
+	})
+	RegisterConfig(ConfigDef{
 		Key: "default_view", Scope: ScopeUser, Type: TypeSelect,
 		Default: "list", Options: []string{"list", "calendar"},
 		Group: "appearance", Label: "默认首页",
