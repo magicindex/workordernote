@@ -391,7 +391,7 @@ const SORT_KEY = 'ui_card_sort'
 const sortMode = ref<SortMode>((localStorage.getItem(SORT_KEY) as SortMode) || 'smart')
 const sortMenu = reactive({ open: false, x: 0, y: 0 })
 const sortItems: { key: SortMode; label: string; hint: string }[] = [
-  { key: 'smart', label: '智能排序（默认）', hint: '红色（≤3 天/逾期）最前，再按账单日、还款日' },
+  { key: 'smart', label: '智能排序（默认）', hint: '还款日近的在前（逾期 / ≤3 天最前），再按账单日' },
   { key: 'statement', label: '按账单日', hint: '账单日早的在前' },
   { key: 'due', label: '按还款日', hint: '离还款日近的在前' },
 ]
@@ -429,10 +429,13 @@ const sortedCards = computed(() => {
     if (sortMode.value === 'statement') {
       return a.statement_day - b.statement_day || daysToDue(a) - daysToDue(b)
     }
-    // 智能：红色最前 → 账单日早的在前 → 还款日近的在前
+    // 智能：红色（≤3 天/逾期）最前 → **还款日近的在前** → 账单日早的在前。
+    // 还款日必须是第一顺位：用户报过「交通银行还款日只剩 11 天却排在最后」——
+    // 因为旧的第二顺位是账单日，跨月卡（账单日 25 / 还款日 19）在账单日上永远吃亏。
+    // 红色本身就是「还款日 ≤3 天或已过」，所以它天然排在最前面，这里保留一项做兜底。
     return Number(isRed(b)) - Number(isRed(a))
-      || a.statement_day - b.statement_day
       || daysToDue(a) - daysToDue(b)
+      || a.statement_day - b.statement_day
   })
   return list
 })

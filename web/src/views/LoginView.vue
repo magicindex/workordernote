@@ -6,13 +6,13 @@
         系统中已有应用账号，请登录现有账号；验证成功后会自动完成绑定，并继续使用原来的提醒和通知方式。
       </div>
 
-      <AuthField v-model="username" label="用户名" autocomplete="username" required placeholder="请输入用户名" autofocus>
+      <AuthField v-model="username" label="用户名" name="username" id="login-username" autocomplete="username" required placeholder="请输入用户名" autofocus>
         <template #icon>
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
         </template>
       </AuthField>
 
-      <AuthField v-model="password" label="密码" type="password" autocomplete="current-password" required placeholder="请输入密码">
+      <AuthField v-model="password" label="密码" name="password" id="login-password" type="password" autocomplete="current-password" required placeholder="请输入密码">
         <template #icon>
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V8a4 4 0 118 0v3"/></svg>
         </template>

@@ -1,7 +1,7 @@
 <template>
   <div>
     <div v-if="label || $slots.labelRight" class="flex items-center justify-between mb-1.5">
-      <label v-if="label" class="block text-sm font-medium text-white/75">{{ label }}</label>
+      <label v-if="label" :for="fieldId" class="block text-sm font-medium text-white/75">{{ label }}</label>
       <slot name="labelRight" />
     </div>
     <div class="relative group">
@@ -12,6 +12,8 @@
         <slot name="icon" />
       </span>
       <input
+        :id="fieldId"
+        :name="name"
         :value="modelValue"
         @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
         :type="inputType"
@@ -49,6 +51,13 @@ const props = withDefaults(
     type?: string
     placeholder?: string
     autocomplete?: string
+    /**
+     * 浏览器/安卓 WebView 的密码管理器靠 name + id 认字段：只给 autocomplete
+     * 时 Safari 与部分安卓浏览器仍然不弹「保存密码」，于是用户每次都手输
+     * （实测反馈：安卓客户端里勾了「记住我」也记不住密码）。
+     */
+    name?: string
+    id?: string
     required?: boolean
     autofocus?: boolean
   }>(),
@@ -59,6 +68,7 @@ defineEmits<{ (e: 'update:modelValue', value: string): void }>()
 
 const show = ref(false)
 const isPassword = computed(() => props.type === 'password')
+const fieldId = computed(() => props.id || props.name || undefined)
 const inputType = computed(() => (isPassword.value ? (show.value ? 'text' : 'password') : props.type))
 const isTouchDevice = typeof window !== 'undefined' && window.matchMedia('(hover: none) and (pointer: coarse)').matches
 const shouldAutofocus = computed(() => props.autofocus && !isTouchDevice)

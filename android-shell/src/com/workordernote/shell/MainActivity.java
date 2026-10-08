@@ -176,7 +176,10 @@ public class MainActivity extends Activity {
     }
 
     private void loadApp(String server) {
-        web.loadUrl(server + "/login");
+        // 打开根路径而不是 /login：路由守卫会按登录态决定去工作台还是登录页。
+        // 原来写死 /login，导致壳子里每次启动都停在登录页（网页端已同时加了
+        // 「已登录访问 /login 自动进工作台」，所以旧 APK 不重装也能好）。
+        web.loadUrl(server + "/");
     }
 
     /** 容错：没写协议就补 http://，去掉结尾的斜杠与多余空格。 */

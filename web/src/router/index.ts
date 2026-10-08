@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import type { RouteLocationNormalized } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { isNarrowNow } from '../utils/use-narrow'
+import { SK } from '../utils/storage-keys'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -85,11 +87,27 @@ router.beforeEach(async (to, from, next) => {
 
   if (to.meta.requiresAuth !== false && !authStore.isAuthenticated && authStore.requireLogin) {
     next({ name: 'Login' })
+  } else if ((to.name === 'Login' || to.name === 'Register' || to.name === 'ForgotPassword')
+    && authStore.isAuthenticated && !hasFnOSFlow(to)) {
+    // 已经登录了就别再摆登录页：安卓壳子启动时固定打开 /login（见 android-shell 的
+    // loadApp），不拦的话「记住我」明明勾着、token 也还在，用户每次仍要重输一遍密码。
+    // 带飞牛授权参数的链接例外——那条路要继续走绑定/换账号流程。
+    next({ path: '/admin' })
   } else if (to.meta.requiresAdmin && !authStore.isAdmin) {
     next({ name: 'Home' })
   } else {
     next()
   }
 })
+
+/** 正在走飞牛授权的链接（带 fnos 参数，或刚拿到票据还没处理）不该被弹回工作台。 */
+function hasFnOSFlow(to: RouteLocationNormalized): boolean {
+  if (to.query.fnos || to.query.ticket) return true
+  try {
+    return !!sessionStorage.getItem(SK.fnosTicket)
+  } catch {
+    return false
+  }
+}
 
 export default router
