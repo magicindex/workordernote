@@ -1,0 +1,217 @@
+package reminder
+
+import (
+	"testing"
+	"time"
+)
+
+// 计划页口径：只放「预设信息」——有循环规则的、有时间段的、或排在明天及以后的任务；
+// 今天页那些「就今天办」的普通任务不进计划页，记事也永远不进（它没有排期）。
+func TestPlannedViewOnlyPresets(t *testing.T) {
+	withShanghaiLocal(t)
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const userID = 71
+	list, err := ensureDefaultList(appDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	loc := shanghai()
+	todayNoon := time.Date(now.In(loc).Year(), now.In(loc).Month(), now.In(loc).Day(), 20, 0, 0, 0, loc)
+	tomorrow := todayNoon.AddDate(0, 0, 1)
+	yesterday := todayNoon.AddDate(0, 0, -1)
+	rangeStart := todayNoon.AddDate(0, 0, 2)
+	rangeEnd := rangeStart.Add(2 * time.Hour)
+
+	mk := func(title string, in SaveReminderInput) uint {
+		in.Title = title
+		in.ListID = list.ID
+		if in.RepeatRule == "" {
+			in.RepeatRule = "none"
+		}
+		created, err := createReminder(appDB, userID, in)
+		if err != nil {
+			t.Fatalf("建 %q 失败：%v", title, err)
+		}
+		return created.ID
+	}
+	mk("只有今天", SaveReminderInput{DueAt: &todayNoon})
+	mk("明天的事", SaveReminderInput{DueAt: &tomorrow})
+	mk("每天的例行", SaveReminderInput{DueAt: &yesterday, RepeatRule: "daily"})
+	mk("跨两小时的时间段", SaveReminderInput{StartAt: &rangeStart, EndAt: &rangeEnd})
+	mk("记事", SaveReminderInput{Kind: KindNote})
+
+	planned, err := listReminders(appDB, userID, "planned", "", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, r := range planned {
+		got[r.Title] = true
+	}
+	for _, want := range []string{"明天的事", "每天的例行", "跨两小时的时间段"} {
+		if !got[want] {
+			t.Errorf("计划页少了 %q（现有：%v）", want, keysOf(got))
+		}
+	}
+	for _, notWant := range []string{"只有今天", "记事"} {
+		if got[notWant] {
+			t.Errorf("计划页不该出现 %q", notWant)
+		}
+	}
+
+	today, err := listReminders(appDB, userID, "today", "", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 今天页：今天到期的 + 逾期未完成的，且逾期的排在最前
+	if len(today) != 2 {
+		t.Fatalf("今天页应有 2 条（今天的 + 逾期的），实际 %d：%v", len(today), titlesOf(today))
+	}
+	if today[0].Title != "每天的例行" {
+		t.Errorf("逾期未完成的应置顶，实际第一条是 %q", today[0].Title)
+	}
+}
+
+// 时间段校验：开始/结束必须成对且有序；有区间时 DueAt 归到开始时间。
+func TestReminderRangeValidation(t *testing.T) {
+	withShanghaiLocal(t)
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const userID = 72
+	list, err := ensureDefaultList(appDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loc := shanghai()
+	start := time.Date(2026, time.October, 10, 14, 0, 0, 0, loc)
+	end := time.Date(2026, time.October, 10, 16, 0, 0, 0, loc)
+
+	// 只给结束 → 拒绝
+	if _, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "只有结束", ListID: list.ID, EndAt: &end, RepeatRule: "none",
+	}); err == nil {
+		t.Fatal("只给结束时间应当被拒绝")
+	}
+	// 结束早于开始 → 拒绝
+	if _, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "时间颠倒", ListID: list.ID, StartAt: &end, EndAt: &start, RepeatRule: "none",
+	}); err == nil {
+		t.Fatal("结束早于开始应当被拒绝")
+	}
+	// 两个都给 → 落库，DueAt = StartAt
+	full, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "开会 14-16", ListID: list.ID, StartAt: &start, EndAt: &end, RepeatRule: "none",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if full.StartAt == nil || full.EndAt == nil || !full.StartAt.Equal(start) || !full.EndAt.Equal(end) {
+		t.Fatalf("时间段没有原样落库：%+v / %+v", full.StartAt, full.EndAt)
+	}
+	if full.DueAt == nil || !full.DueAt.Equal(start) {
+		t.Fatalf("有区间时 DueAt 应等于开始时间，实际 %+v", full.DueAt)
+	}
+	// 只给开始 → 当作单点时间
+	only, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "只给开始", ListID: list.ID, StartAt: &start, RepeatRule: "none",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if only.EndAt != nil {
+		t.Fatalf("只给开始时应没有结束时间，实际 %+v", only.EndAt)
+	}
+	if only.DueAt == nil || !only.DueAt.Equal(start) {
+		t.Fatalf("只给开始时应把 DueAt 设为开始时间，实际 %+v", only.DueAt)
+	}
+	// 记事必须把区间一起清掉
+	note, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "记事", Kind: KindNote, ListID: list.ID, StartAt: &start, EndAt: &end,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if note.StartAt != nil || note.EndAt != nil || note.DueAt != nil {
+		t.Fatalf("记事不该带排期：%+v / %+v / %+v", note.StartAt, note.EndAt, note.DueAt)
+	}
+}
+
+// 时间段要能跟着同步走到对端（字段进了快照、比较与落地三处）。
+func TestSyncCarriesTimeRange(t *testing.T) {
+	withShanghaiLocal(t)
+	dbA, dbB := newSyncDB(t), newSyncDB(t)
+	userA := seedUser(t, dbA, "王耀辉", "admin")
+	seedUser(t, dbB, "王耀辉", "admin")
+	list, err := ensureDefaultList(dbA, userA.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loc := shanghai()
+	start := time.Date(2026, time.October, 12, 9, 0, 0, 0, loc)
+	end := time.Date(2026, time.October, 12, 11, 30, 0, 0, loc)
+	if _, err := createReminder(dbA, userA.ID, SaveReminderInput{
+		Title: "季度评审", ListID: list.ID, StartAt: &start, EndAt: &end,
+		RepeatRule: "none", Channels: []string{ChannelInApp},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := buildSyncSnapshot(dbA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applySyncSnapshot(dbB, snap); err != nil {
+		t.Fatal(err)
+	}
+	var inB Reminder
+	if err := dbB.Where("title = ?", "季度评审").First(&inB).Error; err != nil {
+		t.Fatal(err)
+	}
+	if inB.StartAt == nil || inB.EndAt == nil || !inB.StartAt.Equal(start) || !inB.EndAt.Equal(end) {
+		t.Fatalf("对端没拿到时间段：%+v / %+v", inB.StartAt, inB.EndAt)
+	}
+	movedEnd := end.Add(time.Hour)
+	assertSameFingerprint(t, fingerprint(t, dbA), fingerprint(t, dbB), "时间段首次同步后")
+
+	// 在 A 上改结束时间，再同步一次
+	var inA Reminder
+	if err := dbA.Where("title = ?", "季度评审").First(&inA).Error; err != nil {
+		t.Fatal(err)
+	}
+	updated, err := updateReminder(dbA, userA.ID, inA.ID, SaveReminderInput{
+		Title: inA.Title, ListID: inA.ListID, StartAt: &start, EndAt: &movedEnd,
+		RepeatRule: "none", Channels: []string{ChannelInApp}, Version: inA.Version,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.EndAt == nil || !updated.EndAt.Equal(movedEnd) {
+		t.Fatalf("A 上没改成功：%+v", updated.EndAt)
+	}
+	snap2, err := buildSyncSnapshot(dbA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applySyncSnapshot(dbB, snap2); err != nil {
+		t.Fatal(err)
+	}
+	var afterB Reminder
+	if err := dbB.Where("title = ?", "季度评审").First(&afterB).Error; err != nil {
+		t.Fatal(err)
+	}
+	if afterB.EndAt == nil || !afterB.EndAt.Equal(movedEnd) {
+		t.Fatalf("结束时间没同步到对端：%+v", afterB.EndAt)
+	}
+	assertSameFingerprint(t, fingerprint(t, dbA), fingerprint(t, dbB), "改区间后再同步")
+}
+
+func keysOf(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}

@@ -88,7 +88,9 @@ func fingerprint(t *testing.T, db *gorm.DB) []string {
 		t.Fatal(err)
 	}
 	for _, r := range reminders {
+		// 指纹里带上时间段（start_at/end_at）：漏了的话「区间没同步过去」会被判成一致。
 		out = append(out, "reminder|"+r.Title+"|"+listName[r.ListID]+"|"+stamp(r.DueAt)+"|"+
+			stamp(r.StartAt)+"|"+stamp(r.EndAt)+"|"+
 			r.UpdatedAt.UTC().Format(time.RFC3339Nano)+"|"+boolMark(r.DeletedAt != nil)+"|"+stamp(r.CompletedAt))
 	}
 	var completions []Completion

@@ -112,6 +112,9 @@ type syncReminder struct {
 	Priority            int        `json:"priority"`
 	DueAt               *time.Time `json:"due_at,omitempty"`
 	AllDay              bool       `json:"all_day"`
+	// 时间段任务的起止（计划页专用）；旧版本对端没有这两个字段，缺省即 NULL。
+	StartAt             *time.Time `json:"start_at,omitempty"`
+	EndAt               *time.Time `json:"end_at,omitempty"`
 	RepeatRule          string     `json:"repeat_rule"`
 	Calendar            string     `json:"calendar"`
 	LunarAnchor         string     `json:"lunar_anchor,omitempty"`

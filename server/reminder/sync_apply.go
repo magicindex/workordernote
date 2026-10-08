@@ -337,6 +337,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 				CardID:   cardIDs[incoming.CardUID],
 				Kind:     normalizeKind(incoming.Kind),
 				Priority: incoming.Priority, DueAt: incoming.DueAt, AllDay: incoming.AllDay,
+				StartAt: incoming.StartAt, EndAt: incoming.EndAt,
 				RepeatRule: incoming.RepeatRule, Calendar: incoming.Calendar,
 				LunarAnchor: incoming.LunarAnchor, RepeatNotifyMinutes: incoming.RepeatNotifyMinutes,
 				CompletedAt: incoming.CompletedAt, SnoozedUntil: incoming.SnoozedUntil,
@@ -414,6 +415,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 				"card_role": incoming.CardRole, "card_id": cardIDs[incoming.CardUID],
 				"kind": normalizeKind(incoming.Kind), "priority": incoming.Priority,
 				"due_at": incoming.DueAt, "all_day": incoming.AllDay,
+				"start_at": incoming.StartAt, "end_at": incoming.EndAt,
 				"repeat_rule": incoming.RepeatRule, "calendar": incoming.Calendar,
 				"lunar_anchor":          incoming.LunarAnchor,
 				"repeat_notify_minutes": incoming.RepeatNotifyMinutes,
@@ -590,6 +592,8 @@ func sameReminder(local *Reminder, incoming syncReminder, listID uint, channels 
 		local.Priority == incoming.Priority &&
 		equalTimePtr(local.DueAt, incoming.DueAt) &&
 		local.AllDay == incoming.AllDay &&
+		equalTimePtr(local.StartAt, incoming.StartAt) &&
+		equalTimePtr(local.EndAt, incoming.EndAt) &&
 		local.RepeatRule == incoming.RepeatRule &&
 		local.Calendar == incoming.Calendar &&
 		local.LunarAnchor == incoming.LunarAnchor &&

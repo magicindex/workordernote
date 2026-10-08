@@ -60,6 +60,9 @@ export interface ReminderItem {
   priority: number
   due_at: string | null
   all_day: boolean
+  /** 时间段任务的起止（计划页专用）；都为空表示普通的单点时间任务 */
+  start_at?: string | null
+  end_at?: string | null
   repeat_rule: string
   calendar: string
   lunar_anchor?: string
@@ -83,6 +86,9 @@ export interface SaveReminderInput {
   priority?: number
   due_at?: string | null
   all_day?: boolean
+  /** 时间段：只给 start_at 等同单点时间；两个都给表示「开始—结束」 */
+  start_at?: string | null
+  end_at?: string | null
   repeat_rule?: string
   calendar?: string
   lunar_anchor?: string
@@ -127,6 +133,9 @@ export interface CalendarItem {
   /** 清单图标的 key（见 utils/list-icons.ts）：日历格子用图标代替圆点 */
   list_icon: string
   due_at: string
+  /** 时间段任务的起止（计划页的「开始—结束」）；没有区间时为空 */
+  start_at?: string | null
+  end_at?: string | null
   /** 到期日在上海时区下的 YYYY-MM-DD，日历按它归格，避免浏览器时区导致跨天错位 */
   due_date: string
   all_day: boolean

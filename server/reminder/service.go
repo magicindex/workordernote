@@ -34,6 +34,10 @@ type SaveReminderInput struct {
 	Priority   int        `json:"priority"`
 	DueAt      *time.Time `json:"due_at"`
 	AllDay     bool       `json:"all_day"`
+	// StartAt / EndAt：时间段任务的起止（计划页专用）。只给 StartAt 等同单点时间；
+	// 只给 EndAt 会被拒绝；两者都给时校验 EndAt 晚于 StartAt，并把 DueAt 归到 StartAt。
+	StartAt    *time.Time `json:"start_at"`
+	EndAt      *time.Time `json:"end_at"`
 	RepeatRule string     `json:"repeat_rule"`
 	// Calendar selects "solar" (default) or "lunar" recurrence for the
 	// monthly/yearly rules. The deprecated repeat_rule value "yearly_lunar"
@@ -113,11 +117,36 @@ func validateReminderInput(in *SaveReminderInput) error {
 	if in.Kind == KindNote {
 		in.DueAt = nil
 		in.AllDay = false
+		in.StartAt = nil
+		in.EndAt = nil
 		in.RepeatRule = "none"
 		in.Calendar = "solar"
 		in.LunarAnchor = ""
 		in.RepeatNotifyMinutes = 0
 		in.Priority = 0
+	}
+	// 时间段（计划页的「自定义时间段」）：
+	//   · 两个都给 → 必须有先后，并把 DueAt 归到开始时间（排序/视图/日历/通知都只认 DueAt）
+	//   · 只给开始 → 当作单点时间任务（DueAt = 开始时间），EndAt 清空
+	//   · 只给结束 → 拒绝：没有开始时间的「结束」没有意义
+	if in.EndAt != nil && in.StartAt == nil {
+		return errors.New("请先选择开始时间")
+	}
+	if in.StartAt != nil {
+		start := in.StartAt.In(shanghai())
+		in.StartAt = &start
+		if in.EndAt == nil {
+			in.DueAt = in.StartAt
+		} else {
+			end := in.EndAt.In(shanghai())
+			if !end.After(start) {
+				return errors.New("结束时间要晚于开始时间")
+			}
+			in.EndAt = &end
+			in.DueAt = in.StartAt
+		}
+	} else {
+		in.EndAt = nil
 	}
 	switch in.Calendar {
 	case "", "solar":
@@ -209,6 +238,7 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 			CardRole: in.CardRole,
 			Kind:     in.Kind,
 			Priority: in.Priority, DueAt: in.DueAt, AllDay: in.AllDay,
+			StartAt: in.StartAt, EndAt: in.EndAt,
 			RepeatRule: in.RepeatRule, Calendar: in.Calendar, LunarAnchor: in.LunarAnchor,
 			RepeatNotifyMinutes: in.RepeatNotifyMinutes, Version: 1,
 		}
@@ -272,6 +302,8 @@ func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) 
 		existing.Priority = in.Priority
 		existing.DueAt = in.DueAt
 		existing.AllDay = in.AllDay
+		existing.StartAt = in.StartAt
+		existing.EndAt = in.EndAt
 		existing.RepeatRule = in.RepeatRule
 		existing.Calendar = in.Calendar
 		existing.LunarAnchor = in.LunarAnchor
@@ -442,9 +474,14 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 	}
 	switch view {
 	case "today":
+		// 今天页：今天到期的 + 逾期未完成的。逾期靠排序（due_at 升序）自然置顶，
+		// 前端再打个「逾期」标记（用户要求：今天页只显示今天的信息，逾期的置顶）。
 		q = q.Where(openOnly+"due_at IS NOT NULL AND due_at < ?", endToday)
 	case "planned":
-		q = q.Where(openOnly + "due_at IS NOT NULL")
+		// 计划页＝「预设信息」：有循环规则的、有时间段（计划页建的就是这种）、
+		// 或者排在明天及以后的任务。今天页里那些「就今天办」的普通任务不会在这里
+		// 重复出现；记事没有排期（保存时就被清空），天然不属于计划页。
+		q = q.Where(openOnly+"(repeat_rule <> 'none' OR start_at IS NOT NULL OR (due_at IS NOT NULL AND due_at >= ?))", endToday)
 	case "completed":
 		q = q.Where("completed_at IS NOT NULL")
 	default:
@@ -1117,7 +1154,7 @@ func listCalendarItems(db *gorm.DB, userID uint, from, to time.Time, listIDs []u
 		}
 		item := CalendarItemDTO{
 			ID: r.ID, Title: r.Title, ListID: r.ListID,
-			DueAt: *at, DueDate: at.In(loc).Format("2006-01-02"),
+			DueAt: *at, StartAt: r.StartAt, EndAt: r.EndAt, DueDate: at.In(loc).Format("2006-01-02"),
 			AllDay: r.AllDay && r.Kind == KindTask, Completed: r.CompletedAt != nil,
 			Kind: r.Kind, Priority: r.Priority, RepeatRule: r.RepeatRule,
 			// CardID / CardRole 都要带上：日历靠 card_role 上色，靠 card_id 才能关联回卡片

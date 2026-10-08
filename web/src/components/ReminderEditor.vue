@@ -43,11 +43,33 @@
             >
               <div class="editor-field relative">
                 <span>日期时间</span>
-                <button ref="dateAnchor" type="button" class="mt-1.5 flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-medium sm:mt-2 sm:rounded-2xl sm:px-4 sm:py-3" :class="dateOpen ? 'border-brand-500/45 ring-4 ring-brand-500/10' : 'border-border'" @click="dateOpen = !dateOpen">
-                  <span :class="{ 'text-muted-foreground/55': !editing.due_at }">{{ editing.due_at ? formatFullDue(editing.due_at) : '选择日期' }}</span>
-                  <svg viewBox="0 0 24 24" class="h-4 w-4 text-muted-foreground" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2" stroke-width="1.8"/><path d="M8 3v4m8-4v4M3 10h18" stroke-width="1.8" stroke-linecap="round"/></svg>
-                </button>
+                <div class="mt-1.5 flex items-stretch gap-1.5 sm:mt-2">
+                  <button ref="dateAnchor" type="button" class="flex min-w-0 flex-1 items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-medium sm:rounded-2xl sm:px-4 sm:py-3" :class="dateOpen ? 'border-brand-500/45 ring-4 ring-brand-500/10' : 'border-border'" @click="dateOpen = !dateOpen">
+                    <span class="truncate" :class="{ 'text-muted-foreground/55': !editing.due_at }">{{ editing.due_at ? formatFullDue(editing.due_at) : '选择日期' }}</span>
+                    <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-muted-foreground" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2" stroke-width="1.8"/><path d="M8 3v4m8-4v4M3 10h18" stroke-width="1.8" stroke-linecap="round"/></svg>
+                  </button>
+                  <!-- 时间段入口做成同行的小按钮，**不占额外高度**：编辑弹窗（日历里那种居中卡片）
+                       原来刚好占满一屏，多一行字段就会溢出到要内滚（verify-070 会红）。 -->
+                  <button
+                    v-if="!editing.end_at"
+                    type="button"
+                    class="shrink-0 whitespace-nowrap rounded-xl border border-dashed border-border px-2 text-[11px] font-semibold text-muted-foreground transition hover:border-brand-500/45 hover:text-brand-600"
+                    title="加一个结束时间，这条就变成「开始—结束」的时间段"
+                    data-add-end
+                    @click="enableEnd"
+                  >
+                    +结束
+                  </button>
+                </div>
                 <LunarDatePicker v-if="dateOpen" v-model="datePicked" with-time :anchor-el="dateAnchor" @commit="dateOpen = false" />
+                <div v-if="editing.end_at" class="mt-1.5">
+                  <button ref="endAnchor" type="button" class="flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-medium sm:rounded-2xl sm:px-4 sm:py-3" :class="endOpen ? 'border-brand-500/45 ring-4 ring-brand-500/10' : 'border-border'" @click="endOpen = !endOpen">
+                    <span class="truncate">至 {{ formatFullDue(editing.end_at) }}</span>
+                    <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-muted-foreground" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2" stroke-width="1.8"/><path d="M8 3v4m8-4v4M3 10h18" stroke-width="1.8" stroke-linecap="round"/></svg>
+                  </button>
+                  <LunarDatePicker v-if="endOpen" v-model="endPicked" with-time :anchor-el="endAnchor" @commit="endOpen = false" />
+                  <button type="button" class="mt-1 text-[11px] font-semibold text-muted-foreground hover:text-rose-500" @click="editing.end_at = null">清除结束时间</button>
+                </div>
               </div>
               <label class="editor-field"><span>清单</span><select v-model.number="editing.list_id"><option v-for="list in lists" :key="list.id" :value="list.id">{{ list.name }}</option></select></label>
               <label class="editor-field"><span>优先级</span><select v-model.number="editing.priority"><option :value="0">无</option><option :value="1">低</option><option :value="2">中</option><option :value="3">高</option></select></label>
@@ -141,6 +163,7 @@ const isModal = computed(() => props.presentation === 'modal')
 
 const blankInput = (): SaveReminderInput & { id?: number } => ({
   title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: null,
+  start_at: null, end_at: null,
   all_day: false, repeat_rule: 'none', calendar: 'solar', repeat_notify_minutes: 0, channels: ['inapp'],
 })
 
@@ -150,6 +173,13 @@ const loading = ref(false)
 const errorMsg = ref('')
 const dateOpen = ref(false)
 const dateAnchor = ref<HTMLElement | null>(null)
+// 时间段：结束时间（可选）。留空就是单点时间；两个都填＝「开始—结束」。
+const endOpen = ref(false)
+const endAnchor = ref<HTMLElement | null>(null)
+const endPicked = computed({
+  get: () => (editing.end_at ? new Date(editing.end_at) : null),
+  set: value => { editing.end_at = value ? toLocalIso(value) : null },
+})
 
 const datePicked = computed({
   get: () => (editing.due_at ? new Date(editing.due_at) : null),
@@ -175,10 +205,20 @@ function formatFullDue(value: string | null | undefined) {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+// 点「+结束」：默认结束 = 开始 + 1 小时（没开始时间就先给一个今天 20:00），
+// 并直接把选择器展开，少一次点击。
+function enableEnd() {
+  const base = editing.due_at ? new Date(editing.due_at) : new Date()
+  const end = new Date(base.getTime() + 60 * 60 * 1000)
+  editing.end_at = toLocalIso(end)
+  endOpen.value = true
+}
+
 function applyItem(item: ReminderItem) {
   Object.assign(editing, {
     id: item.id, title: item.title, notes: item.notes, kind: item.kind || 'task', list_id: item.list_id,
     priority: item.priority, due_at: item.due_at, all_day: item.all_day,
+    start_at: item.start_at || null, end_at: item.end_at || null,
     repeat_rule: item.repeat_rule, calendar: item.calendar || 'solar',
     repeat_notify_minutes: item.repeat_notify_minutes || 0,
     channels: [...(item.channels || [])], version: item.version,
@@ -190,9 +230,10 @@ function applyItem(item: ReminderItem) {
 // 打开时按 id 拉最新数据：日历/列表里的那份可能是缓存，version 过期会保存失败。
 // 新建模式直接用 preset 填表，不请求、也不带 id。
 watch(() => [props.modelValue, props.reminderId, props.preset] as const, async ([open, id]) => {
-  if (!open) { dateOpen.value = false; return }
+  if (!open) { dateOpen.value = false; endOpen.value = false; return }
   errorMsg.value = ''
   dateOpen.value = false
+  endOpen.value = false
   if (props.preset) {
     Object.assign(editing, blankInput(), props.preset)
     return
@@ -226,6 +267,8 @@ function setKind(kind: ReminderKind) {
   editing.kind = kind
   if (kind === 'note') {
     editing.due_at = null
+    editing.start_at = null
+    editing.end_at = null
     editing.priority = 0
     editing.repeat_rule = 'none'
     editing.calendar = 'solar'
@@ -251,6 +294,22 @@ function close() { emit('update:modelValue', false) }
 async function save() {
   if (!editing.title?.trim() || saving.value) return
   if (!isCreate.value && !editing.id) return
+  // 时间段：结束时间填了就必须有开始时间（这里用界面上的日期时间作为开始），
+  // 且结束必须晚于开始 —— 后端也会校验，这里先拦一次给出更直接的中文提示。
+  if (editing.kind !== 'note' && editing.end_at) {
+    if (!editing.due_at) {
+      errorMsg.value = '请先选择开始时间'
+      return
+    }
+    if (new Date(editing.end_at).getTime() <= new Date(editing.due_at).getTime()) {
+      errorMsg.value = '结束时间要晚于开始时间'
+      return
+    }
+    editing.start_at = editing.due_at
+  } else if (editing.kind !== 'note') {
+    editing.start_at = null
+    editing.end_at = null
+  }
   saving.value = true
   errorMsg.value = ''
   try {

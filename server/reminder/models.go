@@ -78,6 +78,17 @@ type Reminder struct {
 	Priority   int        `gorm:"not null;default:0" json:"priority"`
 	DueAt      *time.Time `gorm:"index:idx_reminders_user_due" json:"due_at"`
 	AllDay     bool       `gorm:"not null;default:false" json:"all_day"`
+	// StartAt / EndAt 是「时间段」任务的起止时间（计划页专用，用户要求计划任务
+	// 用自定义时间或时间段，而不是「今天/明天」这类相对快捷项）。两者要么都空
+	// （普通的单点时间任务，看 DueAt），要么都填且 EndAt 晚于 StartAt。
+	//
+	// 有区间时 DueAt 会被规范成 StartAt：列表排序、今天/计划视图、日历格子与
+	// 通知投递都只认 DueAt，不必让每一处都去理解区间。
+	//
+	// 新列由 AutoMigrate 自动加（SQLite ADD COLUMN，旧行为 NULL），因此不需要
+	// 额外的 database.Upgrades 记录。
+	StartAt *time.Time `json:"start_at,omitempty"`
+	EndAt   *time.Time `json:"end_at,omitempty"`
 	RepeatRule string     `gorm:"size:16;not null;default:none" json:"repeat_rule"`
 	// Calendar selects which calendar the repeat rule follows: "solar"
 	// (Gregorian, default) or "lunar" (Chinese lunar calendar). Only
@@ -294,6 +305,9 @@ type CalendarItemDTO struct {
 	// ListIcon 是清单的图标 key（见 list_icons.go）：日历格子用图标代替原来的圆点。
 	ListIcon string    `json:"list_icon"`
 	DueAt    time.Time `json:"due_at"`
+	// StartAt / EndAt 是时间段任务的起止（计划页的「开始—结束」）；没有区间时为空。
+	StartAt *time.Time `json:"start_at,omitempty"`
+	EndAt   *time.Time `json:"end_at,omitempty"`
 	// DueDate 是到期日在上海时区下的 YYYY-MM-DD。日历按这个字符串归格，
 	// 不走浏览器时区换算——否则用户在非 +08 时区打开会整体错一天。
 	DueDate    string `json:"due_date"`

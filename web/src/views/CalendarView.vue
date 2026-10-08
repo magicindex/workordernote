@@ -488,7 +488,18 @@ function timeLabel(item: CalendarItem) {
   }
   if (item.all_day) return '全天'
   const d = new Date(item.due_at)
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  const start = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  // 时间段任务（计划页的「开始—结束」）显示成区间，格子里一眼看得出是两个小时的事
+  const end = item.end_at
+  if (end) {
+    const e = new Date(end)
+    const sameDay = e.toDateString() === d.toDateString()
+    const endText = sameDay
+      ? e.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+      : new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(e)
+    return `${start} – ${endText}`
+  }
+  return start
 }
 function ruleLabel(rule: string) {
   return ({ daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年' } as Record<string, string>)[rule] || '循环'

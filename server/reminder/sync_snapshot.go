@@ -131,6 +131,8 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 			Priority:            r.Priority,
 			DueAt:               r.DueAt,
 			AllDay:              r.AllDay,
+			StartAt:             r.StartAt,
+			EndAt:               r.EndAt,
 			RepeatRule:          r.RepeatRule,
 			Calendar:            r.Calendar,
 			LunarAnchor:         r.LunarAnchor,

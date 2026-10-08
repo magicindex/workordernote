@@ -70,7 +70,53 @@
         </div>
 
         <div v-if="quickFocused || quick.title" class="mt-3 border-t border-border/60 pt-3 sm:mt-4 sm:pt-4">
-          <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <!-- 计划页的输入窗口与今天页**刻意不同**（用户要求）：
+               没有「记事」（计划里只有任务）、没有「今天/明天/本周末」这类相对快捷项，
+               改成自定义的**开始 / 结束**（结束留空就是单点时间）+ 重复规则。 -->
+          <div v-if="isPlanned" class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <label class="field-label relative">
+              开始
+              <button ref="planStartAnchor" type="button" class="quick-chip !h-8" :class="{ active: !!quick.start_at }" @click="planStartOpen = !planStartOpen">
+                {{ quick.start_at ? formatFullDue(quick.start_at) : '选择开始时间' }}
+              </button>
+              <LunarDatePicker v-if="planStartOpen" v-model="planStartPicked" with-time :anchor-el="planStartAnchor" @commit="commitPlanStart" />
+            </label>
+            <label class="field-label relative">
+              结束
+              <button ref="planEndAnchor" type="button" class="quick-chip !h-8" :class="{ active: !!quick.end_at }" @click="planEndOpen = !planEndOpen">
+                {{ quick.end_at ? formatFullDue(quick.end_at) : '可选（时间段）' }}
+              </button>
+              <LunarDatePicker v-if="planEndOpen" v-model="planEndPicked" with-time :anchor-el="planEndAnchor" @commit="commitPlanEnd" />
+            </label>
+            <button v-if="quick.end_at" class="quick-chip !h-8" title="清掉结束时间，改成单点时间" @click="clearPlanEnd">清除结束</button>
+            <label class="field-label">
+              重复
+              <select v-model="quick.repeat_rule" class="quick-chip !h-8 !px-2">
+                <option value="none">不重复</option>
+                <option value="daily">每天</option>
+                <option value="weekly">每周</option>
+                <option value="monthly">每月</option>
+                <option value="yearly">每年</option>
+              </select>
+            </label>
+            <button class="quick-chip !h-8" :class="{ active: quick.priority === 3 }" @click="quick.priority = quick.priority === 3 ? 0 : 3">
+              <span class="text-rose-500">!!!</span> 重要
+            </button>
+            <label class="ml-0.5 inline-flex items-center gap-1.5" title="这条计划加到哪个清单（默认取偏好设置里的默认清单）">
+              <i class="h-2 w-2 shrink-0 rounded-full" :style="{ background: listColor(quickListColor) }"></i>
+              <select v-model.number="quick.list_id" class="quick-chip !h-8 max-w-[9rem] !px-2 !text-[11px]" aria-label="选择清单">
+                <option v-for="list in navLists" :key="list.id" :value="list.id">{{ list.name }}</option>
+              </select>
+            </label>
+            <button class="quick-chip !h-8" :class="{ active: quickExpanded }" @click="quickExpanded = !quickExpanded">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 6v.01M12 12v.01M12 18v.01" stroke-width="3" stroke-linecap="round"/></svg>
+              更多
+            </button>
+            <span v-if="quick.start_at" class="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-300">
+              {{ planRangeLabel }}
+            </span>
+          </div>
+          <div v-else class="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button class="quick-chip" :class="{ active: quick.kind !== 'note' }" @click="setQuickKind('task')">任务</button>
             <button class="quick-chip" :class="{ active: quick.kind === 'note' }" @click="setQuickKind('note')">记事</button>
             <span v-if="quick.kind !== 'note'" class="mx-0.5 h-4 w-px bg-border"></span>
@@ -304,8 +350,9 @@
             <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground sm:mt-2">
               <span class="inline-flex items-center gap-1" :class="{ 'text-rose-500': isOverdue(item) }">
                 <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7v5l3 2" stroke-width="1.8" stroke-linecap="round"/></svg>
-                {{ item.due_at ? formatDue(item.snoozed_until || item.due_at) : '无日期' }}
+                {{ dueLabel(item) }}
               </span>
+              <span v-if="isOverdue(item)" class="tiny-badge !text-rose-500">已逾期</span>
               <span class="h-1 w-1 rounded-full bg-border"></span>
               <span>{{ item.list_name }}</span>
               <span v-if="item.channels?.length" class="h-1 w-1 rounded-full bg-border"></span>
@@ -463,6 +510,7 @@ function defaultQuickDue(): string {
 }
 const blankInput = (): SaveReminderInput => ({
   title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: defaultQuickDue(),
+  start_at: null, end_at: null,
   all_day: false, repeat_rule: 'none', calendar: 'solar', repeat_notify_minutes: 0, channels: ['inapp'],
 })
 const quick = reactive<SaveReminderInput>(blankInput())
@@ -470,6 +518,40 @@ const editingId = ref<number | null>(null)
 let quickChannelsTouched = false
 
 const view = computed(() => String(route.meta.reminderView || 'today'))
+// 计划页的输入窗口与今天页不同：只用自定义时间/时间段，没有任何相对快捷项，
+// 也没有「记事」（计划里只有任务）。见模板里的 v-if="isPlanned" 一支。
+const isPlanned = computed(() => view.value === 'planned')
+const planStartOpen = ref(false)
+const planEndOpen = ref(false)
+const planStartAnchor = ref<HTMLElement | null>(null)
+const planEndAnchor = ref<HTMLElement | null>(null)
+const planStartPicked = computed({
+  get: () => (quick.start_at ? new Date(quick.start_at) : null),
+  set: value => { quick.start_at = value ? toLocalIso(value) : null },
+})
+const planEndPicked = computed({
+  get: () => (quick.end_at ? new Date(quick.end_at) : null),
+  set: value => { quick.end_at = value ? toLocalIso(value) : null },
+})
+function commitPlanStart() {
+  planStartOpen.value = false
+  // 结束时间没填或填得比开始还早：跟着开始时间顺延一小时，省得用户再点一次
+  if (!quick.start_at) return
+  if (!quick.end_at || new Date(quick.end_at).getTime() <= new Date(quick.start_at).getTime()) {
+    quick.end_at = toLocalIso(new Date(new Date(quick.start_at).getTime() + 60 * 60 * 1000))
+  }
+}
+function commitPlanEnd() { planEndOpen.value = false }
+function clearPlanEnd() { quick.end_at = null }
+const planRangeLabel = computed(() => {
+  if (!quick.start_at) return ''
+  const start = formatFullDue(quick.start_at)
+  if (!quick.end_at) return start
+  const end = new Date(quick.end_at)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const sameDay = new Date(quick.start_at).toDateString() === end.toDateString()
+  return `${start} – ${sameDay ? `${pad(end.getHours())}:${pad(end.getMinutes())}` : formatFullDue(quick.end_at)}`
+})
 const selectedListID = computed(() => route.name === 'ReminderList' ? Number(route.params.id) : undefined)
 const selectedList = computed(() => lists.value.find(x => x.id === selectedListID.value))
 // 「信用卡账单」是固定栏目：这一页只渲染卡片面板（见模板最上面那一支），
@@ -661,6 +743,12 @@ async function handleExport() {
 }
 async function submitQuick() {
   if (!quick.title?.trim() || saving.value) return
+  // 计划页必须有开始时间：计划任务就是「有预设」的任务，没有时间就没有预设可言。
+  if (isPlanned.value && !quick.start_at) {
+    planStartOpen.value = true
+    showToast('请先选择开始时间', 'error')
+    return
+  }
   saving.value = true
   try {
     // 没设日期的提醒不会出现在按到期时间过滤的「今天 / 计划」视图里：留在原地
@@ -669,15 +757,22 @@ async function submitQuick() {
     // 记事属于「已完成」，任何列表视图都不会出现它，所以单独说明去处，
     // 并且保持「记事」模式不变，方便连着记好几条。
     const isNote = quick.kind === 'note'
-    const undated = !quick.due_at
-    await createReminder({ ...quick, title: quick.title.trim() })
+    const planned = isPlanned.value
+    const undated = !quick.due_at && !quick.start_at
+    // 计划页：只用时间段（结束留空＝单点），due_at 由后端按开始时间归位。
+    const payload: SaveReminderInput = planned
+      ? { ...quick, kind: 'task', title: quick.title.trim(), due_at: null, end_at: quick.end_at || null }
+      : { ...quick, title: quick.title.trim() }
+    await createReminder(payload)
     quickChannelsTouched = false
     Object.assign(quick, blankInput(), {
       kind: isNote ? 'note' : 'task',
       list_id: quickTargetListID.value,
+      // 计划页默认不带「今天 20:00」，免得一进页面就误以为是今天的事
+      due_at: planned ? null : defaultQuickDue(),
     })
     // 归位到「今天」：新建提醒默认带今天 20:00，芯片状态也要跟着点亮
-    preset.value = isNote ? '' : 'today'
+    preset.value = isNote || planned ? '' : 'today'
     quickExpanded.value = false
     quickFocused.value = false
     if (isNote) {
@@ -688,7 +783,7 @@ async function submitQuick() {
       showToast('已保存到「全部」：这条提醒没有设置日期')
     } else {
       await loadItems()
-      showToast('提醒已添加')
+      showToast(planned ? '计划任务已添加' : '提醒已添加')
     }
     changed()
   } catch (err: any) {
@@ -859,6 +954,19 @@ function formatDue(value: string | null | undefined) {
   const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1)
   const day = sameDay ? '今天' : d.toDateString() === tomorrow.toDateString() ? '明天' : new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(d)
   return `${day} ${d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}`
+}
+/** 列表行里的时间：有计划时间段就显示「开始 – 结束」，否则沿用原来的相对日期。 */
+function dueLabel(item: ReminderItem) {
+  if (item.start_at) {
+    const startText = formatDue(item.snoozed_until || item.start_at)
+    if (!item.end_at) return startText
+    const sameDay = new Date(item.start_at).toDateString() === new Date(item.end_at).toDateString()
+    const endText = sameDay
+      ? new Date(item.end_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+      : formatDue(item.end_at)
+    return `${startText} – ${endText}`
+  }
+  return item.due_at ? formatDue(item.snoozed_until || item.due_at) : '无日期'
 }
 function channelName(ch: ReminderChannel) { return ({ inapp: '站内', email: '邮件', sms: '短信', feishu: '飞书', qq: 'QQ', dingtalk: '钉钉' } as Record<string, string>)[ch] || ch }
 function ruleLabel(rule: string) { return ({ daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年' } as Record<string, string>)[rule] || '循环' }
