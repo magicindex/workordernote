@@ -137,16 +137,23 @@ func handleListLists(db *gorm.DB) gin.HandlerFunc {
 		}
 		// 「记事本」是侧栏里的固定栏目：偏好开着却没有这一行时补建一次，
 		// 保证它默认就在（否则要等用户先记一笔才冒出来）。关掉偏好时不建、也不显示，
-		// 数据一条不删。只在确实缺行时才多查一次库，稳态下与改动前一致。
+		// 数据一条不删。名字/图标是旧值（0.15.4 之前的行）也在这里纠正一次：
+		// ensureNoteBucket 只在值不对时才写库，稳态下这里不产生任何写入。
 		if notebookFeatureEnabled(db, userID) {
-			hasNoteBucket := false
-			for _, l := range lists {
+			noteIdx := -1
+			for i, l := range lists {
 				if l.Template == listTemplateNote {
-					hasNoteBucket = true
+					noteIdx = i
 					break
 				}
 			}
-			if !hasNoteBucket {
+			if noteIdx >= 0 && (lists[noteIdx].Name != noteBucketListName || lists[noteIdx].Icon != noteBucketIcon) {
+				if bucket, err := ensureNoteBucket(db, userID); err == nil {
+					lists[noteIdx].Name = bucket.Name
+					lists[noteIdx].Icon = bucket.Icon
+				}
+			}
+			if noteIdx < 0 {
 				if bucket, err := ensureNoteBucket(db, userID); err == nil {
 					lists = append(lists, bucket)
 					sort.SliceStable(lists, func(i, j int) bool {

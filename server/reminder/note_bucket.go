@@ -19,8 +19,9 @@ import (
 // 而「关掉这个栏目」是本机的外观偏好，不该影响另一台机器。
 const (
 	noteBucketListName  = "记事本"
+	// noteBucketIcon 是记事本栏目的固定图标（前端 utils/list-icons.ts 里的 notebook）
+	noteBucketIcon      = "notebook"
 	noteBucketListColor = "emerald"
-	noteBucketListIcon  = "book"
 )
 
 // notebookFeatureEnabled 读**这个用户自己**的偏好 notebook_enabled。
@@ -95,12 +96,21 @@ func ensureNoteBucket(db *gorm.DB, userID uint) (List, error) {
 	}
 	if len(all) > 0 {
 		bucket := all[0]
+		// 名字与图标都固定成「记事本」这一套：图标用笔记本形状，一眼能认出这是记事本
+		// （老数据里的记事本可能是默认清单图标，启动后第一次进列表就被纠正过来）。
+		updates := map[string]interface{}{}
 		if bucket.Name != noteBucketListName {
-			if err := db.Model(&List{}).Where("id = ?", bucket.ID).
-				Update("name", noteBucketListName).Error; err != nil {
+			updates["name"] = noteBucketListName
+			bucket.Name = noteBucketListName
+		}
+		if bucket.Icon != noteBucketIcon {
+			updates["icon"] = noteBucketIcon
+			bucket.Icon = noteBucketIcon
+		}
+		if len(updates) > 0 {
+			if err := db.Model(&List{}).Where("id = ?", bucket.ID).Updates(updates).Error; err != nil {
 				return List{}, err
 			}
-			bucket.Name = noteBucketListName
 		}
 		return bucket, nil
 	}
@@ -109,11 +119,12 @@ func ensureNoteBucket(db *gorm.DB, userID uint) (List, error) {
 		return List{}, err
 	} else if old != nil {
 		if err := db.Model(&List{}).Where("id = ?", old.ID).
-			Updates(map[string]interface{}{"deleted_at": nil, "name": noteBucketListName, "template": listTemplateNote}).Error; err != nil {
+			Updates(map[string]interface{}{"deleted_at": nil, "name": noteBucketListName, "icon": noteBucketIcon, "template": listTemplateNote}).Error; err != nil {
 			return List{}, err
 		}
 		old.DeletedAt = nil
 		old.Name = noteBucketListName
+		old.Icon = noteBucketIcon
 		return *old, nil
 	}
 	var list *List
@@ -125,7 +136,7 @@ func ensureNoteBucket(db *gorm.DB, userID uint) (List, error) {
 		}
 		created := List{
 			UserID: userID, Name: noteBucketListName, Color: noteBucketListColor,
-			Icon: noteBucketListIcon, Position: maxPos + 1, Template: listTemplateNote,
+			Icon: noteBucketIcon, Position: maxPos + 1, Template: listTemplateNote,
 		}
 		if err := db.Create(&created).Error; err != nil {
 			// 并发下可能已经有另一个请求建好了：再找一次，有就用它。

@@ -1,12 +1,104 @@
 package reminder
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
 
 	"smallgo/server/database"
 	"smallgo/server/sysconfig"
 )
+
+// listListsAPI 直接调 handleListLists，返回这一用户的清单列表（绕开鉴权中间件）。
+func listListsAPI(t *testing.T, userID uint) []ListDTO {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/reminder/lists", nil)
+	ctx.Set("userID", userID)
+	handleListLists(appDB)(ctx)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("GET lists 应 200，实际 %d：%s", recorder.Code, recorder.Body.String())
+	}
+	var body struct {
+		Data []ListDTO `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("解析响应失败：%v（%s）", err, recorder.Body.String())
+	}
+	return body.Data
+}
+
+// 老数据里的记事本行（默认清单图标 book）在打开侧栏时就要被纠正成笔记本图标：
+// 否则用户升级后看到的还是原来的图标，会以为「改了没生效」（0.15.4 上线前踩到过）。
+func TestStaleNoteBucketIconHealedOnListLists(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	withFreshNoteFeature(t)
+
+	const userID = 98
+	stale := List{
+		UserID: userID, Name: "旧记事本", Color: noteBucketListColor,
+		Icon: "book", Template: listTemplateNote, Position: 9,
+	}
+	if err := appDB.Create(&stale).Error; err != nil {
+		t.Fatal(err)
+	}
+	other := List{UserID: userID, Name: "自己的清单", Icon: "star", Position: 1}
+	if err := appDB.Create(&other).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	rows := listListsAPI(t, userID)
+	var note *ListDTO
+	for i := range rows {
+		if rows[i].Template == listTemplateNote {
+			note = &rows[i]
+		}
+		if rows[i].Name == "自己的清单" && rows[i].Icon != "star" {
+			t.Fatalf("普通清单的图标被改动了：%q", rows[i].Icon)
+		}
+	}
+	if note == nil {
+		t.Fatal("侧栏里应能看到记事本栏目")
+	}
+	if note.Icon != noteBucketIcon {
+		t.Fatalf("记事本图标应纠正为 %q，实际 %q", noteBucketIcon, note.Icon)
+	}
+	if note.Name != noteBucketListName {
+		t.Fatalf("记事本名字应纠正为 %q，实际 %q", noteBucketListName, note.Name)
+	}
+	if note.ID != stale.ID {
+		t.Fatalf("应复用原来那一行（%d），实际返回 %d", stale.ID, note.ID)
+	}
+
+	// 落库了，下次请求才是稳定态（不重复写）。
+	var after List
+	if err := appDB.Where("id = ?", stale.ID).First(&after).Error; err != nil {
+		t.Fatal(err)
+	}
+	if after.Icon != noteBucketIcon || after.Name != noteBucketListName {
+		t.Fatalf("纠正结果没有落库：%+v", after)
+	}
+	var count int64
+	if err := appDB.Model(&List{}).Where("user_id = ? AND template = ? AND deleted_at IS NULL", userID, listTemplateNote).
+		Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("记事本栏目应仍只有 1 条，实际 %d", count)
+	}
+	// 第二次请求：值已经对了，再取一次也必须一致。
+	for _, r := range listListsAPI(t, userID) {
+		if r.Template == listTemplateNote && (r.Icon != noteBucketIcon || r.Name != noteBucketListName) {
+			t.Fatalf("第二次请求的记事本栏目不对：%+v", r)
+		}
+	}
+}
 
 // 把 notebook feature 缓存关掉：测试里会反复改这个开关，不能让 2 秒缓存影响断言。
 func withFreshNoteFeature(t *testing.T) {

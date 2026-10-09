@@ -19,6 +19,7 @@ export interface ListIcon {
 export const LIST_ICONS: ListIcon[] = [
   { key: 'list', label: '清单', body: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" stroke-width="2"/>' },
   { key: 'card', label: '银行卡', body: '<rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 10h19M6 13.5h4"/>' },
+  { key: 'notebook', label: '记事本', body: '<rect x="6" y="3.5" width="13.5" height="17" rx="2.5"/><path d="M6 8h2.2M6 12h2.2M6 16h2.2"/><path d="M12.5 3.5v6.4l2.4-1.5 2.4 1.5V3.5"/>' },
   { key: 'check', label: '待办', body: '<rect x="4" y="4" width="16" height="16" rx="4"/><path d="m8.5 12 2.4 2.4 4.6-5"/>' },
   { key: 'star', label: '重要', body: '<path d="m12 4.4 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.6-4.8 2.6.9-5.4L4.2 10l5.4-.8L12 4.4Z"/>' },
   { key: 'flag', label: '标记', body: '<path d="M6 21V4m0 1h10.5l-1.7 3.5L16.5 12H6"/>' },
