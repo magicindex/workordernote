@@ -113,7 +113,10 @@
             @click="mobileOpen = false"
           >
             <span class="nav-symbol h-5 w-5 bg-emerald-500/12 text-emerald-500">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 6.5C10.5 5.3 8.3 4.8 5 4.8v12.4c3.3 0 5.5.5 7 1.7 1.5-1.2 3.7-1.7 7-1.7V4.8c-3.3 0-5.5.5-7 1.7Z" stroke-width="1.7"/><path d="M12 6.5v12.4" stroke-width="1.7"/></svg>
+              <!-- 图标取图标库里那个「笔记本」（notebook）：以前这里写死的是一本书，
+                   与清单数据里的 icon 不是同一份来源，导致「改了图标库里那份、侧栏还是旧的」。
+                   现在与日历/清单筛选共用 utils/list-icons.ts 一份定义。 -->
+              <ListIcon name="notebook" :size="20" />
             </span>
             <span class="flex-1">记事本</span>
           </RouterLink>
