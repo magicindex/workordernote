@@ -160,7 +160,10 @@ export const useAuthStore = defineStore('auth', () => {
         if (auth?.authenticated && auth.user) {
           user.value = auth.user
           // 安全提示与主题偏好都不参与路由决策，放到后台补齐，绝不阻塞首屏。
-          void loadUserPreferences()
+          // 但**把 promise 记下来**：登录后那条路径（reloadBootstrap）要等它回来，
+          // 否则首帧还是上一个主题（日出日落/浅色深色要等刷新才对，用户报过）。
+          prefsPromise = loadUserPreferences()
+          void prefsPromise
         } else {
           clearSession()
         }
@@ -175,7 +178,8 @@ export const useAuthStore = defineStore('auth', () => {
         const authRes = await withTimeout(checkAuth(), STARTUP_TIMEOUT_MS, null)
         if (authRes?.data?.code === 0 && authRes.data.data?.authenticated) {
           user.value = authRes.data.data.user
-          void loadUserPreferences()
+          prefsPromise = loadUserPreferences()
+          void prefsPromise
         } else {
           clearSession()
         }
@@ -220,6 +224,10 @@ export const useAuthStore = defineStore('auth', () => {
     initPromise = null
   }
 
+  // 最近一次「补齐个人偏好」的请求（主题模式、日出日落位置、安全提示）。
+  // 首屏不等它；登录后的 reloadBootstrap 等它 —— 见那里的注释。
+  let prefsPromise: Promise<void> | null = null
+
   /**
    * 登录/注册成功后再拉一次启动引导。
    *
@@ -231,6 +239,11 @@ export const useAuthStore = defineStore('auth', () => {
   async function reloadBootstrap() {
     resetInit()
     await init()
+    // 登录/飞牛授权成功后**等个人偏好回来**再放行：主题（含「日出日落」模式与位置）
+    // 就在里面。不等的话首帧用的是上一个主题，用户会以为设置没生效、要刷新一次才对。
+    if (prefsPromise) {
+      try { await prefsPromise } catch { /* 偏好失败不影响登录 */ }
+    }
   }
 
   function setToken(newToken: string, remember = true) {

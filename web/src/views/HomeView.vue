@@ -578,9 +578,17 @@ const loading = ref(true)
 const saving = ref(false)
 const search = ref('')
 const quickInput = ref<HTMLInputElement | null>(null)
-const quickFocused = ref(false)
-const quickExpanded = ref(false)
+// 新建任务插件**默认展开**（用户 2026-10-10 要求）：打开软件/登录后就能直接看到
+// 任务·记事切换、日期（默认今天 20:00）、清单与「更多」里的字段，不必先点一下输入框。
+// 之前是 false，要点输入框（quickFocused）才出芯片行、再点「更多」才出日期等字段，
+// 用户在登录后看不到默认日期，以为「新建任务没有默认时间」。
+const quickFocused = ref(true)
+const quickExpanded = ref(true)
 const preset = ref('today')
+// 「清空」是**明确**动作：按过之后，这一次新建才是真正的「无日期」；
+// 只要又选了日期（芯片或日期选择器）就复位。提交时的兜底用它区分
+// 「用户故意不要日期」与「状态里没日期」（后者补今天）。
+const quickDueCleared = ref(false)
 const editorOpen = ref(false)
 const clockNow = ref(Date.now())
 const toast = reactive<{ message: string; type: 'success' | 'error' }>({ message: '', type: 'success' })
@@ -968,9 +976,13 @@ async function submitQuick() {
     const planned = isPlanned.value
     const undated = !quick.due_at && !quick.start_at
     // 计划页：只用时间段（结束留空＝单点），due_at 由后端按开始时间归位。
+    // 非计划页：日期为空只可能是「用户按了清空」（quickDueCleared）或状态里没日期。
+    // 后者按今天兜底 —— 否则又会存出「无日期」的任务：保存成功、今天页里却找不到
+    // （用户报过的那个 bug）。记事由后端统一清空日期，这里给不给都不影响。
+    const fallbackDue = quick.due_at || (quickDueCleared.value ? null : defaultQuickDue())
     const payload: SaveReminderInput = planned
       ? { ...quick, kind: 'task', title: quick.title.trim(), due_at: null, end_at: quick.end_at || null }
-      : { ...quick, title: quick.title.trim() }
+      : { ...quick, title: quick.title.trim(), due_at: isNote ? null : fallbackDue }
     await createReminder(payload)
     quickChannelsTouched = false
     Object.assign(quick, blankInput(), {
@@ -979,10 +991,18 @@ async function submitQuick() {
       // 计划页默认不带「今天 20:00」，免得一进页面就误以为是今天的事
       due_at: planned ? null : defaultQuickDue(),
     })
-    // 归位到「今天」：新建提醒默认带今天 20:00，芯片状态也要跟着点亮
+    // 归位到「今天」：新建提醒默认带今天 20:00，芯片状态也要跟着点亮。
+    // 面板**保持展开**（用户要求默认展开，连着记几条不用每次再点一下）；
+    // 记事本页仍按 setQuickKind('note') 收起（那里只需要标题）。
     preset.value = isNote || planned ? '' : 'today'
-    quickExpanded.value = false
-    quickFocused.value = false
+    quickDueCleared.value = false
+    if (isNote) {
+      quickExpanded.value = false
+      quickFocused.value = false
+    } else {
+      quickExpanded.value = true
+      quickFocused.value = true
+    }
     if (isNote) {
       // 记事本页要立刻把新记的这条显示出来（其它视图它本来就不出现）。
       await loadItems()
@@ -1068,6 +1088,7 @@ function removeCompleted(entry: CompletedItem) {
 // 要「不要日期」请用清空按钮（clearQuickDue），芯片永远只负责选中。
 function setPreset(kind: string) {
   preset.value = kind
+  quickDueCleared.value = false
   const d = new Date()
   d.setSeconds(0, 0)
   if (kind === 'today') d.setHours(20, 0)
@@ -1079,6 +1100,7 @@ function setPreset(kind: string) {
 function clearQuickDue() {
   preset.value = ''
   quick.due_at = null
+  quickDueCleared.value = true
 }
 function toggleQuickChannel(channel: ReminderChannel) {
   quickChannelsTouched = true

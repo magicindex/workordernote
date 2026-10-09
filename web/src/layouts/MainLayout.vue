@@ -5,6 +5,18 @@
       <span class="ambient-orb ambient-orb-two"></span>
     </div>
 
+    <!-- 「服务已经更新，当前页面还是旧版本」提示。
+         场景：应用被装在桌面/长期开着，我在后台发了新版本（今天一天连发几版），
+         旧页面里的交互还是老代码，用户看到的症状是「有些东西不对，刷新一下又好了」。
+         与其让用户自己猜，不如直接把刷新按钮递到手上。 -->
+    <div v-if="staleBundle" class="stale-bundle" data-stale-bundle role="status">
+      <span class="stale-bundle-text">
+        工作序记已更新到 <b>{{ staleBundle.version }}</b>，当前页面还是旧版本
+      </span>
+      <button type="button" class="stale-bundle-btn" data-stale-reload @click="reloadPage">刷新</button>
+      <button type="button" class="row-action !opacity-80" aria-label="稍后再说" @click="staleDismissed = true">✕</button>
+    </div>
+
     <aside class="sidebar" :class="[mobileOpen ? 'sidebar-open' : '', railActive ? 'sidebar-rail' : 'sidebar-docked']">
       <div class="flex h-full flex-col">
         <div class="flex items-center justify-between px-5 pb-5 pt-6">
@@ -522,6 +534,11 @@ const creatingList = ref(false)
 const realtimeToast = ref('')
 const appVersion = ref('')
 const appBuildTime = ref('')
+// 页面打开时看到的构建提交号；之后每 5 分钟（以及页面回到前台时）对一次，
+// 变了就说明服务端已经换版本了 —— 提醒用户刷新，别让旧页面里的老行为误导人。
+const seenCommit = ref('')
+const staleBundle = ref<{ version: string; commit: string } | null>(null)
+const staleDismissed = ref(false)
 const versionOpen = ref(false)
 
 const icons = {
@@ -861,10 +878,24 @@ async function loadVersion() {
     const info = res.data?.data
     appVersion.value = info?.version || ''
     appBuildTime.value = info?.buildTime || ''
+    const commit = String(info?.gitCommit || '')
+    if (!seenCommit.value) {
+      seenCommit.value = commit
+      return
+    }
+    if (commit && commit !== seenCommit.value) {
+      staleBundle.value = { version: info?.version || '', commit }
+    }
   } catch {
     /* a version label must never block the main application */
   }
 }
+function reloadPage() { window.location.reload() }
+
+// 服务端换版本的检测：每 5 分钟一次，加上「页面回到前台」时顺手查一次
+// （旧页面长期开着不动，也能发现自己已经落后于服务端了）。
+const VERSION_POLL_MS = 5 * 60_000
+let versionTimer: number | undefined
 function logout() {
   stopRealtime?.()
   // 服务端要先记下「主动登出」才轮得到清本地：网关域上只清前端会被网关注入的
@@ -1121,6 +1152,8 @@ function refreshWhenVisible() {
     void checkFnOSSession()
     // 另一台设备在后台期间改过数据，回到前台要立刻跟上，不等下一次轮询。
     void pollRevision()
+    // 顺带核一下服务端版本：后台期间可能刚好发了新版本（今天一天连发几版）。
+    void loadVersion()
   }
 }
 
@@ -1178,11 +1211,13 @@ onMounted(() => {
   // 进门先补一遍：应用没开着的时候到点且还没处理的提醒，打开就该看到。
   void recoverMissedAlerts()
   revisionTimer = window.setInterval(() => { void pollRevision() }, REVISION_POLL_MS)
+  versionTimer = window.setInterval(() => { void loadVersion() }, VERSION_POLL_MS)
 })
 onBeforeUnmount(() => {
   stopRealtime?.()
   if (fnosSessionTimer !== undefined) window.clearInterval(fnosSessionTimer)
   if (revisionTimer !== undefined) window.clearInterval(revisionTimer)
+  if (versionTimer !== undefined) window.clearInterval(versionTimer)
   audioContext?.close()
   window.visualViewport?.removeEventListener('resize', syncKeyboardState)
   window.removeEventListener('reminder-data-changed', refreshNavigation)
@@ -1193,6 +1228,11 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 「服务已更新」提示条：固定在顶部中间，克制一点，点刷新就消失 */
+.stale-bundle { @apply fixed left-1/2 top-3 z-[95] flex w-[calc(100%-1.5rem)] max-w-lg -translate-x-1/2 items-center gap-2 rounded-2xl border border-brand-500/30 bg-surface/95 px-3 py-2 text-[12px] font-semibold shadow-[0_18px_40px_-24px_rgba(15,23,42,.6)] backdrop-blur sm:text-[13px]; }
+.stale-bundle-text { @apply min-w-0 flex-1 leading-5 text-foreground; }
+.stale-bundle-btn { @apply shrink-0 rounded-xl bg-brand-500 px-3 py-1 text-[12px] font-bold text-white transition hover:brightness-110; }
+
 .ambient { position: fixed; inset: 0; z-index: -20; overflow: hidden; pointer-events: none; background: rgb(var(--color-background)); }
 .ambient-orb { position: absolute; border-radius: 999px; filter: blur(110px); opacity: .16; }
 .ambient-orb-one { width: 32rem; height: 32rem; left: 12%; top: -18rem; background: #60a5fa; }
