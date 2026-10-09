@@ -812,10 +812,13 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND deleted_at IS NULL AND reminder_id NOT IN (SELECT id FROM reminders WHERE list_id IN ?))`
 			selectArgs = []interface{}{sqlTimeArg(endToday), userID, hiddenCards, sqlTimeArg(now)}
 		}
+		// 口径与列表一致：用「生效时间」COALESCE(snoozed_until, due_at) ——
+		// 稍后提醒过的条目不算今天/逾期（它已经挪到稍后那一刻，见 service.go 的同名注释）。
+		effectiveDue := "COALESCE(snoozed_until, due_at)"
 		todayExpr := "COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND " +
-			tsUTC("due_at") + " < datetime(?) THEN 1 ELSE 0 END), 0) AS today"
+			tsUTC(effectiveDue) + " < datetime(?) THEN 1 ELSE 0 END), 0) AS today"
 		overdueExpr := "COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND " +
-			tsUTC("due_at") + " < datetime(?) THEN 1 ELSE 0 END), 0) AS overdue"
+			tsUTC(effectiveDue) + " < datetime(?) THEN 1 ELSE 0 END), 0) AS overdue"
 		q := db.Model(&Reminder{}).
 			Select(todayExpr+`,
 				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS planned,

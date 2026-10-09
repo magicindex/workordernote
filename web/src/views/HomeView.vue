@@ -332,8 +332,10 @@
         <div v-for="n in 4" :key="n" class="h-20 animate-pulse rounded-2xl bg-surface/80"></div>
       </section>
 
-      <!-- 已完成：只读的完成记录，不能「完成 / 稍后提醒」；底层提醒还在时才可以编辑或删除 -->
-      <section v-else-if="view === 'completed' && completedItems.length" class="space-y-2">
+      <!-- 已完成：只读的完成记录，不能「完成 / 稍后提醒」；底层提醒还在时才可以编辑或删除。
+           与「按天分卡片」的列表同一套外观：整段是一张卡片，行与行之间用横线分隔。 -->
+      <section v-else-if="view === 'completed' && completedItems.length" class="day-card">
+        <div class="day-card-body">
         <article v-for="entry in completedItems" :key="`${entry.source}-${entry.id}`" class="reminder-row reminder-completed">
           <button class="complete-button cursor-default" disabled :aria-label="entry.kind === 'note' ? '记事' : '已完成'">
             <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -365,6 +367,7 @@
             </button>
           </div>
         </article>
+        </div>
       </section>
 
       <!-- 按天分卡片（用户要求「同一天的放同一个卡片」）：一天一张卡，卡的标题行是
@@ -1160,7 +1163,20 @@ function focusQuickAdd() {
   quickInput.value?.focus()
   quickInput.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
-function isOverdue(item: ReminderItem) { return !!item.due_at && !item.completed_at && new Date(item.snoozed_until || item.due_at).getTime() < clockNow.value }
+/** 逾期判定用的「生效时间」：稍后提醒优先，其次时段开始时间，最后到期时间。
+    记事没有排期，永远不算逾期；已完成的也不算。
+    逾期分组卡片与行上的「已逾期」标记共用这一个函数，避免两处口径跑偏。 */
+function overdueStamp(item: ReminderItem): number | null {
+  if (item.completed_at || item.kind === 'note') return null
+  const raw = item.snoozed_until || item.start_at || item.due_at
+  if (!raw) return null
+  const t = new Date(raw).getTime()
+  return Number.isNaN(t) ? null : t
+}
+function isOverdue(item: ReminderItem) {
+  const t = overdueStamp(item)
+  return t !== null && t < clockNow.value
+}
 // 日期按钮用完整格式：选中后能直接核对年月日时分，避免跨年日期歧义。
 function formatFullDue(value: string | null | undefined) {
   if (!value) return ''
@@ -1227,11 +1243,20 @@ function dayLabelOf(key: string): { label: string; weekday: string } {
 /** 按天分组：同一天的条目放进同一张卡片（用户要求：「同一天的放同一个卡片」）。
     组与组之间沿用 items 的既有顺序（接口已按各视图的口径排好），只分组、不重排；
     但**卡片内部**把已完成的排到后面 —— 「先看没做完的」这条规矩在分卡片之后落在
-    每张卡片里（跨卡片不再保证：昨天已完成的条目本来就排在今天之前）。 */
+    每张卡片里（跨卡片不再保证：昨天已完成的条目本来就排在今天之前）。
+
+    另外（用户 2026-10-09 追加要求）：**逾期未完成的**不再按各自的日期散在各处，
+    统一收进最前面那张「已逾期」卡片 —— 一眼先看到欠着的事，再按天看后面的安排。 */
 const dayGroups = computed(() => {
   const groups: { key: string; label: string; weekday: string; items: ReminderItem[] }[] = []
   const byKey = new Map<string, (typeof groups)[number]>()
+  const overdue: (typeof groups)[number] = { key: 'overdue', label: '已逾期', weekday: '', items: [] }
+  // 逾期的判断与行里的「已逾期」标记同一套口径（overdueStamp）。
   for (const item of items.value) {
+    if (isOverdue(item)) {
+      overdue.items.push(item)
+      continue
+    }
     const key = dayKeyOf(item)
     let group = byKey.get(key)
     if (!group) {
@@ -1241,13 +1266,15 @@ const dayGroups = computed(() => {
     }
     group.items.push(item)
   }
-  for (const group of groups) {
+  const ordered = [...groups.filter(g => g.key !== 'undated'), ...groups.filter(g => g.key === 'undated')]
+  for (const group of ordered) {
     const open = group.items.filter((i) => !i.completed_at)
     const done = group.items.filter((i) => !!i.completed_at)
     group.items = [...open, ...done]
   }
-  // 「无日期」永远排最后：它不该插在时间线中间。
-  return [...groups.filter(g => g.key !== 'undated'), ...groups.filter(g => g.key === 'undated')]
+  overdue.items = overdue.items.sort((a, b) => (overdueStamp(a) || 0) - (overdueStamp(b) || 0))
+  // 逾期排第一（没有逾期条目时这张卡片不出现），「无日期」永远排最后。
+  return overdue.items.length ? [overdue, ...ordered] : ordered
 })
 function channelName(ch: ReminderChannel) { return ({ inapp: '站内', email: '邮件', sms: '短信', feishu: '飞书', qq: 'QQ', dingtalk: '钉钉' } as Record<string, string>)[ch] || ch }
 function ruleLabel(rule: string) { return ({ daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年' } as Record<string, string>)[rule] || '循环' }
@@ -1313,13 +1340,20 @@ function onShortcut(e: KeyboardEvent) {
 /* 按天分卡片：一天一张卡（用户要求「同一天的放同一个卡片」）。
    行自己仍是一张张小卡（.reminder-row 的形状、悬停、逾期红条都不动），
    外面这层负责「这一天」的标题与分组底色。 */
-.day-card { @apply rounded-[26px] border border-border/70 bg-surface/55 p-2 shadow-[0_18px_44px_-34px_rgba(15,23,42,.5)] backdrop-blur-sm sm:p-2.5; }
-.day-card-head { @apply flex items-center gap-2 px-2 pb-1.5 pt-1; }
+/* 按天分卡片：一天一张卡（用户要求「同一天的放同一个卡片」）。
+   卡片里的条目**不再各自是一张小卡**（用户 2026-10-09：「合并的自身卡片将不再使用，
+   使用横线分割」）—— 去掉边框/圆角/阴影/悬浮位移，行与行之间用一条细横线分隔，
+   整张卡片只有一个外框，看起来就是「这一天的清单」。 */
+.day-card { @apply overflow-hidden rounded-2xl border border-border/70 bg-surface/85 shadow-[0_10px_30px_-26px_rgba(15,23,42,.45)] backdrop-blur sm:rounded-[22px]; }
+.day-card-head { @apply flex items-center gap-2 border-b border-border/60 bg-muted/40 px-3 py-2 sm:px-4; }
 .day-card-label { @apply text-[13px] font-extrabold tracking-tight text-foreground sm:text-sm; }
 .day-card-weekday { @apply text-[11px] font-bold text-muted-foreground; }
 .day-card-count { @apply ml-auto text-[11px] font-bold text-muted-foreground; }
-.day-card-body { @apply space-y-2; }
-.reminder-row { @apply relative flex min-h-0 items-center gap-2.5 overflow-hidden rounded-2xl border border-border/65 bg-surface/85 px-3 py-2.5 shadow-[0_6px_24px_-20px_rgba(15,23,42,.5)] backdrop-blur transition-all hover:-translate-y-0.5 hover:border-brand-500/20 hover:shadow-[0_16px_36px_-26px_rgba(15,23,42,.65)] sm:gap-3 sm:px-4 sm:py-3.5; content-visibility: auto; contain-intrinsic-size: 64px; }
+/* 逾期那张卡片的标题行染一点红，与行里的「已逾期」标记呼应 */
+.day-card[data-day-group='overdue'] .day-card-head { @apply bg-rose-500/10; }
+.day-card[data-day-group='overdue'] .day-card-label { @apply text-rose-600 dark:text-rose-400; }
+.day-card-body { @apply divide-y divide-border/55; }
+.reminder-row { @apply relative flex min-h-0 items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-muted/40 sm:gap-3 sm:px-4 sm:py-3; content-visibility: auto; contain-intrinsic-size: 64px; }
 .reminder-row::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 2px; background: transparent; }
 .reminder-overdue::before { background: #f43f5e; }
 .reminder-completed { @apply opacity-60; }

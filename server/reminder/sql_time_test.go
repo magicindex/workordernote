@@ -145,3 +145,71 @@ func TestCompletedRangeIsOffsetAware(t *testing.T) {
 		t.Fatalf("今天窗口内的完成记录应有 2 条（两种偏移各一条），实际 %d：%v", len(items), items)
 	}
 }
+
+// 「稍后提醒」之后，今天 / 计划两个视图要跟着**生效时间**走。
+//
+// 2026-10-10 实测到的坑：一条今天 00:00 到期、被稍后到明天 00:34 的条目仍留在今天页，
+// 而列表行显示的时间与按天分卡片的卡片头都是「明天」—— 同一个页面上自相矛盾。
+// 现在今天页看 COALESCE(snoozed_until, due_at)，计划页的预设判断也用它。
+func TestTodayViewFollowsSnooze(t *testing.T) {
+	withShanghaiLocal(t)
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const userID = 124
+	list, err := ensureDefaultList(appDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loc := shanghai()
+	now := time.Now().In(loc)
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+
+	// 今天早些时候到期（已经过了），但被「稍后提醒」到明天 00:30。
+	due := midnight.Add(-6 * time.Hour)
+	snoozed := midnight.AddDate(0, 0, 1).Add(30 * time.Minute)
+	created, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "稍后到明天", ListID: list.ID, DueAt: &due, RepeatRule: "none",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := appDB.Model(&Reminder{}).Where("id = ?", created.ID).
+		Update("snoozed_until", snoozed).Error; err != nil {
+		t.Fatal(err)
+	}
+	// 对照：今天到期、没稍后的
+	plainDue := midnight.Add(23 * time.Hour)
+	if _, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "今天正常", ListID: list.ID, DueAt: &plainDue, RepeatRule: "none",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	today, err := listReminders(appDB, userID, "today", "", nil, false, "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, r := range today {
+		got[r.Title] = true
+	}
+	if got["稍后到明天"] {
+		t.Errorf("稍后到明天的条目不该留在今天页：%v", titlesOf(today))
+	}
+	if !got["今天正常"] {
+		t.Errorf("今天页少了没稍后的那条：%v", titlesOf(today))
+	}
+
+	planned, err := listReminders(appDB, userID, "planned", "", nil, false, "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plannedTitles := map[string]bool{}
+	for _, r := range planned {
+		plannedTitles[r.Title] = true
+	}
+	if !plannedTitles["稍后到明天"] {
+		t.Errorf("稍后到明天的条目该出现在计划页（生效时间在明天）：%v", titlesOf(planned))
+	}
+}

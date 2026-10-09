@@ -550,12 +550,19 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 	monthStartOfNow := monthEndOfNow.AddDate(0, -1, 0)
 	// 时间比较一律走 tsUTC()：SQLite 里时间是带偏移的文本，直接比会按字符串序
 	// 错位（说明见 sql_time.go）。
-	preset := "(repeat_rule <> 'none' OR start_at IS NOT NULL OR (due_at IS NOT NULL AND " + tsUTC("due_at") + " >= datetime(?)))"
+	//
+	// 「生效时间」= COALESCE(snoozed_until, due_at)：点过「稍后提醒」的条目，时间已经
+	// 挪到稍后那一刻（行里显示的、按天分卡片用的都是这个时间）。今天 / 计划两个视图
+	// 必须用同一个口径，否则会出现「今天页里冒出一张『明天』的卡片」——2026-10-10 实测：
+	// 一条今天 00:00 到期、被稍后到明天 00:34 的条目还留在今天页，卡片头却写着「明天」。
+	effectiveDue := "COALESCE(snoozed_until, due_at)"
+	preset := "(repeat_rule <> 'none' OR start_at IS NOT NULL OR (due_at IS NOT NULL AND " + tsUTC(effectiveDue) + " >= datetime(?)))"
 	switch view {
 	case "today":
-		// 今天页：今天到期的 + 逾期未完成的。逾期靠排序（due_at 升序）自然置顶，
+		// 今天页：生效时间在今天的 + 逾期未完成的。逾期靠排序（due_at 升序）自然置顶，
 		// 前端再打个「逾期」标记（用户要求：今天页只显示今天的信息，逾期的置顶）。
-		q = q.Where(openOnly+"due_at IS NOT NULL AND "+tsUTC("due_at")+" < datetime(?)", sqlTimeArg(endToday))
+		// 「稍后到明天」的条目不在今天页 —— 它已经属于明天了。
+		q = q.Where(openOnly+"due_at IS NOT NULL AND "+tsUTC(effectiveDue)+" < datetime(?)", sqlTimeArg(endToday))
 	case "planned":
 		// 计划页＝「预设信息」：有循环规则的、有时间段（计划页建的就是这种）、
 		// 或者排在明天及以后的任务。今天页里那些「就今天办」的普通任务不会在这里
