@@ -72,9 +72,9 @@
               </p>
             </div>
           </div>
-          <!-- 卡号单独一行、靠右下（原来是持卡人的位置）：位置换一下之后卡号不再跟卡名抢宽度，
-               窄屏也能完整显示尾号（用户要求「卡号和持卡人交换位置」）。 -->
-          <p class="relative mt-2.5 text-right font-mono text-[13px] leading-5 tracking-[.04em] opacity-90 sm:text-[14px] sm:tracking-[.12em]" data-card-number>
+          <!-- 卡号单独一行、**左对齐**（用户要求）：位置换一下之后卡号不再跟卡名抢宽度，
+               窄屏也能完整显示尾号；左对齐是为了跟卡名/持卡人那一列对齐。 -->
+          <p class="relative mt-2.5 text-left font-mono text-[13px] leading-5 tracking-[.04em] opacity-90 sm:text-[14px] sm:tracking-[.12em]" data-card-number>
             {{ maskNo(card.no) }}
           </p>
           <p class="relative mt-2 text-[11px] opacity-80">

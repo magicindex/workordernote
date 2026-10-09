@@ -19,4 +19,7 @@ export const SK = {
   // 本标签页的客户端标识（sessionStorage，一个标签页一个）：随请求与 SSE 连接
   // 一起发给服务端，服务端广播数据变更时据此跳过发起者自己。同样必须带前缀。
   clientId: `${P}client_id`,
+  // 「记住密码」：勾上之后把账号密码存在**本机浏览器**里，下次打开登录页自动填好。
+  // 只做 base64 混淆（不是加密）——这是给自建 NAS 的便利功能，明文只落在用户自己的设备上。
+  rememberedLogin: `${P}remembered_login`,
 } as const

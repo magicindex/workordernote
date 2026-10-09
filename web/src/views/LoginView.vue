@@ -29,7 +29,7 @@
           data-remember
         />
         <span>
-          记住登录
+          记住密码
           <span class="text-xs text-white/45">{{ rememberHint }}</span>
         </span>
       </label>
@@ -128,7 +128,11 @@ const password = ref('')
 // 天数/小时数由后台「系统配置 → 访问控制」决定，这里只显示出来让用户心里有数。
 const remember = ref(true)
 const rememberDays = ref(7)
-const rememberHint = computed(() => (remember.value ? `（${rememberDays.value} 天内不用再登录）` : '（关闭浏览器就要重新登录）'))
+// 勾上「记住密码」：① 登录态记 ${rememberDays} 天（后端配置）② 账号密码存在本机浏览器里，
+// 下次打开登录页自动填好 —— 用户反馈「记住登录没有效果」，就把「记住密码」做实。
+const rememberHint = computed(() => (remember.value
+  ? `（${rememberDays.value} 天内不用再登录；账号密码也存在本机浏览器里）`
+  : '（关闭浏览器就要重新登录）'))
 const loading = ref(false)
 const errorMsg = ref('')
 const fnosBindingRequired = ref(false)
@@ -154,6 +158,25 @@ function clearFnOSTicket() {
 }
 
 
+/** 记住的账号密码：只做 base64 混淆，明文仅存在本机浏览器里。 */
+function saveRememberedLogin(user: string, pass: string) {
+  try {
+    localStorage.setItem(SK.rememberedLogin, btoa(unescape(encodeURIComponent(JSON.stringify({ u: user, p: pass })))))
+  } catch { /* 隐私模式等写不进去，忽略 */ }
+}
+function clearRememberedLogin() {
+  try { localStorage.removeItem(SK.rememberedLogin) } catch { /* 忽略 */ }
+}
+function loadRememberedLogin(): { u: string; p: string } | null {
+  try {
+    const raw = localStorage.getItem(SK.rememberedLogin)
+    if (!raw) return null
+    const parsed = JSON.parse(decodeURIComponent(escape(atob(raw))))
+    if (parsed && typeof parsed.u === 'string' && typeof parsed.p === 'string') return parsed
+  } catch { /* 解不出来就当没有 */ }
+  return null
+}
+
 async function handleLogin() {
   loading.value = true
   errorMsg.value = ''
@@ -165,6 +188,9 @@ async function handleLogin() {
       if (fnosBindingRequired.value) clearFnOSTicket()
       authStore.setToken(res.data.data.token, remember.value)
       authStore.setUser(res.data.data.user)
+      // 「记住密码」：勾上就存，取消勾选就清掉（下次不再预填）
+      if (remember.value) saveRememberedLogin(username.value.trim(), password.value)
+      else clearRememberedLogin()
       // 重新拉一次启动引导：init() 在登录页那次是「未登录」跑的，个人偏好
       // （信用卡栏目开关等）不会回填，侧栏会少东西（用户报过的初次加载 bug）。
       await authStore.reloadBootstrap()
@@ -313,6 +339,13 @@ async function confirmFnOSLogin() {
 }
 
 onMounted(async () => {
+  // 记住密码：打开登录页就把上次记住的账号密码填好（只存本机浏览器）
+  const saved = loadRememberedLogin()
+  if (saved) {
+    username.value = saved.u
+    password.value = saved.p
+    remember.value = true
+  }
   try {
     const res = await getPublicConfigs()
     const days = Number(res.data?.data?.login_remember_days)
