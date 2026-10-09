@@ -4,6 +4,7 @@
       <div
         v-if="visible"
         class="fixed top-4 right-4 z-[100] max-w-sm w-full"
+        data-toast
       >
         <div
           :class="[

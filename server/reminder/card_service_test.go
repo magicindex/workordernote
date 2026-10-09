@@ -153,6 +153,10 @@ func TestGenerateCardPlanWithAdvance(t *testing.T) {
 func TestCardStatementPayFlow(t *testing.T) {
 	cleanup := testDB(t)
 	defer cleanup()
+	// time.Local 也要是上海：parsePeriodDates / retractCardPayment 用的是 time.Local
+	// （生产容器 TZ=Asia/Shanghai），只把 loc 传给 generateCardPlan 的话两边会差 8 小时
+	// —— 以前字符串比较「碰巧」能对上，认偏移之后就把这条对不上了。
+	withShanghaiLocal(t)
 
 	loc := cardTestLoc(t)
 	list, err := ensureDefaultList(appDB, 92)

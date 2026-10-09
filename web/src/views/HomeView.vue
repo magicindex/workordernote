@@ -149,13 +149,28 @@
           </div>
 
           <Transition name="expand">
-            <div v-if="quickExpanded && quick.kind !== 'note'" class="mt-3 grid gap-2.5 rounded-2xl bg-muted/65 p-3 sm:mt-4 sm:grid-cols-2 sm:gap-3 sm:p-4 lg:grid-cols-4">
+            <div
+              v-if="quickExpanded && quick.kind !== 'note'"
+              class="quick-panel flow-frame flow-glow relative mt-3 grid gap-2.5 rounded-2xl bg-muted/65 p-3 sm:mt-4 sm:grid-cols-2 sm:gap-3 sm:p-4 lg:grid-cols-4"
+              data-quick-panel
+            >
               <div class="field-label relative">
                 日期时间
-                <button ref="quickDateAnchor" type="button" class="compact-input mt-1.5 flex h-9 w-full items-center justify-between px-3 text-left text-xs font-medium" :class="{ '!border-brand-500/50': quickDateOpen }" @click="quickDateOpen = !quickDateOpen">
-                  <span :class="{ 'text-muted-foreground/60': !quick.due_at }">{{ quick.due_at ? formatFullDue(quick.due_at) : '选择日期' }}</span>
-                  <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-muted-foreground" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2" stroke-width="1.8"/><path d="M8 3v4m8-4v4M3 10h18" stroke-width="1.8" stroke-linecap="round"/></svg>
-                </button>
+                <div class="mt-1.5 flex items-stretch gap-1.5">
+                  <button ref="quickDateAnchor" type="button" class="compact-input flex h-9 min-w-0 flex-1 items-center justify-between px-3 text-left text-xs font-medium" :class="{ '!border-brand-500/50': quickDateOpen }" @click="quickDateOpen = !quickDateOpen">
+                    <span :class="{ 'text-muted-foreground/60': !quick.due_at }">{{ quick.due_at ? formatFullDue(quick.due_at) : '选择日期' }}</span>
+                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-muted-foreground" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2" stroke-width="1.8"/><path d="M8 3v4m8-4v4M3 10h18" stroke-width="1.8" stroke-linecap="round"/></svg>
+                  </button>
+                  <!-- 「不要日期」是明确动作：不再靠「再点一次今天」这种看不见的开关（见 setPreset 的注释） -->
+                  <button
+                    v-if="quick.due_at"
+                    type="button"
+                    class="quick-chip !h-9 shrink-0"
+                    title="清空日期：这条会变成「无日期」，只在「全部」里出现"
+                    data-quick-clear-due
+                    @click="clearQuickDue"
+                  >清空</button>
+                </div>
                 <LunarDatePicker v-if="quickDateOpen" v-model="quickDatePicked" with-time :anchor-el="quickDateAnchor" @commit="quickDateOpen = false" />
               </div>
               <label class="field-label">重复<select v-model="quick.repeat_rule" class="compact-input"><option value="none">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option></select></label>
@@ -163,6 +178,16 @@
               <label class="field-label">按农历循环<select v-model="quick.calendar" class="compact-input" @change="upgradeCalendarToYearly(quick)"><option value="solar">公历</option><option value="lunar">农历</option></select></label>
               <label class="field-label">过期提醒频率<RepeatNotifySelect :model-value="quick.repeat_notify_minutes ?? 0" @update:model-value="quick.repeat_notify_minutes = $event" /></label>
               <p v-if="quick.calendar === 'lunar'" class="text-[10px] leading-4 text-muted-foreground sm:col-span-2 lg:col-span-4">已按农历循环：提醒按所选日期的农历月/日重复，腊月三十遇小年自动改为除夕当天，闰月日期遇无闰月年份自动用对应平月。</p>
+              <!-- 无日期提示：保存前就让用户看到「这条不会进今天/计划」，别再出现
+                   「明明保存了、今天页却没有」这种摸不着头脑的情况（0.15.4 的 bug）。 -->
+              <p
+                v-if="!quick.due_at"
+                class="rounded-xl bg-amber-500/12 px-3 py-2 text-[11px] font-semibold leading-4 text-amber-600 sm:col-span-2 lg:col-span-4 dark:text-amber-400"
+                data-quick-undated-hint
+              >
+                这条没有日期：不会出现在「今天 / 计划」里，只在「全部」里显示为「无日期」。
+                <button type="button" class="underline underline-offset-2" @click="setPreset('today')">设为今天</button>
+              </p>
               <div class="sm:col-span-2 lg:col-span-4">
                 <p class="field-label mb-2">通知方式</p>
                 <div class="flex flex-wrap gap-2">
@@ -342,52 +367,69 @@
         </article>
       </section>
 
-      <section v-else-if="view !== 'completed' && items.length" class="space-y-2">
+      <!-- 按天分卡片（用户要求「同一天的放同一个卡片」）：一天一张卡，卡的标题行是
+           日期与条数，卡内是那一天的条目。分组顺序沿用接口给的顺序（今天页的
+           「逾期置顶」、记事本的「新在前」都不打乱），不另外排序。 -->
+      <section v-else-if="view !== 'completed' && items.length" class="space-y-3">
         <article
-          v-for="item in items"
-          :key="item.id"
-          class="reminder-row group"
-          :class="{ 'reminder-completed': !!item.completed_at && item.kind !== 'note', 'reminder-overdue': isOverdue(item) }"
+          v-for="group in dayGroups"
+          :key="group.key"
+          class="day-card"
+          :data-day-group="group.key"
         >
-          <button
-            class="complete-button"
-            :class="{ 'cursor-default': item.kind === 'note' }"
-            :disabled="item.kind === 'note'"
-            :aria-label="item.kind === 'note' ? '记事，无需完成' : item.completed_at ? '恢复提醒' : '完成提醒'"
-            @click.stop="toggleComplete(item)"
-          >
-            <svg v-if="item.completed_at" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-          <button class="min-w-0 flex-1 text-left" @click="editItem(item)">
-            <div class="flex items-center gap-2">
-              <!-- 任务标题用所属清单的颜色：侧栏圆点、这里的标题、日历色块三处同色。
-                   颜色在侧栏「编辑清单」里改，改完会广播数据变更，本页与日历立即刷新。 -->
-              <h3 class="truncate text-sm font-bold sm:text-[15px]" :style="{ color: listColor(item.list_color) }">{{ item.title }}</h3>
-              <span v-if="item.kind === 'note'" class="tiny-badge">记事</span>
-              <span v-if="item.priority" class="priority-mark" :class="`priority-${item.priority}`">{{ '!'.repeat(item.priority) }}</span>
-              <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ item.calendar === 'lunar' ? `农历${ruleLabel(item.repeat_rule)}` : ruleLabel(item.repeat_rule) }}</span>
-              <span v-if="item.repeat_notify_minutes" class="tiny-badge">过期提醒</span>
-            </div>
-            <p v-if="item.notes" class="mt-0.5 truncate text-xs text-muted-foreground sm:mt-1">{{ item.notes }}</p>
-            <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground sm:mt-2">
-              <span class="inline-flex items-center gap-1" :class="{ 'text-rose-500': isOverdue(item) }">
-                <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7v5l3 2" stroke-width="1.8" stroke-linecap="round"/></svg>
-                {{ dueLabel(item) }}
-              </span>
-              <span v-if="isOverdue(item)" class="tiny-badge !text-rose-500">已逾期</span>
-              <span class="h-1 w-1 rounded-full bg-border"></span>
-              <span>{{ item.list_name }}</span>
-              <span v-if="item.channels?.length" class="h-1 w-1 rounded-full bg-border"></span>
-              <span v-if="item.channels?.length">{{ item.channels.map(channelName).join(' · ') }}</span>
-            </div>
-          </button>
-          <div class="row-actions">
-            <button v-if="!item.completed_at && item.due_at && item.kind !== 'note'" class="row-action" title="稍后提醒" @click="snooze(item, 10)">
-              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 8v4l3 2M5 3l-2 3m16-3 2 3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z" stroke-width="1.8" stroke-linecap="round"/></svg>
-            </button>
-            <button class="row-action hover:!text-rose-500" title="删除" @click="removeItem(item)">
-              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
+          <header class="day-card-head">
+            <span class="day-card-label">{{ group.label }}</span>
+            <span class="day-card-weekday" v-if="group.weekday">{{ group.weekday }}</span>
+            <span class="day-card-count">{{ group.items.length }} 条</span>
+          </header>
+          <div class="day-card-body">
+            <article
+              v-for="item in group.items"
+              :key="item.id"
+              class="reminder-row group"
+              :class="{ 'reminder-completed': !!item.completed_at && item.kind !== 'note', 'reminder-overdue': isOverdue(item) }"
+            >
+              <button
+                class="complete-button"
+                :class="{ 'cursor-default': item.kind === 'note' }"
+                :disabled="item.kind === 'note'"
+                :aria-label="item.kind === 'note' ? '记事，无需完成' : item.completed_at ? '恢复提醒' : '完成提醒'"
+                @click.stop="toggleComplete(item)"
+              >
+                <svg v-if="item.completed_at" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button class="min-w-0 flex-1 text-left" @click="editItem(item)">
+                <div class="flex items-center gap-2">
+                  <!-- 任务标题用所属清单的颜色：侧栏圆点、这里的标题、日历色块三处同色。
+                       颜色在侧栏「编辑清单」里改，改完会广播数据变更，本页与日历立即刷新。 -->
+                  <h3 class="truncate text-sm font-bold sm:text-[15px]" :style="{ color: listColor(item.list_color) }">{{ item.title }}</h3>
+                  <span v-if="item.kind === 'note'" class="tiny-badge">记事</span>
+                  <span v-if="item.priority" class="priority-mark" :class="`priority-${item.priority}`">{{ '!'.repeat(item.priority) }}</span>
+                  <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ item.calendar === 'lunar' ? `农历${ruleLabel(item.repeat_rule)}` : ruleLabel(item.repeat_rule) }}</span>
+                  <span v-if="item.repeat_notify_minutes" class="tiny-badge">过期提醒</span>
+                </div>
+                <p v-if="item.notes" class="mt-0.5 truncate text-xs text-muted-foreground sm:mt-1">{{ item.notes }}</p>
+                <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground sm:mt-2">
+                  <span class="inline-flex items-center gap-1" :class="{ 'text-rose-500': isOverdue(item) }">
+                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7v5l3 2" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    {{ dueLabel(item) }}
+                  </span>
+                  <span v-if="isOverdue(item)" class="tiny-badge !text-rose-500">已逾期</span>
+                  <span class="h-1 w-1 rounded-full bg-border"></span>
+                  <span>{{ item.list_name }}</span>
+                  <span v-if="item.channels?.length" class="h-1 w-1 rounded-full bg-border"></span>
+                  <span v-if="item.channels?.length">{{ item.channels.map(channelName).join(' · ') }}</span>
+                </div>
+              </button>
+              <div class="row-actions">
+                <button v-if="!item.completed_at && item.due_at && item.kind !== 'note'" class="row-action" title="稍后提醒" @click="snooze(item, 10)">
+                  <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 8v4l3 2M5 3l-2 3m16-3 2 3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z" stroke-width="1.8" stroke-linecap="round"/></svg>
+                </button>
+                <button class="row-action hover:!text-rose-500" title="删除" @click="removeItem(item)">
+                  <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </div>
+            </article>
           </div>
         </article>
       </section>
@@ -1015,18 +1057,25 @@ function removeCompleted(entry: CompletedItem) {
   if (!entry.reminder_exists) return
   removeItem({ id: entry.reminder_id, title: entry.title })
 }
+// 「今天 / 明天 / 本周末」是**选中**语义，不是开关：再点一次不该把日期清掉。
+//
+// 0.15.4 上线当天踩到的真 bug：这三个芯片原来是 toggle，用户在「今天」页点了
+// 已经亮着的「今天」，`due_at` 被清成 null，任务就存成「无日期」——今天页里
+// 找不到，去「全部」看只显示「无日期」。用户报的正是这一条。
+// 要「不要日期」请用清空按钮（clearQuickDue），芯片永远只负责选中。
 function setPreset(kind: string) {
-  preset.value = preset.value === kind ? '' : kind
-  if (!preset.value) {
-    quick.due_at = null
-    return
-  }
+  preset.value = kind
   const d = new Date()
   d.setSeconds(0, 0)
   if (kind === 'today') d.setHours(20, 0)
   if (kind === 'tomorrow') { d.setDate(d.getDate() + 1); d.setHours(9, 0) }
   if (kind === 'weekend') { const add = (6 - d.getDay() + 7) % 7 || 7; d.setDate(d.getDate() + add); d.setHours(9, 0) }
-  quick.due_at = d.toISOString()
+  quick.due_at = toLocalIso(d)
+}
+/** 明确「这条不要日期」。只有这里会把日期清空，并且立刻给出可见提示。 */
+function clearQuickDue() {
+  preset.value = ''
+  quick.due_at = null
 }
 function toggleQuickChannel(channel: ReminderChannel) {
   quickChannelsTouched = true
@@ -1128,8 +1177,15 @@ function formatDue(value: string | null | undefined) {
   const day = sameDay ? '今天' : d.toDateString() === tomorrow.toDateString() ? '明天' : new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(d)
   return `${day} ${d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}`
 }
-/** 列表行里的时间：有计划时间段就显示「开始 – 结束」，否则沿用原来的相对日期。 */
+/** 列表行里的时间：记事显示**记录时间**，有计划时间段就显示「开始 – 结束」，
+    否则沿用原来的相对日期。
+    记事没有到期时间，原来一律显示「无日期」——记事本里每条都看不出是哪天记的
+    （用户要求补上）。记事创建即完成，completed_at 就是它的记录时刻。 */
 function dueLabel(item: ReminderItem) {
+  if (item.kind === 'note') {
+    const stamp = item.completed_at || item.created_at
+    return stamp ? `记于 ${formatDue(stamp)}` : '无日期'
+  }
   if (item.start_at) {
     const startText = formatDue(item.snoozed_until || item.start_at)
     if (!item.end_at) return startText
@@ -1141,6 +1197,51 @@ function dueLabel(item: ReminderItem) {
   }
   return item.due_at ? formatDue(item.snoozed_until || item.due_at) : '无日期'
 }
+
+/** 一条提醒「算哪一天」：有计划时间段看开始时间，否则看到期时间；记事看记录时间。
+    都取不到就归到「无日期」那一组（永远排在最后）。 */
+function dayKeyOf(item: ReminderItem): string {
+  const stamp = item.kind === 'note'
+    ? (item.completed_at || item.created_at)
+    : (item.snoozed_until || item.start_at || item.due_at)
+  if (!stamp) return 'undated'
+  const d = new Date(stamp)
+  if (Number.isNaN(d.getTime())) return 'undated'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+const WEEKDAY_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+function dayLabelOf(key: string): { label: string; weekday: string } {
+  if (key === 'undated') return { label: '无日期', weekday: '' }
+  const [y, m, d] = key.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  const now = new Date()
+  const midnight = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const diffDays = Math.round((midnight(date) - midnight(now)) / 86400000)
+  const relative = diffDays === 0 ? '今天' : diffDays === 1 ? '明天' : diffDays === -1 ? '昨天' : ''
+  const base = y === now.getFullYear() ? `${m}月${d}日` : `${y}年${m}月${d}日`
+  return { label: relative ? `${relative} · ${base}` : base, weekday: WEEKDAY_CN[date.getDay()] }
+}
+
+/** 按天分组：同一天的条目放进同一张卡片（用户要求：「同一天的放同一个卡片」）。
+    顺序沿用 items 的既有顺序（接口已按各视图的口径排好），只分组、不重排。 */
+const dayGroups = computed(() => {
+  const groups: { key: string; label: string; weekday: string; items: ReminderItem[] }[] = []
+  const byKey = new Map<string, (typeof groups)[number]>()
+  for (const item of items.value) {
+    const key = dayKeyOf(item)
+    let group = byKey.get(key)
+    if (!group) {
+      group = { key, ...dayLabelOf(key), items: [] }
+      byKey.set(key, group)
+      groups.push(group)
+    }
+    group.items.push(item)
+  }
+  // 「无日期」永远排最后：它不该插在时间线中间。
+  return [...groups.filter(g => g.key !== 'undated'), ...groups.filter(g => g.key === 'undated')]
+})
 function channelName(ch: ReminderChannel) { return ({ inapp: '站内', email: '邮件', sms: '短信', feishu: '飞书', qq: 'QQ', dingtalk: '钉钉' } as Record<string, string>)[ch] || ch }
 function ruleLabel(rule: string) { return ({ daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年' } as Record<string, string>)[rule] || '循环' }
 // 清单色表在 utils/list-colors.ts（侧栏/筛选/标题/日历共用一份，改一处不会走样）。
@@ -1202,6 +1303,15 @@ function onShortcut(e: KeyboardEvent) {
 .quick-card { @apply relative overflow-hidden rounded-[24px] border border-border/70 bg-surface/90 p-3 shadow-[0_20px_50px_-30px_rgba(15,23,42,.35)] backdrop-blur-xl transition-all sm:p-5; }
 .quick-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: linear-gradient(#3b82f6, #6366f1); opacity: .75; }
 .field-label { @apply block text-[11px] font-bold text-muted-foreground; }
+/* 按天分卡片：一天一张卡（用户要求「同一天的放同一个卡片」）。
+   行自己仍是一张张小卡（.reminder-row 的形状、悬停、逾期红条都不动），
+   外面这层负责「这一天」的标题与分组底色。 */
+.day-card { @apply rounded-[26px] border border-border/70 bg-surface/55 p-2 shadow-[0_18px_44px_-34px_rgba(15,23,42,.5)] backdrop-blur-sm sm:p-2.5; }
+.day-card-head { @apply flex items-center gap-2 px-2 pb-1.5 pt-1; }
+.day-card-label { @apply text-[13px] font-extrabold tracking-tight text-foreground sm:text-sm; }
+.day-card-weekday { @apply text-[11px] font-bold text-muted-foreground; }
+.day-card-count { @apply ml-auto text-[11px] font-bold text-muted-foreground; }
+.day-card-body { @apply space-y-2; }
 .reminder-row { @apply relative flex min-h-0 items-center gap-2.5 overflow-hidden rounded-2xl border border-border/65 bg-surface/85 px-3 py-2.5 shadow-[0_6px_24px_-20px_rgba(15,23,42,.5)] backdrop-blur transition-all hover:-translate-y-0.5 hover:border-brand-500/20 hover:shadow-[0_16px_36px_-26px_rgba(15,23,42,.65)] sm:gap-3 sm:px-4 sm:py-3.5; content-visibility: auto; contain-intrinsic-size: 64px; }
 .reminder-row::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 2px; background: transparent; }
 .reminder-overdue::before { background: #f43f5e; }

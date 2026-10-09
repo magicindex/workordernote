@@ -451,7 +451,7 @@ func handleItemMonths(db *gorm.DB) gin.HandlerFunc {
 		var oldest, newest Reminder
 		if err := db.Select("due_at, completed_at, created_at").
 			Where("user_id = ? AND deleted_at IS NULL", userID).
-			Order(effective + " ASC").First(&oldest).Error; err != nil {
+			Order(tsUTC(effective) + " ASC").First(&oldest).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				response.Success(c, gin.H{"first": "", "last": ""})
 				return
@@ -461,7 +461,7 @@ func handleItemMonths(db *gorm.DB) gin.HandlerFunc {
 		}
 		if err := db.Select("due_at, completed_at, created_at").
 			Where("user_id = ? AND deleted_at IS NULL", userID).
-			Order(effective + " DESC").First(&newest).Error; err != nil {
+			Order(tsUTC(effective) + " DESC").First(&newest).Error; err != nil {
 			response.ErrorInternal(c, "读取月份范围失败")
 			return
 		}
@@ -801,20 +801,27 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		hiddenCards := hiddenCardListIDs(db, userID)
 		completedExpr := `COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
 					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND deleted_at IS NULL)`
-		selectArgs := []interface{}{endToday, userID, now}
+		// 参数顺序必须与 SQL 里的占位符顺序一致：today → completed 子查询 → overdue。
+		// 口径与改动前一致：今天 = due_at < 今天 24 点（含逾期），逾期 = due_at < 现在。
+		// 时间比较一律走 tsUTC() 归一化（SQLite 里时间是带偏移的文本，直接比会按
+		// 字符串序错位，见 sql_time.go）。
+		selectArgs := []interface{}{sqlTimeArg(endToday), userID, sqlTimeArg(now)}
 		if len(hiddenCards) > 0 {
 			// 栏目关掉时，它那些卡片提醒的完成记录也不该再计入角标。
 			completedExpr = `COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
 					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND deleted_at IS NULL AND reminder_id NOT IN (SELECT id FROM reminders WHERE list_id IN ?))`
-			selectArgs = []interface{}{endToday, userID, hiddenCards, now}
+			selectArgs = []interface{}{sqlTimeArg(endToday), userID, hiddenCards, sqlTimeArg(now)}
 		}
+		todayExpr := "COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND " +
+			tsUTC("due_at") + " < datetime(?) THEN 1 ELSE 0 END), 0) AS today"
+		overdueExpr := "COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND " +
+			tsUTC("due_at") + " < datetime(?) THEN 1 ELSE 0 END), 0) AS overdue"
 		q := db.Model(&Reminder{}).
-			Select(`
-				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND due_at < ? THEN 1 ELSE 0 END), 0) AS today,
+			Select(todayExpr+`,
 				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS planned,
 				COALESCE(SUM(CASE WHEN completed_at IS NULL THEN 1 ELSE 0 END), 0) AS open_total,
 				`+completedExpr+` AS completed,
-				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND due_at < ? THEN 1 ELSE 0 END), 0) AS overdue`, selectArgs...).
+				`+overdueExpr, selectArgs...).
 			Where("user_id = ? AND deleted_at IS NULL", userID)
 		q = excludeHiddenCardReminders(q, hiddenCards)
 		if err := q.Scan(&counts).Error; err != nil {

@@ -548,21 +548,24 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 	// 滚下去，页面就不再是「计划」了（用户要求：全部应包含本月已完成项目）。
 	monthEndOfNow := time.Date(localNow.Year(), localNow.Month(), 1, 0, 0, 0, 0, loc).AddDate(0, 1, 0)
 	monthStartOfNow := monthEndOfNow.AddDate(0, -1, 0)
-	preset := "(repeat_rule <> 'none' OR start_at IS NOT NULL OR (due_at IS NOT NULL AND due_at >= ?))"
+	// 时间比较一律走 tsUTC()：SQLite 里时间是带偏移的文本，直接比会按字符串序
+	// 错位（说明见 sql_time.go）。
+	preset := "(repeat_rule <> 'none' OR start_at IS NOT NULL OR (due_at IS NOT NULL AND " + tsUTC("due_at") + " >= datetime(?)))"
 	switch view {
 	case "today":
 		// 今天页：今天到期的 + 逾期未完成的。逾期靠排序（due_at 升序）自然置顶，
 		// 前端再打个「逾期」标记（用户要求：今天页只显示今天的信息，逾期的置顶）。
-		q = q.Where(openOnly+"due_at IS NOT NULL AND due_at < ?", endToday)
+		q = q.Where(openOnly+"due_at IS NOT NULL AND "+tsUTC("due_at")+" < datetime(?)", sqlTimeArg(endToday))
 	case "planned":
 		// 计划页＝「预设信息」：有循环规则的、有时间段（计划页建的就是这种）、
 		// 或者排在明天及以后的任务。今天页里那些「就今天办」的普通任务不会在这里
 		// 重复出现；记事没有排期（保存时就被清空），天然不属于计划页。
 		if includeCompleted {
-			q = q.Where("(completed_at IS NULL AND "+preset+") OR (completed_at IS NOT NULL AND completed_at >= ? AND completed_at < ?)",
-				endToday, monthStartOfNow, monthEndOfNow)
+			q = q.Where("(completed_at IS NULL AND "+preset+") OR (completed_at IS NOT NULL AND "+
+				tsUTC("completed_at")+" >= datetime(?) AND "+tsUTC("completed_at")+" < datetime(?))",
+				sqlTimeArg(endToday), sqlTimeArg(monthStartOfNow), sqlTimeArg(monthEndOfNow))
 		} else {
-			q = q.Where(openOnly+preset, endToday)
+			q = q.Where(openOnly+preset, sqlTimeArg(endToday))
 		}
 	case "completed":
 		q = q.Where("completed_at IS NOT NULL")
@@ -574,10 +577,10 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 	// 时间窗口（from/to）：归月/归日口径与原来一致——有到期时间按 due_at，
 	// 记事没有到期时间按它的记录时间 completed_at，最后兜底 created_at。
 	if window.start != nil {
-		q = q.Where("COALESCE(due_at, completed_at, created_at) >= ?", *window.start)
+		q = q.Where(tsUTC("COALESCE(due_at, completed_at, created_at)")+" >= datetime(?)", sqlTimeArg(*window.start))
 	}
 	if window.end != nil {
-		q = q.Where("COALESCE(due_at, completed_at, created_at) < ?", *window.end)
+		q = q.Where(tsUTC("COALESCE(due_at, completed_at, created_at)")+" < datetime(?)", sqlTimeArg(*window.end))
 	}
 	if len(listIDs) > 0 {
 		q = q.Where("list_id IN ?", listIDs)
@@ -587,7 +590,7 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 		q = q.Where("(title LIKE ? OR notes LIKE ?)", like, like)
 	}
 	// 「全部」视图里已完成的行排到最后：先看还要做的事，再回头翻已做完的。
-	order := "CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, priority DESC, position ASC, id DESC"
+	order := "CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, " + tsUTC("due_at") + " ASC, priority DESC, position ASC, id DESC"
 	if includeCompleted && view != "completed" {
 		order = "CASE WHEN completed_at IS NULL THEN 0 ELSE 1 END, " + order
 	}
@@ -595,7 +598,7 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 	// 而记事本是流水账——最新的要排在最上面。按生效时间倒序（记事取 completed_at，
 	// 也就等于创建时间）。
 	if sort == "created_desc" {
-		order = "COALESCE(due_at, completed_at, created_at) DESC, id DESC"
+		order = tsUTC("COALESCE(due_at, completed_at, created_at)") + " DESC, id DESC"
 	}
 	if err := q.Order(order).Find(&rows).Error; err != nil {
 		return nil, err
@@ -1013,15 +1016,15 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 	hq := db.Where("user_id = ?", userID)
 	hq = excludeHiddenCardCompletions(hq, db, hiddenCardListIDs(db, userID))
 	if rng.Start != nil {
-		hq = hq.Where("completed_at >= ?", *rng.Start)
+		hq = hq.Where(tsUTC("completed_at")+" >= datetime(?)", sqlTimeArg(*rng.Start))
 	}
 	if rng.End != nil {
-		hq = hq.Where("completed_at < ?", *rng.End)
+		hq = hq.Where(tsUTC("completed_at")+" < datetime(?)", sqlTimeArg(*rng.End))
 	}
 	if query = strings.TrimSpace(query); query != "" {
 		hq = hq.Where("title_snapshot LIKE ?", "%"+query+"%")
 	}
-	if err := hq.Order("completed_at DESC").Find(&history).Error; err != nil {
+	if err := hq.Order(tsUTC("completed_at") + " DESC").Find(&history).Error; err != nil {
 		return nil, err
 	}
 
@@ -1029,10 +1032,10 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 	rq := db.Where("user_id = ? AND deleted_at IS NULL AND completed_at IS NOT NULL", userID)
 	rq = excludeHiddenCardReminders(rq, hiddenCardListIDs(db, userID))
 	if rng.Start != nil {
-		rq = rq.Where("completed_at >= ?", *rng.Start)
+		rq = rq.Where(tsUTC("completed_at")+" >= datetime(?)", sqlTimeArg(*rng.Start))
 	}
 	if rng.End != nil {
-		rq = rq.Where("completed_at < ?", *rng.End)
+		rq = rq.Where(tsUTC("completed_at")+" < datetime(?)", sqlTimeArg(*rng.End))
 	}
 	if len(listIDs) > 0 {
 		rq = rq.Where("list_id IN ?", listIDs)
@@ -1041,7 +1044,7 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 		like := "%" + query + "%"
 		rq = rq.Where("(title LIKE ? OR notes LIKE ?)", like, like)
 	}
-	if err := rq.Order("completed_at DESC").Find(&rows).Error; err != nil {
+	if err := rq.Order(tsUTC("completed_at") + " DESC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 
@@ -1202,14 +1205,14 @@ func listCalendarItems(db *gorm.DB, userID uint, from, to time.Time, listIDs []u
 	// 记事的 completed_at 一定非空（创建时写入），任务的 due_at 一定非空，
 	// 两个条件互斥，合起来就是「这一天有这条数据」。
 	q := db.Where("user_id = ? AND deleted_at IS NULL AND ("+
-		"(kind = ? AND due_at IS NOT NULL AND due_at >= ? AND due_at < ?) OR "+
-		"(kind = ? AND completed_at IS NOT NULL AND completed_at >= ? AND completed_at < ?))",
-		userID, KindTask, from, to, KindNote, from, to)
+		"(kind = ? AND due_at IS NOT NULL AND "+tsUTC("due_at")+" >= datetime(?) AND "+tsUTC("due_at")+" < datetime(?)) OR "+
+		"(kind = ? AND completed_at IS NOT NULL AND "+tsUTC("completed_at")+" >= datetime(?) AND "+tsUTC("completed_at")+" < datetime(?)))",
+		userID, KindTask, sqlTimeArg(from), sqlTimeArg(to), KindNote, sqlTimeArg(from), sqlTimeArg(to))
 	q = excludeHiddenCardReminders(q, hiddenCardListIDs(db, userID))
 	if len(listIDs) > 0 {
 		q = q.Where("list_id IN ?", listIDs)
 	}
-	if err := q.Order("COALESCE(due_at, completed_at) ASC, id ASC").Find(&rows).Error; err != nil {
+	if err := q.Order(tsUTC("COALESCE(due_at, completed_at)") + " ASC, id ASC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	if len(rows) == 0 {

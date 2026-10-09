@@ -23,7 +23,7 @@
         <!-- Glass card -->
         <div class="card-wrap animate-scale-in">
           <div class="card-glow"></div>
-          <div class="auth-card">
+          <div class="auth-card flow-frame">
             <div class="relative z-10">
               <h2 class="font-display text-[1.75rem] leading-tight font-extrabold tracking-tight text-white">{{ title }}</h2>
               <p v-if="subtitle" class="mt-2 text-sm text-white/50">{{ subtitle }}</p>
@@ -54,12 +54,6 @@ const siteInitial = computed(() => (authStore.siteTitle || 'S').charAt(0).toUppe
 </script>
 
 <style scoped>
-@property --bd-angle {
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: false;
-}
-
 .auth-root {
   position: relative;
   min-height: 100vh;
@@ -181,32 +175,8 @@ const siteInitial = computed(() => (authStore.siteTitle || 'S').charAt(0).toUppe
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: hidden;
 }
-/* rotating conic flow border */
-.auth-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: conic-gradient(
-    from var(--bd-angle),
-    transparent 0%,
-    rgba(99, 102, 241, 0) 18%,
-    #6366f1 32%,
-    #a855f7 44%,
-    #22d3ee 56%,
-    rgba(34, 211, 238, 0) 70%,
-    transparent 100%
-  );
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation: border-rotate 7s linear infinite;
-  pointer-events: none;
-}
-@keyframes border-rotate {
-  to { --bd-angle: 360deg; }
-}
+/* 流光边框（旋转的 conic 光带）用的是全局 .flow-frame —— 与「新建任务窗口」
+   同一份实现，见 src/style.css。这里只保留卡片自身的玻璃质感。 */
 
 /* logo */
 .logo-badge {
@@ -251,7 +221,7 @@ const siteInitial = computed(() => (authStore.siteTitle || 'S').charAt(0).toUppe
     -webkit-backdrop-filter: none;
   }
 
-  .auth-card::before {
+  .auth-card.flow-frame::before {
     display: none;
   }
 
@@ -263,7 +233,7 @@ const siteInitial = computed(() => (authStore.siteTitle || 'S').charAt(0).toUppe
 
 @media (prefers-reduced-motion: reduce) {
   .aurora { animation: none; }
-  .auth-card::before { animation: none; }
+  .auth-card.flow-frame::before { animation: none; }
   .animate-fade-in, .animate-scale-in { animation: none; }
 }
 
