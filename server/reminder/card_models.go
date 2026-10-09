@@ -16,9 +16,18 @@ const (
 	listTemplateNote    = "notebook"
 )
 
+// normalizeListTemplate 把「系统栏目」的模板名规范化。
+//
+// 必须把**所有**系统栏目都认出来：同步过来的清单如果模板名不被识别，就会退化成
+// 普通清单 —— 对端再按模板查找自己的栏目时会找不到，于是**各自再建一个**，两边都
+// 冒出重复的「记事本」（实测：0.15.0 上线后 201 有 3 个、200 有 4 个记事本）。
 func normalizeListTemplate(t string) string {
-	if strings.EqualFold(strings.TrimSpace(t), listTemplateCard) {
+	trimmed := strings.TrimSpace(t)
+	if strings.EqualFold(trimmed, listTemplateCard) {
 		return listTemplateCard
+	}
+	if strings.EqualFold(trimmed, listTemplateNote) {
+		return listTemplateNote
 	}
 	return listTemplateGeneral
 }

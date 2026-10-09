@@ -324,7 +324,15 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 			if incoming.Deleted {
 				continue
 			}
-			if listID == 0 {
+			if normalizeKind(incoming.Kind) == KindNote {
+				// 记事本栏目是**本机自己的固定栏目**：对端同步过来的记事也归到本机这一栏，
+				// 不跟着对端的清单走（各机的记事本清单 id 不同，跟着走会在本机乱建清单）。
+				bucket, err := ensureNoteBucket(tx, owner.ID)
+				if err != nil {
+					return nil, err
+				}
+				listID = bucket.ID
+			} else if listID == 0 {
 				fallback, err := ensureDefaultList(tx, owner.ID)
 				if err != nil {
 					return nil, err
@@ -399,7 +407,13 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 			}
 			continue
 		}
-		if listID == 0 {
+		if normalizeKind(incoming.Kind) == KindNote {
+			bucket, err := ensureNoteBucket(tx, owner.ID)
+			if err != nil {
+				return nil, err
+			}
+			listID = bucket.ID
+		} else if listID == 0 {
 			fallback, err := ensureDefaultList(tx, owner.ID)
 			if err != nil {
 				return nil, err

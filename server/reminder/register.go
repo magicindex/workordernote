@@ -69,6 +69,34 @@ func init() {
 		},
 	})
 
+	// 0.15.2：把历史上录入的**记事**（kind=note）全部归到「记事本」栏目。
+	// 用户要求「把以前录入的记事本信息也调整到当前栏目中，时间不修改，内容不变」——
+	// 只改 list_id，其余字段（时间、标题、备注、completed_at）一个字都不动。
+	// 每个用户各自建/复用自己的记事本栏目；重复执行是幂等的（已经在里面的不会再动）。
+	database.Upgrades = append(database.Upgrades, database.Upgrade{
+		Version: "0.15.2", Name: "move_notes_into_notebook_bucket",
+		Upgrade: func(db *gorm.DB) error {
+			var userIDs []uint
+			if err := db.Model(&Reminder{}).
+				Where("kind = ? AND deleted_at IS NULL", KindNote).
+				Distinct().Pluck("user_id", &userIDs).Error; err != nil {
+				return err
+			}
+			for _, userID := range userIDs {
+				bucket, err := ensureNoteBucket(db, userID)
+				if err != nil {
+					return err
+				}
+				if err := db.Model(&Reminder{}).
+					Where("user_id = ? AND kind = ? AND deleted_at IS NULL AND list_id <> ?", userID, KindNote, bucket.ID).
+					Update("list_id", bucket.ID).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	})
+
 	database.RegisterModels(
 		&List{}, &Reminder{}, &ReminderChannel{}, &Completion{},
 		// 信用卡：卡片与每期账单（金额/还款状态）

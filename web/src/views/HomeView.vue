@@ -347,7 +347,7 @@
           v-for="item in items"
           :key="item.id"
           class="reminder-row group"
-          :class="{ 'reminder-completed': !!item.completed_at, 'reminder-overdue': isOverdue(item) }"
+          :class="{ 'reminder-completed': !!item.completed_at && item.kind !== 'note', 'reminder-overdue': isOverdue(item) }"
         >
           <button
             class="complete-button"
