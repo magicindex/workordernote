@@ -46,20 +46,28 @@
           <span class="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10"></span>
           <span class="pointer-events-none absolute -bottom-10 -left-4 h-24 w-24 rounded-full bg-black/10"></span>
           <div class="relative flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
-            <div class="flex min-w-0 flex-1 flex-col gap-1">
-              <!-- 银行标志与卡名**各占一整行**（用户要求：「银行卡名称整行换到图标下方」）：
-                   原来是「标志 + 卡名」并排，窄屏时卡名被挤成一列一个字地换行。
-                   现在标志一行（外面这层 data-card-face-logo 仍是「标志块」，用例按它取
-                   logo 的 src 与位置）、卡名一行；卡名整行后用 keep-all 不按字断行，
-                   真放不下才在词内断开。 -->
-              <div class="self-start" data-card-face-logo>
-                <img v-if="logoOf(card)" :src="logoOf(card)" alt="" class="h-6 w-auto max-w-[8.5rem] object-contain sm:h-7" />
-                <svg v-else class="h-6 w-6 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                  <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" stroke-width="1.6" />
-                  <path d="M2.5 10h19M6 13.5h4" stroke-width="1.6" stroke-linecap="round" />
-                </svg>
+            <!-- 左边这一列给一个最小宽度：宽屏一行三张时卡面只有 265px 左右，
+                 标志自己就占 105px，不设下限的话卡名那一列会被压到 0（实测 0px，
+                 于是「VISA」都被拆成一列一个字）。给下限后，右边那列「账单日 / 还款日 /
+                 额度」会按 flex-wrap 折到下面一行，卡名才有地方跟在标志右边。 -->
+            <div class="flex min-w-[11rem] flex-1 flex-col gap-1 sm:min-w-[12rem]">
+              <!-- 银行标志与卡名（用户 2026-10-10 要求）：
+                   ① 空间够时**同一行**，卡名紧跟标志右边；
+                   ② 空间不够、卡名要换行时，换下来的那行**与标志右侧对齐**（挂在标志下）。
+                   做法：两列 grid —— 标志占第 1 列（auto），卡名固定在第 2 列
+                   （minmax(0,1fr)，从标志右边缘 + 间距处开始）。卡名的每一行都在这一列里，
+                   所以换行后自然与标志右侧对齐；不用量标志宽度（各家银行标志宽窄不一）。
+                   minmax(0,1fr) 是关键：不加 0 下限时列宽不会小于内容宽度，窄屏会被顶出去。 -->
+              <div class="card-face-line">
+                <div class="card-face-logo" data-card-face-logo>
+                  <img v-if="logoOf(card)" :src="logoOf(card)" alt="" class="h-6 w-auto max-w-[8.5rem] object-contain sm:h-7" />
+                  <svg v-else class="h-6 w-6 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" stroke-width="1.6" />
+                    <path d="M2.5 10h19M6 13.5h4" stroke-width="1.6" stroke-linecap="round" />
+                  </svg>
+                </div>
+                <p class="card-title text-sm font-extrabold leading-5 tracking-wide" data-card-title>{{ cardTitle(card) }}</p>
               </div>
-              <p class="card-title min-w-0 text-sm font-extrabold leading-5 tracking-wide" data-card-title>{{ cardTitle(card) }}</p>
               <!-- 持卡人挪到卡名下面（原来在右下角）：把右下那一行腾给卡号 -->
               <p v-if="card.holder" class="text-[11px] font-semibold opacity-80" data-card-holder>{{ card.holder }}</p>
             </div>
@@ -489,9 +497,20 @@ watch(isCardList, (v) => { if (v) void load() })
 /* 卡面配色（默认统一 / 账单日后黄→橘 / 最后 3 天与逾期红）在 utils/card-urgency.ts，
    时间卡片里的缩略小卡面也调它，保证同色。 */
 
-/* 卡名不按字断行：中文默认逐字换行，窄屏时「广发银行DIY卡」会被挤成一列一个字
-   （用户要求「整行…不是字换行」）。keep-all 让一整串中文当成一个词，
-   只有确实放不下时才由 break-word 在词内断开兜底。 */
+/* 标志 + 卡名：两列 grid —— 标志第 1 列，卡名固定在第 2 列（从标志右边缘 + 间距开始）。
+   空间够时两者同一行；卡名换行时每一行仍在这一列里，于是与标志右侧对齐。
+   minmax(0,1fr)：允许第 2 列收缩到 0，否则窄屏会被卡名的最小内容宽度顶出去。 */
+.card-face-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.5rem;
+  align-items: center;
+}
+.card-face-logo { grid-column: 1; }
+.card-title { grid-column: 2; }
+
+/* 卡名不按字断行：中文默认逐字换行，窄屏时「广发银行DIY卡」会被挤成一列一个字。
+   keep-all 让一整串中文当成一个词，只有确实放不下时才由 break-word 在词内断开。 */
 .card-title {
   word-break: keep-all;
   overflow-wrap: break-word;
