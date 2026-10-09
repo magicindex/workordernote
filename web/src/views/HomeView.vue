@@ -1225,7 +1225,9 @@ function dayLabelOf(key: string): { label: string; weekday: string } {
 }
 
 /** 按天分组：同一天的条目放进同一张卡片（用户要求：「同一天的放同一个卡片」）。
-    顺序沿用 items 的既有顺序（接口已按各视图的口径排好），只分组、不重排。 */
+    组与组之间沿用 items 的既有顺序（接口已按各视图的口径排好），只分组、不重排；
+    但**卡片内部**把已完成的排到后面 —— 「先看没做完的」这条规矩在分卡片之后落在
+    每张卡片里（跨卡片不再保证：昨天已完成的条目本来就排在今天之前）。 */
 const dayGroups = computed(() => {
   const groups: { key: string; label: string; weekday: string; items: ReminderItem[] }[] = []
   const byKey = new Map<string, (typeof groups)[number]>()
@@ -1238,6 +1240,11 @@ const dayGroups = computed(() => {
       groups.push(group)
     }
     group.items.push(item)
+  }
+  for (const group of groups) {
+    const open = group.items.filter((i) => !i.completed_at)
+    const done = group.items.filter((i) => !!i.completed_at)
+    group.items = [...open, ...done]
   }
   // 「无日期」永远排最后：它不该插在时间线中间。
   return [...groups.filter(g => g.key !== 'undated'), ...groups.filter(g => g.key === 'undated')]
