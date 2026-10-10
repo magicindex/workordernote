@@ -99,14 +99,41 @@
               </button>
               <LunarDatePicker v-if="planStartOpen" v-model="planStartPicked" with-time :anchor-el="planStartAnchor" @commit="commitPlanStart" />
             </label>
-            <label class="field-label relative">
+            <!-- 任务周期（用户要求）：不再让用户手挑结束时间，而是选一个周期 ——
+                 N 天 / 1 周 / 1 月 / 年终 / 1 年，或「自定义」自己挑结束时间。
+                 结束时间由开始时间 + 周期算出来，落在**最后一天的 23:59**（整天都算在任务里）。 -->
+            <label class="field-label">
+              周期
+              <span class="flex items-center gap-1">
+                <input
+                  v-if="planPeriod === 'days'"
+                  v-model.number="planDays"
+                  type="number"
+                  min="1"
+                  max="3650"
+                  class="quick-chip !h-8 !w-16 !px-2 !text-[11px]"
+                  data-plan-days
+                  aria-label="任务周期天数"
+                  @change="applyPlanPeriod"
+                />
+                <select v-model="planPeriod" class="quick-chip !h-8 !px-2 !text-[11px]" data-plan-period @change="applyPlanPeriod">
+                  <option value="days">{{ planDays }} 天</option>
+                  <option value="week">1 周</option>
+                  <option value="month">1 月</option>
+                  <option value="yearend">年终</option>
+                  <option value="year">1 年</option>
+                  <option value="custom">自定义</option>
+                </select>
+              </span>
+            </label>
+            <label v-if="planPeriod === 'custom'" class="field-label relative">
               结束
               <button ref="planEndAnchor" type="button" class="quick-chip !h-8" :class="{ active: !!quick.end_at }" @click="planEndOpen = !planEndOpen">
-                {{ quick.end_at ? formatFullDue(quick.end_at) : '可选（时间段）' }}
+                {{ quick.end_at ? formatFullDue(quick.end_at) : '选择结束时间' }}
               </button>
               <LunarDatePicker v-if="planEndOpen" v-model="planEndPicked" with-time :anchor-el="planEndAnchor" @commit="commitPlanEnd" />
             </label>
-            <button v-if="quick.end_at" class="quick-chip !h-8" title="清掉结束时间，改成单点时间" @click="clearPlanEnd">清除结束</button>
+            <button v-if="quick.end_at" class="quick-chip !h-8" title="清掉结束时间，改成单点时间" data-plan-clear-end @click="clearPlanEnd">清除结束</button>
             <label class="field-label">
               重复
               <select v-model="quick.repeat_rule" class="quick-chip !h-8 !px-2">
@@ -758,14 +785,58 @@ const planEndPicked = computed({
 })
 function commitPlanStart() {
   planStartOpen.value = false
-  // 结束时间没填或填得比开始还早：跟着开始时间顺延一小时，省得用户再点一次
-  if (!quick.start_at) return
-  if (!quick.end_at || new Date(quick.end_at).getTime() <= new Date(quick.start_at).getTime()) {
-    quick.end_at = toLocalIso(new Date(new Date(quick.start_at).getTime() + 60 * 60 * 1000))
-  }
+  // 选完开始时间就把周期算成结束时间（默认 1 天 = 当天 23:59；周期选自定义时不动）
+  applyPlanPeriod()
 }
 function commitPlanEnd() { planEndOpen.value = false }
-function clearPlanEnd() { quick.end_at = null }
+function clearPlanEnd() { quick.end_at = null; planPeriod.value = 'none' }
+
+// 「任务周期」：开始时间 + 周期 → 结束时间（最后一天的 23:59）。
+// 1 天 = 当天；N 天 = 开始那天往后的第 N 天（含首尾）；1 周 = 7 天；
+// 1 月 = 下个月同一天的前一天；年终 = 当年 12-31；1 年 = 明年同一天的前一天。
+const planPeriod = ref<'days' | 'week' | 'month' | 'yearend' | 'year' | 'custom' | 'none'>('days')
+const planDays = ref(1)
+function endOfDay(d: Date) {
+  const x = new Date(d)
+  x.setHours(23, 59, 0, 0)
+  return x
+}
+function periodEnd(startIso: string, kind: string, days: number): Date {
+  const start = new Date(startIso)
+  const base = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+  switch (kind) {
+    case 'week': return endOfDay(new Date(base.getFullYear(), base.getMonth(), base.getDate() + 6))
+    case 'month': return endOfDay(new Date(base.getFullYear(), base.getMonth() + 1, base.getDate() - 1))
+    case 'year': return endOfDay(new Date(base.getFullYear() + 1, base.getMonth(), base.getDate() - 1))
+    case 'yearend': return endOfDay(new Date(base.getFullYear(), 11, 31))
+    default: return endOfDay(new Date(base.getFullYear(), base.getMonth(), base.getDate() + Math.max(1, days) - 1))
+  }
+}
+/** 按当前周期重算结束时间；「自定义」交给用户自己挑，不动 end_at。 */
+function applyPlanPeriod() {
+  if (planPeriod.value === 'custom' || planPeriod.value === 'none') return
+  if (!quick.start_at) return
+  const end = periodEnd(quick.start_at, planPeriod.value, planDays.value)
+  quick.end_at = toLocalIso(end)
+}
+/** 已有结束时间时反推周期（编辑旧数据用）：能对上就选中对应档，否则算自定义。 */
+function inferPlanPeriod() {
+  if (!quick.end_at || !quick.start_at) { planPeriod.value = 'none'; return }
+  const start = new Date(quick.start_at)
+  const end = new Date(quick.end_at)
+  const same = (d: Date) => Math.abs(end.getTime() - d.getTime()) < 60_000
+  if (same(periodEnd(quick.start_at, 'days', 1))) { planPeriod.value = 'days'; planDays.value = 1; return }
+  if (same(periodEnd(quick.start_at, 'week', 7))) { planPeriod.value = 'week'; return }
+  if (same(periodEnd(quick.start_at, 'month', 30))) { planPeriod.value = 'month'; return }
+  if (same(periodEnd(quick.start_at, 'year', 365))) { planPeriod.value = 'year'; return }
+  if (same(periodEnd(quick.start_at, 'yearend', 0))) { planPeriod.value = 'yearend'; return }
+  // 天数只差在 N 天上（1 天以外）
+  const startBase = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+  const endBase = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+  const diff = Math.round((endBase.getTime() - startBase.getTime()) / 86400_000) + 1
+  if (diff > 1 && diff <= 3650 && Math.abs(end.getHours()) === 23) { planPeriod.value = 'days'; planDays.value = diff; return }
+  planPeriod.value = 'custom'
+}
 const planRangeLabel = computed(() => {
   if (!quick.start_at) return ''
   const start = formatFullDue(quick.start_at)
@@ -1023,6 +1094,9 @@ async function submitQuick() {
       // 计划页默认不带「今天 20:00」，免得一进页面就误以为是今天的事
       due_at: planned ? null : defaultQuickDue(),
     })
+    // 任务周期跟着复位（下一条重新选开始时间时按默认 1 天算）
+    planPeriod.value = 'days'
+    planDays.value = 1
     // 归位到「今天」：新建提醒默认带今天 20:00，芯片状态也要跟着点亮。
     // 芯片行保持可见（连着记几条不用再点输入框），「更多」面板收起回默认隐藏状态。
     preset.value = isNote || planned ? '' : 'today'
@@ -1212,12 +1286,14 @@ function focusQuickAdd() {
   quickInput.value?.focus()
   quickInput.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
-/** 逾期判定用的「生效时间」：稍后提醒优先，其次时段开始时间，最后到期时间。
+/** 逾期判定用的「生效时间」：稍后提醒优先；**有时间段的任务看最后一天**（用户要求：
+    「计时最后一天遵守后台偏好设置的过期时间」—— 3 天期的任务要到第 3 天过完、
+    再加上宽限时间才算逾期）；其余看到期时间。
     记事没有排期，永远不算逾期；已完成的也不算。
     逾期分组卡片与行上的「已逾期」标记共用这一个函数，避免两处口径跑偏。 */
 function overdueStamp(item: ReminderItem): number | null {
   if (item.completed_at || item.kind === 'note') return null
-  const raw = item.snoozed_until || item.start_at || item.due_at
+  const raw = item.snoozed_until || item.end_at || item.start_at || item.due_at
   if (!raw) return null
   const t = new Date(raw).getTime()
   return Number.isNaN(t) ? null : t

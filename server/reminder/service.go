@@ -1235,10 +1235,18 @@ func listCalendarItems(db *gorm.DB, userID uint, from, to time.Time, listIDs []u
 	var rows []Reminder
 	// 记事的 completed_at 一定非空（创建时写入），任务的 due_at 一定非空，
 	// 两个条件互斥，合起来就是「这一天有这条数据」。
+	// 任务的三种「这一天有它」：① 到期日落在窗口内；② **时间段任务与窗口相交**
+	// （开始早于窗口末尾、结束不早于窗口开头）—— 时间段任务在日历上要跨天显示，
+	// 所以只要区间与这一屏有交集就得带回来（用户要求：点开始框、跨框，一直到时间段最后一天）；
+	// ③ 记事的记录时间落在窗口内（记事没有到期时间）。
 	q := db.Where("user_id = ? AND deleted_at IS NULL AND ("+
 		"(kind = ? AND due_at IS NOT NULL AND "+tsUTC("due_at")+" >= datetime(?) AND "+tsUTC("due_at")+" < datetime(?)) OR "+
+		"(kind = ? AND end_at IS NOT NULL AND start_at IS NOT NULL AND "+
+		tsUTC("start_at")+" < datetime(?) AND "+tsUTC("end_at")+" >= datetime(?)) OR "+
 		"(kind = ? AND completed_at IS NOT NULL AND "+tsUTC("completed_at")+" >= datetime(?) AND "+tsUTC("completed_at")+" < datetime(?)))",
-		userID, KindTask, sqlTimeArg(from), sqlTimeArg(to), KindNote, sqlTimeArg(from), sqlTimeArg(to))
+		userID, KindTask, sqlTimeArg(from), sqlTimeArg(to),
+		KindTask, sqlTimeArg(to), sqlTimeArg(from),
+		KindNote, sqlTimeArg(from), sqlTimeArg(to))
 	q = excludeHiddenCardReminders(q, hiddenCardListIDs(db, userID))
 	if len(listIDs) > 0 {
 		q = q.Where("list_id IN ?", listIDs)

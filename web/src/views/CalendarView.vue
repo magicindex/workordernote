@@ -137,9 +137,9 @@
             tabindex="0"
             class="cal-cell group relative flex flex-col rounded-xl border p-1 text-left transition sm:p-1.5"
             :class="cellClass(cell)"
-            @click="selectedDate = cellKey(cell)"
+            @click="selectCell(cellKey(cell))"
             @dblclick="openCreateForDate(cellKey(cell))"
-            @keydown.enter.prevent="selectedDate = cellKey(cell)"
+            @keydown.enter.prevent="selectCell(cellKey(cell))"
             :title="`双击在这天新建提醒`"
             :data-cal-date="cellKey(cell)"
           >
@@ -163,6 +163,28 @@
                   :title="role === 'statement' ? '信用卡账单日' : role === 'advance' ? '信用卡还款提醒' : '信用卡还款日'"
                 ></i>
               </span>
+            </div>
+
+            <!-- 时间段任务（计划页「任务周期」建的）：在**区间内每一天**都显示一条，
+                 点一下就把整段（开始框 → 跨框 → 最后一天）高亮出来。底色与图标
+                 参考信用卡/记事本那种「图标 + 浅色底」的样式，用清单色。 -->
+            <div v-if="spansOf(cellKey(cell)).length" class="mt-1 flex flex-col gap-0.5" data-cal-spans>
+              <button
+                v-for="span in spansOf(cellKey(cell))"
+                :key="`span-${span.item.id}`"
+                type="button"
+                class="cal-span flex min-w-0 items-center gap-1 rounded-md px-1 py-[1px] text-left font-semibold leading-tight"
+                :class="spanClass(span)"
+                :style="{ background: chipStyle(span.item).background, color: chipStyle(span.item).color }"
+                :data-cal-span="`${span.item.id}:${span.role}`"
+                :title="`${span.item.title}（${spanRangeText(span.item)}）`"
+                @click.stop="activateSpan(span.item)"
+              >
+                <span class="cal-plan-mark shrink-0" :style="{ background: chipDot(span.item) }">
+                  <ListIcon name="clock" :size="10" class="text-white" />
+                </span>
+                <span class="truncate">{{ span.item.title }}</span>
+              </button>
             </div>
 
             <!-- 桌面：显示提醒标题；手机：只显示圆点 -->
@@ -645,9 +667,56 @@ function lunarClass(c: LunarDayInfo) {
 }
 function cellClass(c: LunarDayInfo) {
   const selected = cellKey(c) === selectedDate.value
+  const inActiveSpan = activeSpanId.value !== null && spansOf(cellKey(c)).some((s) => s.item.id === activeSpanId.value)
+  if (selected && inActiveSpan) return 'border-brand-500/70 bg-brand-500/15 ring-2 ring-brand-500/40'
+  if (inActiveSpan) return 'border-brand-500/45 bg-brand-500/8'
   if (selected) return 'border-brand-500/60 bg-brand-500/8 ring-2 ring-brand-500/25'
   if (!c.in_month) return 'border-transparent bg-transparent opacity-45 hover:bg-muted/60'
   return 'border-border/60 bg-surface/50 hover:border-brand-500/35 hover:bg-muted/60'
+}
+
+// ---------- 时间段任务在日历上的「跨天」显示 ----------
+// 后端把区间与窗口相交的任务都带回来了（见 listCalendarItems），这里按天判断：
+// 某一天落在 [start_at, end_at] 之内就画一条；role 决定圆角（start / mid / end），
+// 一天内首尾同格时按 start 处理，看起来还是一整段。
+const activeSpanId = ref<number | null>(null)
+/** ISO → 上海时区的 YYYY-MM-DD（与后端 due_date 同一口径；中国没有夏令时，直接 +8h 取日期）。 */
+function isoDayKey(iso: string) {
+  return new Date(new Date(iso).getTime() + 8 * 3600_000).toISOString().slice(0, 10)
+}
+function spansOf(key: string) {
+  const out: Array<{ item: CalendarItem; role: 'start' | 'mid' | 'end' | 'single' }> = []
+  for (const item of items.value) {
+    if (!item.start_at || !item.end_at || item.kind === 'note') continue
+    const from = isoDayKey(item.start_at)
+    const to = isoDayKey(item.end_at)
+    if (key < from || key > to) continue
+    const role = from === to ? 'single' : key === from ? 'start' : key === to ? 'end' : 'mid'
+    out.push({ item, role })
+  }
+  return out
+}
+function spanClass(span: { item: CalendarItem; role: string }) {
+  const active = activeSpanId.value === span.item.id
+  const ring = active ? 'ring-2 ring-brand-500/50' : ''
+  if (span.role === 'start') return `rounded-r-none ${ring}`.trim()
+  if (span.role === 'end') return `rounded-l-none ${ring}`.trim()
+  if (span.role === 'mid') return `rounded-none ${ring}`.trim()
+  return ring
+}
+function spanRangeText(item: CalendarItem) {
+  const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('zh-CN', { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '')
+  if (!item.start_at || !item.end_at) return ''
+  return `${fmt(item.start_at)} – ${fmt(item.end_at)}`
+}
+/** 点某一天：这一天有时间段任务就把它整段高亮出来；否则取消高亮（恢复单框显示）。 */
+function selectCell(key: string) {
+  selectedDate.value = key
+  const span = spansOf(key)[0]
+  activeSpanId.value = span ? span.item.id : null
+}
+function activateSpan(item: CalendarItem) {
+  activeSpanId.value = activeSpanId.value === item.id ? null : item.id
 }
 function dayNumberClass(c: LunarDayInfo) {
   if (isToday(c)) return 'bg-brand-500 text-white shadow-sm'
@@ -982,6 +1051,11 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 时间段任务在日历里的「时钟」图标块：与「记」字、信用卡图标同一套写法（白色图标 + 底色） */
+.cal-plan-mark { @apply flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px]; }
+/* 跨天的条：一天内首尾同格时也保持可点区域 */
+.cal-span { min-height: 15px; }
+
 /* 字号由根元素上的 --cal-task-font 变量驱动（见 calendarFontPx），
    格子最小高度也跟着缩放，字号调大时不会把任务条挤没。 */
 .cal-task { font-size: var(--cal-task-font, 10px); }
