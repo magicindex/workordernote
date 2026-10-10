@@ -578,12 +578,13 @@ const loading = ref(true)
 const saving = ref(false)
 const search = ref('')
 const quickInput = ref<HTMLInputElement | null>(null)
-// 新建任务插件**默认展开**（用户 2026-10-10 要求）：打开软件/登录后就能直接看到
-// 任务·记事切换、日期（默认今天 20:00）、清单与「更多」里的字段，不必先点一下输入框。
-// 之前是 false，要点输入框（quickFocused）才出芯片行、再点「更多」才出日期等字段，
-// 用户在登录后看不到默认日期，以为「新建任务没有默认时间」。
+// 新建任务窗口的默认形态（用户 2026-10-10 两次要求后定下来的）：
+//   · **芯片行默认可见**（quickFocused = true）：任务/记事、今天/明天/本周末、重要、清单，
+//     以及右侧那个「今天 20:00」——默认日期一眼就能看到，不用先点输入框；
+//   · **「更多」面板默认隐藏**（quickExpanded = false）：日期时间、重复、备注、农历、
+//     通知方式这些字段收在「更多」里，点开才出现，日常新建不被这一大块挡着。
 const quickFocused = ref(true)
-const quickExpanded = ref(true)
+const quickExpanded = ref(false)
 const preset = ref('today')
 // 「清空」是**明确**动作：按过之后，这一次新建才是真正的「无日期」；
 // 只要又选了日期（芯片或日期选择器）就复位。提交时的兜底用它区分
@@ -992,17 +993,12 @@ async function submitQuick() {
       due_at: planned ? null : defaultQuickDue(),
     })
     // 归位到「今天」：新建提醒默认带今天 20:00，芯片状态也要跟着点亮。
-    // 面板**保持展开**（用户要求默认展开，连着记几条不用每次再点一下）；
-    // 记事本页仍按 setQuickKind('note') 收起（那里只需要标题）。
+    // 芯片行保持可见（连着记几条不用再点输入框），「更多」面板收起回默认隐藏状态。
     preset.value = isNote || planned ? '' : 'today'
     quickDueCleared.value = false
-    if (isNote) {
-      quickExpanded.value = false
-      quickFocused.value = false
-    } else {
-      quickExpanded.value = true
-      quickFocused.value = true
-    }
+    quickExpanded.value = false
+    if (isNote) quickFocused.value = false
+    else quickFocused.value = true
     if (isNote) {
       // 记事本页要立刻把新记的这条显示出来（其它视图它本来就不出现）。
       await loadItems()
