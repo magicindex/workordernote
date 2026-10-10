@@ -543,7 +543,12 @@ const settingsOpen = ref(false)
 const lists = ref<ReminderList[]>([])
 // 侧栏「我的清单」里只列普通清单：信用卡账单与记事本是上面那两个固定栏目，
 // 不混在里面（也不出现在「新建提醒的清单下拉」里）。
-const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card' && l.template !== 'notebook'))
+// 「我的清单」里只列普通清单：信用卡账单 / 记事本 / 人生要有仪式感都是上面的**固定栏目**，
+// 它们不该再作为普通清单出现一次 —— 否则「人生要有仪式感」会出现两行，而且普通清单那一行
+// 不受偏好控制（用户报的「重复出现，有一个不受后台管理」就是这个）。
+const navLists = computed(() => lists.value.filter(
+  (l) => l.template !== 'credit_card' && l.template !== 'notebook' && l.template !== 'ceremony',
+))
 const cardBucket = computed(() => lists.value.find((l) => l.template === 'credit_card') || null)
 const noteBucket = computed(() => lists.value.find((l) => l.template === 'notebook') || null)
 const ceremonyBucket = computed(() => lists.value.find((l) => l.template === 'ceremony') || null)

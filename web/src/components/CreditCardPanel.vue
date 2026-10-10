@@ -33,9 +33,10 @@
     </p>
 
     <!-- 一行三张（窄屏一张、中屏两张），卡片靠银行标志区分；顺序见 sortedCards() -->
-    <!-- 一行两张（窄屏一张）：一行三张时卡面只有 265px，标志就占 105px，
-         卡名没地方站；两列之后卡面约 420-470px，配合下面的卡片比例才像一张真卡。 -->
-    <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+    <!-- 宽屏一行四张（窄屏一张、中屏两张）：卡片按 1.586:1 的比例**等比例缩小**
+         —— 卡片小了一号，但长宽比不变，看起来仍是银行卡。为了在小卡面上给卡名留出
+         位置，标志同步缩小（见下面的 max-w-[4.5rem]），右侧那列信息字号也收到 10px。 -->
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" data-card-grid>
       <!-- 抽屉打开时把这张卡片抬到同排之上：抽屉是 absolute 的，
            后面的兄弟卡片（.surface 自带 backdrop-blur，各自成层）会盖住它
            —— 用户报的「更多按钮弹出会被遮挡」就是这个。 -->
@@ -51,7 +52,7 @@
         <!-- 按真卡的 85.6×54mm（≈1.586:1）给一个固定比例：卡片高度跟着宽度走，
              看起来就是一张银行卡，而不是一条信息框（用户要求「增加卡片高度」）。 -->
         <div
-          class="relative flex aspect-[1.586/1] flex-col overflow-hidden rounded-2xl px-4 py-3.5 shadow-lg"
+          class="relative flex aspect-[1.586/1] flex-col overflow-hidden rounded-2xl px-3 py-2.5 shadow-lg sm:px-3.5"
           :style="{ background: urgencyOf(card).gradient, color: urgencyOf(card).ink }"
           :data-card-face="card.id"
           :data-card-urgency="urgencyOf(card).level"
@@ -72,18 +73,18 @@
                    minmax(0,1fr) 是关键：不加 0 下限时列宽不会小于内容宽度，窄屏会被顶出去。 -->
               <div class="card-face-line">
                 <div class="card-face-logo" data-card-face-logo>
-                  <img v-if="logoOf(card)" :src="logoOf(card)" alt="" class="h-6 w-auto max-w-[8.5rem] object-contain sm:h-7" />
-                  <svg v-else class="h-6 w-6 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <img v-if="logoOf(card)" :src="logoOf(card)" alt="" class="h-5 w-auto max-w-[4.5rem] object-contain sm:h-6" />
+                  <svg v-else class="h-5 w-5 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
                     <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" stroke-width="1.6" />
                     <path d="M2.5 10h19M6 13.5h4" stroke-width="1.6" stroke-linecap="round" />
                   </svg>
                 </div>
-                <p class="card-title text-sm font-extrabold leading-5 tracking-wide" data-card-title>{{ cardTitle(card) }}</p>
+                <p class="card-title text-[13px] font-extrabold leading-[18px] tracking-wide" data-card-title>{{ cardTitle(card) }}</p>
               </div>
               <!-- 持卡人挪到卡名下面（原来在右下角）：把右下那一行腾给卡号 -->
               <p v-if="card.holder" class="text-[11px] font-semibold opacity-80" data-card-holder>{{ card.holder }}</p>
             </div>
-            <div class="shrink-0 whitespace-nowrap text-right text-[11px] leading-4 opacity-85" data-card-meta>
+            <div class="shrink-0 whitespace-nowrap text-right text-[10px] leading-4 opacity-85 sm:text-[10.5px]" data-card-meta>
               <p>账单日 每月 {{ card.statement_day }} 号</p>
               <p>还款日 每月 {{ card.due_day }} 号</p>
               <p data-card-limit>
@@ -94,7 +95,7 @@
           </div>
           <!-- 卡号单独一行、**左对齐**（用户要求）：位置换一下之后卡号不再跟卡名抢宽度，
                窄屏也能完整显示尾号；左对齐是为了跟卡名/持卡人那一列对齐。 -->
-          <p class="relative mt-auto pt-3 text-left font-mono text-[13px] leading-5 tracking-[.04em] opacity-90 sm:text-[14px] sm:tracking-[.12em]" data-card-number>
+          <p class="relative mt-auto pt-2 text-left font-mono text-[12px] leading-5 tracking-[.04em] opacity-90 sm:text-[13px] sm:tracking-[.08em]" data-card-number>
             {{ maskNo(card.no) }}
           </p>
           <p class="relative mt-2 text-[11px] opacity-80">
