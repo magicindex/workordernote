@@ -36,7 +36,7 @@ export interface ReminderList {
   position: number
   is_default: boolean
   open_count: number
-  template?: 'general' | 'credit_card' | 'notebook'
+  template?: 'general' | 'credit_card' | 'notebook' | 'ceremony'
   /** 信用卡账单栏目才有：这一栏里有几张卡（侧栏角标用） */
   card_count?: number
   card_name?: string
@@ -54,6 +54,8 @@ export interface ReminderItem {
   list_name: string
   /** 所属清单的色名（blue/violet/rose/amber/emerald），列表页用它给标题上色 */
   list_color: string
+  /** 「这是第几次」：循环项目已完成过 N 次，这一次就是第 N+1 次；非循环项目为 0 */
+  cycle_index?: number
   title: string
   notes: string
   kind: ReminderKind
@@ -401,6 +403,8 @@ export interface CreditCard {
   last_paid?: CardStatement | null
   unpaid_total_cents: number
   unpaid_count: number
+  /** 开卡时间：算「第几期」用（后端 GORM 自带字段） */
+  created_at?: string
 }
 
 export interface CardPeriod {

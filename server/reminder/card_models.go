@@ -11,9 +11,10 @@ import (
 // 后两者都是侧栏里的**固定系统栏目**：不在「新建清单」里选，也不混进「我的清单」，
 // 各自的显示由个人偏好控制（见 card_bucket.go / note_bucket.go）。
 const (
-	listTemplateGeneral = "general"
-	listTemplateCard    = "credit_card"
-	listTemplateNote    = "notebook"
+	listTemplateGeneral  = "general"
+	listTemplateCard     = "credit_card"
+	listTemplateNote     = "notebook"
+	listTemplateCeremony = "ceremony"
 )
 
 // normalizeListTemplate 把「系统栏目」的模板名规范化。
@@ -28,6 +29,9 @@ func normalizeListTemplate(t string) string {
 	}
 	if strings.EqualFold(trimmed, listTemplateNote) {
 		return listTemplateNote
+	}
+	if strings.EqualFold(trimmed, listTemplateCeremony) {
+		return listTemplateCeremony
 	}
 	return listTemplateGeneral
 }

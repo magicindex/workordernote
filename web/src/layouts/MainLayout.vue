@@ -133,6 +133,23 @@
             <span class="flex-1">记事本</span>
           </RouterLink>
 
+          <!-- 人生要有仪式感：与「记事本」并列的固定栏目，由个人偏好 ceremony_enabled 控制显示。
+               里面的条目在栏目页上用**倒计时卡片**展示（生日/纪念日/节日/考试…）。 -->
+          <RouterLink
+            v-if="authStore.ceremonyEnabled && ceremonyBucket"
+            :to="`/admin/list/${ceremonyBucket.id}`"
+            class="nav-row"
+            :class="{ 'nav-row-active': route.path === `/admin/list/${ceremonyBucket.id}` }"
+            :title="railActive ? '人生要有仪式感' : '人生要有仪式感：生日、纪念日、节日、考试的倒计时'"
+            data-nav-ceremony
+            @click="mobileOpen = false"
+          >
+            <span class="nav-symbol h-5 w-5 bg-rose-500/10 text-rose-500">
+              <ListIcon name="ceremony" :size="20" />
+            </span>
+            <span class="flex-1">人生要有仪式感</span>
+          </RouterLink>
+
           <!-- 清单行不再挂「笔」图标：右键（桌面）或长按（触屏）弹出菜单，里面有重命名 / 修改 / 删除。
                右键菜单藏起来的入口，所以这里不摆任何常驻按钮，侧栏更干净。 -->
           <div
@@ -529,6 +546,7 @@ const lists = ref<ReminderList[]>([])
 const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card' && l.template !== 'notebook'))
 const cardBucket = computed(() => lists.value.find((l) => l.template === 'credit_card') || null)
 const noteBucket = computed(() => lists.value.find((l) => l.template === 'notebook') || null)
+const ceremonyBucket = computed(() => lists.value.find((l) => l.template === 'ceremony') || null)
 const summary = ref<Record<string, number>>({})
 const creatingList = ref(false)
 const realtimeToast = ref('')

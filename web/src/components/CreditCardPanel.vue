@@ -112,6 +112,8 @@
         <!-- 本期应还 + 还款闭环 -->
         <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] font-semibold" data-card-current="period">
           <span class="text-muted-foreground">本期（{{ card.current?.period || '—' }}）</span>
+          <!-- 循环周期：这是这张卡的第几期（按开卡月份算，第 1 期就是开卡那个月） -->
+          <span v-if="periodIndex(card) > 0" class="tiny-badge" :data-card-period-index="card.id">第 {{ periodIndex(card) }} 期</span>
           <span v-if="card.current?.paid_at" class="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400" data-card-paid>
             <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="m5 13 4 4L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             已还 ¥{{ formatCents(card.current.paid_amount_cents || card.current.amount_cents) }}
@@ -283,6 +285,18 @@ const scheduleOpen = ref(false)
 const scheduleCard = ref<CreditCard | null>(null)
 const deleteOpen = ref(false)
 const deleteTarget = ref<CreditCard | null>(null)
+
+/** 这张卡的「第几期」：从开卡那个月算到当前账单期（同月 = 第 1 期）。
+    账单期的期号本身是 YYYY-MM，两者相减就是期数；拿不到月份时返回 0（不显示角标）。 */
+function periodIndex(card: CreditCard) {
+  const period = String(card.current?.period || '')
+  const created = String(card.created_at || '')
+  const pm = /^(\d{4})-(\d{2})$/.exec(period)
+  const cm = /^(\d{4})-(\d{2})/.exec(created)
+  if (!pm || !cm) return 0
+  const delta = (Number(pm[1]) - Number(cm[1])) * 12 + (Number(pm[2]) - Number(cm[2]))
+  return delta >= 0 ? delta + 1 : 0
+}
 
 function cardTitle(card: CreditCard) {
   // 只显示卡名：银行名由卡面上的**完整银行标志**表达（用户要求「图标后边不再加 XX银行字样」）。

@@ -14,6 +14,8 @@ var listIconDefs = []struct {
 	{Key: "list", Label: "清单"},
 	{Key: "card", Label: "银行卡"},
 	{Key: "notebook", Label: "记事本"},
+	{Key: "ceremony", Label: "仪式感"},
+	{Key: "cake", Label: "生日"},
 	{Key: "check", Label: "待办"},
 	{Key: "star", Label: "重要"},
 	{Key: "flag", Label: "标记"},

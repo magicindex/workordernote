@@ -22,6 +22,24 @@
       <CreditCardPanel v-if="selectedList" :list="selectedList" @changed="onCardsChanged" @refresh-strip="weekRefreshKey += 1" />
     </template>
 
+    <!-- 「人生要有仪式感」栏目页：条目用倒计时卡片展示（生日/纪念日/节日/考试…） -->
+    <template v-else-if="isCeremonyBucketPage">
+      <section class="mb-3 flex flex-col gap-2 sm:mb-5 sm:flex-row sm:items-end sm:justify-between">
+        <div class="min-w-0">
+          <div class="mb-2 hidden items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-muted-foreground sm:flex">
+            <ListIcon name="ceremony" :size="14" />
+            <span>固定栏目</span>
+          </div>
+          <h1 class="flex items-center gap-2 text-xl font-extrabold tracking-tight sm:text-[26px]" data-ceremony-page-title>
+            <ListIcon name="ceremony" :size="24" />
+            {{ pageTitle }}
+          </h1>
+          <p class="mt-1 text-sm text-muted-foreground">生日、纪念日、节日、考试 —— 还有多少天，一眼就看到。</p>
+        </div>
+      </section>
+      <CeremonyPanel v-if="selectedList" :list="selectedList" @changed="onCardsChanged" @toast="(m, t) => showToast(m, t)" />
+    </template>
+
     <template v-else>
       <section class="mb-3 flex flex-col gap-2.5 sm:mb-6 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div class="min-w-0">
@@ -410,6 +428,10 @@
                   <span v-if="item.priority" class="priority-mark" :class="`priority-${item.priority}`">{{ '!'.repeat(item.priority) }}</span>
                   <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ item.calendar === 'lunar' ? `农历${ruleLabel(item.repeat_rule)}` : ruleLabel(item.repeat_rule) }}</span>
                   <span v-if="item.repeat_notify_minutes" class="tiny-badge">过期提醒</span>
+                  <!-- 循环周期：这是第几次（后端按完成历史算，非循环项目不返回） -->
+                  <span v-if="item.cycle_index" class="tiny-badge !text-brand-600 dark:!text-brand-300" data-cycle-badge>
+                    第 {{ item.cycle_index }} 次
+                  </span>
                 </div>
                 <p v-if="item.notes" class="mt-0.5 truncate text-xs text-muted-foreground sm:mt-1">{{ item.notes }}</p>
                 <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground sm:mt-2">
@@ -511,6 +533,7 @@ import RepeatNotifySelect from '../components/RepeatNotifySelect.vue'
 import PrintDialog from '../components/PrintDialog.vue'
 import ExportDialog from '../components/ExportDialog.vue'
 import CreditCardPanel from '../components/CreditCardPanel.vue'
+import CeremonyPanel from '../components/CeremonyPanel.vue'
 import { listColorHex } from '../utils/list-colors'
 import { getPublicConfigs } from '../api/config'
 import ReminderEditor from '../components/ReminderEditor.vue'
@@ -766,8 +789,10 @@ const isCardBucketPage = computed(() => selectedList.value?.template === 'credit
 // 「记事本」也是固定栏目：它不是卡片页那种特殊页面，而是一个内容全是记事的普通清单页
 // （按记录时间倒序、固定显示全部）。偏好关掉时不认这一页。
 const isNoteBucketPage = computed(() => selectedList.value?.template === 'notebook' && authStore.notebookEnabled)
+// 「人生要有仪式感」：固定栏目，页面是倒计时卡片（不是普通清单列表）
+const isCeremonyBucketPage = computed(() => selectedList.value?.template === 'ceremony' && authStore.ceremonyEnabled)
 // 下拉/筛选里能选的只有普通清单（信用卡/记事本栏目不是「清单」，不该出现在这些地方）
-const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card' && l.template !== 'notebook'))
+const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card' && l.template !== 'notebook' && l.template !== 'ceremony'))
 const pageTitle = computed(() => selectedList.value?.name || String(route.meta.title || '今天'))
 const eyebrow = computed(() => selectedList.value ? '我的清单' : view.value === 'today' ? '此刻最重要' : '工作序记')
 const accentColor = computed(() => selectedList.value ? listColor(selectedList.value.color) : view.value === 'completed' ? '#10b981' : '#3182f6')

@@ -54,6 +54,8 @@ export const useAuthStore = defineStore('auth', () => {
   const creditCardEnabled = ref(true)
   // 个人偏好「记事本栏目」：与信用卡同一套范式，默认开。记事一律收在这一栏里。
   const notebookEnabled = ref(true)
+  // 「人生要有仪式感」栏目（生日/纪念日/节日/考试的倒计时卡片）——与记事本同样的个人偏好
+  const ceremonyEnabled = ref(true)
   // 提醒频率（分钟）：未处理的提醒多久再弹一次；点「知道了」之后多久再提醒（0 = 第二天）
   const reminderNotifyMinutes = ref(10)
   const reminderAckMinutes = ref(0)
@@ -110,6 +112,7 @@ export const useAuthStore = defineStore('auth', () => {
     allowRegister.value = configs.allow_register !== 'false'
     creditCardEnabled.value = configs.credit_card_enabled !== 'false'
     notebookEnabled.value = configs.notebook_enabled !== 'false'
+    ceremonyEnabled.value = configs.ceremony_enabled !== 'false'
     reminderNotifyMinutes.value = Number(configs.reminder_notify_minutes || 10) || 10
     reminderAckMinutes.value = Number(configs.reminder_ack_minutes || 0) || 0
     if (configs.site_title) siteTitle.value = configs.site_title
@@ -357,11 +360,16 @@ export const useAuthStore = defineStore('auth', () => {
     notebookEnabled.value = on
   }
 
+  function setCeremonyEnabled(on: boolean) {
+    ceremonyEnabled.value = on
+  }
+
   function setReminderFrequencies(notifyMinutes: number, ackMinutes: number) {
     if (notifyMinutes > 0) reminderNotifyMinutes.value = notifyMinutes
     if (ackMinutes >= 0) reminderAckMinutes.value = ackMinutes
   }
 
-  return { token, user, requireLogin, allowRegister, creditCardEnabled, setCreditCardEnabled, notebookEnabled, setNotebookEnabled, reloadBootstrap,
+  return { token, user, requireLogin, allowRegister, creditCardEnabled, setCreditCardEnabled, notebookEnabled, setNotebookEnabled,
+    ceremonyEnabled, setCeremonyEnabled, reloadBootstrap,
     reminderNotifyMinutes, reminderAckMinutes, setReminderFrequencies, setupRequired, siteTitle, hasSecurityQuestions, securityPromptDismissed, servicePort, fnosGatewayEntry, fnosApp, sessionSource, followsFnOSSession, isAuthenticated, isAdmin, init, resetInit, setToken, setUser, endSession, logout, dropIfFnOSSessionGone, checkSetupRequired, dismissSecurityPrompt, refreshSecurityQuestions }
 })

@@ -30,10 +30,10 @@ type SaveReminderInput struct {
 	ListID uint   `json:"list_id"`
 	// CardRole 只由信用卡还款计划生成时写入（statement/due），
 	// 普通新建与编辑不传，保持原值。
-	CardRole   string     `json:"card_role"`
-	Priority   int        `json:"priority"`
-	DueAt      *time.Time `json:"due_at"`
-	AllDay     bool       `json:"all_day"`
+	CardRole string     `json:"card_role"`
+	Priority int        `json:"priority"`
+	DueAt    *time.Time `json:"due_at"`
+	AllDay   bool       `json:"all_day"`
 	// StartAt / EndAt：时间段任务的起止（计划页专用）。只给 StartAt 等同单点时间；
 	// 只给 EndAt 会被拒绝；两者都给时校验 EndAt 晚于 StartAt，并把 DueAt 归到 StartAt。
 	StartAt    *time.Time `json:"start_at"`
@@ -654,14 +654,38 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 		listColors[list.ID] = list.Color
 	}
 
+	// 「第几次」：循环项目的完成次数（一条聚合查询覆盖本页所有行，不是逐行查）。
+	// 只统计 completions 历史表：循环任务完成一次就写一条历史（非循环的只写
+	// completed_at，不参与这里），所以 N+1 就是这一次的序号。
+	type cycleRow struct {
+		ReminderID uint
+		Done       int64
+	}
+	var cycleRows []cycleRow
+	if err := db.Model(&Completion{}).
+		Select("reminder_id, COUNT(*) AS done").
+		Where("user_id = ? AND deleted_at IS NULL AND reminder_id IN ?", userID, reminderIDs).
+		Group("reminder_id").Scan(&cycleRows).Error; err != nil {
+		return nil, err
+	}
+	doneByReminder := make(map[uint]int64, len(cycleRows))
+	for _, row := range cycleRows {
+		doneByReminder[row.ReminderID] = row.Done
+	}
+
 	result := make([]ReminderDTO, 0, len(rows))
 	for _, row := range rows {
+		cycle := 0
+		if row.RepeatRule != "" && row.RepeatRule != "none" {
+			cycle = int(doneByReminder[row.ID]) + 1
+		}
 		result = append(result, ReminderDTO{
 			Reminder:       row,
 			Channels:       channelsByReminder[row.ID],
 			ChannelTargets: targetsByReminder[row.ID],
 			ListName:       listNames[row.ListID],
 			ListColor:      listColors[row.ListID],
+			CycleIndex:     cycle,
 		})
 	}
 	return result, nil

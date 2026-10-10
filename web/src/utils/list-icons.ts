@@ -20,6 +20,10 @@ export const LIST_ICONS: ListIcon[] = [
   { key: 'list', label: '清单', body: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" stroke-width="2"/>' },
   { key: 'card', label: '银行卡', body: '<rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 10h19M6 13.5h4"/>' },
   { key: 'notebook', label: '记事本', body: '<rect x="6" y="3.5" width="13.5" height="17" rx="2.5"/><path d="M6 8h2.2M6 12h2.2M6 16h2.2"/><path d="M12.5 3.5v6.4l2.4-1.5 2.4 1.5V3.5"/>' },
+  // 仪式感：礼花筒 + 星点（「人生要有仪式感」栏目用它）
+  { key: 'ceremony', label: '仪式感', body: '<path d="M3.6 20.4 8.2 8.6l7.2 7.2-11.8 4.6Z"/><path d="M9.6 7.2c.5-1.6.4-3.1-.3-4.4M13.4 9.6c1.4-.6 2.4-1.7 2.9-3.2"/><path d="M17.4 12.6l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z"/>' },
+  // 生日/纪念日：蛋糕 + 蜡烛
+  { key: 'cake', label: '生日', body: '<path d="M4.5 12.5h15v6.5a1.5 1.5 0 0 1-1.5 1.5H6a1.5 1.5 0 0 1-1.5-1.5v-6.5Z"/><path d="M4.5 16c1.6 1.2 3 1.2 4.5 0s2.9-1.2 4.5 0 3 1.2 4.5 0"/><path d="M12 12.5V9.4"/><path d="M12 7.6c.8-.9 1.2-1.4 1.2-2A1.2 1.2 0 0 0 12 4.4a1.2 1.2 0 0 0-1.2 1.2c0 .6.4 1.1 1.2 2Z"/>' },
   { key: 'check', label: '待办', body: '<rect x="4" y="4" width="16" height="16" rx="4"/><path d="m8.5 12 2.4 2.4 4.6-5"/>' },
   { key: 'star', label: '重要', body: '<path d="m12 4.4 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.6-4.8 2.6.9-5.4L4.2 10l5.4-.8L12 4.4Z"/>' },
   { key: 'flag', label: '标记', body: '<path d="M6 21V4m0 1h10.5l-1.7 3.5L16.5 12H6"/>' },

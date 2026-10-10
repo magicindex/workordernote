@@ -178,7 +178,7 @@ func init() {
 		Key: "task_overdue_after_minutes", Scope: ScopeSystem, Type: TypeSelect,
 		Default: "30", Options: []string{"0", "15", "30", "60", "120", "240"},
 		Public: true,
-		Group: "reminder", Label: "任务过期多久算逾期",
+		Group:  "reminder", Label: "任务过期多久算逾期",
 		Description: "到期后多久开始标「已逾期」（默认 30 分钟；新建任务的默认时间是当前时刻，留一点宽限更自然）",
 	})
 	RegisterConfig(ConfigDef{
@@ -248,6 +248,14 @@ func init() {
 	//
 	// 与信用卡同一套范式（见 server/reminder/note_bucket.go）：模板 notebook、
 	// 个人偏好 notebook_enabled 控制显示、关掉只隐藏不删数据。默认开。
+	// 「人生要有仪式感」栏目：生日、纪念日、节日、考试这些「一年一次」的事项，
+	// 用倒计时卡片看还有多少天。与记事本一样是个人偏好，关掉只隐藏、不删数据。
+	RegisterConfig(ConfigDef{
+		Key: "ceremony_enabled", Scope: ScopeUser, Type: TypeBool,
+		Default: "true", Public: true,
+		Group: "features", Label: "人生要有仪式感栏目",
+		Description: "在侧栏显示「人生要有仪式感」栏目（生日/纪念日/节日/考试等倒计时卡片）；关掉后栏目隐藏，数据保留",
+	})
 	RegisterConfig(ConfigDef{
 		Key: "notebook_enabled", Scope: ScopeUser, Type: TypeBool,
 		Default: "true", Public: true,

@@ -141,22 +141,25 @@ func handleListLists(db *gorm.DB) gin.HandlerFunc {
 		// 保证它默认就在（否则要等用户先记一笔才冒出来）。关掉偏好时不建、也不显示，
 		// 数据一条不删。名字/图标是旧值（0.15.4 之前的行）也在这里纠正一次：
 		// ensureNoteBucket 只在值不对时才写库，稳态下这里不产生任何写入。
-		if notebookFeatureEnabled(db, userID) {
-			noteIdx := -1
+		// 记事本 / 人生要有仪式感两个固定栏目：偏好开着却没有这一行就补建，
+		// 已有但名字或图标是旧值（同步来的、更早版本建的）也顺手纠正一次。
+		// 稳态下这里不产生任何写入（ensure*Bucket 只在值不对时才写库）。
+		ensureFixedBucket := func(template, wantName, wantIcon string, ensure func(*gorm.DB, uint) (List, error)) {
+			idx := -1
 			for i, l := range lists {
-				if l.Template == listTemplateNote {
-					noteIdx = i
+				if l.Template == template {
+					idx = i
 					break
 				}
 			}
-			if noteIdx >= 0 && (lists[noteIdx].Name != noteBucketListName || lists[noteIdx].Icon != noteBucketIcon) {
-				if bucket, err := ensureNoteBucket(db, userID); err == nil {
-					lists[noteIdx].Name = bucket.Name
-					lists[noteIdx].Icon = bucket.Icon
+			if idx >= 0 && (lists[idx].Name != wantName || lists[idx].Icon != wantIcon) {
+				if bucket, err := ensure(db, userID); err == nil {
+					lists[idx].Name = bucket.Name
+					lists[idx].Icon = bucket.Icon
 				}
 			}
-			if noteIdx < 0 {
-				if bucket, err := ensureNoteBucket(db, userID); err == nil {
+			if idx < 0 {
+				if bucket, err := ensure(db, userID); err == nil {
 					lists = append(lists, bucket)
 					sort.SliceStable(lists, func(i, j int) bool {
 						if lists[i].IsDefault != lists[j].IsDefault {
@@ -169,6 +172,12 @@ func handleListLists(db *gorm.DB) gin.HandlerFunc {
 					})
 				}
 			}
+		}
+		if notebookFeatureEnabled(db, userID) {
+			ensureFixedBucket(listTemplateNote, noteBucketListName, noteBucketIcon, ensureNoteBucket)
+		}
+		if ceremonyFeatureEnabled(db, userID) {
+			ensureFixedBucket(listTemplateCeremony, ceremonyBucketListName, ceremonyBucketIcon, ensureCeremonyBucket)
 		}
 		type openCountRow struct {
 			ListID    uint
@@ -211,6 +220,9 @@ func handleListLists(db *gorm.DB) gin.HandlerFunc {
 			}
 			if list.Template == listTemplateNote {
 				list.Name = noteBucketListName
+			}
+			if list.Template == listTemplateCeremony {
+				list.Name = ceremonyBucketListName
 			}
 			result = append(result, ListDTO{List: list, OpenCount: openCounts[list.ID], CardCount: cardCounts[list.ID]})
 		}

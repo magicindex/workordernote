@@ -74,10 +74,10 @@ type Reminder struct {
 	// Kind is "task" (default) or "note"; see the KindTask / KindNote
 	// constants. The column default keeps every pre-existing row on task
 	// semantics, so adding this field needs no data migration.
-	Kind       string     `gorm:"size:8;not null;default:task" json:"kind"`
-	Priority   int        `gorm:"not null;default:0" json:"priority"`
-	DueAt      *time.Time `gorm:"index:idx_reminders_user_due" json:"due_at"`
-	AllDay     bool       `gorm:"not null;default:false" json:"all_day"`
+	Kind     string     `gorm:"size:8;not null;default:task" json:"kind"`
+	Priority int        `gorm:"not null;default:0" json:"priority"`
+	DueAt    *time.Time `gorm:"index:idx_reminders_user_due" json:"due_at"`
+	AllDay   bool       `gorm:"not null;default:false" json:"all_day"`
 	// StartAt / EndAt 是「时间段」任务的起止时间（计划页专用，用户要求计划任务
 	// 用自定义时间或时间段，而不是「今天/明天」这类相对快捷项）。两者要么都空
 	// （普通的单点时间任务，看 DueAt），要么都填且 EndAt 晚于 StartAt。
@@ -87,8 +87,8 @@ type Reminder struct {
 	//
 	// 新列由 AutoMigrate 自动加（SQLite ADD COLUMN，旧行为 NULL），因此不需要
 	// 额外的 database.Upgrades 记录。
-	StartAt *time.Time `json:"start_at,omitempty"`
-	EndAt   *time.Time `json:"end_at,omitempty"`
+	StartAt    *time.Time `json:"start_at,omitempty"`
+	EndAt      *time.Time `json:"end_at,omitempty"`
 	RepeatRule string     `gorm:"size:16;not null;default:none" json:"repeat_rule"`
 	// Calendar selects which calendar the repeat rule follows: "solar"
 	// (Gregorian, default) or "lunar" (Chinese lunar calendar). Only
@@ -236,6 +236,10 @@ type ReminderDTO struct {
 	// ListColor 是所属清单的色名（blue/violet/…）。列表页用它给任务标题上色，
 	// 与侧栏圆点、日历色块保持同一份取色规则（前端 utils/list-colors.ts）。
 	ListColor string `json:"list_color"`
+	// CycleIndex 是「这是第几次」：循环项目（计划里的循环任务、仪式感里的生日/纪念日）
+	// 已完成过 N 次，这一次就是第 N+1 次。非循环项目固定为 0（前端不显示这个角标）。
+	// 值由 listReminders 里一条聚合查询一次算出（不给每行单独查，避免 N+1）。
+	CycleIndex int `json:"cycle_index"`
 }
 
 // supportedListColors 是清单颜色的白名单。它与前端 utils/list-colors.ts 的
