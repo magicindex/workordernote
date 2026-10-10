@@ -181,6 +181,17 @@ func init() {
 		Group:  "reminder", Label: "任务过期多久算逾期",
 		Description: "到期后多久开始标「已逾期」（默认 30 分钟；新建任务的默认时间是当前时刻，留一点宽限更自然）",
 	})
+	// 任务「过期时间」（用户 2026-10-10 要求）：**当天到这个点才算过期** ——
+	// 到期日当天的任务，不管写的是几点，都要等到这个时间（默认 23:59）才算逾期，
+	// 之后再叠加上面的「任务过期多久算逾期」宽限分钟数（见 reminder.overdueDeadline）。
+	// 它同时是**新建提醒时的默认时间**（原来默认「当前时刻」，见 HomeView.defaultQuickDue）。
+	RegisterConfig(ConfigDef{
+		Key: "task_expire_time", Scope: ScopeSystem, Type: TypeSelect,
+		Default: "23:59", Options: []string{"18:00", "19:00", "20:00", "21:00", "22:00", "23:00", "23:59", "00:00"},
+		Public: true,
+		Group:  "reminder", Label: "任务过期时间",
+		Description: "当天到这个时间才算「过期」（默认 23:59，再叠加上面的宽限分钟数）；新建提醒的默认时间也用它。选 00:00 表示按到期时刻算、不按天顺延",
+	})
 	RegisterConfig(ConfigDef{
 		Key: "theme_mode", Scope: ScopeUser, Type: TypeSelect,
 		Default: "system", Options: []string{"system", "light", "dark", "sun"},

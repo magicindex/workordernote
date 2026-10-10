@@ -25,7 +25,15 @@
         :data-ceremony-card="entry.id"
         :data-ceremony-days="entry.days"
       >
-        <div class="flex items-start gap-2">
+        <!-- 倒计时**放到最上面、放大**（用户 2026-10-10 要求：卡片加高、倒计时醒目）：
+             天数用 30px 的字、单位小一号，整块带底色，一眼就能看到还有多少天。 -->
+        <div class="ceremony-hero" :class="entry.daysClass" :data-ceremony-countdown="entry.id">
+          <template v-if="entry.days === 0">就是<b>今天</b></template>
+          <template v-else-if="entry.days === 1">还有 <b>1</b> 天</template>
+          <template v-else-if="entry.days > 1">还有 <b>{{ entry.days }}</b> 天</template>
+          <template v-else>已过 <b>{{ -entry.days }}</b> 天</template>
+        </div>
+        <div class="mt-2.5 flex items-start gap-2">
           <span class="ceremony-icon"><ListIcon :name="entry.icon" :size="22" /></span>
           <div class="min-w-0 flex-1">
             <h3 class="ceremony-title" :data-ceremony-title="entry.id">{{ entry.title }}</h3>
@@ -34,12 +42,6 @@
               <span v-if="entry.lunar" class="tiny-badge ml-1">农历</span>
               <span v-if="entry.repeatLabel" class="tiny-badge ml-1">{{ entry.repeatLabel }}</span>
             </p>
-          </div>
-          <div class="ceremony-days" :class="entry.daysClass" :data-ceremony-countdown="entry.id">
-            <template v-if="entry.days === 0">今天</template>
-            <template v-else-if="entry.days === 1">明天</template>
-            <template v-else-if="entry.days > 1">还有 <b>{{ entry.days }}</b> 天</template>
-            <template v-else>已过 {{ -entry.days }} 天</template>
           </div>
         </div>
         <div class="mt-2 flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
@@ -369,12 +371,14 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 </script>
 
 <style scoped>
-.ceremony-card { @apply rounded-2xl p-3.5 transition-shadow hover:shadow-[0_18px_40px_-30px_rgba(15,23,42,.6)]; }
+/* 卡片加高（用户要求）：倒计时独占最上面一行，所以卡片比原来高、信息也不会挤 */
+.ceremony-card { @apply flex min-h-[9.5rem] flex-col rounded-2xl p-4 transition-shadow hover:shadow-[0_18px_40px_-30px_rgba(15,23,42,.6)]; }
 .ceremony-icon { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-500; }
 .ceremony-title { @apply truncate text-[15px] font-extrabold leading-5; }
 .ceremony-date { @apply mt-0.5 text-[11px] font-semibold text-muted-foreground; }
-.ceremony-days { @apply shrink-0 rounded-xl bg-muted/70 px-2.5 py-1 text-[12px] font-bold text-foreground; }
-.ceremony-days b { @apply text-[16px] leading-none; }
+/* 倒计时：大字 + 底色，放在卡片最上面 */
+.ceremony-hero { @apply flex items-baseline gap-1.5 rounded-xl bg-muted/65 px-3 py-2 text-[15px] font-extrabold leading-none text-foreground; }
+.ceremony-hero b { @apply text-[30px] leading-none tracking-tight; }
 .ceremony-days-soon { @apply bg-amber-500/15 text-amber-600 dark:text-amber-400; }
 .ceremony-days-past { @apply bg-muted/50 text-muted-foreground; }
 .ceremony-preset { @apply flex items-center gap-2.5 rounded-xl border border-border/70 bg-surface px-3 py-2 text-left transition hover:border-brand-500/40 hover:bg-muted/40; }

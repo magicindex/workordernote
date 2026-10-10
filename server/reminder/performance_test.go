@@ -95,7 +95,9 @@ func TestSummaryUsesTwoAggregateQueries(t *testing.T) {
 
 	const userID = 72
 	now := time.Now()
-	past := now.Add(-time.Hour)
+	// 「已过期」那条要用**昨天**：0.20 起当天到期要等到「过期时间」（默认 23:59）才算逾期，
+	// 用 now-1h 的话上午跑是逾期、下午跑就不是了（这个用例就红过）。
+	past := now.AddDate(0, 0, -1)
 	future := now.Add(time.Hour)
 	completedAt := now
 	rows := []Reminder{

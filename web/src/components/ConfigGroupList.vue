@@ -176,6 +176,22 @@ const selectOptionLabelMap: Record<string, Record<string, string>> = {
     list: '列表视图',
     calendar: '日历视图',
   },
+  // 周起始日（用户 2026-10-10：原来直接显示 monday/sunday）
+  calendar_week_start: {
+    monday: '周一',
+    sunday: '周日',
+  },
+  // 任务过期时间：当天到这个点才算过期，同时也是新建提醒的默认时间
+  task_expire_time: {
+    '18:00': '18:00（傍晚 6 点）',
+    '19:00': '19:00（晚上 7 点）',
+    '20:00': '20:00（晚上 8 点）',
+    '21:00': '21:00（晚上 9 点）',
+    '22:00': '22:00（晚上 10 点）',
+    '23:00': '23:00（晚上 11 点）',
+    '23:59': '23:59（当天结束，默认）',
+    '00:00': '00:00（按到期时刻算，不按天顺延）',
+  },
 }
 
 function groupTitle(key: string): string {

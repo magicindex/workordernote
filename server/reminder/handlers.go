@@ -26,6 +26,8 @@ func setupAuthRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	group.GET("/lists", handleListLists(db))
 	group.POST("/lists", handleCreateList(db))
 	group.PATCH("/lists/:id", handleUpdateList(db))
+	// 清单顺序（用户 2026-10-10 要求）：偏好设置里用 ↑/↓ 调顺序，一次提交整串 id
+	group.PUT("/lists/order", handleReorderLists(db))
 	// 信用卡：一个清单可以放多张卡，卡片与账单期的接口见 card_handlers.go
 	registerCardRoutes(group, db)
 	group.DELETE("/lists/:id", handleDeleteList(db))
@@ -133,7 +135,11 @@ func handleListLists(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		var lists []List
-		if err := db.Where("user_id = ? AND deleted_at IS NULL", userID).Order("is_default DESC, position ASC, id ASC").Find(&lists).Error; err != nil {
+		// 顺序**完全按 position**（用户 2026-10-10 要求：后台偏好里能调清单顺序）。
+		// 原来这里是 `is_default DESC, position ASC`：默认清单被钉在最前面，于是「把默认清单
+		// 往上/往下调」在界面上看不出变化。默认清单的身份仍用 is_default 表达（侧栏有 ⭐ 标记、
+		// 下拉里默认选中它），不再靠排序体现。
+		if err := db.Where("user_id = ? AND deleted_at IS NULL", userID).Order("position ASC, id ASC").Find(&lists).Error; err != nil {
 			response.ErrorInternal(c, "读取清单失败")
 			return
 		}
@@ -269,6 +275,69 @@ func handleCreateList(db *gorm.DB) gin.HandlerFunc {
 		}
 		publishDataChanged(list.UserID, "list", "created", list.ID, originClientID(c))
 		response.Success(c, ListDTO{List: list})
+	}
+}
+
+// handleReorderLists 按前端给的 id 顺序重排清单（用户 2026-10-10 要求：
+// 后台偏好里能调整清单顺序）。
+//
+//   - 只接受**当前用户自己的、未删除的**清单 id；系统固定栏目（信用卡/随手记事本/
+//     人生要有仪式感）也能排，但侧栏里它们是固定那几行，排它们不影响显示顺序；
+//   - 位置写成 1..N（原子的：整个顺序一次提交，避免前端逐条改造成中间态）；
+//   - 缺的清单（前端没传的，比如刚好在另一台机器上新建的）排在后面，按原位置补齐，
+//     不会因为一次重排把别人的清单顺序打乱。
+func handleReorderLists(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var in struct {
+			IDs []uint `json:"ids"`
+		}
+		if err := c.ShouldBindJSON(&in); err != nil || len(in.IDs) == 0 {
+			response.ErrorBadRequest(c, "清单顺序参数无效")
+			return
+		}
+		userID := currentUserID(c)
+		var lists []List
+		if err := db.Where("user_id = ? AND deleted_at IS NULL", userID).
+			Order("position ASC, id ASC").Find(&lists).Error; err != nil {
+			response.ErrorInternal(c, "读取清单失败")
+			return
+		}
+		byID := make(map[uint]List, len(lists))
+		for _, l := range lists {
+			byID[l.ID] = l
+		}
+		ordered := make([]List, 0, len(lists))
+		seen := make(map[uint]bool, len(lists))
+		for _, id := range in.IDs {
+			if l, ok := byID[id]; ok && !seen[id] {
+				ordered = append(ordered, l)
+				seen[id] = true
+			}
+		}
+		for _, l := range lists { // 没在请求里出现的，按原顺序接在后面
+			if !seen[l.ID] {
+				ordered = append(ordered, l)
+			}
+		}
+		err := db.Transaction(func(tx *gorm.DB) error {
+			for i, l := range ordered {
+				pos := i + 1
+				if l.Position == pos {
+					continue
+				}
+				if err := tx.Model(&List{}).Where("id = ? AND user_id = ?", l.ID, userID).
+					Update("position", pos).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			response.ErrorInternal(c, "保存清单顺序失败")
+			return
+		}
+		publishDataChanged(userID, "list", "reordered", 0, originClientID(c))
+		response.Success(c, gin.H{"ordered": len(ordered)})
 	}
 }
 
@@ -803,33 +872,72 @@ func handleCalendarItems(db *gorm.DB) gin.HandlerFunc {
 var (
 	overdueGraceMu    sync.Mutex
 	overdueGraceValue time.Duration
-	overdueGraceAt    time.Time
-	overdueGraceTTL   = 2 * time.Second
+	// 「任务过期时间」（当天的几点算过期，默认 23:59）。与宽限分钟数一起缓存，
+	// 因为它们都只在同一次 GetPublicConfigs 里读出来（保持 /summary 的 2 条聚合查询不变）。
+	overdueExpireValue = "23:59"
+	overdueGraceAt     time.Time
+	overdueGraceTTL    = 2 * time.Second
 )
 
 func overdueGrace(db *gorm.DB) time.Duration {
+	grace, _ := overduePolicy(db)
+	return grace
+}
+
+// overduePolicy 一次返回「宽限时长 + 当天过期时间（HH:MM）」。
+func overduePolicy(db *gorm.DB) (time.Duration, string) {
 	overdueGraceMu.Lock()
 	if !overdueGraceAt.IsZero() && time.Since(overdueGraceAt) < overdueGraceTTL {
-		v := overdueGraceValue
+		v, e := overdueGraceValue, overdueExpireValue
 		overdueGraceMu.Unlock()
-		return v
+		return v, e
 	}
 	overdueGraceMu.Unlock()
 
 	grace := time.Duration(0)
-	raw := ""
+	expire := "23:59"
 	if cfg, err := sysconfig.GetPublicConfigs(db); err == nil {
-		raw = cfg["task_overdue_after_minutes"]
-	}
-	if mins, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && mins > 0 {
-		grace = time.Duration(mins) * time.Minute
+		if mins, err := strconv.Atoi(strings.TrimSpace(cfg["task_overdue_after_minutes"])); err == nil && mins > 0 {
+			grace = time.Duration(mins) * time.Minute
+		}
+		if v := strings.TrimSpace(cfg["task_expire_time"]); validClock(v) {
+			expire = v
+		}
 	}
 
 	overdueGraceMu.Lock()
 	overdueGraceValue = grace
+	overdueExpireValue = expire
 	overdueGraceAt = time.Now()
 	overdueGraceMu.Unlock()
-	return grace
+	return grace, expire
+}
+
+// validClock 校验 "HH:MM"（配置是下拉里的固定几个值，这里仍做一次格式校验，
+// 防止手改数据库塞进非法值把 SQL 拼坏）。
+func validClock(v string) bool {
+	if len(v) != 5 || v[2] != ':' {
+		return false
+	}
+	h, err1 := strconv.Atoi(v[0:2])
+	m, err2 := strconv.Atoi(v[3:5])
+	return err1 == nil && err2 == nil && h >= 0 && h <= 23 && m >= 0 && m <= 59
+}
+
+// overdueDeadlineExpr 生成「这一行的逾期判定时刻」SQL 片段。
+//
+// 规则（用户 2026-10-10 要求）：**当天到这个点才算过期** —— 到期日当天的任务，
+// 不管写的是几点，都要等到「过期时间」（默认 23:59）才算逾期，再叠加上面的宽限分钟数；
+// 若到期时刻本来就晚于当天的过期时间（比如 23:59:30 或跨天区间），取两者里晚的那个。
+//
+// 时间在库里是**带偏移的文本**，所以先把生效时间归一化成 UTC（tsUTC），
+// 再 +8 小时折回上海本地日期、拼上过期时间、最后 -8 小时折回 UTC 参与比较。
+// 传进来的 expire 已经过 validClock 校验，不会被注入。
+func overdueDeadlineExpr(effectiveDue, expire string) string {
+	utc := tsUTC(effectiveDue)
+	localDay := "date(" + utc + ", '+8 hours')"
+	dayDeadline := "datetime(" + localDay + " || ' " + expire + ":00', '-8 hours')"
+	return "MAX(datetime(" + utc + "), " + dayDeadline + ")"
 }
 
 func handleSummary(db *gorm.DB) gin.HandlerFunc {
@@ -857,8 +965,10 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		// 口径与改动前一致：今天 = due_at < 今天 24 点（含逾期），逾期 = due_at < 现在。
 		// 时间比较一律走 tsUTC() 归一化（SQLite 里时间是带偏移的文本，直接比会按
 		// 字符串序错位，见 sql_time.go）。
-		// 逾期看的是**过了宽限时间之后**（与前端 isOverdue 同一口径）
-		overdueBefore := now.Add(-overdueGrace(db))
+		// 逾期看的是**过了宽限时间之后**（与前端 isOverdue 同一口径），
+		// 而且「当天到这个点才算过期」（task_expire_time，默认 23:59）。
+		grace, expire := overduePolicy(db)
+		overdueBefore := now.Add(-grace)
 		selectArgs := []interface{}{sqlTimeArg(endToday), userID, sqlTimeArg(overdueBefore)}
 		if len(hiddenCards) > 0 {
 			// 栏目关掉时，它那些卡片提醒的完成记录也不该再计入角标。
@@ -872,7 +982,7 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		todayExpr := "COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND " +
 			tsUTC(effectiveDue) + " < datetime(?) THEN 1 ELSE 0 END), 0) AS today"
 		overdueExpr := "COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND " +
-			tsUTC(effectiveDue) + " < datetime(?) THEN 1 ELSE 0 END), 0) AS overdue"
+			overdueDeadlineExpr(effectiveDue, expire) + " < datetime(?) THEN 1 ELSE 0 END), 0) AS overdue"
 		q := db.Model(&Reminder{}).
 			Select(todayExpr+`,
 				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS planned,

@@ -197,6 +197,9 @@ export const createList = (data: { name: string; color?: string; icon?: string; 
 export const updateList = (id: number, data: Partial<ReminderList>) =>
   request.patch(`/api/reminder/lists/${id}`, data)
 export const deleteList = (id: number) => request.delete(`/api/reminder/lists/${id}`)
+/** 清单顺序（用户 2026-10-10 要求）：一次提交整串 id，服务端按顺序写 position（1..N）。 */
+export const reorderLists = (ids: number[]) =>
+  request.put('/api/reminder/lists/order', { ids })
 
 
 /**

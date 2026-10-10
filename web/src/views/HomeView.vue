@@ -66,7 +66,7 @@
           <button
             v-if="canQuickAdd && !quickOpen"
             type="button"
-            class="quick-new-button"
+            class="quick-new-button flow-frame"
             data-quick-add
             data-quick-new
             title="新建提醒（快捷键 N）"
@@ -139,23 +139,26 @@
             <label class="field-label !flex flex-col items-start gap-1">
               周期
               <span class="flex items-center gap-1">
+                <!-- 数量输入框**所有按数量的档位都保留**（用户 2026-10-10 要求：
+                     原来只有「天」能调数量，周/月/年都是写死的 1）——N 天 / N 周 / N 月 / N 年。
+                     「年终」是按日历年锚定的，不是数量，所以那一档不显示输入框。 -->
                 <input
-                  v-if="planPeriod === 'days'"
+                  v-if="planPeriod !== 'yearend' && planPeriod !== 'custom'"
                   v-model.number="planDays"
                   type="number"
                   min="1"
                   max="3650"
                   class="quick-chip !h-8 !w-16 !px-2 !text-[11px]"
                   data-plan-days
-                  aria-label="任务周期天数"
+                  :aria-label="planCountLabel"
                   @change="applyPlanPeriod"
                 />
                 <select v-model="planPeriod" class="quick-chip !h-8 !px-2 !text-[11px]" data-plan-period @change="applyPlanPeriod">
                   <option value="days">{{ planDays }} 天</option>
-                  <option value="week">1 周</option>
-                  <option value="month">1 月</option>
+                  <option value="week">{{ planDays }} 周</option>
+                  <option value="month">{{ planDays }} 月</option>
                   <option value="yearend">年终</option>
-                  <option value="year">1 年</option>
+                  <option value="year">{{ planDays }} 年</option>
                   <option value="custom">自定义</option>
                 </select>
               </span>
@@ -695,18 +698,24 @@ const editorOpen = ref(false)
 const clockNow = ref(Date.now())
 const toast = reactive<{ message: string; type: 'success' | 'error' }>({ message: '', type: 'success' })
 
-// 新建提醒的默认时间 = **当前时刻**（取整到分，秒与毫秒归零）。
+// 新建提醒的默认时间 = **当天的「过期时间」**（后台偏好 `task_expire_time`，默认 23:59）。
 //
-// 用户 2026-10-10 明确要求：「日期默认为当前时间点作为兜底」。刚建完就已经过了几秒，
-// 所以「多久算逾期」由后台偏好 `task_overdue_after_minutes`（默认 30 分钟）兜着 ——
-// 没到宽限时间不会顶着「已逾期」（见 overdueGraceMinutes / isOverdue）。
+// 历史：0.16.5 曾按用户要求改成「当前时刻」；2026-10-10 用户又要求后台加「过期时间」，
+// 并明确「新建预填这个时间」——所以现在默认是当天 23:59（跟着偏好走）。
+// 逾期口径也一起变了：**当天到这个点才算过期**，再叠加 `task_overdue_after_minutes` 宽限。
 function defaultQuickDue(): string {
   const d = new Date()
-  d.setSeconds(0, 0)
+  d.setHours(expireTimeParts.value.h, expireTimeParts.value.m, 0, 0)
   return toLocalIso(d)
 }
 // 「任务过期多久算逾期」按**分钟**存，前端从公开配置读（系统级设置，公开接口里的就是权威值）。
 const overdueGraceMinutes = ref(30)
+// 「任务过期时间」（HH:MM，默认 23:59）：当天到这个点才算过期；也是新建提醒的默认时间。
+const expireTime = ref('23:59')
+const expireTimeParts = computed(() => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(expireTime.value.trim())
+  return m ? { h: Number(m[1]), m: Number(m[2]) } : { h: 23, m: 59 }
+})
 const blankInput = (): SaveReminderInput => ({
   title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: defaultQuickDue(),
   start_at: null, end_at: null,
@@ -854,15 +863,24 @@ function endOfDay(d: Date) {
   x.setHours(23, 59, 0, 0)
   return x
 }
-function periodEnd(startIso: string, kind: string, days: number): Date {
+/**
+ * 周期 → 结束时刻（落在最后一天的 23:59）。
+ *
+ * `n` 是**数量**，各档位都通用（用户 2026-10-10 要求：天/周/月/年都能调数量）：
+ *   · N 天 → 开始那天起 N 天；· N 周 = N×7 天；· N 月 = N 个自然月；
+ *   · N 年 = N 个自然年；· 年终 = 开始那一年的 12-31（锚定日历年，不用数量）。
+ * 都用「日期 + 天数 − 1」的算法，所以结束日当天整天都算在任务里。
+ */
+function periodEnd(startIso: string, kind: string, n: number): Date {
   const start = new Date(startIso)
   const base = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+  const count = Math.min(3650, Math.max(1, Math.round(n) || 1))
   switch (kind) {
-    case 'week': return endOfDay(new Date(base.getFullYear(), base.getMonth(), base.getDate() + 6))
-    case 'month': return endOfDay(new Date(base.getFullYear(), base.getMonth() + 1, base.getDate() - 1))
-    case 'year': return endOfDay(new Date(base.getFullYear() + 1, base.getMonth(), base.getDate() - 1))
+    case 'week': return endOfDay(new Date(base.getFullYear(), base.getMonth(), base.getDate() + count * 7 - 1))
+    case 'month': return endOfDay(new Date(base.getFullYear(), base.getMonth() + count, base.getDate() - 1))
+    case 'year': return endOfDay(new Date(base.getFullYear() + count, base.getMonth(), base.getDate() - 1))
     case 'yearend': return endOfDay(new Date(base.getFullYear(), 11, 31))
-    default: return endOfDay(new Date(base.getFullYear(), base.getMonth(), base.getDate() + Math.max(1, days) - 1))
+    default: return endOfDay(new Date(base.getFullYear(), base.getMonth(), base.getDate() + count - 1))
   }
 }
 /** 按当前周期重算结束时间；「自定义」交给用户自己挑，不动 end_at。 */
@@ -873,23 +891,43 @@ function applyPlanPeriod() {
   quick.end_at = toLocalIso(end)
 }
 /** 已有结束时间时反推周期（编辑旧数据用）：能对上就选中对应档，否则算自定义。 */
+/**
+ * 从已有的「开始—结束」反推周期档位与数量（编辑一条计划任务时用）。
+ * 各档位的匹配按「先特殊后一般」：年终 → N 年 → N 月 → N 周 → N 天。
+ */
 function inferPlanPeriod() {
   if (!quick.end_at || !quick.start_at) { planPeriod.value = 'none'; return }
   const start = new Date(quick.start_at)
   const end = new Date(quick.end_at)
   const same = (d: Date) => Math.abs(end.getTime() - d.getTime()) < 60_000
-  if (same(periodEnd(quick.start_at, 'days', 1))) { planPeriod.value = 'days'; planDays.value = 1; return }
-  if (same(periodEnd(quick.start_at, 'week', 7))) { planPeriod.value = 'week'; return }
-  if (same(periodEnd(quick.start_at, 'month', 30))) { planPeriod.value = 'month'; return }
-  if (same(periodEnd(quick.start_at, 'year', 365))) { planPeriod.value = 'year'; return }
-  if (same(periodEnd(quick.start_at, 'yearend', 0))) { planPeriod.value = 'yearend'; return }
-  // 天数只差在 N 天上（1 天以外）
   const startBase = new Date(start.getFullYear(), start.getMonth(), start.getDate())
   const endBase = new Date(end.getFullYear(), end.getMonth(), end.getDate())
-  const diff = Math.round((endBase.getTime() - startBase.getTime()) / 86400_000) + 1
-  if (diff > 1 && diff <= 3650 && Math.abs(end.getHours()) === 23) { planPeriod.value = 'days'; planDays.value = diff; return }
+  const diff = Math.round((endBase.getTime() - startBase.getTime()) / 86400_000) + 1 // 含首尾的天数
+  if (diff >= 1 && diff <= 3650 && Math.abs(end.getHours()) === 23) {
+    if (same(periodEnd(quick.start_at, 'yearend', 1))) { planPeriod.value = 'yearend'; return }
+    for (let n = 1; n <= 60; n += 1) {
+      if (diff % 7 === 0 && n === diff / 7 && same(periodEnd(quick.start_at, 'week', n))) {
+        planPeriod.value = 'week'; planDays.value = n; return
+      }
+    }
+    for (let n = 1; n <= 60; n += 1) {
+      if (same(periodEnd(quick.start_at, 'month', n))) { planPeriod.value = 'month'; planDays.value = n; return }
+    }
+    for (let n = 1; n <= 30; n += 1) {
+      if (same(periodEnd(quick.start_at, 'year', n))) { planPeriod.value = 'year'; planDays.value = n; return }
+    }
+    if (diff <= 3650) { planPeriod.value = 'days'; planDays.value = diff; return }
+  }
   planPeriod.value = 'custom'
 }
+
+/** 当前周期档位对应的数量输入框可访问名（读屏用；不影响界面）。 */
+const planCountLabel = computed(() => ({
+  days: '任务周期天数',
+  week: '任务周期周数',
+  month: '任务周期月数',
+  year: '任务周期年数',
+} as Record<string, string>)[planPeriod.value] || '任务周期数量')
 const planRangeLabel = computed(() => {
   if (!quick.start_at) return ''
   const start = formatFullDue(quick.start_at)
@@ -1366,8 +1404,18 @@ function overdueStamp(item: ReminderItem): number | null {
   const t = new Date(raw).getTime()
   return Number.isNaN(t) ? null : t
 }
-function isOverdue(item: ReminderItem) {
+/** 逾期判定的**截止时刻**：到期时刻与「当天过期时间」取晚的那个。
+    （用户 2026-10-10：当天到这个点才算过期；若到期时刻本来就晚于它，就按到期时刻。） */
+function overdueDeadline(item: ReminderItem): number | null {
   const t = overdueStamp(item)
+  if (t === null) return null
+  const d = new Date(t)
+  const { h, m } = expireTimeParts.value
+  const dayExpire = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0, 0).getTime()
+  return Math.max(t, dayExpire)
+}
+function isOverdue(item: ReminderItem) {
+  const t = overdueDeadline(item)
   if (t === null) return false
   // 过了「宽限时间」才算逾期：默认时间就是当前时刻，不留余量的话新建即逾期
   return t + overdueGraceMinutes.value * 60_000 < clockNow.value
@@ -1502,9 +1550,12 @@ watch([selectedList, () => authStore.creditCardEnabled, () => authStore.notebook
 async function loadOverdueGrace() {
   try {
     const res = await getPublicConfigs()
-    const v = Number((res.data?.data as Record<string, unknown> | undefined)?.task_overdue_after_minutes)
+    const cfg = (res.data?.data || {}) as Record<string, unknown>
+    const v = Number(cfg.task_overdue_after_minutes)
     if (Number.isFinite(v) && v >= 0) overdueGraceMinutes.value = v
-  } catch { /* 拿不到就按默认 30 分钟 */ }
+    const t = String(cfg.task_expire_time || '').trim()
+    if (/^\d{1,2}:\d{2}$/.test(t)) expireTime.value = t
+  } catch { /* 拿不到就按默认 30 分钟 / 23:59 */ }
 }
 onMounted(() => {
   loadData()
@@ -1542,9 +1593,10 @@ function onShortcut(e: KeyboardEvent) {
 .search-box { @apply flex h-10 w-full items-center gap-2 rounded-2xl border border-border/80 bg-surface/80 px-3 text-muted-foreground shadow-sm backdrop-blur transition focus-within:border-brand-500/40 focus-within:ring-4 focus-within:ring-brand-500/10 sm:h-11 sm:w-64; }
 .search-box input { @apply min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/65; }
 .quick-card { @apply relative overflow-hidden rounded-[24px] border border-border/70 bg-surface/90 p-3 shadow-[0_20px_50px_-30px_rgba(15,23,42,.35)] backdrop-blur-xl transition-all sm:p-5; }
-/* 收起态的「新建」按钮（用户要求：新建提醒控件折叠成一个新建按钮）：
-   虚线的整行按钮，点一下展开成上面的 .quick-card。 */
-.quick-new-button { @apply inline-flex h-10 shrink-0 items-center gap-1.5 rounded-2xl border border-dashed border-border bg-surface/70 px-2.5 text-sm font-bold text-muted-foreground shadow-sm backdrop-blur transition hover:border-brand-500/45 hover:text-brand-600 dark:hover:text-brand-300 sm:h-11 sm:px-3.5; }
+/* 收起态的「新建」按钮（用户要求：新建提醒控件折叠成一个按钮、放到搜索框左边）：
+   **实线边框 + 流光**（.flow-frame 那条旋转的 1px 光带，见 style.css）——
+   边框本身仍是实线，光带叠在它上面转，所以看起来是「实线在流动」。 */
+.quick-new-button { @apply inline-flex h-10 shrink-0 items-center gap-1.5 rounded-2xl border border-solid border-border bg-surface/70 px-2.5 text-sm font-bold text-muted-foreground shadow-sm backdrop-blur transition hover:border-brand-500/45 hover:text-brand-600 dark:hover:text-brand-300 sm:h-11 sm:px-3.5; }
 /* 流光外壳：圆角与卡片一致（.flow-frame::before 的 1px 光带靠 border-radius: inherit），
    自己不裁剪，好让 .flow-glow::after 那团柔光露出来。 */
 .quick-shell { @apply relative rounded-[24px]; }

@@ -458,6 +458,12 @@ const dayKey = (d: Date) => keyOf(d.getFullYear(), d.getMonth() + 1, d.getDate()
 const viewMode = ref<'month' | 'week'>('month')
 // 后台「周起始日」（系统配置，默认周一）：月历表头与周视图第一列都跟着它
 const weekStartPref = ref<'monday' | 'sunday'>('monday')
+// 「过期时间」（后台偏好 task_expire_time，默认 23:59）：日历里新建提醒的默认时分
+const expireTime = ref('23:59')
+const expireTimeParts = computed(() => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(expireTime.value.trim())
+  return m ? { h: Number(m[1]), m: Number(m[2]) } : { h: 23, m: 59 }
+})
 const weekdays = computed(() => (weekStartPref.value === 'sunday'
   ? ['日', '一', '二', '三', '四', '五', '六']
   : ['一', '二', '三', '四', '五', '六', '日']))
@@ -555,7 +561,10 @@ async function loadWeekStart() {
     // 用公开配置：周起始日是**系统级**设置，公开接口里的就是权威值（管理员的
     // /api/configs 会把用户作用域的键合并进来，历史上可能留下同名用户行）
     const res = await getPublicConfigs()
-    const v = String((res.data?.data as Record<string, unknown> | undefined)?.calendar_week_start || '')
+    const cfgAll = (res.data?.data || {}) as Record<string, unknown>
+    const expire = String(cfgAll.task_expire_time || '').trim()
+    if (/^\d{1,2}:\d{2}$/.test(expire)) expireTime.value = expire
+    const v = String(cfgAll.calendar_week_start || '')
     if (v === 'sunday' || v === 'monday') {
       weekStartPref.value = v
       weekStart.value = startOfWeek(weekStart.value)
@@ -950,8 +959,9 @@ async function onEditorSaved() {
 }
 
 /**
- * 双击日期格（或点「＋ 新建」）在这天新建提醒：弹出和列表页同一个编辑面板，
- * 预填那天 20:00 —— 与首页「今天」默认 20:00 的约定保持一致。
+ * 双击日期格（或点「＋ 新建」）在这天新建提醒：弹出和列表页同一个编辑面板。
+ * 预填那天的**「过期时间」**（后台偏好 task_expire_time，默认 23:59）——
+ * 与首页「今天」新建的默认时间保持同一个约定（用户 2026-10-10 要求）。
  * 清单沿用当前选中清单，没选就用默认清单，与首页快速新建同规则。
  */
 /**
@@ -978,7 +988,7 @@ function openCreateForSlot(d: Date, e: MouseEvent) {
 function openCreateForDate(dateKey: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return
   const [y, m, d] = dateKey.split('-').map(Number)
-  const due = new Date(y, m - 1, d, 20, 0, 0, 0)
+  const due = new Date(y, m - 1, d, expireTimeParts.value.h, expireTimeParts.value.m, 0, 0)
   editingId.value = null
   createPreset.value = {
     title: '', notes: '', kind: 'task',
