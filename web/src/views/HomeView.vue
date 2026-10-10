@@ -91,8 +91,12 @@
           <!-- 计划页的输入窗口与今天页**刻意不同**（用户要求）：
                没有「记事」（计划里只有任务）、没有「今天/明天/本周末」这类相对快捷项，
                改成自定义的**开始 / 结束**（结束留空就是单点时间）+ 重复规则。 -->
-          <div v-if="isPlanned" class="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            <label class="field-label relative">
+          <!-- 计划页这一排：带标题的字段（开始/周期/结束/重复）统一成「标题在上、控件在下」，
+               整行改成 items-end 按**底边**对齐 —— 这样带标题的控件与「重要/清单/更多」这些
+               纯按钮芯片都落在同一条水平线上（用户报的「周期和控件错位」就是原来
+               「开始」的按钮跟在标题同一行、而「周期」的多控件块掉了下去）。 -->
+          <div v-if="isPlanned" class="flex flex-wrap items-end gap-1.5 sm:gap-2">
+            <label class="field-label relative !flex flex-col items-start gap-1">
               开始
               <button ref="planStartAnchor" type="button" class="quick-chip !h-8" :class="{ active: !!quick.start_at }" @click="planStartOpen = !planStartOpen">
                 {{ quick.start_at ? formatFullDue(quick.start_at) : '选择开始时间' }}
@@ -102,7 +106,7 @@
             <!-- 任务周期（用户要求）：不再让用户手挑结束时间，而是选一个周期 ——
                  N 天 / 1 周 / 1 月 / 年终 / 1 年，或「自定义」自己挑结束时间。
                  结束时间由开始时间 + 周期算出来，落在**最后一天的 23:59**（整天都算在任务里）。 -->
-            <label class="field-label">
+            <label class="field-label !flex flex-col items-start gap-1">
               周期
               <span class="flex items-center gap-1">
                 <input
@@ -126,7 +130,7 @@
                 </select>
               </span>
             </label>
-            <label v-if="planPeriod === 'custom'" class="field-label relative">
+            <label v-if="planPeriod === 'custom'" class="field-label relative !flex flex-col items-start gap-1">
               结束
               <button ref="planEndAnchor" type="button" class="quick-chip !h-8" :class="{ active: !!quick.end_at }" @click="planEndOpen = !planEndOpen">
                 {{ quick.end_at ? formatFullDue(quick.end_at) : '选择结束时间' }}
@@ -134,7 +138,7 @@
               <LunarDatePicker v-if="planEndOpen" v-model="planEndPicked" with-time :anchor-el="planEndAnchor" @commit="commitPlanEnd" />
             </label>
             <button v-if="quick.end_at" class="quick-chip !h-8" title="清掉结束时间，改成单点时间" data-plan-clear-end @click="clearPlanEnd">清除结束</button>
-            <label class="field-label">
+            <label class="field-label !flex flex-col items-start gap-1">
               重复
               <select v-model="quick.repeat_rule" class="quick-chip !h-8 !px-2">
                 <option value="none">不重复</option>
@@ -169,6 +173,34 @@
               <button class="quick-chip" :class="{ active: preset === 'today' }" @click="setPreset('today')">今天</button>
               <button class="quick-chip" :class="{ active: preset === 'tomorrow' }" @click="setPreset('tomorrow')">明天</button>
               <button class="quick-chip" :class="{ active: preset === 'weekend' }" @click="setPreset('weekend')">本周末</button>
+              <!-- 日期与重复从「更多」里搬出来（用户要求：「更多」只留备注/农历/过期提醒频率/通知方式）：
+                   日期芯片点开就是完整的选择器，右边跟着「清空」；重复直接是个小下拉。 -->
+              <span class="relative inline-flex items-center gap-1">
+                <button
+                  ref="quickDateAnchor"
+                  type="button"
+                  class="quick-chip"
+                  :class="{ active: !!quick.due_at, '!border-brand-500/50': quickDateOpen }"
+                  data-quick-date
+                  @click="quickDateOpen = !quickDateOpen"
+                >{{ quick.due_at ? formatFullDue(quick.due_at) : '选择日期' }}</button>
+                <button
+                  v-if="quick.due_at"
+                  type="button"
+                  class="quick-chip"
+                  title="清空日期：这条会变成「无日期」，只在「全部」里出现"
+                  data-quick-clear-due
+                  @click="clearQuickDue"
+                >清空</button>
+                <LunarDatePicker v-if="quickDateOpen" v-model="quickDatePicked" with-time :anchor-el="quickDateAnchor" @commit="quickDateOpen = false" />
+              </span>
+              <select v-model="quick.repeat_rule" class="quick-chip max-w-[6.5rem] !px-2 !text-[11px]" data-quick-repeat aria-label="重复">
+                <option value="none">不重复</option>
+                <option value="daily">每天</option>
+                <option value="weekly">每周</option>
+                <option value="monthly">每月</option>
+                <option value="yearly">每年</option>
+              </select>
               <button class="quick-chip" :class="{ active: quick.priority === 3 }" @click="quick.priority = quick.priority === 3 ? 0 : 3">
                 <span class="text-rose-500">!!!</span> 重要
               </button>
@@ -178,7 +210,7 @@
                 <i class="h-2 w-2 shrink-0 rounded-full" :style="{ background: listColor(quickListColor) }"></i>
                 <select
                   v-model.number="quick.list_id"
-                  class="quick-chip !h-7 max-w-[9rem] !px-2 !text-[11px]"
+                  class="quick-chip max-w-[9rem] !px-2 !text-[11px]"
                   aria-label="选择清单"
                 >
                   <option v-for="list in navLists" :key="list.id" :value="list.id">{{ list.name }}</option>
@@ -193,46 +225,29 @@
             <span v-else-if="quick.due_at" class="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-300">{{ formatDue(quick.due_at) }}</span>
           </div>
 
+          <!-- 无日期提示：保存前就让用户看到「这条不会进今天/计划」（0.15.4 的 bug）。
+               0.18.2 起从「更多」面板搬到这里 —— 面板默认收起时也要能看到，两条分支都覆盖。 -->
+          <p
+            v-if="quick.kind !== 'note' && !quick.due_at && !quick.start_at"
+            class="mt-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[11px] font-semibold leading-4 text-amber-600 dark:text-amber-400"
+            data-quick-undated-hint
+          >
+            这条没有日期：不会出现在「今天 / 计划」里，只在「全部」里显示为「无日期」。
+            <button type="button" class="underline underline-offset-2" @click="setPreset('today')">设为今天</button>
+          </p>
+
           <Transition name="expand">
             <div
               v-if="quickExpanded && quick.kind !== 'note'"
               class="quick-panel flow-frame flow-glow relative mt-3 grid gap-2.5 rounded-2xl bg-muted/65 p-3 sm:mt-4 sm:grid-cols-2 sm:gap-3 sm:p-4 lg:grid-cols-4"
               data-quick-panel
             >
-              <div class="field-label relative">
-                日期时间
-                <div class="mt-1.5 flex items-stretch gap-1.5">
-                  <button ref="quickDateAnchor" type="button" class="compact-input flex h-9 min-w-0 flex-1 items-center justify-between px-3 text-left text-xs font-medium" :class="{ '!border-brand-500/50': quickDateOpen }" @click="quickDateOpen = !quickDateOpen">
-                    <span :class="{ 'text-muted-foreground/60': !quick.due_at }">{{ quick.due_at ? formatFullDue(quick.due_at) : '选择日期' }}</span>
-                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-muted-foreground" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2" stroke-width="1.8"/><path d="M8 3v4m8-4v4M3 10h18" stroke-width="1.8" stroke-linecap="round"/></svg>
-                  </button>
-                  <!-- 「不要日期」是明确动作：不再靠「再点一次今天」这种看不见的开关（见 setPreset 的注释） -->
-                  <button
-                    v-if="quick.due_at"
-                    type="button"
-                    class="quick-chip !h-9 shrink-0"
-                    title="清空日期：这条会变成「无日期」，只在「全部」里出现"
-                    data-quick-clear-due
-                    @click="clearQuickDue"
-                  >清空</button>
-                </div>
-                <LunarDatePicker v-if="quickDateOpen" v-model="quickDatePicked" with-time :anchor-el="quickDateAnchor" @commit="quickDateOpen = false" />
-              </div>
-              <label class="field-label">重复<select v-model="quick.repeat_rule" class="compact-input"><option value="none">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option></select></label>
+              <!-- 「更多」里只保留这四项（用户要求）：备注 / 按农历循环 / 过期提醒频率 / 通知方式。
+                   日期与重复已经搬到上面的芯片行，随时可点。 -->
               <label class="field-label">备注<input v-model="quick.notes" class="compact-input" placeholder="可选" maxlength="5000" /></label>
               <label class="field-label">按农历循环<select v-model="quick.calendar" class="compact-input" @change="upgradeCalendarToYearly(quick)"><option value="solar">公历</option><option value="lunar">农历</option></select></label>
               <label class="field-label">过期提醒频率<RepeatNotifySelect :model-value="quick.repeat_notify_minutes ?? 0" @update:model-value="quick.repeat_notify_minutes = $event" /></label>
               <p v-if="quick.calendar === 'lunar'" class="text-[10px] leading-4 text-muted-foreground sm:col-span-2 lg:col-span-4">已按农历循环：提醒按所选日期的农历月/日重复，腊月三十遇小年自动改为除夕当天，闰月日期遇无闰月年份自动用对应平月。</p>
-              <!-- 无日期提示：保存前就让用户看到「这条不会进今天/计划」，别再出现
-                   「明明保存了、今天页却没有」这种摸不着头脑的情况（0.15.4 的 bug）。 -->
-              <p
-                v-if="!quick.due_at"
-                class="rounded-xl bg-amber-500/12 px-3 py-2 text-[11px] font-semibold leading-4 text-amber-600 sm:col-span-2 lg:col-span-4 dark:text-amber-400"
-                data-quick-undated-hint
-              >
-                这条没有日期：不会出现在「今天 / 计划」里，只在「全部」里显示为「无日期」。
-                <button type="button" class="underline underline-offset-2" @click="setPreset('today')">设为今天</button>
-              </p>
               <div class="sm:col-span-2 lg:col-span-4">
                 <p class="field-label mb-2">通知方式</p>
                 <div class="flex flex-wrap gap-2">
