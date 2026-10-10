@@ -32,11 +32,11 @@
       还没有卡片。点「+ 新建卡片」填银行、卡名、账单日与还款日，系统会自动生成账单日/还款日提醒。
     </p>
 
-    <!-- 一行三张（窄屏一张、中屏两张），卡片靠银行标志区分；顺序见 sortedCards() -->
-    <!-- 宽屏一行四张（窄屏一张、中屏两张）：卡片按 1.586:1 的比例**等比例缩小**
-         —— 卡片小了一号，但长宽比不变，看起来仍是银行卡。为了在小卡面上给卡名留出
-         位置，标志同步缩小（见下面的 max-w-[4.5rem]），右侧那列信息字号也收到 10px。 -->
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" data-card-grid>
+    <!-- 一行三张（窄屏一张、中屏两张、宽屏三张；2026-10-10 用户确认「三列最合适、
+         效果最好」，不再上到四列），卡片靠银行标志区分；顺序见 sortedCards()。
+         卡片按 1.586:1 的真卡比例，标志与右侧那列信息字号跟着卡片大小走
+         （见下面的 max-w-[4.5rem] 与 10px）。 -->
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" data-card-grid>
       <!-- 抽屉打开时把这张卡片抬到同排之上：抽屉是 absolute 的，
            后面的兄弟卡片（.surface 自带 backdrop-blur，各自成层）会盖住它
            —— 用户报的「更多按钮弹出会被遮挡」就是这个。 -->
@@ -59,38 +59,32 @@
         >
           <span class="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10"></span>
           <span class="pointer-events-none absolute -bottom-10 -left-4 h-24 w-24 rounded-full bg-black/10"></span>
-          <div class="relative flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
-            <!-- 左列（标志+卡名）：min-w-0 让卡名可以在自己那一列里换行。
-                 右列（账单日/还款日/额度）**固定不换行、永远待在右上角**（用户要求
-                 「保持位置不换行」）—— 所以这里不给左列设最小宽度去挤它。 -->
-            <div class="flex min-w-0 flex-1 flex-col gap-1">
-              <!-- 银行标志与卡名（用户 2026-10-10 要求）：
-                   ① 空间够时**同一行**，卡名紧跟标志右边；
-                   ② 空间不够、卡名要换行时，换下来的那行**与标志右侧对齐**（挂在标志下）。
-                   做法：两列 grid —— 标志占第 1 列（auto），卡名固定在第 2 列
-                   （minmax(0,1fr)，从标志右边缘 + 间距处开始）。卡名的每一行都在这一列里，
-                   所以换行后自然与标志右侧对齐；不用量标志宽度（各家银行标志宽窄不一）。
-                   minmax(0,1fr) 是关键：不加 0 下限时列宽不会小于内容宽度，窄屏会被顶出去。 -->
-              <div class="card-face-line">
-                <div class="card-face-logo" data-card-face-logo>
-                  <img v-if="logoOf(card)" :src="logoOf(card)" alt="" class="h-5 w-auto max-w-[4.5rem] object-contain sm:h-6" />
-                  <svg v-else class="h-5 w-5 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                    <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" stroke-width="1.6" />
-                    <path d="M2.5 10h19M6 13.5h4" stroke-width="1.6" stroke-linecap="round" />
-                  </svg>
-                </div>
-                <p class="card-title text-[13px] font-extrabold leading-[18px] tracking-wide" data-card-title>{{ cardTitle(card) }}</p>
+          <div class="relative flex flex-col gap-1">
+            <!-- 第一行：银行标志（左上）+ 账单日/还款日/额度（右上，**固定不换行**）。
+                 第二行：卡名与持卡人**同一行** —— 卡名左端与标志左端齐，
+                 持卡人右对齐到**卡面右边缘**（用户 2026-10-10 要求
+                 「账号名称放在银行图标下边、与图标对齐，持卡人与账号名称同行右对齐」）。
+                 两行分开排的原因：持卡人要和整张卡面对齐，不能被右上角那列信息截断。 -->
+            <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+              <div class="card-face-logo" data-card-face-logo>
+                <img v-if="logoOf(card)" :src="logoOf(card)" alt="" class="h-5 w-auto max-w-[4.5rem] object-contain sm:h-6" />
+                <svg v-else class="h-5 w-5 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" stroke-width="1.6" />
+                  <path d="M2.5 10h19M6 13.5h4" stroke-width="1.6" stroke-linecap="round" />
+                </svg>
               </div>
-              <!-- 持卡人挪到卡名下面（原来在右下角）：把右下那一行腾给卡号 -->
-              <p v-if="card.holder" class="text-[11px] font-semibold opacity-80" data-card-holder>{{ card.holder }}</p>
+              <div class="shrink-0 whitespace-nowrap text-right text-[10px] leading-4 opacity-85 sm:text-[10.5px]" data-card-meta>
+                <p>账单日 每月 {{ card.statement_day }} 号</p>
+                <p>还款日 每月 {{ card.due_day }} 号</p>
+                <p data-card-limit>
+                  <template v-if="card.limit_cents">信用额度 ¥{{ formatCents(card.limit_cents) }}</template>
+                  <template v-else>额度未填</template>
+                </p>
+              </div>
             </div>
-            <div class="shrink-0 whitespace-nowrap text-right text-[10px] leading-4 opacity-85 sm:text-[10.5px]" data-card-meta>
-              <p>账单日 每月 {{ card.statement_day }} 号</p>
-              <p>还款日 每月 {{ card.due_day }} 号</p>
-              <p data-card-limit>
-                <template v-if="card.limit_cents">信用额度 ¥{{ formatCents(card.limit_cents) }}</template>
-                <template v-else>额度未填</template>
-              </p>
+            <div class="flex min-w-0 items-end justify-between gap-2" data-card-name-row>
+              <p class="card-title text-[13px] font-extrabold leading-[18px] tracking-wide" data-card-title>{{ cardTitle(card) }}</p>
+              <p v-if="card.holder" class="shrink-0 whitespace-nowrap text-[11px] font-semibold opacity-80" data-card-holder>{{ card.holder }}</p>
             </div>
           </div>
           <!-- 卡号单独一行、**左对齐**（用户要求）：位置换一下之后卡号不再跟卡名抢宽度，
@@ -524,17 +518,12 @@ watch(isCardList, (v) => { if (v) void load() })
 /* 卡面配色（默认统一 / 账单日后黄→橘 / 最后 3 天与逾期红）在 utils/card-urgency.ts，
    时间卡片里的缩略小卡面也调它，保证同色。 */
 
-/* 标志 + 卡名：两列 grid —— 标志第 1 列，卡名固定在第 2 列（从标志右边缘 + 间距开始）。
-   空间够时两者同一行；卡名换行时每一行仍在这一列里，于是与标志右侧对齐。
-   minmax(0,1fr)：允许第 2 列收缩到 0，否则窄屏会被卡名的最小内容宽度顶出去。 */
-.card-face-line {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  column-gap: 0.5rem;
-  align-items: center;
-}
-.card-face-logo { grid-column: 1; }
-.card-title { grid-column: 2; }
+/* 标志与卡名（用户 2026-10-10 第二次调整）：
+   标志单独一行在左上；下面一行「卡名 …… 持卡人」—— 卡名左端与标志左端齐（同一个
+   竖列起点），持卡人在同一行、右对齐。layout 用 flex 而不是 grid：
+   卡名可以换行，换下来的行仍从标志左端开始（与图标对齐），持卡人不被挤走。 */
+.card-face-logo { @apply inline-flex; }
+.card-title { @apply min-w-0; }
 
 /* 卡名不按字断行：中文默认逐字换行，窄屏时「广发银行DIY卡」会被挤成一列一个字。
    keep-all 让一整串中文当成一个词，只有确实放不下时才由 break-word 在词内断开。 */

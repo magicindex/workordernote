@@ -259,8 +259,8 @@ func init() {
 	RegisterConfig(ConfigDef{
 		Key: "notebook_enabled", Scope: ScopeUser, Type: TypeBool,
 		Default: "true", Public: true,
-		Group: "features", Label: "记事本栏目",
-		Description: "在侧栏显示固定的「记事本」栏目（新建的记事都收在这里）；关掉后栏目隐藏，记事数据保留",
+		Group: "features", Label: "随手记事本栏目",
+		Description: "在侧栏显示固定的「随手记事本」栏目（新建的记事都收在这里）；关掉后栏目隐藏，记事数据保留",
 	})
 	RegisterConfig(ConfigDef{
 		Key: "log_retention_days", Scope: ScopeSystem, Type: TypeInt,

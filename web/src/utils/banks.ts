@@ -31,6 +31,9 @@ import jsbchina from '../assets/banks/jsbchina.svg?url'
 import njcb from '../assets/banks/njcb.svg?url'
 import czbank from '../assets/banks/czbank.svg?url'
 import hfbank from '../assets/banks/hfbank.svg?url'
+import alipay from '../assets/banks/alipay.svg?url'
+import wechat from '../assets/banks/wechat.svg?url'
+import jdfinance from '../assets/banks/jdfinance.svg?url'
 
 export interface BankPreset {
   /** 图标文件名（assets/banks/<code>.svg） */
@@ -65,6 +68,16 @@ export const BANK_PRESETS: BankPreset[] = [
   { code: 'njcb', name: '南京银行', aliases: ['南京', 'njcb'], logo: njcb },
   { code: 'czbank', name: '浙商银行', aliases: ['浙商', 'czbank'], logo: czbank },
   { code: 'hfbank', name: '恒丰银行', aliases: ['恒丰', 'hfbank'], logo: hfbank },
+  // 「类银行卡」的消费/信用付平台（用户 2026-10-10 要求：支付宝、微信、京东金融）：
+  // 花呗 / 分付 / 白条这些也有账单日与还款日，卡面同样需要标志来区分。
+  // 图标来源：支付宝、微信用 Simple Icons（CC0，官方标志的单色版，这里按品牌色填充：
+  // 支付宝 #1677ff、微信 #07c160）；京东金融在可用的开源图标集里没有完整彩色标志，
+  // 用 Arcticons 的 `jd-finance`（CC BY-SA 4.0，作者 Donnnno / Arcticons Team）
+  // 线性图标、按品牌红 #e1251b 描边 —— 若拿到官方 SVG，直接替换
+  // `assets/banks/jdfinance.svg` 即可，代码不用动。
+  { code: 'alipay', name: '支付宝', aliases: ['支付宝', 'alipay', '花呗', '借呗'], logo: alipay },
+  { code: 'wechat', name: '微信', aliases: ['微信', 'wechat', 'weixin', '分付', '零钱通'], logo: wechat },
+  { code: 'jdfinance', name: '京东金融', aliases: ['京东金融', '京东', 'jdfinance', 'jd', '白条', '京东白条'], logo: jdfinance },
 ]
 
 /** 按卡上存的名字找银行标志；找不到（老数据里的自由文本）返回 null。 */

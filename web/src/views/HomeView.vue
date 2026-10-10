@@ -4,8 +4,8 @@
          没有完成记录筛选；要加东西就点「新建卡片」。 -->
     <template v-if="isCardBucketPage">
       <!-- 页面标题那一行右侧就是时间卡片：宽屏并排（有最大宽度），窄屏自动折到标题下方 -->
-      <section class="mb-3 flex flex-col gap-2.5 sm:mb-5 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
-        <div class="min-w-0 lg:shrink-0">
+      <section class="mb-3 flex flex-col gap-2.5 sm:mb-5">
+        <div class="min-w-0">
           <div class="mb-2 hidden items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-muted-foreground sm:flex">
             <span class="h-2 w-2 rounded-full" :style="{ background: accentColor }"></span>
             信用卡账单
@@ -14,8 +14,9 @@
           <p class="mt-2 hidden text-sm text-muted-foreground sm:block">卡片、账单日与本周待还都在这一页；一个栏目装下所有卡。</p>
           <p class="truncate text-xs text-muted-foreground sm:hidden">卡片与本周待还都在这一页</p>
         </div>
-        <!-- 宽度放到最大：占满标题右侧剩下的空间（不再设上限），窄屏自动折到标题下方 -->
-        <div class="min-w-0 w-full lg:flex-1">
+        <!-- 到期卡片**单独一行**、放在标题下方（用户 2026-10-10 要求）：占满整行宽度，
+             不再挤在标题右侧，也不再因为窄屏折行而跑到标题中间。 -->
+        <div class="min-w-0 w-full" data-billing-row>
           <BillingStrip :refresh-key="weekRefreshKey" />
         </div>
       </section>
@@ -59,16 +60,47 @@
           </div>
           <p class="mt-2 hidden text-sm text-muted-foreground sm:block">{{ subtitle }}</p>
         </div>
-        <label class="search-box">
-          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" stroke-width="1.8"/><path d="m16.5 16.5 4 4" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <input v-model="search" placeholder="搜索提醒…" @input="debouncedLoad" />
-          <kbd class="hidden rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] sm:inline">⌘ K</kbd>
-        </label>
+        <!-- 搜索框左边就是收窄的「新建」按钮（用户 2026-10-10 要求：折叠后的新建按钮
+             调整宽度、放到搜索框左边）。点它展开整块新建卡片。 -->
+        <div class="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:justify-end">
+          <button
+            v-if="canQuickAdd && !quickOpen"
+            type="button"
+            class="quick-new-button"
+            data-quick-add
+            data-quick-new
+            title="新建提醒（快捷键 N）"
+            @click="expandQuickAdd"
+          >
+            <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2.2" stroke-linecap="round"/></svg>
+            新建
+          </button>
+          <label class="search-box">
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" stroke-width="1.8"/><path d="m16.5 16.5 4 4" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <input v-model="search" placeholder="搜索提醒…" @input="debouncedLoad" />
+            <kbd class="hidden rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] sm:inline">⌘ K</kbd>
+          </label>
+        </div>
       </section>
 
-      <section v-if="view !== 'completed'" class="quick-card" :class="{ 'quick-card-expanded': quickExpanded }">
+      <!-- 展开后的新建卡片（用户 2026-10-10 要求）：默认收起成上面那个「新建」按钮，
+           点按钮展开；**刷新、切换页面都回到收起状态**。全部页不给新建入口（见 canQuickAdd）。
+           卡片左上角那个圆形「＋」现在是**收起**按钮（用户要求：点圆圈＋号图标折叠）。 -->
+      <section v-if="canQuickAdd && quickOpen" data-quick-add>
+        <!-- 流光边框挂在**新建任务卡片**上（用户 2026-10-10 要求：原来错挂在「更多」面板里，
+             反了）。外面这层 shell 负责 .flow-frame/.flow-glow：卡片自己有 overflow-hidden
+             （用来裁左边那条品牌色竖条），把发光放在它身上会被裁掉，所以套一层不裁剪的壳。 -->
+        <div class="quick-shell flow-frame flow-glow">
+          <div class="quick-card" :class="{ 'quick-card-expanded': quickExpanded }">
         <div class="flex items-start gap-3">
-          <button class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-brand-500/25 text-brand-500" aria-label="新提醒">
+          <button
+            type="button"
+            class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-brand-500/25 text-brand-500 transition hover:border-brand-500 hover:bg-brand-500/10"
+            aria-label="收起新建窗口"
+            data-quick-collapse
+            title="收起新建窗口（回到「新建」按钮）"
+            @click="collapseQuickAdd"
+          >
             <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
           <div class="min-w-0 flex-1">
@@ -79,15 +111,13 @@
               :placeholder="quick.kind === 'note' ? '记一笔…' : '添加一条提醒…'"
               maxlength="200"
               @keydown.enter.prevent="submitQuick"
-              @focus="quickFocused = true"
-              @click="quickFocused = true"
             />
             <p v-if="quick.notes" class="mt-1 truncate text-xs text-muted-foreground">{{ quick.notes }}</p>
           </div>
           <button v-if="quick.title" class="btn-primary !h-9 !px-4" :disabled="saving" @click="submitQuick">{{ saving ? '保存中' : quick.kind === 'note' ? '记下' : '添加' }}</button>
         </div>
 
-        <div v-if="quickFocused || quick.title" class="mt-3 border-t border-border/60 pt-3 sm:mt-4 sm:pt-4">
+        <div class="mt-3 border-t border-border/60 pt-3 sm:mt-4 sm:pt-4">
           <!-- 计划页的输入窗口与今天页**刻意不同**（用户要求）：
                没有「记事」（计划里只有任务）、没有「今天/明天/本周末」这类相对快捷项，
                改成自定义的**开始 / 结束**（结束留空就是单点时间）+ 重复规则。 -->
@@ -221,7 +251,7 @@
                 更多
               </button>
             </template>
-            <span v-if="quick.kind === 'note'" class="ml-auto text-xs font-semibold text-muted-foreground">记事保存后进入「记事本」</span>
+            <span v-if="quick.kind === 'note'" class="ml-auto text-xs font-semibold text-muted-foreground">记事保存后进入「随手记事本」</span>
             <span v-else-if="quick.due_at" class="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-300">{{ formatDue(quick.due_at) }}</span>
           </div>
 
@@ -236,10 +266,12 @@
             <button type="button" class="underline underline-offset-2" @click="setPreset('today')">设为今天</button>
           </p>
 
+          <!-- 「更多」面板**不带流光**（用户 2026-10-10 要求：流光属于新建任务卡片，
+               原来挂在这里是挂反了）。 -->
           <Transition name="expand">
             <div
               v-if="quickExpanded && quick.kind !== 'note'"
-              class="quick-panel flow-frame flow-glow relative mt-3 grid gap-2.5 rounded-2xl bg-muted/65 p-3 sm:mt-4 sm:grid-cols-2 sm:gap-3 sm:p-4 lg:grid-cols-4"
+              class="quick-panel relative mt-3 grid gap-2.5 rounded-2xl bg-muted/65 p-3 sm:mt-4 sm:grid-cols-2 sm:gap-3 sm:p-4 lg:grid-cols-4"
               data-quick-panel
             >
               <!-- 「更多」里只保留这四项（用户要求）：备注 / 按农历循环 / 过期提醒频率 / 通知方式。
@@ -262,6 +294,8 @@
               </div>
             </div>
           </Transition>
+        </div>
+          </div>
         </div>
       </section>
 
@@ -509,7 +543,7 @@
         </div>
         <h3 class="mt-5 text-lg font-extrabold">{{ emptyTitle }}</h3>
         <p class="mt-1 max-w-sm text-sm leading-6 text-muted-foreground">{{ emptyText }}</p>
-        <button v-if="view !== 'completed'" class="btn-primary mt-5" @click="focusQuickAdd">添加第一条提醒</button>
+        <button v-if="canQuickAdd" class="btn-primary mt-5" @click="expandQuickAdd">添加第一条提醒</button>
       </section>
 
       <!-- 月份翻页：只在「按月看」时出现——「全部」页选了「本月」，或普通清单页
@@ -562,7 +596,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import Toast from '../components/Toast.vue'
@@ -644,12 +678,13 @@ const loading = ref(true)
 const saving = ref(false)
 const search = ref('')
 const quickInput = ref<HTMLInputElement | null>(null)
-// 新建任务窗口的默认形态（用户 2026-10-10 两次要求后定下来的）：
-//   · **芯片行默认可见**（quickFocused = true）：任务/记事、今天/明天/本周末、重要、清单，
-//     以及右侧那个「今天 20:00」——默认日期一眼就能看到，不用先点输入框；
-//   · **「更多」面板默认隐藏**（quickExpanded = false）：日期时间、重复、备注、农历、
-//     通知方式这些字段收在「更多」里，点开才出现，日常新建不被这一大块挡着。
-const quickFocused = ref(true)
+// 新建入口的形态（用户 2026-10-10 要求）：
+//   · **默认收起成一个「新建」按钮**（quickOpen = false）：不占地方，页面干净；
+//     点一下（或侧栏「新建提醒」/ 手机悬浮 + / 快捷键 N）才展开整块输入窗口；
+//   · **刷新、切换页面都回到收起状态**（见 route.fullPath 的 watcher）；
+//   · **「全部」页没有新建入口**（见 canQuickAdd）。
+//   · 展开后：「芯片行」可见、「更多」面板仍默认收起（quickExpanded = false）。
+const quickOpen = ref(false)
 const quickExpanded = ref(false)
 const preset = ref('today')
 // 「清空」是**明确**动作：按过之后，这一次新建才是真正的「无日期」；
@@ -713,6 +748,9 @@ const view = computed(() => String(route.meta.reminderView || 'today'))
 // 让人以为数据丢了（状态开关那种长期偏好才需要记住）。
 type ListRangeOption = 'today' | 'yesterday' | 'week' | 'lastweek' | 'month' | 'year' | 'custom'
 const isAllPage = computed(() => route.name === 'AllReminders')
+// 新建入口出现在哪些页（用户要求「全部页面取消新建提醒」）：
+// 已完成页本来就没有；「全部」页是翻月/查历史用的浏览页，也一并去掉。
+const canQuickAdd = computed(() => view.value !== 'completed' && !isAllPage.value)
 const listRange = ref<ListRangeOption>('month')
 const listRangeOptions: { value: ListRangeOption; label: string }[] = [
   { value: 'today', label: '今天' },
@@ -937,6 +975,9 @@ function debouncedLoad() {
 }
 
 watch(() => route.fullPath, () => {
+  // 切换页面（或换清单 / 换查询参数）时，新建窗口**回到收起状态**（用户要求）。
+  quickOpen.value = false
+  quickExpanded.value = false
   loadRouteData()
   openRequestedEditor()
 })
@@ -1113,16 +1154,15 @@ async function submitQuick() {
     planPeriod.value = 'days'
     planDays.value = 1
     // 归位到「今天」：新建提醒默认带今天 20:00，芯片状态也要跟着点亮。
-    // 芯片行保持可见（连着记几条不用再点输入框），「更多」面板收起回默认隐藏状态。
+    // 保存后**保持展开**（连着加几条不用再点一次「新建」），「更多」面板收起回默认状态。
     preset.value = isNote || planned ? '' : 'today'
     quickDueCleared.value = false
     quickExpanded.value = false
-    if (isNote) quickFocused.value = false
-    else quickFocused.value = true
+    quickOpen.value = true
     if (isNote) {
       // 记事本页要立刻把新记的这条显示出来（其它视图它本来就不出现）。
       await loadItems()
-      showToast('记事已保存到「记事本」')
+      showToast('记事已保存到「随手记事本」')
     } else if (undated && !selectedListID.value && (view.value === 'today' || view.value === 'planned')) {
       await router.push({ name: 'AllReminders' })
       showToast('已保存到「全部」：这条提醒没有设置日期')
@@ -1296,10 +1336,23 @@ async function snooze(item: ReminderItem, minutes: number) {
     showToast(`已稍后 ${minutes} 分钟提醒`)
   } catch (err: any) { showToast(err.response?.data?.message || '设置稍后提醒失败', 'error') }
 }
-function focusQuickAdd() {
-  quickFocused.value = true
+// 展开新建窗口并把光标放进去。侧栏「新建提醒」、手机悬浮 +、快捷键 N、
+// 列表空状态那个「添加第一条提醒」都走这里（MainLayout 派发 open-quick-reminder 事件）。
+//
+// 「全部」页没有新建入口（用户要求），从那里点新建就先去「今天」页 ——
+// 注意顺序：先 await 导航，再置 quickOpen —— 否则会被 route.fullPath 的
+// watcher（切页收起）盖掉，出现「跳过去了却没展开」。
+async function expandQuickAdd() {
+  if (isAllPage.value) await router.push({ name: 'Home' })
+  quickExpanded.value = false
+  quickOpen.value = true
+  await nextTick()
   quickInput.value?.focus()
   quickInput.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+function collapseQuickAdd() {
+  quickOpen.value = false
+  quickExpanded.value = false
 }
 /** 逾期判定用的「生效时间」：稍后提醒优先；**有时间段的任务看最后一天**（用户要求：
     「计时最后一天遵守后台偏好设置的过期时间」—— 3 天期的任务要到第 3 天过完、
@@ -1458,13 +1511,13 @@ onMounted(() => {
   void loadOverdueGrace()
   openRequestedEditor()
   clockTimer = setInterval(() => { clockNow.value = Date.now() }, 60_000)
-  window.addEventListener('open-quick-reminder', focusQuickAdd)
+  window.addEventListener('open-quick-reminder', expandQuickAdd)
   window.addEventListener('reminder-realtime', refreshRealtimeData)
   window.addEventListener('reminder-realtime-resume', refreshRealtimeData)
   window.addEventListener('keydown', onShortcut)
 })
 onBeforeUnmount(() => {
-  window.removeEventListener('open-quick-reminder', focusQuickAdd)
+  window.removeEventListener('open-quick-reminder', expandQuickAdd)
   window.removeEventListener('reminder-realtime', refreshRealtimeData)
   window.removeEventListener('reminder-realtime-resume', refreshRealtimeData)
   window.removeEventListener('keydown', onShortcut)
@@ -1473,7 +1526,11 @@ onBeforeUnmount(() => {
 })
 function onShortcut(e: KeyboardEvent) {
   if (e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
-    e.preventDefault(); focusQuickAdd()
+    e.preventDefault(); expandQuickAdd()
+  }
+  // Esc：还没写东西就收起新建窗口（写了标题时留给输入框自己处理，避免误丢内容）
+  if (e.key === 'Escape' && quickOpen.value && !quick.title.trim()) {
+    collapseQuickAdd()
   }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault(); (document.querySelector('.search-box input') as HTMLInputElement)?.focus()
@@ -1485,6 +1542,12 @@ function onShortcut(e: KeyboardEvent) {
 .search-box { @apply flex h-10 w-full items-center gap-2 rounded-2xl border border-border/80 bg-surface/80 px-3 text-muted-foreground shadow-sm backdrop-blur transition focus-within:border-brand-500/40 focus-within:ring-4 focus-within:ring-brand-500/10 sm:h-11 sm:w-64; }
 .search-box input { @apply min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/65; }
 .quick-card { @apply relative overflow-hidden rounded-[24px] border border-border/70 bg-surface/90 p-3 shadow-[0_20px_50px_-30px_rgba(15,23,42,.35)] backdrop-blur-xl transition-all sm:p-5; }
+/* 收起态的「新建」按钮（用户要求：新建提醒控件折叠成一个新建按钮）：
+   虚线的整行按钮，点一下展开成上面的 .quick-card。 */
+.quick-new-button { @apply inline-flex h-10 shrink-0 items-center gap-1.5 rounded-2xl border border-dashed border-border bg-surface/70 px-2.5 text-sm font-bold text-muted-foreground shadow-sm backdrop-blur transition hover:border-brand-500/45 hover:text-brand-600 dark:hover:text-brand-300 sm:h-11 sm:px-3.5; }
+/* 流光外壳：圆角与卡片一致（.flow-frame::before 的 1px 光带靠 border-radius: inherit），
+   自己不裁剪，好让 .flow-glow::after 那团柔光露出来。 */
+.quick-shell { @apply relative rounded-[24px]; }
 .quick-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: linear-gradient(#3b82f6, #6366f1); opacity: .75; }
 .field-label { @apply block text-[11px] font-bold text-muted-foreground; }
 /* 按天分卡片：一天一张卡（用户要求「同一天的放同一个卡片」）。

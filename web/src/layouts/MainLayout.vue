@@ -113,14 +113,14 @@
             <span v-if="cardBucket.card_count" class="nav-count">{{ cardBucket.card_count }}</span>
           </RouterLink>
 
-          <!-- 记事本：与「信用卡账单」并列的固定栏目，由个人偏好 notebook_enabled 控制显示。
+          <!-- 随手记事本：与「信用卡账单」并列的固定栏目，由个人偏好 notebook_enabled 控制显示。
                记事一律收在这一栏里，不需要（也不能）自己建这个清单。 -->
           <RouterLink
             v-if="authStore.notebookEnabled && noteBucket"
             :to="`/admin/list/${noteBucket.id}`"
             class="nav-row"
             :class="{ 'nav-row-active': route.path === `/admin/list/${noteBucket.id}` }"
-            :title="railActive ? '记事本' : '记事本：新建的记事都收在这里'"
+            :title="railActive ? '随手记事本' : '随手记事本：新建的记事都收在这里'"
             data-nav-notebook
             @click="mobileOpen = false"
           >
@@ -130,7 +130,7 @@
                    现在与日历/清单筛选共用 utils/list-icons.ts 一份定义。 -->
               <ListIcon name="notebook" :size="20" />
             </span>
-            <span class="flex-1">记事本</span>
+            <span class="flex-1">随手记事本</span>
           </RouterLink>
 
           <!-- 人生要有仪式感：与「记事本」并列的固定栏目，由个人偏好 ceremony_enabled 控制显示。

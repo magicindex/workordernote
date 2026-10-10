@@ -45,11 +45,14 @@
         <p class="truncate text-[11px] font-extrabold leading-4">{{ [item.bank, item.name].filter(Boolean).join('') || '信用卡' }}</p>
         <p class="mt-0.5 font-mono text-[10px] tracking-[.16em] opacity-85">{{ item.tail ? `****${item.tail}` : '****' }}</p>
         <p class="mt-1 text-[11px] font-bold leading-4">¥{{ item.amount_cents ? formatCents(item.amount_cents) : '—' }}</p>
-        <p class="mt-0.5 text-[10px] leading-4 opacity-85">
+        <!-- 时间信息保留原位置（卡片底部两行），改成**右对齐**（用户 2026-10-10 要求：
+             「卡片中的时间信息保留位置使用卡片方式右对齐」—— 与大卡面右侧
+             「账单日 / 还款日 / 额度」那种右对齐写法一致）。 -->
+        <p class="mt-0.5 text-right text-[10px] leading-4 opacity-85">
           {{ item.overdue ? `逾期 ${Math.abs(item.days_left)} 天` : item.days_left === 0 ? '就是今天' : `还有 ${item.days_left} 天` }}
           · {{ monthDay(item.due_date) }}
         </p>
-        <p class="mt-0.5 text-[10px] leading-4 opacity-75">账单日 {{ monthDay(item.statement_date) }}</p>
+        <p class="mt-0.5 text-right text-[10px] leading-4 opacity-75">账单日 {{ monthDay(item.statement_date) }}</p>
       </article>
     </div>
   </section>

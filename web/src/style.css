@@ -65,6 +65,30 @@
   .flow-frame::before { animation: none; }
 }
 
+/* 流光**文字**（用户 2026-10-10 要求：日历「月 / 周」切换里，选中那个字要有流光效果）：
+   与 .flow-frame 同一套配色（靛蓝 → 紫 → 青），做成跑动的渐变文字。
+   只挂在 <span> 上，按钮自己的选中底色与尺寸都不受影响。 */
+.flow-text {
+  background-image: linear-gradient(90deg, #6366f1, #a855f7, #22d3ee, #a855f7, #6366f1);
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  /* 兜底：不支持 background-clip: text 的内核至少还能看见字（否则透明=看不见） */
+  -webkit-text-fill-color: transparent;
+  animation: flow-text-move 3.5s linear infinite;
+}
+@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+  .flow-text { color: inherit; -webkit-text-fill-color: inherit; background-image: none; animation: none; }
+}
+@keyframes flow-text-move {
+  from { background-position: 0% 50%; }
+  to { background-position: 300% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-text { animation: none; }
+}
+
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

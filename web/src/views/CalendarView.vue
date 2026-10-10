@@ -59,8 +59,14 @@
       <section class="surface flex min-h-0 flex-col overflow-hidden rounded-2xl p-2 sm:p-3">
         <!-- 月 / 周 切换（周视图＝7 列天 × 纵向小时，用户要求） -->
         <div class="mb-2 flex items-center gap-1.5" data-cal-view-toggle>
-          <button class="seg-btn" :class="{ 'seg-btn-on': viewMode === 'month' }" data-cal-view="month" @click="setViewMode('month')">月</button>
-          <button class="seg-btn" :class="{ 'seg-btn-on': viewMode === 'week' }" data-cal-view="week" @click="setViewMode('week')">周</button>
+          <!-- 选中的那个字用**流光**（用户 2026-10-10 要求）：渐变文字 + 位移动画，
+               按钮本身的选中底色不动，所以「月/周」两个字的大小与位置都不变。 -->
+          <button class="seg-btn" :class="{ 'seg-btn-on': viewMode === 'month' }" data-cal-view="month" @click="setViewMode('month')">
+            <span :class="{ 'flow-text': viewMode === 'month' }">月</span>
+          </button>
+          <button class="seg-btn" :class="{ 'seg-btn-on': viewMode === 'week' }" data-cal-view="week" @click="setViewMode('week')">
+            <span :class="{ 'flow-text': viewMode === 'week' }">周</span>
+          </button>
           <template v-if="viewMode === 'week'">
             <button class="btn-ghost !h-8 !px-2 text-xs" data-week-prev @click="shiftWeek(-1)">‹ 上一周</button>
             <button class="btn-ghost !h-8 !px-2 text-xs" data-week-today @click="goThisWeek">本周</button>
@@ -110,7 +116,8 @@
                 :data-week-block="b.item.id"
                 :data-overlap="b.overlap"
                 :title="`${b.item.title} · ${timeLabel(b.item)}${b.overlap > 1 ? ` · 与 ${b.overlap - 1} 条重叠（并排显示）` : ''}`"
-                @click.stop="openEditor(b.item)"
+                @click.stop="onItemClick(b.item)"
+                @dblclick.stop="onItemDblClick(b.item)"
               >
                 <span class="block truncate">{{ b.item.title }}</span>
                 <span class="block truncate opacity-85">{{ timeLabel(b.item) }}</span>
@@ -178,7 +185,8 @@
                 :style="{ background: chipStyle(span.item).background, color: chipStyle(span.item).color }"
                 :data-cal-span="`${span.item.id}:${span.role}`"
                 :title="`${span.item.title}（${spanRangeText(span.item)}）`"
-                @click.stop="activateSpan(span.item)"
+                @click.stop="onSpanClick(span.item)"
+                @dblclick.stop="onItemDblClick(span.item)"
               >
                 <span class="cal-plan-mark shrink-0" :style="{ background: chipDot(span.item) }">
                   <ListIcon name="clock" :size="10" class="text-white" />
@@ -192,9 +200,13 @@
               <span
                 v-for="item in visibleItems(cell)"
                 :key="item.id"
-                class="cal-task flex min-w-0 items-center gap-1 rounded-md px-1 py-[1px] font-semibold leading-tight"
+                class="cal-task flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1 py-[1px] font-semibold leading-tight transition hover:ring-1 hover:ring-brand-500/35"
                 :class="{ 'opacity-55 line-through': item.completed && item.kind !== 'note' }"
                 :style="chipStyle(item)"
+                :title="`${item.title}（单击查看，双击编辑）`"
+                :data-cal-task="item.id"
+                @click.stop="onItemClick(item)"
+                @dblclick.stop="onItemDblClick(item)"
               >
                 <!-- 记事用「记」字标记；其余一律用图标（不再用圆点）：
                      普通提醒用清单图标，信用卡的账单日/还款日/提前提醒用**银行卡图标**（缩到 11px），
@@ -240,7 +252,8 @@
                 :key="item.id"
                 type="button"
                 class="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[11px] font-semibold hover:bg-muted"
-                @click.stop="openEditor(item); overflowFor = ''"
+                @click.stop="onItemClick(item); overflowFor = ''"
+                @dblclick.stop="onItemDblClick(item); overflowFor = ''"
               >
                 <i v-if="item.kind === 'note'" class="cal-note-mark shrink-0">记</i>
                 <span v-else-if="item.card_role" class="cal-card-mark shrink-0" :style="{ background: chipDot(item) }">
@@ -308,7 +321,12 @@
             >
               <svg viewBox="0 0 24 24" class="h-3 w-3" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-            <button class="min-w-0 flex-1 text-left" @click="openEditor(item)">
+            <button
+              class="min-w-0 flex-1 text-left"
+              :title="`${item.title}（单击查看，双击编辑）`"
+              @click="onItemClick(item)"
+              @dblclick="onItemDblClick(item)"
+            >
               <div class="flex min-w-0 items-center gap-1.5">
                 <h4 class="cal-task-lg truncate font-bold" :class="{ 'line-through opacity-60': item.completed && item.kind !== 'note' }">{{ item.title }}</h4>
                 <span v-if="item.kind === 'note'" class="tiny-badge shrink-0">记事</span>
@@ -342,10 +360,13 @@
         <p v-else class="mt-4 flex-1 text-sm text-muted-foreground">这天没有安排。</p>
 
         <p class="mt-3 border-t border-border/60 pt-2.5 text-[11px] leading-4 text-muted-foreground">
-          双击日期格在这天新建提醒；点标题就地编辑；勾选即完成，重复提醒会自动排到下一次。
+          双击日期格（周视图里双击空白时段）新建提醒；**单击任务看详情、双击任务就地编辑**；勾选即完成，重复提醒会自动排到下一次。
         </p>
       </aside>
     </div>
+
+    <!-- 单击任务弹出的**查看页**（只读 + 底部「编辑」按钮） -->
+    <ReminderViewDialog :item="viewItem" @close="closeView" @edit="editFromView" />
 
     <!-- 与列表页共用同一个提醒编辑器，改一处两边同时生效。
          editingId 为空、createPreset 有值 = 新建（双击日期格进来的）。 -->
@@ -400,6 +421,7 @@ import { useIsNarrow } from '../utils/use-narrow'
 import ListFilter from '../components/ListFilter.vue'
 import ListIcon from '../components/ListIcon.vue'
 import ReminderEditor from '../components/ReminderEditor.vue'
+import ReminderViewDialog from '../components/ReminderViewDialog.vue'
 import Toast from '../components/Toast.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import ContextMenu from '../components/ContextMenu.vue'
@@ -895,6 +917,33 @@ function openEditor(item: CalendarItem) {
   createPreset.value = null
   editingId.value = item.id
   editorOpen.value = true
+}
+
+// ---- 单击 = 查看、双击 = 编辑（用户 2026-10-10 要求）----
+// 浏览器的事件顺序是 click → click → dblclick，所以单击要先等一小会儿；
+// 期间来了 dblclick 就把定时器撤掉，只进编辑器，避免「先弹查看页、再弹编辑器」。
+const viewItem = ref<CalendarItem | null>(null)
+let itemClickTimer: ReturnType<typeof setTimeout> | undefined
+const CLICK_DELAY = 250
+function onItemClick(item: CalendarItem) {
+  if (itemClickTimer) clearTimeout(itemClickTimer)
+  itemClickTimer = setTimeout(() => { itemClickTimer = undefined; viewItem.value = item }, CLICK_DELAY)
+}
+function onItemDblClick(item: CalendarItem) {
+  if (itemClickTimer) { clearTimeout(itemClickTimer); itemClickTimer = undefined }
+  viewItem.value = null
+  openEditor(item)
+}
+/** 时间段任务：单击仍然把整段高亮出来（0.18.0 的行为），同时弹出查看页。 */
+function onSpanClick(item: CalendarItem) {
+  activateSpan(item)
+  onItemClick(item)
+}
+function closeView() { viewItem.value = null }
+function editFromView() {
+  const it = viewItem.value
+  viewItem.value = null
+  if (it) openEditor(it)
 }
 async function onEditorSaved() {
   await load()

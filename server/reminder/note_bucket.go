@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 「记事本」是侧栏里与「信用卡账单」并列的另一个**固定栏目**，不是普通清单：
+// 「随手记事本」是侧栏里与「信用卡账单」并列的另一个**固定栏目**，不是普通清单：
 //
 //   - 记事（kind=note）一律落到这一栏里（见 ensureNoteBucket 与 createReminder）；
 //   - 栏目的显示由个人偏好 notebook_enabled 控制（默认开）；
@@ -18,7 +18,7 @@ import (
 // 这里刻意**不删除任何行**：删了会通过双机同步把对端的记事一起删掉，
 // 而「关掉这个栏目」是本机的外观偏好，不该影响另一台机器。
 const (
-	noteBucketListName  = "记事本"
+	noteBucketListName  = "随手记事本"
 	// noteBucketIcon 是记事本栏目的固定图标（前端 utils/list-icons.ts 里的 notebook）
 	noteBucketIcon      = "notebook"
 	noteBucketListColor = "emerald"
@@ -83,7 +83,7 @@ func findNoteBucket(db *gorm.DB, userID uint, includeDeleted bool) (*List, error
 	return &list, nil
 }
 
-// ensureNoteBucket 取「记事本」这一栏，没有就建一个。新建记事与打开侧栏
+// ensureNoteBucket 取「随手记事本」这一栏，没有就建一个。新建记事与打开侧栏
 // 都走这里，所以用户不需要（也无法）自己先建一个清单。
 //
 // 与 ensureCardBucket 同一套写法：先取现有 → 没有就建 → 并发/重复调用兜底
