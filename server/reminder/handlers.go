@@ -6,10 +6,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"smallgo/server/lunar"
 	"smallgo/server/response"
+	"smallgo/server/sysconfig"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -780,6 +782,44 @@ func handleCalendarItems(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// overdueGrace 读「任务过期多久算逾期」的系统配置（分钟）。
+// 读不到或值非法时按 0 处理（等于「一到点就算逾期」，即改动前的行为）。
+//
+// 它出现在 /summary 这种热路径上，而 /summary 的「固定 2 条聚合查询」是有用例钉住的
+// （TestSummaryUsesTwoAggregateQueries）—— 所以和「记事本栏目开关」一样做一层 2 秒
+// 的进程内缓存：多出来的那次配置查询只在缓存过期时发生，稳态下不多查。
+var (
+	overdueGraceMu    sync.Mutex
+	overdueGraceValue time.Duration
+	overdueGraceAt    time.Time
+	overdueGraceTTL   = 2 * time.Second
+)
+
+func overdueGrace(db *gorm.DB) time.Duration {
+	overdueGraceMu.Lock()
+	if !overdueGraceAt.IsZero() && time.Since(overdueGraceAt) < overdueGraceTTL {
+		v := overdueGraceValue
+		overdueGraceMu.Unlock()
+		return v
+	}
+	overdueGraceMu.Unlock()
+
+	grace := time.Duration(0)
+	raw := ""
+	if cfg, err := sysconfig.GetPublicConfigs(db); err == nil {
+		raw = cfg["task_overdue_after_minutes"]
+	}
+	if mins, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && mins > 0 {
+		grace = time.Duration(mins) * time.Minute
+	}
+
+	overdueGraceMu.Lock()
+	overdueGraceValue = grace
+	overdueGraceAt = time.Now()
+	overdueGraceMu.Unlock()
+	return grace
+}
+
 func handleSummary(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := currentUserID(c)
@@ -805,12 +845,14 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		// 口径与改动前一致：今天 = due_at < 今天 24 点（含逾期），逾期 = due_at < 现在。
 		// 时间比较一律走 tsUTC() 归一化（SQLite 里时间是带偏移的文本，直接比会按
 		// 字符串序错位，见 sql_time.go）。
-		selectArgs := []interface{}{sqlTimeArg(endToday), userID, sqlTimeArg(now)}
+		// 逾期看的是**过了宽限时间之后**（与前端 isOverdue 同一口径）
+		overdueBefore := now.Add(-overdueGrace(db))
+		selectArgs := []interface{}{sqlTimeArg(endToday), userID, sqlTimeArg(overdueBefore)}
 		if len(hiddenCards) > 0 {
 			// 栏目关掉时，它那些卡片提醒的完成记录也不该再计入角标。
 			completedExpr = `COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
 					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND deleted_at IS NULL AND reminder_id NOT IN (SELECT id FROM reminders WHERE list_id IN ?))`
-			selectArgs = []interface{}{sqlTimeArg(endToday), userID, hiddenCards, sqlTimeArg(now)}
+			selectArgs = []interface{}{sqlTimeArg(endToday), userID, hiddenCards, sqlTimeArg(overdueBefore)}
 		}
 		// 口径与列表一致：用「生效时间」COALESCE(snoozed_until, due_at) ——
 		// 稍后提醒过的条目不算今天/逾期（它已经挪到稍后那一刻，见 service.go 的同名注释）。

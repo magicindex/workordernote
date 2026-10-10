@@ -512,6 +512,7 @@ import PrintDialog from '../components/PrintDialog.vue'
 import ExportDialog from '../components/ExportDialog.vue'
 import CreditCardPanel from '../components/CreditCardPanel.vue'
 import { listColorHex } from '../utils/list-colors'
+import { getPublicConfigs } from '../api/config'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import {
   completeReminder, createReminder, deleteReminder, exportReminders, getChannelStatuses, getCompletedHistory, getLists,
@@ -594,13 +595,18 @@ const editorOpen = ref(false)
 const clockNow = ref(Date.now())
 const toast = reactive<{ message: string; type: 'success' | 'error' }>({ message: '', type: 'success' })
 
-// 新建提醒默认落在「今天」。时间沿用「今天」芯片既有的 20:00 约定，
-// 这样默认值与芯片点亮状态一致，不会出现「日期是今天、芯片却没点亮」的错位。
+// 新建提醒的默认时间 = **当前时刻**（取整到分，秒与毫秒归零）。
+//
+// 用户 2026-10-10 明确要求：「日期默认为当前时间点作为兜底」。刚建完就已经过了几秒，
+// 所以「多久算逾期」由后台偏好 `task_overdue_after_minutes`（默认 30 分钟）兜着 ——
+// 没到宽限时间不会顶着「已逾期」（见 overdueGraceMinutes / isOverdue）。
 function defaultQuickDue(): string {
   const d = new Date()
-  d.setHours(20, 0, 0, 0)
+  d.setSeconds(0, 0)
   return toLocalIso(d)
 }
+// 「任务过期多久算逾期」按**分钟**存，前端从公开配置读（系统级设置，公开接口里的就是权威值）。
+const overdueGraceMinutes = ref(30)
 const blankInput = (): SaveReminderInput => ({
   title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: defaultQuickDue(),
   start_at: null, end_at: null,
@@ -1193,7 +1199,9 @@ function overdueStamp(item: ReminderItem): number | null {
 }
 function isOverdue(item: ReminderItem) {
   const t = overdueStamp(item)
-  return t !== null && t < clockNow.value
+  if (t === null) return false
+  // 过了「宽限时间」才算逾期：默认时间就是当前时刻，不留余量的话新建即逾期
+  return t + overdueGraceMinutes.value * 60_000 < clockNow.value
 }
 // 日期按钮用完整格式：选中后能直接核对年月日时分，避免跨年日期歧义。
 function formatFullDue(value: string | null | undefined) {
@@ -1322,8 +1330,16 @@ watch([selectedList, () => authStore.creditCardEnabled, () => authStore.notebook
   }
 })
 
+async function loadOverdueGrace() {
+  try {
+    const res = await getPublicConfigs()
+    const v = Number((res.data?.data as Record<string, unknown> | undefined)?.task_overdue_after_minutes)
+    if (Number.isFinite(v) && v >= 0) overdueGraceMinutes.value = v
+  } catch { /* 拿不到就按默认 30 分钟 */ }
+}
 onMounted(() => {
   loadData()
+  void loadOverdueGrace()
   openRequestedEditor()
   clockTimer = setInterval(() => { clockNow.value = Date.now() }, 60_000)
   window.addEventListener('open-quick-reminder', focusQuickAdd)

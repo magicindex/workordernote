@@ -122,9 +122,11 @@ func TestSummaryUsesTwoAggregateQueries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 「信用卡账单」开关（个人偏好）是进程内缓存的：刚启动时第一次读会查一次配置，
-	// 之后不再查。先把它读热**再清零计数**，统计的才是稳定态（线上绝大多数请求都是）。
+	// 「信用卡账单」开关（个人偏好）与「任务过期多久算逾期」（系统配置）都是进程内
+	// 缓存的：刚启动时第一次读会各查一次配置，之后不再查。先把它们读热**再清零计数**，
+	// 统计的才是稳定态（线上绝大多数请求都是）。
 	creditCardFeatureEnabled(appDB, uint(userID))
+	overdueGrace(appDB)
 	queryCount.Store(0)
 
 	recorder := httptest.NewRecorder()
