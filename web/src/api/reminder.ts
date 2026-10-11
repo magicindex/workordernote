@@ -74,6 +74,8 @@ export interface ReminderItem {
   channels: ReminderChannel[]
   channel_targets?: Record<string, number[]>
   repeat_notify_minutes: number
+  /** 仪式感卡片的过渡色色名（空/缺省＝默认色） */
+  accent?: string
   created_at: string
   updated_at: string
 }
@@ -95,6 +97,8 @@ export interface SaveReminderInput {
   calendar?: string
   lunar_anchor?: string
   channels?: ReminderChannel[]
+  /** 仪式感卡片的过渡色色名（见 utils/card-accents.ts）；不传＝不改，空串＝用默认色 */
+  accent?: string
   version?: number
 }
 

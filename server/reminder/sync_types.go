@@ -119,7 +119,9 @@ type syncReminder struct {
 	Calendar            string     `json:"calendar"`
 	LunarAnchor         string     `json:"lunar_anchor,omitempty"`
 	RepeatNotifyMinutes int        `json:"repeat_notify_minutes"`
-	CompletedAt         *time.Time `json:"completed_at,omitempty"`
+	// Accent：仪式感卡片挑的过渡色（旧版本对端不认，忽略即可）
+	Accent      string     `json:"accent,omitempty"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	SnoozedUntil        *time.Time `json:"snoozed_until,omitempty"`
 	Position            int        `json:"position"`
 	Version             uint       `json:"version"`

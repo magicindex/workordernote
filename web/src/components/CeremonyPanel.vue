@@ -22,20 +22,28 @@
         v-for="entry in cards"
         :key="entry.id"
         class="surface ceremony-card"
+        :style="cardStyle(entry)"
         :data-ceremony-card="entry.id"
         :data-ceremony-days="entry.days"
+        :data-ceremony-bg="entry.accent || 'default'"
       >
         <!-- 倒计时**放到最上面、放大**（用户 2026-10-10 要求：卡片加高、倒计时醒目）：
              天数用 30px 的字、单位小一号，整块带底色，一眼就能看到还有多少天。 -->
-        <div class="ceremony-hero" :class="entry.daysClass" :data-ceremony-countdown="entry.id">
+        <div
+          class="ceremony-hero"
+          :class="entry.daysClass"
+          :style="heroStyle(entry)"
+          :data-ceremony-countdown="entry.id"
+          :data-ceremony-accent="entry.accent || 'default'"
+        >
           <template v-if="entry.days === 0">就是<b>今天</b></template>
           <template v-else-if="entry.days === 1">还有 <b>1</b> 天</template>
           <template v-else-if="entry.days > 1">还有 <b>{{ entry.days }}</b> 天</template>
           <template v-else>已过 <b>{{ -entry.days }}</b> 天</template>
         </div>
-        <div class="mt-2.5 flex items-start gap-2">
+        <div class="mt-2.5 flex flex-col items-center gap-1.5 text-center">
           <span class="ceremony-icon"><ListIcon :name="entry.icon" :size="22" /></span>
-          <div class="min-w-0 flex-1">
+          <div class="min-w-0">
             <h3 class="ceremony-title" :data-ceremony-title="entry.id">{{ entry.title }}</h3>
             <p class="ceremony-date">
               {{ entry.dateLabel }}
@@ -44,10 +52,10 @@
             </p>
           </div>
         </div>
-        <div class="mt-2 flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
+        <div class="mt-2 flex items-center justify-center gap-2 text-center text-[11px] font-semibold text-muted-foreground">
           <span v-if="entry.cycle > 0" class="tiny-badge" :data-ceremony-cycle="entry.id">第 {{ entry.cycle }} 次</span>
           <span v-if="entry.notes" class="truncate">{{ entry.notes }}</span>
-          <span class="ml-auto flex items-center gap-1">
+          <span class="flex items-center gap-1">
             <button class="row-action !opacity-100" title="编辑" :data-ceremony-edit="entry.id" @click="edit(entry)">
               <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 20h4L20 8l-4-4L4 16v4Z" stroke-width="1.7" stroke-linejoin="round"/></svg>
             </button>
@@ -109,6 +117,24 @@
             <option value="lunar">农历</option>
           </select>
         </label>
+        <!-- 卡片过渡色（用户 2026-10-11 要求：多种过渡色、可自行选择） -->
+        <div class="field-label">
+          卡片颜色
+          <div class="mt-1.5 flex flex-wrap gap-1.5" data-ceremony-form-accents>
+            <button
+              v-for="a in CARD_ACCENTS"
+              :key="a.key || 'default'"
+              type="button"
+              class="accent-swatch"
+              :class="{ selected: form.accent === a.key }"
+              :style="{ background: swatchGradient(a) }"
+              :title="a.label"
+              :aria-label="`卡片颜色：${a.label}`"
+              :data-ceremony-form-accent="a.key || 'default'"
+              @click="form.accent = a.key"
+            ><span v-if="form.accent === a.key">✓</span></button>
+          </div>
+        </div>
         <p class="text-[11px] text-muted-foreground">
           农历 + 每年 = 按农历月日重复（生日、七夕、中秋、春节都用这个）。
         </p>
@@ -134,6 +160,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import Modal from './Modal.vue'
+import { CARD_ACCENTS, cardTint, heroGradient, heroInk, type CardAccent } from '../utils/card-accents'
 import ConfirmDialog from './ConfirmDialog.vue'
 import ListIcon from './ListIcon.vue'
 import LunarDatePicker from './LunarDatePicker.vue'
@@ -152,7 +179,21 @@ const dateAnchor = ref<HTMLElement | null>(null)
 const editingId = ref<number | null>(null)
 const removeTarget = ref<ReminderItem | null>(null)
 
-const form = reactive({ title: '', dueAt: '' as string, repeat: 'yearly', calendar: 'solar' })
+const form = reactive({ title: '', dueAt: '' as string, repeat: 'yearly', calendar: 'solar', accent: '' })
+
+/** 色板按钮的底色 */
+const swatchGradient = (a: CardAccent) => `linear-gradient(135deg, ${a.from} 0%, ${a.to} 100%)`
+/**
+ * 倒计时块：选了颜色用该色的浓郁渐变 + 配套字色；「默认」档也给一档**浅色**
+ * （按 id 稳定随机，见 utils/card-accents.ts），不再是一块死灰。
+ */
+function heroStyle(entry: { accent?: string; id: number }) {
+  return { background: heroGradient(entry.accent, entry.id), color: heroInk(entry.accent, entry.id) }
+}
+/** 整卡底色（用户 2026-10-11：纯白不好看）：默认档用浅色随机，选了色用同色系浅淡版。 */
+function cardStyle(entry: { accent?: string; id: number }) {
+  return { backgroundImage: cardTint(entry.accent, entry.id) }
+}
 
 const datePicked = computed({
   get: () => (form.dueAt ? new Date(form.dueAt) : null),
@@ -192,14 +233,24 @@ const cards = computed(() => items.value
       ...item,
       icon: item.kind === 'note' ? 'notebook' : (item.repeat_rule === 'yearly' && /生日|纪念/.test(item.title) ? 'cake' : 'ceremony'),
       days: days ?? 9999,
+      undated: days === null,
       daysClass: days === null ? '' : days < 0 ? 'ceremony-days-past' : days <= 7 ? 'ceremony-days-soon' : '',
       lunar,
       dateLabel: d ? `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日` : '未设日期',
       repeatLabel: repeatLabelOf(item.repeat_rule),
       cycle: item.cycle_index || 0,
+      accent: item.accent || '',
     }
   })
-  .sort((a, b) => a.days - b.days))
+  // 排序（用户 2026-10-11 要求「倒计时最短的在最前边，以此类推」）：
+  //   ① 还没到的按「还有 N 天」从小到大（就是今天 0 → 1 天 → 2 天 …）；
+  //   ② 「已过 N 天」的排到最后（过得最少的在前 —— 它离下一次最近）；
+  //   ③ 没日期的排最末。
+  // 原来直接 `a.days - b.days`，负数（已过）会顶到最前面，一开页先看到「已过 2817 天」。
+  .sort((a, b) => {
+    const key = (e: { days: number; undated: boolean }) => (e.undated ? 2_000_000 : e.days >= 0 ? e.days : 1_000_000 + -e.days)
+    return key(a) - key(b)
+  }))
 
 async function load() {
   loading.value = true
@@ -220,7 +271,7 @@ function openCreate() {
   editingId.value = null
   const d = new Date()
   d.setHours(9, 0, 0, 0)
-  Object.assign(form, { title: '', dueAt: toLocalIso(d), repeat: 'yearly', calendar: 'solar' })
+  Object.assign(form, { title: '', dueAt: toLocalIso(d), repeat: 'yearly', calendar: 'solar', accent: '' })
   createOpen.value = true
 }
 
@@ -231,6 +282,7 @@ function edit(entry: ReminderItem) {
     dueAt: entry.due_at || '',
     repeat: entry.repeat_rule === 'none' ? 'none' : entry.repeat_rule,
     calendar: entry.calendar === 'lunar' ? 'lunar' : 'solar',
+    accent: entry.accent || '',
   })
   createOpen.value = true
 }
@@ -246,6 +298,7 @@ async function save() {
       due_at: form.dueAt,
       repeat_rule: form.repeat as SaveReminderInput['repeat_rule'],
       calendar: form.calendar as SaveReminderInput['calendar'],
+      accent: form.accent,
       channels: ['inapp'],
     }
     if (editingId.value) await updateReminder(editingId.value, { ...payload, version: items.value.find((i) => i.id === editingId.value)?.version })
@@ -371,16 +424,22 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 </script>
 
 <style scoped>
-/* 卡片加高（用户要求）：倒计时独占最上面一行，所以卡片比原来高、信息也不会挤 */
-.ceremony-card { @apply flex min-h-[9.5rem] flex-col rounded-2xl p-4 transition-shadow hover:shadow-[0_18px_40px_-30px_rgba(15,23,42,.6)]; }
+/* 卡片加高（用户要求）：倒计时独占最上面一行，所以卡片比原来高、信息也不会挤。
+   2026-10-11 用户又说「倒计时还不够显眼，继续放大」——数字从 30px 提到 44px（手机 36px），
+   底色更实、上下留白更多，整块成为卡片的视觉重心。 */
+/* 底色由 cardStyle() 内联给（浅色随机 / 同色系浅淡版），这里只保证圆角、内边距与居中；
+   不加 bg-* 类，免得把内联的渐变盖掉。深色主题下这些浅色只是很淡的一层，不刺眼。 */
+.ceremony-card { @apply flex min-h-[11rem] flex-col items-stretch rounded-2xl p-4 text-center transition-shadow hover:shadow-[0_18px_40px_-30px_rgba(15,23,42,.6)]; }
 .ceremony-icon { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-500; }
 .ceremony-title { @apply truncate text-[15px] font-extrabold leading-5; }
 .ceremony-date { @apply mt-0.5 text-[11px] font-semibold text-muted-foreground; }
 /* 倒计时：大字 + 底色，放在卡片最上面 */
-.ceremony-hero { @apply flex items-baseline gap-1.5 rounded-xl bg-muted/65 px-3 py-2 text-[15px] font-extrabold leading-none text-foreground; }
-.ceremony-hero b { @apply text-[30px] leading-none tracking-tight; }
+.ceremony-hero { @apply flex items-baseline justify-center gap-2 rounded-xl bg-muted/70 px-3.5 py-3 text-center text-[16px] font-extrabold leading-none text-foreground sm:px-4; }
+.ceremony-hero b { @apply text-[36px] font-black leading-none tracking-tight sm:text-[44px]; }
 .ceremony-days-soon { @apply bg-amber-500/15 text-amber-600 dark:text-amber-400; }
 .ceremony-days-past { @apply bg-muted/50 text-muted-foreground; }
+.accent-swatch { @apply flex h-7 w-7 items-center justify-center rounded-full border-2 border-transparent text-[12px] font-black text-white/95 shadow-sm transition hover:scale-105; }
+.accent-swatch.selected { @apply border-foreground/60 ring-2 ring-brand-500/40; }
 .ceremony-preset { @apply flex items-center gap-2.5 rounded-xl border border-border/70 bg-surface px-3 py-2 text-left transition hover:border-brand-500/40 hover:bg-muted/40; }
 .field-label { @apply block text-[11px] font-bold text-muted-foreground; }
 </style>

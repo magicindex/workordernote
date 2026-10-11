@@ -54,7 +54,11 @@ type SaveReminderInput struct {
 	// recurs on, encoded "M:D" (negative M = leap month). When empty, the
 	// anchor is derived from DueAt on save.
 	LunarAnchor string `json:"lunar_anchor"`
-	Version     uint   `json:"version"`
+	// Accent 是条目自己挑的过渡色（仪式感卡片用，见 card_accents.go）。
+	// **用指针**：编辑时旧客户端/通用编辑器不带这个字段，缺省表示「不改」，
+	// 传空字符串才表示「清掉、用默认色」。
+	Accent  *string `json:"accent"`
+	Version uint    `json:"version"`
 }
 
 func ensureDefaultList(tx *gorm.DB, userID uint) (List, error) {
@@ -91,6 +95,11 @@ func validateReminderInput(in *SaveReminderInput) error {
 	}
 	if in.Priority < 0 || in.Priority > 3 {
 		return errors.New("优先级无效")
+	}
+	if in.Accent != nil {
+		if err := validateAccent(*in.Accent); err != nil {
+			return err
+		}
 	}
 	if in.RepeatRule == "" {
 		in.RepeatRule = "none"
@@ -242,8 +251,13 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 		if err := assertListOwner(tx, userID, in.ListID); err != nil {
 			return err
 		}
+		accent := ""
+		if in.Accent != nil {
+			accent = *in.Accent
+		}
 		created = Reminder{
 			UserID: userID, ListID: in.ListID, Title: in.Title, Notes: in.Notes,
+			Accent:   accent,
 			CardRole: in.CardRole,
 			Kind:     in.Kind,
 			Priority: in.Priority, DueAt: in.DueAt, AllDay: in.AllDay,
@@ -324,6 +338,9 @@ func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) 
 		existing.Calendar = in.Calendar
 		existing.LunarAnchor = in.LunarAnchor
 		existing.RepeatNotifyMinutes = in.RepeatNotifyMinutes
+		if in.Accent != nil { // 没传就保留原来的（通用编辑器不带这个字段）
+			existing.Accent = *in.Accent
+		}
 		existing.SnoozedUntil = nil
 		existing.Version++
 		if err := tx.Save(&existing).Error; err != nil {

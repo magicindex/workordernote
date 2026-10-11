@@ -103,6 +103,10 @@ type Reminder struct {
 	// RepeatNotifyMinutes re-notifies an uncompleted reminder on a fixed
 	// interval after each due time; 0 disables the behaviour.
 	RepeatNotifyMinutes int               `gorm:"not null;default:0" json:"repeat_notify_minutes"`
+	// Accent 是**条目自己挑的过渡色**（用户 2026-10-11 要求：仪式感卡片支持多种过渡色、
+	// 新建/编辑时自己选）。存色名 key（见 card_accents.go 的白名单），空 = 用默认色。
+	// 只影响「人生要有仪式感」卡片的观感，不参与排序/提醒逻辑；新列同样由 AutoMigrate 自动加。
+	Accent string `gorm:"size:24" json:"accent,omitempty"`
 	CompletedAt         *time.Time        `gorm:"index:idx_reminders_user_completed" json:"completed_at"`
 	SnoozedUntil        *time.Time        `json:"snoozed_until"`
 	Position            int               `gorm:"not null;default:0" json:"position"`

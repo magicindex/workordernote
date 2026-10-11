@@ -347,7 +347,8 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 				Priority: incoming.Priority, DueAt: incoming.DueAt, AllDay: incoming.AllDay,
 				StartAt: incoming.StartAt, EndAt: incoming.EndAt,
 				RepeatRule: incoming.RepeatRule, Calendar: incoming.Calendar,
-				LunarAnchor: incoming.LunarAnchor, RepeatNotifyMinutes: incoming.RepeatNotifyMinutes,
+				LunarAnchor: incoming.LunarAnchor, Accent: incoming.Accent,
+				RepeatNotifyMinutes: incoming.RepeatNotifyMinutes,
 				CompletedAt: incoming.CompletedAt, SnoozedUntil: incoming.SnoozedUntil,
 				Position: incoming.Position, Version: incoming.Version,
 				CreatedAt: incoming.CreatedAt, UpdatedAt: incoming.UpdatedAt,
@@ -432,6 +433,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 				"start_at": incoming.StartAt, "end_at": incoming.EndAt,
 				"repeat_rule": incoming.RepeatRule, "calendar": incoming.Calendar,
 				"lunar_anchor":          incoming.LunarAnchor,
+				"accent":                incoming.Accent,
 				"repeat_notify_minutes": incoming.RepeatNotifyMinutes,
 				"completed_at":          incoming.CompletedAt, "snoozed_until": incoming.SnoozedUntil,
 				"position": incoming.Position, "version": incoming.Version,
@@ -611,6 +613,7 @@ func sameReminder(local *Reminder, incoming syncReminder, listID uint, channels 
 		local.RepeatRule == incoming.RepeatRule &&
 		local.Calendar == incoming.Calendar &&
 		local.LunarAnchor == incoming.LunarAnchor &&
+		local.Accent == incoming.Accent &&
 		local.RepeatNotifyMinutes == incoming.RepeatNotifyMinutes &&
 		equalTimePtr(local.CompletedAt, incoming.CompletedAt) &&
 		equalTimePtr(local.SnoozedUntil, incoming.SnoozedUntil) &&

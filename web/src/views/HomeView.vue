@@ -1191,12 +1191,13 @@ async function submitQuick() {
     // 任务周期跟着复位（下一条重新选开始时间时按默认 1 天算）
     planPeriod.value = 'days'
     planDays.value = 1
-    // 归位到「今天」：新建提醒默认带今天 20:00，芯片状态也要跟着点亮。
-    // 保存后**保持展开**（连着加几条不用再点一次「新建」），「更多」面板收起回默认状态。
+    // 归位到「今天」：新建提醒默认带当天「过期时间」，芯片状态也要跟着点亮。
+    // 保存后**自动收起**（用户 2026-10-11 要求：新建提交后自动隐藏）——
+    // 收起成一个「新建」按钮，「更多」面板也一并回到默认收起状态。
     preset.value = isNote || planned ? '' : 'today'
     quickDueCleared.value = false
     quickExpanded.value = false
-    quickOpen.value = true
+    quickOpen.value = false
     if (isNote) {
       // 记事本页要立刻把新记的这条显示出来（其它视图它本来就不出现）。
       await loadItems()
@@ -1596,7 +1597,9 @@ function onShortcut(e: KeyboardEvent) {
 /* 收起态的「新建」按钮（用户要求：新建提醒控件折叠成一个按钮、放到搜索框左边）：
    **实线边框 + 流光**（.flow-frame 那条旋转的 1px 光带，见 style.css）——
    边框本身仍是实线，光带叠在它上面转，所以看起来是「实线在流动」。 */
-.quick-new-button { @apply inline-flex h-10 shrink-0 items-center gap-1.5 rounded-2xl border border-solid border-border bg-surface/70 px-2.5 text-sm font-bold text-muted-foreground shadow-sm backdrop-blur transition hover:border-brand-500/45 hover:text-brand-600 dark:hover:text-brand-300 sm:h-11 sm:px-3.5; }
+/* 蓝紫过渡色（用户 2026-10-11 要求：见左侧菜单栏第一个「新建提醒」按钮那套渐变色），
+   流光（.flow-frame 的 conic 光带）照旧叠在上面；底色深，字改成白色。 */
+.quick-new-button { @apply inline-flex h-10 shrink-0 items-center gap-1.5 rounded-2xl border border-solid border-white/25 bg-gradient-to-r from-blue-500 to-indigo-500 px-2.5 text-sm font-bold text-white shadow-[0_14px_30px_-14px_rgba(59,130,246,.8)] transition hover:brightness-105 sm:h-11 sm:px-3.5; }
 /* 流光外壳：圆角与卡片一致（.flow-frame::before 的 1px 光带靠 border-radius: inherit），
    自己不裁剪，好让 .flow-glow::after 那团柔光露出来。 */
 .quick-shell { @apply relative rounded-[24px]; }

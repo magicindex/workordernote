@@ -25,10 +25,43 @@
             <button type="button" class="nav-btn" aria-label="上个月" @click="shiftMonth(-1)">
               <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m15 6-6 6 6 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-            <span class="min-w-[96px] text-center text-sm font-bold">{{ viewYear }} 年 {{ viewMonth }} 月</span>
+            <!-- 点标题快速选年月（用户 2026-10-11 要求：日期栏目没办法快速选年月）：
+                 展开一个「年份下拉 + 12 个月」的面板，点月份直接跳过去。 -->
+            <button
+              type="button"
+              class="picker-title"
+              data-picker-title
+              :aria-expanded="quickOpen ? 'true' : 'false'"
+              aria-label="快速选择年月"
+              @click="toggleQuick"
+            >
+              <span class="min-w-[96px] text-center text-sm font-bold">{{ viewYear }} 年 {{ viewMonth }} 月</span>
+              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 transition" :class="{ 'rotate-180': quickOpen }" fill="none" stroke="currentColor"><path d="m6 9 6 6 6-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
             <button type="button" class="nav-btn" aria-label="下个月" @click="shiftMonth(1)">
               <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m9 6 6 6-6 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
+          </div>
+        </div>
+        <!-- 快速选年月面板：年份下拉（近 80 年 + 未来 10 年）+ 12 个月按钮 -->
+        <div v-if="quickOpen" class="picker-quick" data-picker-quick>
+          <div class="flex items-center gap-2 pb-2">
+            <span class="text-[11px] font-bold text-muted-foreground">年份</span>
+            <select v-model.number="quickYear" class="quick-year-select" aria-label="选择年份" data-picker-year>
+              <option v-for="y in quickYearOptions" :key="y" :value="y">{{ y }}</option>
+            </select>
+            <span class="ml-auto text-[10px] text-muted-foreground">选年份 → 点月份</span>
+          </div>
+          <div class="grid grid-cols-4 gap-1">
+            <button
+              v-for="m in 12"
+              :key="m"
+              type="button"
+              class="picker-month"
+              :class="{ active: quickYear === viewYear && m === viewMonth }"
+              :data-picker-month="m"
+              @click="pickMonth(m)"
+            >{{ m }} 月</button>
           </div>
         </div>
         <div class="grid grid-cols-7 border-b border-border/70 pb-1 text-center text-[10px] font-bold text-muted-foreground">
@@ -298,6 +331,7 @@ async function probeLeapMonth(year: number): Promise<number> {
 function switchMode(next: 'solar' | 'lunar') {
   if (mode.value === next) return
   mode.value = next
+  quickOpen.value = false // 换页签时收起「快速选年月」面板
   if (next === 'lunar') {
     syncLunarFromSolar()
   }
@@ -385,6 +419,25 @@ function shiftMonth(delta: number) {
   viewMonth.value = next.getMonth() + 1
 }
 
+// ---- 快速选年月（公历页签，用户 2026-10-11 要求）----
+// 年份范围给得宽一点（往前 80 年），这样生日/纪念日这种久远日期也能一两下点到。
+const quickOpen = ref(false)
+const quickYear = ref(0)
+const quickYearOptions = computed(() => {
+  const current = new Date().getFullYear()
+  const from = current - 80
+  return Array.from({ length: 91 }, (_, i) => from + i)
+})
+function toggleQuick() {
+  if (!quickOpen.value) quickYear.value = viewYear.value || new Date().getFullYear()
+  quickOpen.value = !quickOpen.value
+}
+function pickMonth(m: number) {
+  viewYear.value = quickYear.value || viewYear.value
+  viewMonth.value = m
+  quickOpen.value = false
+}
+
 // 手机端手势：在日历格子上左右轻扫翻月（水平位移明显大于垂直才算，
 // 避免和页面滚动冲突）。左扫下个月，右扫上个月。
 let gridTouchStart: { x: number; y: number } | null = null
@@ -432,6 +485,7 @@ function shiftLunarMonth(delta: number) {
 }
 
 function goToday() {
+  quickOpen.value = false
   const now = new Date()
   viewYear.value = now.getFullYear()
   viewMonth.value = now.getMonth() + 1
@@ -581,6 +635,12 @@ void Promise.resolve().then(place)
 .nav-btn { @apply flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground; }
 .today-btn { @apply rounded-lg border border-border px-3 py-2 text-xs font-bold text-muted-foreground transition hover:border-brand-500/40 hover:text-brand-600; }
 .lunar-select { @apply h-9 rounded-lg border border-border bg-surface px-2 text-[16px] sm:text-xs font-bold text-foreground outline-none focus:border-brand-500/50; }
+/* 可点的年月标题 + 快速选年月面板（点标题展开） */
+.picker-title { @apply flex items-center gap-0.5 rounded-lg px-1 py-0.5 text-foreground transition hover:bg-muted; }
+.picker-quick { @apply mb-2 rounded-xl border border-border/70 bg-muted/45 p-2; }
+.quick-year-select { @apply h-8 rounded-lg border border-border bg-surface px-2 text-[16px] sm:text-xs font-bold text-foreground outline-none focus:border-brand-500/50; }
+.picker-month { @apply h-8 rounded-lg text-xs font-bold text-muted-foreground transition hover:bg-brand-500/10 hover:text-brand-600 dark:hover:text-brand-300; }
+.picker-month.active { @apply bg-brand-500/15 text-brand-600 dark:text-brand-300; }
 .day-cell { @apply flex h-[46px] flex-col items-center justify-center rounded-xl px-0.5 py-1 transition hover:bg-muted; }
 .day-cell.dim { @apply opacity-35; }
 .day-cell.today .day-num { @apply text-brand-600 dark:text-brand-300; }
