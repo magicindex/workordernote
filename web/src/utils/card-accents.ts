@@ -16,18 +16,20 @@ export interface CardAccent {
 
 export const CARD_ACCENTS: CardAccent[] = [
   { key: '', label: '默认（浅色随机）', from: '#e2e8f0', to: '#cbd5e1', ink: '#0f172a' },
-  { key: 'slate', label: '石墨', from: '#64748b', to: '#1e293b', ink: '#ffffff' },
-  { key: 'rose', label: '玫红', from: '#fb7185', to: '#be123c', ink: '#ffffff' },
-  { key: 'amber', label: '琥珀', from: '#fcd34d', to: '#f59e0b', ink: '#3f2404' },
-  // 鎏金（用户 2026-10-11 要求）：比琥珀更「金」、带一点暗纹感，浅底所以用深字
-  { key: 'gold', label: '鎏金', from: '#f9e79f', to: '#b8860b', ink: '#3f2c05' },
-  { key: 'orange', label: '暖橘', from: '#fb923c', to: '#ea580c', ink: '#ffffff' },
-  { key: 'emerald', label: '翡翠', from: '#34d399', to: '#047857', ink: '#ffffff' },
-  { key: 'teal', label: '青碧', from: '#2dd4bf', to: '#0f766e', ink: '#ffffff' },
-  { key: 'sky', label: '天蓝', from: '#38bdf8', to: '#0369a1', ink: '#ffffff' },
-  { key: 'indigo', label: '靛蓝', from: '#818cf8', to: '#4338ca', ink: '#ffffff' },
-  { key: 'violet', label: '紫罗兰', from: '#c084fc', to: '#7e22ce', ink: '#ffffff' },
-  { key: 'fuchsia', label: '品红', from: '#e879f9', to: '#a21caf', ink: '#ffffff' },
+  // 深色系：两端都够深，白字对比度 ≥4.7（原来的中浅渐变配白字只有 2.6～3.0，看不清 ——
+  // 用户 2026-10-11：「浅色背景影响字体显示，字体是白色的，自动调整字体颜色」）。
+  { key: 'slate', label: '石墨', from: '#475569', to: '#1e293b', ink: '#ffffff' },
+  { key: 'rose', label: '玫红', from: '#e11d48', to: '#9f1239', ink: '#ffffff' },
+  // 浅色系（琥珀 / 鎏金）：底色浅，自动配深字（对比度 8.3 / 5.5）
+  { key: 'amber', label: '琥珀', from: '#fcd34d', to: '#f59e0b', ink: '#0f172a' },
+  { key: 'gold', label: '鎏金', from: '#f9e79f', to: '#b8860b', ink: '#0f172a' },
+  { key: 'orange', label: '暖橘', from: '#c2410c', to: '#7c2d12', ink: '#ffffff' },
+  { key: 'emerald', label: '翡翠', from: '#047857', to: '#064e3b', ink: '#ffffff' },
+  { key: 'teal', label: '青碧', from: '#0f766e', to: '#134e4a', ink: '#ffffff' },
+  { key: 'sky', label: '天蓝', from: '#0369a1', to: '#0c4a6e', ink: '#ffffff' },
+  { key: 'indigo', label: '靛蓝', from: '#4f46e5', to: '#3730a3', ink: '#ffffff' },
+  { key: 'violet', label: '紫罗兰', from: '#7c3aed', to: '#5b21b6', ink: '#ffffff' },
+  { key: 'fuchsia', label: '品红', from: '#c026d3', to: '#86198f', ink: '#ffffff' },
 ]
 
 /**
@@ -70,6 +72,18 @@ export function cardTint(accentKey?: string | null, id?: number | string): strin
   return `linear-gradient(135deg, ${a.from}29 0%, ${a.to}14 100%)`
 }
 
+/**
+ * 卡面文字色：
+ *   · 默认档的浅色卡面是**不透明**的浅底 —— 必须强制深字，否则深色主题下白字糊在浅底上
+ *     （用户 2026-10-11 报的就是这个）；
+ *   · 选了颜色的卡面只是薄薄一层同色系浅淡底（透出主题卡面），跟着主题走最自然 → 返回 null（不改）。
+ */
+export function cardInk(accentKey?: string | null, id?: number | string): string | null {
+  if (accentKey) return null
+  const a = defaultAccentFor(id)
+  return bestInk(a.from, a.to)
+}
+
 /** 倒计时块：选了颜色用该色浓郁渐变；没选就用那一档配套的**浓色**（与浅色卡面拉开层次）。 */
 export function heroGradient(accentKey?: string | null, id?: number | string): string {
   if (!accentKey) return accentGradient(defaultAccentFor(id).heroKey)
@@ -80,6 +94,46 @@ export function heroGradient(accentKey?: string | null, id?: number | string): s
 export function heroInk(accentKey?: string | null, id?: number | string): string {
   if (!accentKey) return accentInk(defaultAccentFor(id).heroKey)
   return accentInk(accentKey)
+}
+
+// ---- 字色自动匹配（用户 2026-10-11：「自动调整字体颜色，让字体显示清晰」）----
+// 按 WCAG 相对亮度算对比度，在白字 / 深字之间挑「渐变两端里更差的那一端」更好的一个。
+// 这样以后改色板颜色也不用逐个手调字色。
+const DARK_INK = '#0f172a'
+const LIGHT_INK = '#ffffff'
+
+function channel(v: number) {
+  const c = v / 255
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+}
+
+function luminance(hex: string) {
+  const h = hex.replace('#', '')
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+}
+
+/** WCAG 对比度（1～21）。 */
+export function contrastRatio(a: string, b: string) {
+  const la = luminance(a)
+  const lb = luminance(b)
+  const hi = Math.max(la, lb)
+  const lo = Math.min(la, lb)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+/** 一组渐变两端里，哪个字色更清楚：取「两端对比度里较小的那个」更大的字色。 */
+export function bestInk(from: string, to: string): string {
+  const dark = Math.min(contrastRatio(DARK_INK, from), contrastRatio(DARK_INK, to))
+  const light = Math.min(contrastRatio(LIGHT_INK, from), contrastRatio(LIGHT_INK, to))
+  return dark >= light ? DARK_INK : LIGHT_INK
+}
+
+/** 浅色系的字色（浅底一律深字）。 */
+export function softInk(ink: string) {
+  return ink === DARK_INK ? 'rgba(15, 23, 42, .72)' : 'rgba(255, 255, 255, .85)'
 }
 
 const BY_KEY = new Map(CARD_ACCENTS.map((a) => [a.key, a]))
@@ -95,7 +149,8 @@ export function accentGradient(key?: string | null): string {
   return `linear-gradient(135deg, ${a.from} 0%, ${a.to} 100%)`
 }
 
-/** 与渐变配套的文字色。 */
+/** 与渐变配套的文字色（按渐变两端自动挑，见 bestInk）。 */
 export function accentInk(key?: string | null): string {
-  return cardAccent(key).ink
+  const a = cardAccent(key)
+  return bestInk(a.from, a.to)
 }

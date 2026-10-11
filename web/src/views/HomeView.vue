@@ -66,7 +66,7 @@
           <button
             v-if="canQuickAdd && !quickOpen"
             type="button"
-            class="quick-new-button flow-frame"
+            class="quick-new-button"
             data-quick-add
             data-quick-new
             title="新建提醒（快捷键 N）"
@@ -1598,7 +1598,8 @@ function onShortcut(e: KeyboardEvent) {
    **实线边框 + 流光**（.flow-frame 那条旋转的 1px 光带，见 style.css）——
    边框本身仍是实线，光带叠在它上面转，所以看起来是「实线在流动」。 */
 /* 蓝紫过渡色（用户 2026-10-11 要求：见左侧菜单栏第一个「新建提醒」按钮那套渐变色），
-   流光（.flow-frame 的 conic 光带）照旧叠在上面；底色深，字改成白色。 */
+   底色深、字用白色。**不加流光**（用户 2026-10-11 第二次明确：收缩态这个按钮取消流光、
+   只留底色；流光仍在展开后的新建卡片上）。 */
 .quick-new-button { @apply inline-flex h-10 shrink-0 items-center gap-1.5 rounded-2xl border border-solid border-white/25 bg-gradient-to-r from-blue-500 to-indigo-500 px-2.5 text-sm font-bold text-white shadow-[0_14px_30px_-14px_rgba(59,130,246,.8)] transition hover:brightness-105 sm:h-11 sm:px-3.5; }
 /* 流光外壳：圆角与卡片一致（.flow-frame::before 的 1px 光带靠 border-radius: inherit），
    自己不裁剪，好让 .flow-glow::after 那团柔光露出来。 */

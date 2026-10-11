@@ -41,26 +41,30 @@
           <template v-else-if="entry.days > 1">还有 <b>{{ entry.days }}</b> 天</template>
           <template v-else>已过 <b>{{ -entry.days }}</b> 天</template>
         </div>
-        <div class="mt-2.5 flex flex-col items-center gap-1.5 text-center">
-          <span class="ceremony-icon"><ListIcon :name="entry.icon" :size="22" /></span>
-          <div class="min-w-0">
+        <!-- 图标挪到内容**左侧**并放大 2 倍（用户 2026-10-12：「图标放内容左侧放大2倍」）；
+             名称 / 时间 / 循环 / 次数等一并放大。整组（图标 + 文字）在卡片里居中。 -->
+        <div class="ceremony-body">
+          <span class="ceremony-icon"><ListIcon :name="entry.icon" :size="44" /></span>
+          <div class="min-w-0 text-left">
             <h3 class="ceremony-title" :data-ceremony-title="entry.id">{{ entry.title }}</h3>
             <p class="ceremony-date">
               {{ entry.dateLabel }}
               <span v-if="entry.lunar" class="tiny-badge ml-1">农历</span>
               <span v-if="entry.repeatLabel" class="tiny-badge ml-1">{{ entry.repeatLabel }}</span>
             </p>
+            <p v-if="entry.cycle > 0 || entry.notes" class="ceremony-extra">
+              <span v-if="entry.cycle > 0" class="tiny-badge" :data-ceremony-cycle="entry.id">第 {{ entry.cycle }} 次</span>
+              <span v-if="entry.notes" class="truncate">{{ entry.notes }}</span>
+            </p>
           </div>
         </div>
-        <div class="mt-2 flex items-center justify-center gap-2 text-center text-[11px] font-semibold text-muted-foreground">
-          <span v-if="entry.cycle > 0" class="tiny-badge" :data-ceremony-cycle="entry.id">第 {{ entry.cycle }} 次</span>
-          <span v-if="entry.notes" class="truncate">{{ entry.notes }}</span>
+        <div class="ceremony-actions">
           <span class="flex items-center gap-1">
             <button class="row-action !opacity-100" title="编辑" :data-ceremony-edit="entry.id" @click="edit(entry)">
-              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 20h4L20 8l-4-4L4 16v4Z" stroke-width="1.7" stroke-linejoin="round"/></svg>
+              <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M4 20h4L20 8l-4-4L4 16v4Z" stroke-width="1.7" stroke-linejoin="round"/></svg>
             </button>
             <button class="row-action !opacity-100 hover:!text-rose-500" title="删除" :data-ceremony-delete="entry.id" @click="askRemove(entry)">
-              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
           </span>
         </div>
@@ -160,7 +164,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import Modal from './Modal.vue'
-import { CARD_ACCENTS, cardTint, heroGradient, heroInk, type CardAccent } from '../utils/card-accents'
+import { CARD_ACCENTS, cardInk, cardTint, heroGradient, heroInk, softInk, type CardAccent } from '../utils/card-accents'
 import ConfirmDialog from './ConfirmDialog.vue'
 import ListIcon from './ListIcon.vue'
 import LunarDatePicker from './LunarDatePicker.vue'
@@ -190,9 +194,20 @@ const swatchGradient = (a: CardAccent) => `linear-gradient(135deg, ${a.from} 0%,
 function heroStyle(entry: { accent?: string; id: number }) {
   return { background: heroGradient(entry.accent, entry.id), color: heroInk(entry.accent, entry.id) }
 }
-/** 整卡底色（用户 2026-10-11：纯白不好看）：默认档用浅色随机，选了色用同色系浅淡版。 */
+/**
+ * 整卡底色 + **配套的字色**（用户 2026-10-11：纯白不好看 → 加浅色底；
+ * 接着又报「浅色背景影响字体显示，字体是白色的，自动调整字体颜色」）。
+ * 默认档的浅色卡面是不透明浅底，这里按卡面颜色自动给一套深字（含次级文字的柔化色）；
+ * 选了颜色的卡面只是薄薄一层同色系浅淡底，字色交回主题。
+ */
 function cardStyle(entry: { accent?: string; id: number }) {
-  return { backgroundImage: cardTint(entry.accent, entry.id) }
+  const style: Record<string, string> = { backgroundImage: cardTint(entry.accent, entry.id) }
+  const ink = cardInk(entry.accent, entry.id)
+  if (ink) {
+    style.color = ink
+    style['--ceremony-ink-soft'] = softInk(ink)
+  }
+  return style
 }
 
 const datePicked = computed({
@@ -430,9 +445,21 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 /* 底色由 cardStyle() 内联给（浅色随机 / 同色系浅淡版），这里只保证圆角、内边距与居中；
    不加 bg-* 类，免得把内联的渐变盖掉。深色主题下这些浅色只是很淡的一层，不刺眼。 */
 .ceremony-card { @apply flex min-h-[11rem] flex-col items-stretch rounded-2xl p-4 text-center transition-shadow hover:shadow-[0_18px_40px_-30px_rgba(15,23,42,.6)]; }
-.ceremony-icon { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-500; }
-.ceremony-title { @apply truncate text-[15px] font-extrabold leading-5; }
-.ceremony-date { @apply mt-0.5 text-[11px] font-semibold text-muted-foreground; }
+/* 图标：从 36px 方框 / 22px 图标放大 2 倍 → 64px 方框 / 44px 图标（用户 2026-10-12） */
+.ceremony-icon { @apply flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500; }
+/* 内容整组（图标 + 文字）在卡片里居中，文字内部左对齐 */
+.ceremony-body { @apply mt-3 flex items-center justify-center gap-3; }
+.ceremony-actions { @apply mt-2.5 flex items-center justify-center gap-2 text-center text-[13px] font-semibold text-muted-foreground; }
+/* 名称 / 时间 / 次数都放大（用户 2026-10-12：「所有内容均放大」） */
+.ceremony-title { @apply truncate text-[19px] font-extrabold leading-6; }
+.ceremony-date { @apply mt-1 text-[14px] font-semibold leading-5 text-muted-foreground; }
+.ceremony-extra { @apply mt-1 flex flex-wrap items-center gap-1 text-[13px] font-semibold text-muted-foreground; }
+/* 卡面上的小徽标（农历 / 每年 / 第 N 次）也跟着放大一号 */
+.ceremony-card .tiny-badge { @apply px-2 py-0.5 text-[12px]; }
+/* 浅色卡面（默认档）上：次级文字与行内按钮改用卡面配套的深字，避免深色主题下白字糊在浅底上 */
+.ceremony-card[data-ceremony-bg='default'] .ceremony-date,
+.ceremony-card[data-ceremony-bg='default'] .tiny-badge,
+.ceremony-card[data-ceremony-bg='default'] .row-action { color: var(--ceremony-ink-soft); }
 /* 倒计时：大字 + 底色，放在卡片最上面 */
 .ceremony-hero { @apply flex items-baseline justify-center gap-2 rounded-xl bg-muted/70 px-3.5 py-3 text-center text-[16px] font-extrabold leading-none text-foreground sm:px-4; }
 .ceremony-hero b { @apply text-[36px] font-black leading-none tracking-tight sm:text-[44px]; }
