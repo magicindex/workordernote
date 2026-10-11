@@ -369,6 +369,7 @@
       :busy="alertBusy"
       :error="alertError"
       :snooze-label="`稍后提醒（${notifyMinutes} 分钟后）`"
+      :ack-label="ackLabel"
       :ack-hint="ackHint"
       @ack="ackCurrentAlert"
       @snooze="snoozeCurrentAlert"
@@ -980,9 +981,16 @@ const pendingAlertCount = computed(() => Math.max(alertQueue.value.length - 1, 0
 // 提醒频率来自偏好设置（个人偏好）：未处理多久再提醒、点「知道了」后多久再提醒
 const notifyMinutes = computed(() => authStore.reminderNotifyMinutes || 10)
 const ackMinutes = computed(() => authStore.reminderAckMinutes || 0)
+// 主按钮必须写明「点了会怎样」：用户 2026-10-12 报「昨天到期的任务进了逾期，
+// 点『知道了』它就出了逾期」——只写「知道了」让人以为是关掉提示，实际上是把提醒
+// 顺延（默认第二天），逾期分组也跟着变了。文案按偏好的「知道了后提醒频率」走：
+// 0 = 明年同一时间（写「延期明天提醒」），否则写实际分钟数，别写死。
+const ackLabel = computed(() => (ackMinutes.value > 0
+  ? `知道了（${ackMinutes.value} 分钟后再提醒）`
+  : '知道了（任务延期明天提醒）'))
 const ackHint = computed(() => (ackMinutes.value > 0
-  ? `点「知道了」后 ${ackMinutes.value} 分钟再提醒；要完成请到列表里勾选`
-  : '点「知道了」后今天不再提示，明天同一时间继续提醒；要完成请到列表里勾选'))
+  ? `要完成请到列表里勾选；${ackMinutes.value} 分钟后会再提醒一次`
+  : '要完成请到列表里勾选；今天不再提示，明天同一时间继续提醒'))
 
 function enqueueDueAlert(notification: ReminderRealtimeEvent['notification']) {
   if (!notification || notification.type !== 'reminder_due') return

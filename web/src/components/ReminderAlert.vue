@@ -36,11 +36,14 @@
 
             <!-- 只有两个动作：「知道了」=当天不再提示、第二天继续提醒；
                  「稍后提醒」=按偏好里的提醒频率过一会儿再弹。**不再有「完成」**——
-                 要完成请到列表里勾选，免得误点把事办了。 -->
+                 要完成请到列表里勾选，免得误点把事办了。
+                 主按钮文案由 MainLayout 传进来（默认「知道了（任务延期明天提醒）」）：
+                 用户 2026-10-12 反馈「昨天到期的任务新建后进了逾期，点知道了就出了逾期」——
+                 按钮本身要写清楚点了等于延期，不能只写「知道了」。 -->
             <div class="mt-5 flex flex-col gap-2.5">
               <button ref="ackButtonRef" type="button" class="btn-brand w-full" :disabled="busy" @click="emit('ack')">
                 <svg v-if="busy" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                {{ busy ? '处理中…' : '知道了' }}
+                {{ busy ? '处理中…' : ackText }}
               </button>
               <button type="button" class="btn-ghost w-full" :disabled="busy" @click="emit('snooze')">
                 {{ snoozeText }}
@@ -88,6 +91,8 @@ const props = withDefaults(defineProps<{
   error?: string
   /** 「稍后提醒」按钮上的文案（按偏好里的提醒频率显示间隔） */
   snoozeLabel?: string
+  /** 主按钮上的文案：点它 = 顺延（默认「知道了（任务延期明天提醒）」） */
+  ackLabel?: string
   /** 主按钮下面那行小字，说明「知道了」之后什么时候再提醒 */
   ackHint?: string
 }>(), {
@@ -98,6 +103,7 @@ const props = withDefaults(defineProps<{
   busy: false,
   error: '',
   snoozeLabel: '稍后提醒',
+  ackLabel: '知道了（任务延期明天提醒）',
   ackHint: '',
 })
 
@@ -110,6 +116,7 @@ const emit = defineEmits<{
 }>()
 
 const snoozeText = computed(() => props.snoozeLabel || '稍后提醒')
+const ackText = computed(() => props.ackLabel || '知道了')
 const hint = computed(() => props.ackHint || '')
 const ackButtonRef = ref<HTMLButtonElement | null>(null)
 
