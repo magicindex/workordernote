@@ -440,6 +440,9 @@ func NewRouter(cfg config.Config, db *gorm.DB, jwtSecret string) *gin.Engine {
 
 	// File upload requires authentication; uploaded content is still readable by
 	// URL so it can be embedded in public pages.
+	// 仪式感卡片的上传背景图要在卡片删除时清理，reminder 包需要知道上传目录在哪。
+	// 这里不直接 import：reminder 包的测试 import 了本包，会构成 test 的 import cycle；
+	// 由 main.go 在启动时注入（reminder.SetUploadDir）。
 	authGroup.POST("/upload", upload.HandleUpload(cfg.UploadDir))
 	appGroup.GET("/uploads/*filepath", upload.ServeUpload(cfg.UploadDir))
 

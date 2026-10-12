@@ -363,6 +363,28 @@
               @click="setListStatus('all')"
             >全部</button>
           </div>
+          <!-- 排序（用户 2026-10-12：「给清单页面增加排序功能（升序/倒序）」）：按**到期时间**
+               排整页 —— 日期卡片整体倒过来，卡片内的条目也倒序。「已逾期」始终第一、
+               「无日期」始终最后（见 listSortDir 的说明）。选择记在本地。
+               记事本栏目不给这个按钮：记事没有到期时间，那一页有自己「新在前」的规矩。 -->
+          <button
+            v-if="view !== 'completed' && !isNoteBucketPage"
+            type="button"
+            class="toolbar-btn inline-flex"
+            data-sort-toggle
+            :data-sort-dir="listSortDir"
+            :aria-pressed="listSortDir === 'desc'"
+            :title="listSortDir === 'asc'
+              ? '按到期时间升序：近的在前（逾期 → 今天 → 明天 …）。点一下改成倒序'
+              : '按到期时间倒序：远的在前（日期卡片整体倒过来）。点一下改回升序'"
+            @click="toggleListSort"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+              <path v-if="listSortDir === 'asc'" d="M12 19V5m0 0-5 5m5-5 5 5" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
+              <path v-else d="M12 5v14m0 0 5-5m-5 5-5-5" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span>{{ listSortDir === 'asc' ? '时间升序' : '时间倒序' }}</span>
+          </button>
           <button
             class="toolbar-btn inline-flex"
             :class="{ 'is-spinning': loading }"
@@ -673,6 +695,24 @@ function setListStatus(next: 'open' | 'all') {
   try { localStorage.setItem(LIST_STATUS_KEY, next) } catch { /* 隐私模式忽略 */ }
   void loadItems()
 }
+
+// 清单页排序（用户 2026-10-12 要求：「给清单页面增加排序功能（升序/倒序）」，按**到期时间**排、
+// 整页重排）。升序 = 时间早的在前（默认，与原来完全一致，不动任何既有行为）；倒序 = 远的在前。
+// 两条既有规矩不参与反转，因为它们不是「某一天」：
+//   · **「已逾期」永远第一** —— 它是「欠着的事」的收件箱（用户 2026-10-09 明确要求逾期置顶）；
+//   · **「无日期」永远最后** —— 它没有到期时间，排在哪一头都是错的。
+// 其余日期卡片整体倒过来，卡片内部（先看没做完的）也按到期时间反向。
+// 选择记在本地：这类偏好跟人走、跟设备走，不必上服务端（与「未完成 / 全部」一致）。
+const LIST_SORT_KEY = 'ui_list_sort_dir'
+const listSortDir = ref<'asc' | 'desc'>(readListSortDir())
+function readListSortDir(): 'asc' | 'desc' {
+  try { return localStorage.getItem(LIST_SORT_KEY) === 'desc' ? 'desc' : 'asc' } catch { return 'asc' }
+}
+function toggleListSort() {
+  const next: 'asc' | 'desc' = listSortDir.value === 'asc' ? 'desc' : 'asc'
+  listSortDir.value = next
+  try { localStorage.setItem(LIST_SORT_KEY, next) } catch { /* 隐私模式忽略 */ }
+}
 const customFrom = ref('')
 const customTo = ref('')
 const lists = ref<ReminderList[]>([])
@@ -698,24 +738,35 @@ const editorOpen = ref(false)
 const clockNow = ref(Date.now())
 const toast = reactive<{ message: string; type: 'success' | 'error' }>({ message: '', type: 'success' })
 
-// 新建提醒的默认时间 = **当天的「过期时间」**（后台偏好 `task_expire_time`，默认 23:59）。
+// 新建提醒的默认时间 = **当天的「新建提醒默认结束时间」**（系统配置 `task_expire_time`，默认 23:59）。
 //
-// 历史：0.16.5 曾按用户要求改成「当前时刻」；2026-10-10 用户又要求后台加「过期时间」，
-// 并明确「新建预填这个时间」——所以现在默认是当天 23:59（跟着偏好走）。
-// 逾期口径也一起变了：**当天到这个点才算过期**，再叠加 `task_overdue_after_minutes` 宽限。
+// 历史：0.16.5 曾按用户要求改成「当前时刻」；2026-10-10 用户又要求后台加这个设置，
+// 并明确「新建预填这个时间」——所以默认是当天 23:59（跟着偏好走）。
+//
+// 2026-10-12 起它**只管新建的默认值**：「逾期」判定搬到了个人偏好「逾期提醒时间」
+// （task_overdue_time，见下面的 overdueTimeParts）——用户要的是「新建默认 23:59」
+// 与「逾期时间 20:30」两件事互不影响。
 function defaultQuickDue(): string {
   const d = new Date()
-  d.setHours(expireTimeParts.value.h, expireTimeParts.value.m, 0, 0)
+  d.setHours(defaultDueParts.value.h, defaultDueParts.value.m, 0, 0)
   return toLocalIso(d)
 }
 // 「任务过期多久算逾期」按**分钟**存，前端从公开配置读（系统级设置，公开接口里的就是权威值）。
 const overdueGraceMinutes = ref(30)
-// 「任务过期时间」（HH:MM，默认 23:59）：当天到这个点才算过期；也是新建提醒的默认时间。
-const expireTime = ref('23:59')
-const expireTimeParts = computed(() => {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(expireTime.value.trim())
-  return m ? { h: Number(m[1]), m: Number(m[2]) } : { h: 23, m: 59 }
-})
+// 「新建提醒默认结束时间」（HH:MM，默认 23:59）：只用于新建时的预填。
+const defaultDueTime = ref('23:59')
+const defaultDueParts = computed(() => clockParts(defaultDueTime.value))
+// 「逾期提醒时间」（个人偏好 task_overdue_time，默认 23:59）：**到期日当天过了这个点
+// 就算逾期**，与任务写了几点无关（写 00:00 表示按到期时刻算、不按天顺延）。
+const overdueTimeParts = computed(() => clockParts(authStore.reminderOverdueTime))
+function clockParts(value: string): { h: number; m: number } {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim())
+  if (!match) return { h: 23, m: 59 }
+  const h = Number(match[1])
+  const m = Number(match[2])
+  if (h < 0 || h > 23 || m < 0 || m > 59) return { h: 23, m: 59 }
+  return { h, m }
+}
 const blankInput = (): SaveReminderInput => ({
   title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: defaultQuickDue(),
   start_at: null, end_at: null,
@@ -1410,10 +1461,13 @@ function overdueStamp(item: ReminderItem): number | null {
 function overdueDeadline(item: ReminderItem): number | null {
   const t = overdueStamp(item)
   if (t === null) return null
+  const { h, m } = overdueTimeParts.value
+  // 00:00 = 按到期时刻算、不按天顺延（沿用这个设置项旧口径里 00:00 的含义）。
+  if (h === 0 && m === 0) return t
   const d = new Date(t)
-  const { h, m } = expireTimeParts.value
-  const dayExpire = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0, 0).getTime()
-  return Math.max(t, dayExpire)
+  // 「到期日当天过了这个点就算逾期」：与任务写了几点无关 —— 新建提醒默认 23:59，
+  // 若取「两者较晚」，用户把逾期时间设成 20:30 就永远看不出效果（这正是要修的）。
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0, 0).getTime()
 }
 function isOverdue(item: ReminderItem) {
   const t = overdueDeadline(item)
@@ -1510,13 +1564,22 @@ const dayGroups = computed(() => {
     }
     group.items.push(item)
   }
-  const ordered = [...groups.filter(g => g.key !== 'undated'), ...groups.filter(g => g.key === 'undated')]
+  const dated = groups.filter(g => g.key !== 'undated')
+  const undated = groups.filter(g => g.key === 'undated')
+  // 倒序：日期卡片整体倒过来（最远的日期在最上面）；「无日期」仍然收尾（见 listSortDir 的说明）。
+  // 记事本栏目不参与：它按「新在前」排（接口 created_desc），那是它自己的规矩不是到期时间。
+  const desc = listSortDir.value === 'desc' && !isNoteBucketPage.value
+  const ordered = [...(desc ? [...dated].reverse() : dated), ...undated]
+  const seq = (rows: ReminderItem[]) => (desc ? [...rows].reverse() : rows)
   for (const group of ordered) {
     const open = group.items.filter((i) => !i.completed_at)
     const done = group.items.filter((i) => !!i.completed_at)
-    group.items = [...open, ...done]
+    // 卡片内部：没做完的仍然在前；同一段里按到期时间，倒序时反向。
+    group.items = [...seq(open), ...seq(done)]
   }
   overdue.items = overdue.items.sort((a, b) => (overdueStamp(a) || 0) - (overdueStamp(b) || 0))
+  // 「已逾期」卡片永远第一；卡片内部在倒序时也反过来（最近逾期的在前）。
+  if (desc) overdue.items = [...overdue.items].reverse()
   // 逾期排第一（没有逾期条目时这张卡片不出现），「无日期」永远排最后。
   return overdue.items.length ? [overdue, ...ordered] : ordered
 })
@@ -1555,7 +1618,7 @@ async function loadOverdueGrace() {
     const v = Number(cfg.task_overdue_after_minutes)
     if (Number.isFinite(v) && v >= 0) overdueGraceMinutes.value = v
     const t = String(cfg.task_expire_time || '').trim()
-    if (/^\d{1,2}:\d{2}$/.test(t)) expireTime.value = t
+    if (/^\d{1,2}:\d{2}$/.test(t)) defaultDueTime.value = t
   } catch { /* 拿不到就按默认 30 分钟 / 23:59 */ }
 }
 onMounted(() => {

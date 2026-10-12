@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 360" preserveAspectRatio="xMidYMid slice" role="img">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#065f46"/><stop offset="1" stop-color="#022c22"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="360" fill="url(#g)"/>
+  <g fill="#dcfce7" opacity=".22">
+    <circle cx="70" cy="60" r="4"/><circle cx="160" cy="120" r="3"/><circle cx="260" cy="50" r="3.5"/>
+    <circle cx="380" cy="90" r="3"/><circle cx="500" cy="50" r="4"/><circle cx="540" cy="150" r="3"/>
+    <circle cx="120" cy="240" r="3"/><circle cx="480" cy="260" r="3.5"/>
+  </g>
+  <g>
+    <path d="M300 70l90 130h-180z" fill="#16a34a" opacity=".95"/>
+    <path d="M300 140l110 150H190z" fill="#15803d" opacity=".95"/>
+    <rect x="288" y="288" width="24" height="34" rx="3" fill="#a16207"/>
+    <circle cx="300" cy="60" r="10" fill="#facc15"/>
+  </g>
+  <g fill="#f87171"><circle cx="255" cy="200" r="7"/><circle cx="345" cy="220" r="7"/><circle cx="300" cy="255" r="7"/></g>
+</svg>

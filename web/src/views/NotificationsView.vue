@@ -27,8 +27,14 @@
         :class="{ unread: !item.read_at }"
         @click="read(item)"
       >
-        <span class="notification-icon" :class="item.type === 'channel_failed' ? 'failure' : 'due'">
+        <!-- 三种站内通知各有各的样子：到点（蓝铃铛）、已逾期（琥珀色感叹号，
+             用户 2026-10-12 加的「逾期提醒」）、发送失败（玫瑰色警告）。 -->
+        <span
+          class="notification-icon"
+          :class="item.type === 'channel_failed' ? 'failure' : item.type === 'reminder_overdue' ? 'overdue' : 'due'"
+        >
           <svg v-if="item.type === 'channel_failed'" viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M12 9v4m0 4h.01M10.3 3.8 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.8a2 2 0 0 0-3.4 0Z" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <svg v-else-if="item.type === 'reminder_overdue'" viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7.5v5m0 3.5h.01" stroke-width="1.9" stroke-linecap="round"/></svg>
           <svg v-else viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </span>
         <span class="min-w-0 flex-1 text-left">
@@ -125,4 +131,5 @@ onBeforeUnmount(() => {
 .notification-icon { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:h-11 sm:w-11 sm:rounded-2xl; }
 .notification-icon.due { @apply bg-blue-500/10 text-blue-500; }
 .notification-icon.failure { @apply bg-rose-500/10 text-rose-500; }
+.notification-icon.overdue { @apply bg-amber-500/10 text-amber-600 dark:text-amber-400; }
 </style>

@@ -110,6 +110,13 @@ func GetConfig(db *gorm.DB, key string, userID uint) (string, error) {
 }
 
 func UpdateConfig(db *gorm.DB, key string, value string, userID uint) error {
+	// 时刻统一补零成 HH:MM（"6:00" → "06:00"）：它会被拼进 SQL、也会被字符串比较，
+	// 同一个时刻两种写法迟早出事（见 NormalizeClock）。
+	if def, ok := GetConfigDef(key); ok && def.Type == TypeTime {
+		if normalized, ok := NormalizeClock(value); ok {
+			value = normalized
+		}
+	}
 	var config database.SystemConfig
 	result := db.Where("user_id = ? AND key = ?", userID, key).First(&config)
 	if result.Error == gorm.ErrRecordNotFound {

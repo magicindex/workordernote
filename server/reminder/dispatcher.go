@@ -40,7 +40,24 @@ func dispatchDueJobs(db *gorm.DB) {
 		logger.Error("reminder: scan delivery jobs: %v", err)
 		return
 	}
+	// 「开始提醒时间」（个人偏好 reminder_all_day_time，默认 09:00）之前**不发任何提醒**：
+	// 用户 2026-10-12 要求的免打扰 —— 0:00 起静默，到点后这些任务仍是 pending，
+	// 下一轮（每分钟一次）一起发出去。每个用户的静默判断只算一次（同一轮里可能有好几条）。
+	quietNow := time.Now()
+	quietUsers := map[uint]bool{}
+	isQuiet := func(userID uint) bool {
+		if cached, ok := quietUsers[userID]; ok {
+			return cached
+		}
+		value := inQuietHours(db, userID, quietNow)
+		quietUsers[userID] = value
+		return value
+	}
+
 	for _, job := range jobs {
+		if isQuiet(job.UserID) {
+			continue
+		}
 		processJob(db, job)
 	}
 }

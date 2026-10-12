@@ -12,9 +12,12 @@ import (
 	"smallgo/server/config"
 	"smallgo/server/server"
 
-	// Blank-import apps so their init() registers routes with the app registry.
-	// Add your own apps here.
-	_ "smallgo/server/reminder"
+	// Apps are imported for their side effects (init registers routes), but the
+	// reminder app also needs the upload dir: ceremony-card background images are
+	// deleted together with their card (see reminder/background.go). It cannot be
+	// wired from the server package — reminder's tests import server, which would
+	// be an import cycle — so it happens here, before the server starts.
+	"smallgo/server/reminder"
 )
 
 func main() {
@@ -22,6 +25,7 @@ func main() {
 	// makes provider credentials available locally without changing production
 	// environment-variable precedence.
 	config.LoadDotEnv(".env", "server/.env")
-	config.Parse()
+	cfg := config.Parse()
+	reminder.SetUploadDir(cfg.UploadDir)
 	server.Start()
 }

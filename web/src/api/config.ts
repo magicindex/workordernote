@@ -3,7 +3,7 @@ import request from './request'
 export interface ConfigMeta {
   key: string
   scope: 'system' | 'user'
-  type: 'string' | 'bool' | 'int' | 'select'
+  type: 'string' | 'bool' | 'int' | 'select' | 'time'
   value: string
   default: string
   public: boolean

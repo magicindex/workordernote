@@ -107,6 +107,10 @@ type Reminder struct {
 	// 新建/编辑时自己选）。存色名 key（见 card_accents.go 的白名单），空 = 用默认色。
 	// 只影响「人生要有仪式感」卡片的观感，不参与排序/提醒逻辑；新列同样由 AutoMigrate 自动加。
 	Accent string `gorm:"size:24" json:"accent,omitempty"`
+	// Background 是仪式感卡片的**背景图**（用户 2026-10-13 要求）：
+	// 空 = 用配色渐变；"preset:<key>" = 内置主题图（随前端产物走，不会被删）；
+	// "/uploads/..." = 用户上传的图片（卡片删除时清理，见 background.go）。
+	Background string `gorm:"size:255" json:"background,omitempty"`
 	CompletedAt         *time.Time        `gorm:"index:idx_reminders_user_completed" json:"completed_at"`
 	SnoozedUntil        *time.Time        `json:"snoozed_until"`
 	Position            int               `gorm:"not null;default:0" json:"position"`

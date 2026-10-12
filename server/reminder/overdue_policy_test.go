@@ -15,9 +15,12 @@ import (
 // resetOverduePolicyCache 让下一次读取重新查库（配置改完必须调用，
 // 否则 2 秒的进程内缓存会把旧值带进来）。
 func resetOverduePolicyCache() {
-	overdueGraceMu.Lock()
-	overdueGraceAt = time.Time{}
-	overdueGraceMu.Unlock()
+	overduePolicyMu.Lock()
+	overduePolicyCache = map[uint]overduePolicyEntry{}
+	overduePolicyMu.Unlock()
+	quietMu.Lock()
+	quietCache = map[uint]quietEntry{}
+	quietMu.Unlock()
 }
 
 // setPublicConfig 写一条系统级公开配置（测试用）。
@@ -32,6 +35,18 @@ func setPublicConfig(t *testing.T, key, value string) {
 	}
 	if err := sysconfig.UpdateConfig(appDB, key, value, 0); err != nil {
 		t.Fatalf("写配置 %s 失败：%v", key, err)
+	}
+	resetOverduePolicyCache()
+}
+
+// setUserConfig 写一条个人偏好（测试用）：「逾期提醒时间」「开始提醒时间」都是个人偏好。
+func setUserConfig(t *testing.T, key, value string, userID uint) {
+	t.Helper()
+	if err := sysconfig.InitDefaultConfigs(appDB); err != nil {
+		t.Fatalf("初始化默认配置失败：%v", err)
+	}
+	if err := sysconfig.UpdateConfig(appDB, key, value, userID); err != nil {
+		t.Fatalf("写个人偏好 %s 失败：%v", key, err)
 	}
 	resetOverduePolicyCache()
 }
@@ -56,8 +71,11 @@ func summaryOverdue(t *testing.T, userID uint) int64 {
 	return payload.Data["overdue"]
 }
 
-// 规则本身（不依赖跑测试的钟点）：用 SQLite 把「逾期截止时刻」算出来，
-// 按固定日期的行核对 —— 当天到期 → 当天 23:59；过期时间设 00:00 → 就是到期时刻本身。
+// 规则本身（不依赖跑测试的钟点）：用 SQLite 把「逾期判定时刻」算出来，按固定日期的行核对。
+//
+// 规则（用户 2026-10-12 明确）：到期日当天的「逾期提醒时间」就是判定时刻 —— 与任务写的
+// 几点无关（新建提醒默认 23:59，若按「取两者较晚」算，用户设 20:30 就永远看不到效果）。
+// 只有 00:00 例外：表示按到期时刻本身算、不按天顺延。
 func TestOverdueDeadlineExpression(t *testing.T) {
 	cleanup := testDB(t)
 	defer cleanup()
@@ -69,9 +87,9 @@ func TestOverdueDeadlineExpression(t *testing.T) {
 	if err := appDB.Create(&row).Error; err != nil {
 		t.Fatal(err)
 	}
-	deadlineOf := func(expire string) string {
+	deadlineOf := func(cutoff string) string {
 		var got string
-		q := "SELECT " + overdueDeadlineExpr("due_at", expire) + " FROM reminders WHERE id = ?"
+		q := "SELECT " + overdueDeadlineExpr("due_at", cutoff) + " FROM reminders WHERE id = ?"
 		if err := appDB.Raw(q, row.ID).Scan(&got).Error; err != nil {
 			t.Fatalf("算 deadline 失败：%v", err)
 		}
@@ -81,19 +99,23 @@ func TestOverdueDeadlineExpression(t *testing.T) {
 	if got := deadlineOf("23:59"); got != "2026-10-10 15:59:00" {
 		t.Fatalf("默认 23:59 的 deadline 应是 2026-10-10 15:59:00(UTC)，实际 %q", got)
 	}
-	// 00:00：截止时刻等于到期时刻本身 = 2026-10-10 01:00 UTC
-	if got := deadlineOf("00:00"); got != "2026-10-10 01:00:00" {
-		t.Fatalf("过期时间 00:00 的 deadline 应等于到期时刻 2026-10-10 01:00:00(UTC)，实际 %q", got)
+	// 20:30（用户举的例子）：就是当天 20:30 —— 09:00 到期的任务也等到 20:30 才算逾期
+	if got := deadlineOf("20:30"); got != "2026-10-10 12:30:00" {
+		t.Fatalf("逾期时间 20:30 的 deadline 应是当天 20:30 = 2026-10-10 12:30:00(UTC)，实际 %q", got)
 	}
-	// 到期时刻晚于当天过期时间时取晚的那个：09:00 + 过期时间 08:00 → 仍是 09:00
-	if got := deadlineOf("08:00"); got != "2026-10-10 01:00:00" {
-		t.Fatalf("到期时刻晚于过期时间时应取到期时刻，实际 %q", got)
+	// 08:00：比到期时刻（09:00）还早 —— 新口径按**日期**算，所以就是当天 08:00
+	if got := deadlineOf("08:00"); got != "2026-10-10 00:00:00" {
+		t.Fatalf("逾期时间 08:00 的 deadline 应是当天 08:00 = 2026-10-10 00:00:00(UTC)，实际 %q", got)
+	}
+	// 00:00：例外 —— 按到期时刻本身算 = 2026-10-10 01:00 UTC
+	if got := deadlineOf("00:00"); got != "2026-10-10 01:00:00" {
+		t.Fatalf("逾期时间 00:00 的 deadline 应等于到期时刻 2026-10-10 01:00:00(UTC)，实际 %q", got)
 	}
 }
 
-// 端到端：/summary 的 overdue 角标跟着「过期时间」走。
+// 端到端：/summary 的 overdue 角标跟着**个人偏好**「逾期提醒时间」走。
 // 用「昨天 23:00」与「今天 00:10」两条，断言随时钟自适应（不写死期望值）。
-func TestExpireTimeDefersOverdueUntilDayEnd(t *testing.T) {
+func TestOverdueTimeDefersOverdueUntilCutoff(t *testing.T) {
 	cleanup := testDB(t)
 	defer cleanup()
 
@@ -116,27 +138,49 @@ func TestExpireTimeDefersOverdueUntilDayEnd(t *testing.T) {
 	}
 
 	setPublicConfig(t, "task_overdue_after_minutes", "30")
-	// 默认 23:59：今天 00:10 那条要等到今天 23:59（+30 分钟），所以只有昨天那条逾期
-	setPublicConfig(t, "task_expire_time", "23:59")
-	if got := summaryOverdue(t, userID); got != 1 {
-		t.Fatalf("默认 23:59 时应只有昨天那条逾期，实际 %d", got)
+	// 期望值全部按「判定时刻 + 30 分钟宽限」随时钟算：跑测试的钟点不同（尤其刚过零点、
+	// 刚过 20:30 这些边界）期望值本来就该变，写死数字只会在那几个分钟里假红。
+	const grace = 30 * time.Minute
+	overdueNow := func(instant time.Time, cutoff string) int64 {
+		deadline := instant
+		if cutoff != "00:00" { // 00:00 = 按到期时刻本身算
+			h, m, _ := clockParts(cutoff)
+			l := instant.In(loc)
+			deadline = time.Date(l.Year(), l.Month(), l.Day(), h, m, 0, 0, loc)
+		}
+		if now.After(deadline.Add(grace)) {
+			return 1
+		}
+		return 0
+	}
+	wantWith := func(cutoff string) int64 {
+		return overdueNow(yesterdayLate, cutoff) + overdueNow(todayEarly, cutoff)
 	}
 
-	// 过期时间 00:00 = 按到期时刻算：今天 00:10 那条的 deadline 就是 00:10，
-	// 过了 00:40 就该算逾期（跑测试的钟点不同，期望值随之调整）
-	setPublicConfig(t, "task_expire_time", "00:00")
-	want := int64(1)
-	if now.After(todayEarly.Add(30 * time.Minute)) {
-		want = 2
+	// 默认 23:59：今天 00:10 那条要等到今天 23:59（+30 分钟），所以正常只有昨天那条逾期
+	setUserConfig(t, "task_overdue_time", "23:59", userID)
+	if got, want := summaryOverdue(t, userID), wantWith("23:59"); got != want {
+		t.Fatalf("默认 23:59 时应有 %d 条逾期，实际 %d（now=%s）", want, got, now.Format(time.RFC3339))
 	}
-	if got := summaryOverdue(t, userID); got != want {
-		t.Fatalf("过期时间 00:00 时应有 %d 条逾期，实际 %d（now=%s）", want, got, now.Format(time.RFC3339))
+
+	// 逾期时间 00:00 = 按到期时刻算：今天 00:10 那条的 deadline 就是 00:10（+30 分钟宽限）
+	setUserConfig(t, "task_overdue_time", "00:00", userID)
+	if got, want := summaryOverdue(t, userID), wantWith("00:00"); got != want {
+		t.Fatalf("逾期时间 00:00 时应有 %d 条逾期，实际 %d（now=%s）", want, got, now.Format(time.RFC3339))
+	}
+
+	// 用户举的例子：逾期时间设 20:30 —— 今天 00:10 到期的任务过了今天 20:30（+宽限）
+	// 就算逾期。注意它比「新建默认的 23:59」更早，这正是这次改动要的效果：
+	// 旧口径取 MAX(到期时刻, 当天时间)，设 20:30 对 23:59 的任务永远没有效果。
+	setUserConfig(t, "task_overdue_time", "20:30", userID)
+	if got, want := summaryOverdue(t, userID), wantWith("20:30"); got != want {
+		t.Fatalf("逾期时间 20:30 时应有 %d 条逾期，实际 %d（now=%s）", want, got, now.Format(time.RFC3339))
 	}
 
 	// 非法值不生效，退回默认 23:59
-	setPublicConfig(t, "task_expire_time", "25:99")
-	if _, expire := overduePolicy(appDB); expire != "23:59" {
-		t.Fatalf("非法过期时间应退回 23:59，实际 %q", expire)
+	setUserConfig(t, "task_overdue_time", "25:99", userID)
+	if _, cutoff := overduePolicy(appDB, userID); cutoff != "23:59" {
+		t.Fatalf("非法逾期时间应退回 23:59，实际 %q", cutoff)
 	}
 }
 

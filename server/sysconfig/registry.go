@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // Scope identifies who a config belongs to: the whole installation (system,
@@ -24,6 +25,9 @@ const (
 	TypeBool   ValueType = "bool"
 	TypeInt    ValueType = "int"
 	TypeSelect ValueType = "select"
+	// TypeTime 是「一天里的某个时刻」HH:MM（0-23:0-59）。前端渲染成原生
+	// <input type="time">，服务端校验并统一补零成 HH:MM（"6:00" → "06:00"）。
+	TypeTime ValueType = "time"
 )
 
 // sunLocationOptions 是「日出日落位置」可选城市。
@@ -102,6 +106,23 @@ func isInternalKey(key string) bool {
 	return ok && def.Internal
 }
 
+// NormalizeClock 把 "6:00" / "06:00" 这样的写法统一成 "HH:MM"，非法值返回 false。
+//
+// 为什么要统一：时刻会参与 SQL 拼接（见 reminder.overdueDeadlineExpr）与字符串比较，
+// 同一个时刻两种写法会让缓存与比较出现意外。
+func NormalizeClock(value string) (string, bool) {
+	parts := strings.Split(strings.TrimSpace(value), ":")
+	if len(parts) != 2 {
+		return "", false
+	}
+	h, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+	m, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err1 != nil || err2 != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return "", false
+	}
+	return fmt.Sprintf("%02d:%02d", h, m), true
+}
+
 // Validate checks a raw value against the definition's type. Booleans accept
 // only "true"/"false" (consumers compare against those exact strings);
 // selects accept only one of the declared options.
@@ -114,6 +135,10 @@ func Validate(def ConfigDef, value string) error {
 	case TypeInt:
 		if _, err := strconv.Atoi(value); err != nil {
 			return fmt.Errorf("config %q must be an integer", def.Key)
+		}
+	case TypeTime:
+		if _, ok := NormalizeClock(value); !ok {
+			return fmt.Errorf("config %q must be a time of day like 06:00", def.Key)
 		}
 	case TypeSelect:
 		for _, opt := range def.Options {
@@ -181,16 +206,16 @@ func init() {
 		Group:  "reminder", Label: "任务过期多久算逾期",
 		Description: "到期后多久开始标「已逾期」（默认 30 分钟；新建任务的默认时间是当前时刻，留一点宽限更自然）",
 	})
-	// 任务「过期时间」（用户 2026-10-10 要求）：**当天到这个点才算过期** ——
-	// 到期日当天的任务，不管写的是几点，都要等到这个时间（默认 23:59）才算逾期，
-	// 之后再叠加上面的「任务过期多久算逾期」宽限分钟数（见 reminder.overdueDeadline）。
-	// 它同时是**新建提醒时的默认时间**（原来默认「当前时刻」，见 HomeView.defaultQuickDue）。
+	// 「新建提醒的默认结束时间」（默认 23:59）。它只负责**新建时的默认时刻**
+	// （见 HomeView.defaultQuickDue），不再参与逾期判定 —— 逾期判定搬到了下面的
+	// 个人偏好「逾期提醒时间」（用户 2026-10-12 要求把两件事拆开：
+	// 「新建结束时间默认 23:59」与「逾期提醒时间设 20:30」）。
 	RegisterConfig(ConfigDef{
-		Key: "task_expire_time", Scope: ScopeSystem, Type: TypeSelect,
-		Default: "23:59", Options: []string{"18:00", "19:00", "20:00", "21:00", "22:00", "23:00", "23:59", "00:00"},
-		Public: true,
-		Group:  "reminder", Label: "任务过期时间",
-		Description: "当天到这个时间才算「过期」（默认 23:59，再叠加上面的宽限分钟数）；新建提醒的默认时间也用它。选 00:00 表示按到期时刻算、不按天顺延",
+		Key: "task_expire_time", Scope: ScopeSystem, Type: TypeTime,
+		Default: "23:59",
+		Public:  true,
+		Group:   "reminder", Label: "新建提醒默认结束时间",
+		Description: "新建提醒时默认填的时刻（默认 23:59）；只影响新建的默认值，不参与逾期判定",
 	})
 	RegisterConfig(ConfigDef{
 		Key: "theme_mode", Scope: ScopeUser, Type: TypeSelect,
@@ -238,6 +263,19 @@ func init() {
 		Public: true,
 		Group:  "reminder", Label: "点「知道了」后的提醒频率",
 		Description: "弹窗上点「知道了」之后多久再提醒；「第二天」表示当天不再提示、第二天同一时间继续提醒",
+	})
+	// 「逾期提醒时间」（用户 2026-10-12 要求）：**到期日当天到了这个点还没完成就算逾期**，
+	// 同时发一条「已逾期」提醒（每个任务每天一条）。
+	//
+	// 与「任务过期时间」的旧口径差别：旧口径是 MAX(到期时刻, 当天过期时间) —— 到期时刻写得
+	// 比这个点晚的任务（例如默认 23:59）永远不会在这个点之前被标逾期，用户设了 20:30 也
+	// 看不到效果。新口径按**日期**算：只看「到期日是今天、现在过了这个点」，与任务写了几点无关。
+	RegisterConfig(ConfigDef{
+		Key: "task_overdue_time", Scope: ScopeUser, Type: TypeTime,
+		Default: "23:59",
+		Public:  true,
+		Group:   "reminder", Label: "逾期提醒时间",
+		Description: "到期日当天超过这个时间还没完成，就算逾期、并提醒一次（默认 23:59；再叠加上面的「任务过期多久算逾期」宽限分钟数）",
 	})
 	// 信用卡账单：侧栏里那个**固定栏目**，不是普通清单——不用在「新建清单」里选模板，
 	// 卡片一律归到这一栏里。

@@ -26,7 +26,20 @@
         :data-ceremony-card="entry.id"
         :data-ceremony-days="entry.days"
         :data-ceremony-bg="entry.accent || 'default'"
+        :data-ceremony-image="cardImage(entry) ? (entry.background || '') : ''"
       >
+        <!-- 背景图（用户 2026-10-13）：预设主题图或自己上传的图片。
+             只在本机有文件的上传图在对端会加载失败 → @error 把它从这张卡片上去掉，
+             卡片回落到配色渐变，不显示破图。 -->
+        <img
+          v-if="cardImage(entry)"
+          :src="cardImage(entry)"
+          class="ceremony-bg-img"
+          alt=""
+          aria-hidden="true"
+          @error="markImageFailed(entry.id)"
+        />
+        <span v-if="cardImage(entry)" class="ceremony-bg-scrim" aria-hidden="true"></span>
         <!-- 倒计时**放到最上面、放大**（用户 2026-10-10 要求：卡片加高、倒计时醒目）：
              天数用 30px 的字、单位小一号，整块带底色，一眼就能看到还有多少天。 -->
         <div
@@ -121,9 +134,11 @@
             <option value="lunar">农历</option>
           </select>
         </label>
-        <!-- 卡片过渡色（用户 2026-10-11 要求：多种过渡色、可自行选择） -->
+        <!-- 卡片配色（用户 2026-10-11 要求：多种过渡色、可自行选择）。
+             2026-10-13 起这一档颜色**同时**决定整张卡面与倒计时的底色（原来是两块色），
+             所以不再有「单独设卡片颜色」这回事。 -->
         <div class="field-label">
-          卡片颜色
+          卡片与倒计时颜色
           <div class="mt-1.5 flex flex-wrap gap-1.5" data-ceremony-form-accents>
             <button
               v-for="a in CARD_ACCENTS"
@@ -137,6 +152,62 @@
               :data-ceremony-form-accent="a.key || 'default'"
               @click="form.accent = a.key"
             ><span v-if="form.accent === a.key">✓</span></button>
+          </div>
+        </div>
+        <!-- 背景图（用户 2026-10-13：「可以更换图片作为背景」「针对不同主题预置一些
+             对应的背景图片，可以直接选择，跟随模板不会被删除」）：预设主题图随版本走、
+             不会被删；自己上传的图片在卡片删除时会跟着删（服务端清理）。 -->
+        <div class="field-label">
+          卡片背景图
+          <p class="mt-1 text-[11px] font-medium text-muted-foreground">
+            不选就是用上面的配色；选了图片后整张卡片铺满图片（倒计时仍是配色块）。
+            内置主题图不会因为删卡片而消失。
+          </p>
+          <div class="mt-1.5 grid grid-cols-3 gap-1.5 sm:grid-cols-5" data-ceremony-form-backgrounds>
+            <button
+              type="button"
+              class="ceremony-bg-option"
+              :class="{ selected: !form.background }"
+              data-ceremony-form-bg="none"
+              @click="form.background = ''"
+            >
+              <span class="ceremony-bg-none">纯色</span>
+            </button>
+            <button
+              v-for="bg in CEREMONY_BACKGROUNDS"
+              :key="bg.key"
+              type="button"
+              class="ceremony-bg-option"
+              :class="{ selected: form.background === `preset:${bg.key}` }"
+              :data-ceremony-form-bg="bg.key"
+              :title="`${bg.label}（${bg.hint}）`"
+              @click="form.background = `preset:${bg.key}`"
+            >
+              <img :src="bg.url" alt="" class="ceremony-bg-thumb" />
+              <span class="ceremony-bg-label">{{ bg.label }}</span>
+            </button>
+          </div>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <label class="btn-secondary !h-8 !px-3 !text-[11px] cursor-pointer">
+              {{ uploadingBackground ? '上传中…' : '上传图片' }}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                class="hidden"
+                data-ceremony-form-bg-upload
+                @change="pickBackgroundFile"
+              />
+            </label>
+            <span v-if="form.background.startsWith('/uploads/')" class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+              已上传自己的图片
+            </span>
+            <button
+              v-if="form.background"
+              type="button"
+              class="text-[11px] font-semibold text-rose-500 hover:underline"
+              data-ceremony-form-bg-clear
+              @click="form.background = ''"
+            >清除背景</button>
           </div>
         </div>
         <p class="text-[11px] text-muted-foreground">
@@ -164,11 +235,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import Modal from './Modal.vue'
-import { CARD_ACCENTS, cardInk, cardTint, heroGradient, heroInk, softInk, type CardAccent } from '../utils/card-accents'
+import { CARD_ACCENTS, heroGradient, heroInk, softInk, type CardAccent } from '../utils/card-accents'
+import { CEREMONY_BACKGROUNDS, backgroundImageUrl } from '../utils/ceremony-backgrounds'
 import ConfirmDialog from './ConfirmDialog.vue'
 import ListIcon from './ListIcon.vue'
 import LunarDatePicker from './LunarDatePicker.vue'
-import { createReminder, deleteReminder, updateReminder, convertLunarDate, getReminders, type ReminderItem, type SaveReminderInput } from '../api/reminder'
+import { createReminder, deleteReminder, updateReminder, convertLunarDate, getReminders, uploadImage, type ReminderItem, type SaveReminderInput } from '../api/reminder'
 
 const props = defineProps<{ list: { id: number; name: string } }>()
 const emit = defineEmits<{ (e: 'changed'): void; (e: 'toast', message: string, type?: 'success' | 'error'): void }>()
@@ -183,7 +255,10 @@ const dateAnchor = ref<HTMLElement | null>(null)
 const editingId = ref<number | null>(null)
 const removeTarget = ref<ReminderItem | null>(null)
 
-const form = reactive({ title: '', dueAt: '' as string, repeat: 'yearly', calendar: 'solar', accent: '' })
+const form = reactive({ title: '', dueAt: '' as string, repeat: 'yearly', calendar: 'solar', accent: '', background: '' })
+const uploadingBackground = ref(false)
+// 图片加载失败的卡片（对端没有这个上传文件时）：这张卡回落到配色渐变，不显示破图
+const failedImages = ref<Set<number>>(new Set())
 
 /** 色板按钮的底色 */
 const swatchGradient = (a: CardAccent) => `linear-gradient(135deg, ${a.from} 0%, ${a.to} 100%)`
@@ -192,7 +267,13 @@ const swatchGradient = (a: CardAccent) => `linear-gradient(135deg, ${a.from} 0%,
  * （按 id 稳定随机，见 utils/card-accents.ts），不再是一块死灰。
  */
 function heroStyle(entry: { accent?: string; id: number }) {
-  return { background: heroGradient(entry.accent, entry.id), color: heroInk(entry.accent, entry.id) }
+  return {
+    // 整张卡片现在就是这套渐变（见 cardStyle），倒计时块再叠一层极淡的白纱 +
+    // 一圈描边，才能从同色卡面上「浮」出来（用户 2026-10-13：卡片颜色与倒计时一致）。
+    backgroundImage: `linear-gradient(0deg, rgba(255,255,255,.14), rgba(255,255,255,.14)), ${heroGradient(entry.accent, entry.id)}`,
+    color: heroInk(entry.accent, entry.id),
+    borderColor: 'rgba(255,255,255,.28)',
+  }
 }
 /**
  * 整卡底色 + **配套的字色**（用户 2026-10-11：纯白不好看 → 加浅色底；
@@ -200,14 +281,28 @@ function heroStyle(entry: { accent?: string; id: number }) {
  * 默认档的浅色卡面是不透明浅底，这里按卡面颜色自动给一套深字（含次级文字的柔化色）；
  * 选了颜色的卡面只是薄薄一层同色系浅淡底，字色交回主题。
  */
-function cardStyle(entry: { accent?: string; id: number }) {
-  const style: Record<string, string> = { backgroundImage: cardTint(entry.accent, entry.id) }
-  const ink = cardInk(entry.accent, entry.id)
-  if (ink) {
-    style.color = ink
-    style['--ceremony-ink-soft'] = softInk(ink)
+function cardImage(entry: { background?: string; id: number }): string {
+  if (failedImages.value.has(entry.id)) return ''
+  return backgroundImageUrl(entry.background)
+}
+
+function markImageFailed(id: number) {
+  failedImages.value = new Set(failedImages.value).add(id)
+}
+
+function cardStyle(entry: { accent?: string; id: number; background?: string }) {
+  // 整张卡片 = 倒计时那一套渐变（用户 2026-10-13：「卡片颜色也与倒计时颜色一致，
+  // 不再单独设定卡片颜色」）。原来卡面是同色系的一层浅淡底、倒计时是浓渐变两块色，
+  // 现在合成一块：字色、次级字色、图标底盘都按这套渐变算。
+  // 有背景图时：渐变仍在（图片没加载出来时就是它），字色固定用白色（蒙版保证对比度）。
+  const ink = cardImage(entry) ? '#ffffff' : heroInk(entry.accent, entry.id)
+  return {
+    backgroundImage: heroGradient(entry.accent, entry.id),
+    color: ink,
+    '--ceremony-ink-soft': softInk(ink),
+    // 图标底盘：深字（浅色渐变）用一层淡黑，白字用一层淡白，保证图标看得清
+    '--ceremony-chip': ink === '#ffffff' ? 'rgba(255,255,255,.18)' : 'rgba(15,23,42,.10)',
   }
-  return style
 }
 
 const datePicked = computed({
@@ -255,6 +350,7 @@ const cards = computed(() => items.value
       repeatLabel: repeatLabelOf(item.repeat_rule),
       cycle: item.cycle_index || 0,
       accent: item.accent || '',
+      background: item.background || '',
     }
   })
   // 排序（用户 2026-10-11 要求「倒计时最短的在最前边，以此类推」）：
@@ -286,7 +382,7 @@ function openCreate() {
   editingId.value = null
   const d = new Date()
   d.setHours(9, 0, 0, 0)
-  Object.assign(form, { title: '', dueAt: toLocalIso(d), repeat: 'yearly', calendar: 'solar', accent: '' })
+  Object.assign(form, { title: '', dueAt: toLocalIso(d), repeat: 'yearly', calendar: 'solar', accent: '', background: '' })
   createOpen.value = true
 }
 
@@ -298,8 +394,33 @@ function edit(entry: ReminderItem) {
     repeat: entry.repeat_rule === 'none' ? 'none' : entry.repeat_rule,
     calendar: entry.calendar === 'lunar' ? 'lunar' : 'solar',
     accent: entry.accent || '',
+    background: entry.background || '',
   })
   createOpen.value = true
+}
+
+/** 选图并上传：成功后把 `/uploads/...` 填进 form.background（保存时随条目落库）。 */
+async function pickBackgroundFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // 允许连续选同一个文件
+  if (!file) return
+  if (file.size > 8 * 1024 * 1024) {
+    emit('toast', '图片太大了（最大 8MB）', 'error')
+    return
+  }
+  uploadingBackground.value = true
+  try {
+    const res = await uploadImage(file)
+    const path = res.data?.data?.path
+    if (!path) throw new Error('上传接口没有返回路径')
+    form.background = path
+    emit('toast', '背景图已选好，保存后生效')
+  } catch (err: any) {
+    emit('toast', err?.response?.data?.message || '图片上传失败', 'error')
+  } finally {
+    uploadingBackground.value = false
+  }
 }
 
 async function save() {
@@ -314,6 +435,7 @@ async function save() {
       repeat_rule: form.repeat as SaveReminderInput['repeat_rule'],
       calendar: form.calendar as SaveReminderInput['calendar'],
       accent: form.accent,
+      background: form.background,
       channels: ['inapp'],
     }
     if (editingId.value) await updateReminder(editingId.value, { ...payload, version: items.value.find((i) => i.id === editingId.value)?.version })
@@ -444,9 +566,9 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
    底色更实、上下留白更多，整块成为卡片的视觉重心。 */
 /* 底色由 cardStyle() 内联给（浅色随机 / 同色系浅淡版），这里只保证圆角、内边距与居中；
    不加 bg-* 类，免得把内联的渐变盖掉。深色主题下这些浅色只是很淡的一层，不刺眼。 */
-.ceremony-card { @apply flex min-h-[11rem] flex-col items-stretch rounded-2xl p-4 text-center transition-shadow hover:shadow-[0_18px_40px_-30px_rgba(15,23,42,.6)]; }
+.ceremony-card { @apply relative flex min-h-[11rem] flex-col items-stretch overflow-hidden rounded-2xl p-4 text-center transition-shadow hover:shadow-[0_18px_40px_-30px_rgba(15,23,42,.6)]; }
 /* 图标：从 36px 方框 / 22px 图标放大 2 倍 → 64px 方框 / 44px 图标（用户 2026-10-12） */
-.ceremony-icon { @apply flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500; }
+.ceremony-icon { @apply flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl; }
 /* 内容整组（图标 + 文字）在卡片里居中，文字内部左对齐 */
 .ceremony-body { @apply mt-3 flex items-center justify-center gap-3; }
 .ceremony-actions { @apply mt-2.5 flex items-center justify-center gap-2 text-center text-[13px] font-semibold text-muted-foreground; }
@@ -456,15 +578,29 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 .ceremony-extra { @apply mt-1 flex flex-wrap items-center gap-1 text-[13px] font-semibold text-muted-foreground; }
 /* 卡面上的小徽标（农历 / 每年 / 第 N 次）也跟着放大一号 */
 .ceremony-card .tiny-badge { @apply px-2 py-0.5 text-[12px]; }
-/* 浅色卡面（默认档）上：次级文字与行内按钮改用卡面配套的深字，避免深色主题下白字糊在浅底上 */
-.ceremony-card[data-ceremony-bg='default'] .ceremony-date,
-.ceremony-card[data-ceremony-bg='default'] .tiny-badge,
-.ceremony-card[data-ceremony-bg='default'] .row-action { color: var(--ceremony-ink-soft); }
+/* 次级文字与行内按钮一律用卡面配套的柔化字色（整卡都是一套渐变，见 cardStyle） */
+.ceremony-date, .ceremony-extra, .ceremony-actions { color: var(--ceremony-ink-soft, currentColor); }
+.ceremony-card .tiny-badge,
+.ceremony-card .row-action { color: var(--ceremony-ink-soft, currentColor); }
+/* 图标底盘：跟着卡面字色走的一层薄底（原来是固定的玫瑰色块，在彩色卡面上很跳） */
+.ceremony-icon { background: var(--ceremony-chip, rgba(255,255,255,.18)); color: inherit; }
 /* 倒计时：大字 + 底色，放在卡片最上面 */
-.ceremony-hero { @apply flex items-baseline justify-center gap-2 rounded-xl bg-muted/70 px-3.5 py-3 text-center text-[16px] font-extrabold leading-none text-foreground sm:px-4; }
+.ceremony-hero { @apply flex items-baseline justify-center gap-2 rounded-xl border border-transparent px-3.5 py-3 text-center text-[16px] font-extrabold leading-none sm:px-4; }
 .ceremony-hero b { @apply text-[36px] font-black leading-none tracking-tight sm:text-[44px]; }
-.ceremony-days-soon { @apply bg-amber-500/15 text-amber-600 dark:text-amber-400; }
-.ceremony-days-past { @apply bg-muted/50 text-muted-foreground; }
+/* 「快到了」/「已过」不再改底色（会盖掉卡面渐变），只加粗提示由字号承担 */
+.ceremony-days-soon { @apply tracking-tight; }
+.ceremony-days-past { @apply opacity-90; }
+/* 背景图（用户 2026-10-13）：图片铺满整卡，上面压一层暗色蒙版保证白字可读；
+   卡片自身的配色渐变仍在内联 style 里 —— 图片没加载出来/对端没有这个文件时就是它。 */
+.ceremony-bg-img { @apply pointer-events-none absolute inset-0 h-full w-full object-cover; }
+.ceremony-bg-scrim { @apply pointer-events-none absolute inset-0; background: linear-gradient(180deg, rgba(2, 6, 23, .42) 0%, rgba(2, 6, 23, .62) 100%); }
+.ceremony-card > *:not(.ceremony-bg-img):not(.ceremony-bg-scrim) { position: relative; z-index: 1; }
+/* 背景图选择器（预设主题图 + 纯色） */
+.ceremony-bg-option { @apply flex flex-col items-center gap-1 overflow-hidden rounded-xl border border-border/70 bg-surface p-1 text-[10px] font-bold text-muted-foreground transition hover:border-brand-500/40; }
+.ceremony-bg-option.selected { @apply border-brand-500 text-foreground ring-2 ring-brand-500/30; }
+.ceremony-bg-thumb { @apply h-9 w-full rounded-md object-cover; }
+.ceremony-bg-label { @apply max-w-full truncate; }
+.ceremony-bg-none { @apply flex h-9 w-full items-center justify-center rounded-md bg-muted/60 text-[11px]; }
 .accent-swatch { @apply flex h-7 w-7 items-center justify-center rounded-full border-2 border-transparent text-[12px] font-black text-white/95 shadow-sm transition hover:scale-105; }
 .accent-swatch.selected { @apply border-foreground/60 ring-2 ring-brand-500/40; }
 .ceremony-preset { @apply flex items-center gap-2.5 rounded-xl border border-border/70 bg-surface px-3 py-2 text-left transition hover:border-brand-500/40 hover:bg-muted/40; }

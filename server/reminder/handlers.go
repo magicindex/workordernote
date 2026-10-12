@@ -869,52 +869,64 @@ func handleCalendarItems(db *gorm.DB) gin.HandlerFunc {
 // 它出现在 /summary 这种热路径上，而 /summary 的「固定 2 条聚合查询」是有用例钉住的
 // （TestSummaryUsesTwoAggregateQueries）—— 所以和「记事本栏目开关」一样做一层 2 秒
 // 的进程内缓存：多出来的那次配置查询只在缓存过期时发生，稳态下不多查。
+//
+// 2026-10-12 起缓存按**用户**分开：逾期时刻是个人偏好（task_overdue_time），
+// 不再是一个全局值。
 var (
-	overdueGraceMu    sync.Mutex
-	overdueGraceValue time.Duration
-	// 「任务过期时间」（当天的几点算过期，默认 23:59）。与宽限分钟数一起缓存，
-	// 因为它们都只在同一次 GetPublicConfigs 里读出来（保持 /summary 的 2 条聚合查询不变）。
-	overdueExpireValue = "23:59"
-	overdueGraceAt     time.Time
-	overdueGraceTTL    = 2 * time.Second
+	overduePolicyMu    sync.Mutex
+	overduePolicyCache = map[uint]overduePolicyEntry{}
+	overduePolicyTTL   = 2 * time.Second
 )
 
-func overdueGrace(db *gorm.DB) time.Duration {
-	grace, _ := overduePolicy(db)
+type overduePolicyEntry struct {
+	grace  time.Duration
+	cutoff string
+	at     time.Time
+}
+
+func overdueGrace(db *gorm.DB, userID uint) time.Duration {
+	grace, _ := overduePolicy(db, userID)
 	return grace
 }
 
-// overduePolicy 一次返回「宽限时长 + 当天过期时间（HH:MM）」。
-func overduePolicy(db *gorm.DB) (time.Duration, string) {
-	overdueGraceMu.Lock()
-	if !overdueGraceAt.IsZero() && time.Since(overdueGraceAt) < overdueGraceTTL {
-		v, e := overdueGraceValue, overdueExpireValue
-		overdueGraceMu.Unlock()
-		return v, e
+// overduePolicy 一次返回「宽限时长 + 逾期提醒时间（HH:MM，个人偏好）」。
+//
+//	· 宽限（task_overdue_after_minutes，系统配置，默认 30 分钟）：刚建出来的任务
+//	  不该立刻顶着「已逾期」。
+//	· 逾期提醒时间（task_overdue_time，**个人偏好**，默认 23:59）：到期日当天过了
+//	  这个点就算逾期（见 overdueDeadlineExpr）。读不到时用注册表默认值。
+func overduePolicy(db *gorm.DB, userID uint) (time.Duration, string) {
+	overduePolicyMu.Lock()
+	if entry, ok := overduePolicyCache[userID]; ok && time.Since(entry.at) < overduePolicyTTL {
+		overduePolicyMu.Unlock()
+		return entry.grace, entry.cutoff
 	}
-	overdueGraceMu.Unlock()
+	overduePolicyMu.Unlock()
 
 	grace := time.Duration(0)
-	expire := "23:59"
+	cutoff := "23:59"
 	if cfg, err := sysconfig.GetPublicConfigs(db); err == nil {
 		if mins, err := strconv.Atoi(strings.TrimSpace(cfg["task_overdue_after_minutes"])); err == nil && mins > 0 {
 			grace = time.Duration(mins) * time.Minute
 		}
-		if v := strings.TrimSpace(cfg["task_expire_time"]); validClock(v) {
-			expire = v
+	}
+	if def, ok := sysconfig.GetConfigDef("task_overdue_time"); ok {
+		cutoff = def.Default
+	}
+	// 个人偏好：没写过这一行时 GetConfig 返回 ErrRecordNotFound，保持默认值。
+	if v, err := sysconfig.GetConfig(db, "task_overdue_time", userID); err == nil {
+		if normalized, ok := sysconfig.NormalizeClock(v); ok {
+			cutoff = normalized
 		}
 	}
 
-	overdueGraceMu.Lock()
-	overdueGraceValue = grace
-	overdueExpireValue = expire
-	overdueGraceAt = time.Now()
-	overdueGraceMu.Unlock()
-	return grace, expire
+	overduePolicyMu.Lock()
+	overduePolicyCache[userID] = overduePolicyEntry{grace: grace, cutoff: cutoff, at: time.Now()}
+	overduePolicyMu.Unlock()
+	return grace, cutoff
 }
 
-// validClock 校验 "HH:MM"（配置是下拉里的固定几个值，这里仍做一次格式校验，
-// 防止手改数据库塞进非法值把 SQL 拼坏）。
+// validClock 校验 "HH:MM"（手改数据库塞进非法值会把 SQL 拼坏）。
 func validClock(v string) bool {
 	if len(v) != 5 || v[2] != ':' {
 		return false
@@ -926,18 +938,24 @@ func validClock(v string) bool {
 
 // overdueDeadlineExpr 生成「这一行的逾期判定时刻」SQL 片段。
 //
-// 规则（用户 2026-10-10 要求）：**当天到这个点才算过期** —— 到期日当天的任务，
-// 不管写的是几点，都要等到「过期时间」（默认 23:59）才算逾期，再叠加上面的宽限分钟数；
-// 若到期时刻本来就晚于当天的过期时间（比如 23:59:30 或跨天区间），取两者里晚的那个。
+// 规则（用户 2026-10-12 明确）：**到期日当天到了「逾期提醒时间」就算逾期** ——
+// 例如逾期提醒时间设 20:30，那么到期日是今天的任务，过了今天 20:30 还没完成就算逾期，
+// **不管它的结束时间写的是几点**（新建提醒的默认结束时间是 23:59，如果按「取两者较晚」
+// 来算，用户把逾期时间设成 20:30 就永远看不到效果 —— 这正是这次要修的）。
+//
+// 唯一例外是 **00:00**：它表示「不按天算、就按到期时刻」（沿用这个配置项旧口径里
+// 00:00 的含义，也是唯一一个「比一天的开始还早」的合法值，按天算没有意义）。
 //
 // 时间在库里是**带偏移的文本**，所以先把生效时间归一化成 UTC（tsUTC），
-// 再 +8 小时折回上海本地日期、拼上过期时间、最后 -8 小时折回 UTC 参与比较。
-// 传进来的 expire 已经过 validClock 校验，不会被注入。
-func overdueDeadlineExpr(effectiveDue, expire string) string {
+// 再 +8 小时折回上海本地日期、拼上逾期时间、最后 -8 小时折回 UTC 参与比较。
+// 传进来的 cutoff 已经过校验/归一化，不会被注入。
+func overdueDeadlineExpr(effectiveDue, cutoff string) string {
 	utc := tsUTC(effectiveDue)
+	if cutoff == "00:00" {
+		return "datetime(" + utc + ")"
+	}
 	localDay := "date(" + utc + ", '+8 hours')"
-	dayDeadline := "datetime(" + localDay + " || ' " + expire + ":00', '-8 hours')"
-	return "MAX(datetime(" + utc + "), " + dayDeadline + ")"
+	return "datetime(" + localDay + " || ' " + cutoff + ":00', '-8 hours')"
 }
 
 func handleSummary(db *gorm.DB) gin.HandlerFunc {
@@ -966,8 +984,8 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		// 时间比较一律走 tsUTC() 归一化（SQLite 里时间是带偏移的文本，直接比会按
 		// 字符串序错位，见 sql_time.go）。
 		// 逾期看的是**过了宽限时间之后**（与前端 isOverdue 同一口径），
-		// 而且「当天到这个点才算过期」（task_expire_time，默认 23:59）。
-		grace, expire := overduePolicy(db)
+		// 而且「到期日当天过了个人偏好里的逾期提醒时间就算逾期」（task_overdue_time，默认 23:59）。
+		grace, cutoff := overduePolicy(db, userID)
 		overdueBefore := now.Add(-grace)
 		selectArgs := []interface{}{sqlTimeArg(endToday), userID, sqlTimeArg(overdueBefore)}
 		if len(hiddenCards) > 0 {
@@ -982,7 +1000,7 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		todayExpr := "COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND " +
 			tsUTC(effectiveDue) + " < datetime(?) THEN 1 ELSE 0 END), 0) AS today"
 		overdueExpr := "COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND " +
-			overdueDeadlineExpr(effectiveDue, expire) + " < datetime(?) THEN 1 ELSE 0 END), 0) AS overdue"
+			overdueDeadlineExpr(effectiveDue, cutoff) + " < datetime(?) THEN 1 ELSE 0 END), 0) AS overdue"
 		q := db.Model(&Reminder{}).
 			Select(todayExpr+`,
 				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS planned,

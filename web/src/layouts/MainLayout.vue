@@ -992,8 +992,12 @@ const ackHint = computed(() => (ackMinutes.value > 0
   ? `要完成请到列表里勾选；${ackMinutes.value} 分钟后会再提醒一次`
   : '要完成请到列表里勾选；今天不再提示，明天同一时间继续提醒'))
 
+// 会弹「屏幕中央弹窗」的站内通知类型：到点提醒 + 逾期提醒（用户 2026-10-12 加的
+// 「到了逾期提醒时间还没完成就提醒」）。其它类型（例如渠道投递失败）仍是轻量 toast。
+const ALERT_NOTIFICATION_TYPES = ['reminder_due', 'reminder_overdue']
+
 function enqueueDueAlert(notification: ReminderRealtimeEvent['notification']) {
-  if (!notification || notification.type !== 'reminder_due') return
+  if (!notification || !ALERT_NOTIFICATION_TYPES.includes(notification.type)) return
   if (alertQueue.value.some(item => item.notificationID === notification.id)) return
   alertQueue.value.push({
     notificationID: notification.id,
@@ -1091,11 +1095,38 @@ function snoozeCurrentAlert() {
   })
 }
 
+/**
+ * 把「已经在别处处理掉」的提醒弹窗从队列里摘掉。
+ *
+ * 场景（用户 2026-10-13 报的）：手机点了「知道了」，电脑上那条弹窗还杵着不走 ——
+ * 服务端确实把通知标成已读了，也广播了 reminders.changed，但弹窗队列是本地的，
+ * 没人去核对。这里在收到数据变更（以及页面重新可见）时，拿一次通知列表，
+ * 把「已读 / 已经不存在」的从队列里去掉；正在显示的那条被摘掉后，队列头会自动
+ * 换成下一条（currentAlert 就是队列头）。
+ *
+ * 队列为空时直接返回：普通编辑也会发 reminders.changed，不该为它多打一次请求。
+ */
+async function dropAcknowledgedAlerts() {
+  if (!alertQueue.value.length) return
+  try {
+    const res = await getNotifications()
+    const items = (res.data?.data || []) as RealtimeNotification[]
+    const unread = new Set(items.filter((item) => !item.read_at).map((item) => item.id))
+    const remaining = alertQueue.value.filter((item) => unread.has(item.notificationID))
+    if (remaining.length !== alertQueue.value.length) {
+      alertQueue.value = remaining
+      alertError.value = ''
+    }
+  } catch { /* 拉不到就保持现状，下一次数据变更或轮询还会再试 */ }
+}
+
 function handleRealtimeEvent(event: ReminderRealtimeEvent) {
   // 数据变更（别的设备/窗口增删改了提醒、清单、通知、渠道）：本机不重新拉数据就会
   // 一直显示旧内容，这正是「手机端加了，PC 端看不到」的原因。
   if (event.type === 'reminders.changed') {
     lastRevision = event.revision ?? lastRevision
+    // 通知被别处标已读（手机点了「知道了」）→ 本机也别再显示那条弹窗
+    if (event.scope === 'notification') void dropAcknowledgedAlerts()
     refreshNavigation()
     window.dispatchEvent(new CustomEvent('reminder-realtime', { detail: event }))
     window.dispatchEvent(new CustomEvent('reminder-data-changed'))
@@ -1108,7 +1139,7 @@ function handleRealtimeEvent(event: ReminderRealtimeEvent) {
   window.dispatchEvent(new CustomEvent('reminder-data-changed'))
   // 站内提醒：手机端也能看到的弹窗（toast 在小屏上太容易被忽略，也容易被底部
   // 标签栏挡住）。其它类型（例如渠道投递失败）继续保持轻量的 toast。
-  if (event.notification.type === 'reminder_due') {
+  if (ALERT_NOTIFICATION_TYPES.includes(event.notification.type)) {
     enqueueDueAlert(event.notification)
     realtimeToast.value = ''
     playReminderSound()
@@ -1137,7 +1168,7 @@ async function recoverMissedAlerts() {
     const items = (res.data?.data || []) as RealtimeNotification[]
     let added = 0
     for (const item of items) {
-      if (item.type !== 'reminder_due' || item.read_at) continue
+      if (!ALERT_NOTIFICATION_TYPES.includes(item.type) || item.read_at) continue
       if (new Date(item.created_at).getTime() < alertRecoverySince.getTime()) continue
       const before = alertQueue.value.length
       enqueueDueAlert(item)
@@ -1167,6 +1198,9 @@ async function pollRevision() {
     refreshNavigation()
     // 修订号变了说明服务端发生过事件，长连接没送到的到点通知在这里补弹。
     void recoverMissedAlerts()
+    // ……同样地：长连接没送到的「别处已确认」也要在这里撤掉弹窗。手机端长连接常被
+    // 系统掐断，只靠 SSE 会出现「手机点了知道了、这台还杵着」（用户 2026-10-13 报的）。
+    void dropAcknowledgedAlerts()
     window.dispatchEvent(new CustomEvent('reminder-realtime-resume'))
     window.dispatchEvent(new CustomEvent('reminder-data-changed'))
   } catch {
@@ -1183,6 +1217,8 @@ function refreshWhenVisible() {
     void checkFnOSSession()
     // 另一台设备在后台期间改过数据，回到前台要立刻跟上，不等下一次轮询。
     void pollRevision()
+    // 另一台设备在后台期间把提醒「知道了」→ 本机这条弹窗也该撤掉（用户 2026-10-13 报的）。
+    void dropAcknowledgedAlerts()
     // 顺带核一下服务端版本：后台期间可能刚好发了新版本（今天一天连发几版）。
     void loadVersion()
   }

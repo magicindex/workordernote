@@ -87,6 +87,18 @@
               class="input-field !py-2 flex-1"
             />
 
+            <!-- time: 一天里的某个时刻（HH:MM）。原生 time 输入会给出 HH:MM，
+                 服务端再统一补零校验一次（见 sysconfig.NormalizeClock）。 -->
+            <input
+              v-else-if="item.type === 'time'"
+              type="time"
+              :value="getEditValue(item)"
+              :disabled="getSaving(item)"
+              @input="setEditValue(item, ($event.target as HTMLInputElement).value)"
+              @keyup.enter="emitSave(item)"
+              class="input-field !py-2 flex-1"
+            />
+
             <!-- string: text input -->
             <input
               v-else
@@ -180,17 +192,6 @@ const selectOptionLabelMap: Record<string, Record<string, string>> = {
   calendar_week_start: {
     monday: '周一',
     sunday: '周日',
-  },
-  // 任务过期时间：当天到这个点才算过期，同时也是新建提醒的默认时间
-  task_expire_time: {
-    '18:00': '18:00（傍晚 6 点）',
-    '19:00': '19:00（晚上 7 点）',
-    '20:00': '20:00（晚上 8 点）',
-    '21:00': '21:00（晚上 9 点）',
-    '22:00': '22:00（晚上 10 点）',
-    '23:00': '23:00（晚上 11 点）',
-    '23:59': '23:59（当天结束，默认）',
-    '00:00': '00:00（按到期时刻算，不按天顺延）',
   },
 }
 

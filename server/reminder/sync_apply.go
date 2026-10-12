@@ -348,6 +348,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 				StartAt: incoming.StartAt, EndAt: incoming.EndAt,
 				RepeatRule: incoming.RepeatRule, Calendar: incoming.Calendar,
 				LunarAnchor: incoming.LunarAnchor, Accent: incoming.Accent,
+				Background: incoming.Background,
 				RepeatNotifyMinutes: incoming.RepeatNotifyMinutes,
 				CompletedAt: incoming.CompletedAt, SnoozedUntil: incoming.SnoozedUntil,
 				Position: incoming.Position, Version: incoming.Version,
@@ -434,6 +435,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 				"repeat_rule": incoming.RepeatRule, "calendar": incoming.Calendar,
 				"lunar_anchor":          incoming.LunarAnchor,
 				"accent":                incoming.Accent,
+				"background":            incoming.Background,
 				"repeat_notify_minutes": incoming.RepeatNotifyMinutes,
 				"completed_at":          incoming.CompletedAt, "snoozed_until": incoming.SnoozedUntil,
 				"position": incoming.Position, "version": incoming.Version,
@@ -614,6 +616,7 @@ func sameReminder(local *Reminder, incoming syncReminder, listID uint, channels 
 		local.Calendar == incoming.Calendar &&
 		local.LunarAnchor == incoming.LunarAnchor &&
 		local.Accent == incoming.Accent &&
+		local.Background == incoming.Background &&
 		local.RepeatNotifyMinutes == incoming.RepeatNotifyMinutes &&
 		equalTimePtr(local.CompletedAt, incoming.CompletedAt) &&
 		equalTimePtr(local.SnoozedUntil, incoming.SnoozedUntil) &&

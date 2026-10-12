@@ -76,6 +76,8 @@ export interface ReminderItem {
   repeat_notify_minutes: number
   /** 仪式感卡片的过渡色色名（空/缺省＝默认色） */
   accent?: string
+  /** 仪式感卡片的背景图：`preset:<key>`（内置主题图）或 `/uploads/...`（自己上传的图片） */
+  background?: string
   created_at: string
   updated_at: string
 }
@@ -99,6 +101,8 @@ export interface SaveReminderInput {
   channels?: ReminderChannel[]
   /** 仪式感卡片的过渡色色名（见 utils/card-accents.ts）；不传＝不改，空串＝用默认色 */
   accent?: string
+  /** 仪式感卡片的背景图（见 utils/ceremony-backgrounds.ts）；不传＝不改，空串＝清掉背景 */
+  background?: string
   version?: number
 }
 
@@ -316,6 +320,18 @@ export interface AndroidClient {
   lan_url: string
   wan_url: string
   min_sdk: number
+}
+
+/**
+ * 上传一张图片（仪式感卡片的背景图用），返回服务端存下来的路径 `/uploads/...`。
+ *
+ * 服务端（server/upload/upload.go）只接受 JPEG/PNG/GIF/WebP、最大 20MB，
+ * 扩展名按探测到的内容定、文件名是 UUID，不采信客户端的文件名。
+ */
+export const uploadImage = (file: File) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return request.post('/api/upload', fd, { timeout: 120000 })
 }
 
 export const getAndroidClient = () => request.get('/api/reminder/android')

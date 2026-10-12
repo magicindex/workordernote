@@ -59,6 +59,9 @@ export const useAuthStore = defineStore('auth', () => {
   // 提醒频率（分钟）：未处理的提醒多久再弹一次；点「知道了」之后多久再提醒（0 = 第二天）
   const reminderNotifyMinutes = ref(10)
   const reminderAckMinutes = ref(0)
+  // 「逾期提醒时间」（个人偏好 task_overdue_time，默认 23:59）：到期日当天过了这个点
+  // 还没完成就算逾期 —— 列表标红、「已逾期」分组、侧栏角标都按它算。
+  const reminderOverdueTime = ref('23:59')
   const setupRequired = ref(false)
   const siteTitle = ref('工作序记')
   // 飞牛部署下授权登录要用的两个信息，随启动引导一起取回，登录/注册页不再
@@ -105,6 +108,17 @@ export const useAuthStore = defineStore('auth', () => {
     clearStoredToken()
   }
 
+  /** 把 "6:00" / "06:00" 归一化成 "HH:MM"；非法值返回空串（调用处给默认值）。 */
+  function normalizeClockValue(raw: unknown): string {
+    const text = String(raw ?? '').trim()
+    const match = /^(\d{1,2}):(\d{2})$/.exec(text)
+    if (!match) return ''
+    const h = Number(match[1])
+    const m = Number(match[2])
+    if (h < 0 || h > 23 || m < 0 || m > 59) return ''
+    return `${String(h).padStart(2, '0')}:${match[2]}`
+  }
+
   function applyBootstrap(data: BootstrapData) {
     setupRequired.value = !!data.setup_required
     const configs = data.configs || {}
@@ -115,6 +129,7 @@ export const useAuthStore = defineStore('auth', () => {
     ceremonyEnabled.value = configs.ceremony_enabled !== 'false'
     reminderNotifyMinutes.value = Number(configs.reminder_notify_minutes || 10) || 10
     reminderAckMinutes.value = Number(configs.reminder_ack_minutes || 0) || 0
+    reminderOverdueTime.value = normalizeClockValue(configs.task_overdue_time) || '23:59'
     if (configs.site_title) siteTitle.value = configs.site_title
     if (data.service_port) servicePort.value = data.service_port
     // 服务端运行形态是按钮显隐的唯一权威；字段缺席（旧后端）时保留编译期
@@ -371,5 +386,5 @@ export const useAuthStore = defineStore('auth', () => {
 
   return { token, user, requireLogin, allowRegister, creditCardEnabled, setCreditCardEnabled, notebookEnabled, setNotebookEnabled,
     ceremonyEnabled, setCeremonyEnabled, reloadBootstrap,
-    reminderNotifyMinutes, reminderAckMinutes, setReminderFrequencies, setupRequired, siteTitle, hasSecurityQuestions, securityPromptDismissed, servicePort, fnosGatewayEntry, fnosApp, sessionSource, followsFnOSSession, isAuthenticated, isAdmin, init, resetInit, setToken, setUser, endSession, logout, dropIfFnOSSessionGone, checkSetupRequired, dismissSecurityPrompt, refreshSecurityQuestions }
+    reminderNotifyMinutes, reminderAckMinutes, reminderOverdueTime, setReminderFrequencies, setupRequired, siteTitle, hasSecurityQuestions, securityPromptDismissed, servicePort, fnosGatewayEntry, fnosApp, sessionSource, followsFnOSSession, isAuthenticated, isAdmin, init, resetInit, setToken, setUser, endSession, logout, dropIfFnOSSessionGone, checkSetupRequired, dismissSecurityPrompt, refreshSecurityQuestions }
 })

@@ -58,7 +58,10 @@ type SaveReminderInput struct {
 	// **用指针**：编辑时旧客户端/通用编辑器不带这个字段，缺省表示「不改」，
 	// 传空字符串才表示「清掉、用默认色」。
 	Accent  *string `json:"accent"`
-	Version uint    `json:"version"`
+	// Background 是仪式感卡片的背景图（"preset:<key>" 或 "/uploads/..."，见 background.go）。
+	// 同样用指针：缺省 = 不改，传空字符串 = 清掉背景。
+	Background *string `json:"background"`
+	Version    uint    `json:"version"`
 }
 
 func ensureDefaultList(tx *gorm.DB, userID uint) (List, error) {
@@ -98,6 +101,11 @@ func validateReminderInput(in *SaveReminderInput) error {
 	}
 	if in.Accent != nil {
 		if err := validateAccent(*in.Accent); err != nil {
+			return err
+		}
+	}
+	if in.Background != nil {
+		if err := validateBackground(*in.Background); err != nil {
 			return err
 		}
 	}
@@ -255,9 +263,14 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 		if in.Accent != nil {
 			accent = *in.Accent
 		}
+		background := ""
+		if in.Background != nil {
+			background = *in.Background
+		}
 		created = Reminder{
 			UserID: userID, ListID: in.ListID, Title: in.Title, Notes: in.Notes,
-			Accent:   accent,
+			Accent:     accent,
+			Background: background,
 			CardRole: in.CardRole,
 			Kind:     in.Kind,
 			Priority: in.Priority, DueAt: in.DueAt, AllDay: in.AllDay,
@@ -291,6 +304,11 @@ func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) 
 	if err := validateReminderInput(&in); err != nil {
 		return ReminderDTO{}, err
 	}
+	// 换背景时，旧的那张上传图要在**事务提交之后**删掉（删文件撤不回来）：
+	// 先把它记下来，提交成功再清理。
+	previousBackground := ""
+	_ = db.Model(&Reminder{}).Where("id = ? AND user_id = ?", reminderID, userID).
+		Pluck("background", &previousBackground).Error
 	err := db.Transaction(func(tx *gorm.DB) error {
 		var existing Reminder
 		q := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
@@ -341,6 +359,9 @@ func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) 
 		if in.Accent != nil { // 没传就保留原来的（通用编辑器不带这个字段）
 			existing.Accent = *in.Accent
 		}
+		if in.Background != nil { // 同上：没传就保留
+			existing.Background = *in.Background
+		}
 		existing.SnoozedUntil = nil
 		existing.Version++
 		if err := tx.Save(&existing).Error; err != nil {
@@ -353,6 +374,9 @@ func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) 
 	})
 	if err != nil {
 		return ReminderDTO{}, err
+	}
+	if in.Background != nil && previousBackground != "" && previousBackground != *in.Background {
+		cleanupUploadedBackground(db, previousBackground, reminderID)
 	}
 	return getReminder(db, userID, reminderID)
 }
@@ -719,11 +743,13 @@ func retireDueNotifications(tx *gorm.DB, userID, reminderID uint, at time.Time) 
 }
 
 func deleteReminder(db *gorm.DB, userID, reminderID uint) error {
-	return db.Transaction(func(tx *gorm.DB) error {
+	background := ""
+	err := db.Transaction(func(tx *gorm.DB) error {
 		var item Reminder
 		if err := tx.Where("id = ? AND user_id = ? AND deleted_at IS NULL", reminderID, userID).First(&item).Error; err != nil {
 			return err
 		}
+		background = item.Background
 		if err := tx.Model(&DeliveryJob{}).Where("reminder_id = ? AND user_id = ? AND status IN ?", reminderID, userID, []string{"pending", "retry"}).Update("status", "cancelled").Error; err != nil {
 			return err
 		}
@@ -733,6 +759,13 @@ func deleteReminder(db *gorm.DB, userID, reminderID uint) error {
 		}
 		return tx.Model(&item).Update("deleted_at", &now).Error
 	})
+	if err != nil {
+		return err
+	}
+	// 卡片删了，它上传的背景图跟着删（用户 2026-10-13 明确要求）；
+	// preset: 开头的内置图没有文件，cleanup 里会直接放过。
+	cleanupUploadedBackground(db, background, reminderID)
+	return nil
 }
 
 func completeReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error) {

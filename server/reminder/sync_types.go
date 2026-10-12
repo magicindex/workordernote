@@ -120,7 +120,11 @@ type syncReminder struct {
 	LunarAnchor         string     `json:"lunar_anchor,omitempty"`
 	RepeatNotifyMinutes int        `json:"repeat_notify_minutes"`
 	// Accent：仪式感卡片挑的过渡色（旧版本对端不认，忽略即可）
-	Accent      string     `json:"accent,omitempty"`
+	Accent string `json:"accent,omitempty"`
+	// Background：仪式感卡片的背景图（preset:<key> 或 /uploads/...）。
+	// 只同步**路径**：内置图两端都有；上传的图片文件不传，对端会回落到配色渐变
+	// （见 background.go 的说明）。
+	Background  string     `json:"background,omitempty"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	SnoozedUntil        *time.Time `json:"snoozed_until,omitempty"`
 	Position            int        `json:"position"`
