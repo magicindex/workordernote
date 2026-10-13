@@ -498,6 +498,9 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
           const hero = c.querySelector('[data-ceremony-countdown]');
           const title = c.querySelector('[data-ceremony-title]');
           const cardStops = stops(c);
+          // 带背景图的卡片：真正垫在字下面的是「图片 + 可调蒙板」，不是卡面渐变 ——
+          // 拿渐变去算对比度没有意义（2026-10-13 加蒙板后，这类卡片交给 verify-115 管）。
+          const hasImage = !!c.querySelector('.ceremony-bg-img');
           // 倒计时数字现在是「渐变字 + 透明色」（流光），量不到 color：
           // 用 --ceremony-ink（就是它原来的字色）跟**卡面**渐变比 —— 倒计时直接压在卡面上。
           const heroInk = hero ? getComputedStyle(hero).getPropertyValue('--ceremony-ink').trim() : '';
@@ -505,13 +508,14 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
           return {
             accent: c.getAttribute('data-ceremony-bg'),
             hero: cardStops.length && heroInk ? Number(Math.min(...cardStops.map((x) => cr(heroInk, x))).toFixed(2)) : null,
-            title: cardStops.length ? Number(Math.min(...cardStops.map((x) => cr(titleInk, x))).toFixed(2)) : null,
+            title: cardStops.length && !hasImage ? Number(Math.min(...cardStops.map((x) => cr(titleInk, x))).toFixed(2)) : null,
+            hasImage,
             heroInk,
             titleInk,
           };
         });
       });
-      check('每张卡的倒计时字色与卡面渐变对比度足够（≥3.5，浅底自动配深字）',
+      check('每张卡的倒计时字色与卡面渐变对比度足够（≥3.5，浅底自动配深字；带背景图的卡片走 verify-115）',
         contrast.length > 0 && contrast.every((c) => c.hero === null || c.hero >= 3.5),
         JSON.stringify(contrast.map((c) => [c.accent, c.hero, c.heroInk])));
 

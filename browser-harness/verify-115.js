@@ -167,6 +167,112 @@ const api = (page, p, method = 'GET', body = null, extraHeaders = null) => page.
       .find((b) => (b.textContent || '').includes('取消'))?.click());
     await sleep(600);
 
+    // ---------- 2b. 背景蒙板：虚化 + 透明度两个指标 ----------
+    const maskSliders = await page.evaluate(async (id) => {
+      document.querySelector(`[data-ceremony-edit="${id}"]`)?.click();
+      await new Promise((r) => setTimeout(r, 700));
+      const blur = document.querySelector('[data-ceremony-form-bg-blur]');
+      const mask = document.querySelector('[data-ceremony-form-bg-mask]');
+      return {
+        blur: blur ? { min: blur.min, max: blur.max, value: blur.value, type: blur.type } : null,
+        mask: mask ? { min: mask.min, max: mask.max, value: mask.value, type: mask.type } : null,
+      };
+    }, cardId);
+    check('选了背景图后出现「虚化」滑块（0–24）',
+      !!maskSliders.blur && maskSliders.blur.type === 'range' && maskSliders.blur.min === '0' && maskSliders.blur.max === '24',
+      JSON.stringify(maskSliders.blur));
+    check('出现「透明度」滑块（0–100，默认 45）',
+      !!maskSliders.mask && maskSliders.mask.type === 'range' && maskSliders.mask.max === '100' && maskSliders.mask.value === '45',
+      JSON.stringify(maskSliders.mask));
+
+    // 拖动两个滑块并保存 → 落库 + 卡片按值渲染
+    await page.evaluate(() => {
+      const set = (sel, v) => {
+        const el = document.querySelector(sel);
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, String(v));
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      set('[data-ceremony-form-bg-blur]', 12);
+      set('[data-ceremony-form-bg-mask]', 10);
+    });
+    await sleep(300);
+    await page.evaluate(() => {
+      const save = [...document.querySelectorAll('button')].find((b) => (b.textContent || '').includes('保存'));
+      if (save) save.click();
+    });
+    await sleep(2600);
+
+    // 落库由**重新加载后的卡片**证明：下面渲染出来的 data-* 数值就是从服务端载荷来的
+    // （单独再打一次列表接口容易撞限流，本轮就这么假红过一次）。
+
+    await gotoRetry(page, `${BASE}/admin/list/${ceremonyListId}`);
+    await sleep(2400);
+    const renderedMask = await page.evaluate((id) => {
+      const card = document.querySelector(`[data-ceremony-card="${id}"]`);
+      if (!card) return null;
+      const img = card.querySelector('.ceremony-bg-img');
+      const scrim = card.querySelector('.ceremony-bg-scrim');
+      const style = img ? getComputedStyle(img) : null;
+      return {
+        dataBlur: card.getAttribute('data-ceremony-bg-blur'),
+        dataMask: card.getAttribute('data-ceremony-bg-mask'),
+        filter: style?.filter || '',
+        scaled: !!img && img.className.includes('ceremony-bg-img-blurred'),
+        scrimBg: scrim ? getComputedStyle(scrim).backgroundImage : '',
+      };
+    }, cardId);
+    check('卡片按「虚化」渲染（12px 模糊 + 放大一点防边缘透底）',
+      !!renderedMask && /blur\(12px\)/.test(renderedMask.filter) && renderedMask.scaled === true,
+      JSON.stringify(renderedMask));
+    // 透明度 10% → 蒙板浓度 90%：底部 alpha = 0.9，顶部按 76% 递减（浏览器会舍到 3 位小数）
+    const scrim = renderedMask?.scrimBg || '';
+    const alphaAt = (stop) => {
+      const m = scrim.match(new RegExp(`rgba\\(2, 6, 23, ([0-9.]+)\\) ${stop}`));
+      return m ? Number(m[1]) : NaN;
+    };
+    const bottomAlpha = alphaAt('100%');
+    const topAlpha = alphaAt('0%');
+    check('卡片按「透明度」渲染蒙板（10% 透明度 → 浓度 90%，顶层按 76% 递减）',
+      bottomAlpha === 0.9 && topAlpha > 0.6 && topAlpha < 0.72,
+      `top=${topAlpha} bottom=${bottomAlpha} | ${scrim.slice(0, 120)}`);
+    // 带背景图的卡片：字色强制白字（可读性由蒙板保证），蒙板层必须在
+    const imageCardInk = await page.evaluate((id) => {
+      const card = document.querySelector(`[data-ceremony-card="${id}"]`);
+      const title = card?.querySelector('[data-ceremony-title]');
+      const scrim = card?.querySelector('.ceremony-bg-scrim');
+      return {
+        titleInk: title ? getComputedStyle(title).color : '',
+        cardInk: card ? getComputedStyle(card).color : '',
+        hasScrim: !!scrim,
+      };
+    }, cardId);
+    check('带背景图的卡片用白字 + 有蒙板层（可读性靠蒙板，不靠卡面配色）',
+      imageCardInk.titleInk === 'rgb(255, 255, 255)' && imageCardInk.hasScrim === true,
+      JSON.stringify(imageCardInk));
+
+    check('卡片上带着两个指标的数据属性（便于排查）',
+      !!renderedMask && renderedMask.dataBlur === '12' && renderedMask.dataMask === '10',
+      JSON.stringify(renderedMask));
+
+    // 透明度 100% = 不压蒙板（背景原样）
+    await api(page, `/api/reminder/items/${cardId}`, 'PUT', {
+      title: BG_TITLE, kind: 'task', list_id: ceremonyListId,
+      due_at: new Date(Date.now() + 86400_000).toISOString(),
+      repeat_rule: 'yearly', calendar: 'solar',
+      accent: 'indigo', background: 'preset:birthday', bg_blur: 0, bg_mask: 100, channels: ['inapp'],
+    });
+    await gotoRetry(page, `${BASE}/admin/list/${ceremonyListId}`);
+    await sleep(2400);
+    const noMask = await page.evaluate((id) => {
+      const card = document.querySelector(`[data-ceremony-card="${id}"]`);
+      const scrim = card?.querySelector('.ceremony-bg-scrim');
+      const img = card?.querySelector('.ceremony-bg-img');
+      return { scrimBg: scrim ? getComputedStyle(scrim).backgroundImage : '', filter: img ? getComputedStyle(img).filter : '' };
+    }, cardId);
+    check('透明度拉满（100%）时蒙板全透明、背景不虚化',
+      /rgba\(2, 6, 23, 0\)/.test(noMask.scrimBg) && /none/.test(noMask.filter), JSON.stringify(noMask));
+
     // ---------- 3. 上传图片 → 删除卡片后文件跟着删 ----------
     const uploaded = await page.evaluate(async (base) => {
       // 用 canvas 造一张真的 PNG（1x1 会太糊，做 8x8 纯色）
