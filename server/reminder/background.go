@@ -27,6 +27,17 @@ import (
 // 前端会回落到配色渐变（CeremonyPanel 里给 <img> 挂了 @error 兜底），不会显示破图。
 var backgroundPresetPattern = regexp.MustCompile(`^preset:[a-z0-9][a-z0-9-]{0,31}$`)
 
+// 背景蒙板的两个指标范围（用户 2026-10-13）：
+//
+//	maxBgBlur     虚化像素上限（再高就糊成一团，卡面内容也看不清）
+//	defaultBgMask 默认**透明度** 45%（= 蒙板浓度 55%）：与上一版写死在样式里的
+//	              暗色蒙板观感一致，老卡片迁移后看起来不变
+const (
+	maxBgBlur     = 24
+	defaultBgBlur = 0
+	defaultBgMask = 45
+)
+
 // validateBackground 校验背景值：空、preset:<slug>、或本机上传出来的路径。
 // 只校验形状不校验具体 preset 名单 —— 加一张内置图不该逼着后端一起改。
 func validateBackground(value string) error {

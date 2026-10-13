@@ -61,7 +61,11 @@ type SaveReminderInput struct {
 	// Background 是仪式感卡片的背景图（"preset:<key>" 或 "/uploads/..."，见 background.go）。
 	// 同样用指针：缺省 = 不改，传空字符串 = 清掉背景。
 	Background *string `json:"background"`
-	Version    uint    `json:"version"`
+	// BgBlur / BgMask 是背景图的蒙板（虚化像素数 / 蒙板浓度百分比，见 models.go）。
+	// 同样用指针：缺省 = 不改。
+	BgBlur  *int `json:"bg_blur"`
+	BgMask  *int `json:"bg_mask"`
+	Version uint `json:"version"`
 }
 
 func ensureDefaultList(tx *gorm.DB, userID uint) (List, error) {
@@ -108,6 +112,12 @@ func validateReminderInput(in *SaveReminderInput) error {
 		if err := validateBackground(*in.Background); err != nil {
 			return err
 		}
+	}
+	if in.BgBlur != nil && (*in.BgBlur < 0 || *in.BgBlur > maxBgBlur) {
+		return errors.New("背景虚化超出范围（0–24）")
+	}
+	if in.BgMask != nil && (*in.BgMask < 0 || *in.BgMask > 100) {
+		return errors.New("背景蒙板透明度超出范围（0–100）")
 	}
 	if in.RepeatRule == "" {
 		in.RepeatRule = "none"
@@ -267,10 +277,21 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 		if in.Background != nil {
 			background = *in.Background
 		}
+		// 蒙板两个指标：没传就用默认（不虚化 + 55% 蒙板），与老卡片迁移后的值一致
+		bgBlur := defaultBgBlur
+		if in.BgBlur != nil {
+			bgBlur = *in.BgBlur
+		}
+		bgMask := defaultBgMask
+		if in.BgMask != nil {
+			bgMask = *in.BgMask
+		}
 		created = Reminder{
 			UserID: userID, ListID: in.ListID, Title: in.Title, Notes: in.Notes,
 			Accent:     accent,
 			Background: background,
+			BgBlur:     bgBlur,
+			BgMask:     bgMask,
 			CardRole: in.CardRole,
 			Kind:     in.Kind,
 			Priority: in.Priority, DueAt: in.DueAt, AllDay: in.AllDay,
@@ -361,6 +382,12 @@ func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) 
 		}
 		if in.Background != nil { // 同上：没传就保留
 			existing.Background = *in.Background
+		}
+		if in.BgBlur != nil { // 同上：没传就保留
+			existing.BgBlur = *in.BgBlur
+		}
+		if in.BgMask != nil {
+			existing.BgMask = *in.BgMask
 		}
 		existing.SnoozedUntil = nil
 		existing.Version++

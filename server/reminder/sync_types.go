@@ -124,7 +124,11 @@ type syncReminder struct {
 	// Background：仪式感卡片的背景图（preset:<key> 或 /uploads/...）。
 	// 只同步**路径**：内置图两端都有；上传的图片文件不传，对端会回落到配色渐变
 	// （见 background.go 的说明）。
-	Background  string     `json:"background,omitempty"`
+	Background string `json:"background,omitempty"`
+	// BgBlur / BgMask：背景图的蒙板（虚化像素 / 蒙板浓度百分比，见 models.go）。
+	// 老版本对端不认这两个字段，忽略即可（本机保持自己的值）。
+	BgBlur int `json:"bg_blur,omitempty"`
+	BgMask int `json:"bg_mask,omitempty"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	SnoozedUntil        *time.Time `json:"snoozed_until,omitempty"`
 	Position            int        `json:"position"`

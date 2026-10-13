@@ -78,6 +78,10 @@ export interface ReminderItem {
   accent?: string
   /** 仪式感卡片的背景图：`preset:<key>`（内置主题图）或 `/uploads/...`（自己上传的图片） */
   background?: string
+  /** 背景图蒙板：虚化像素数（0–24，0 = 不虚化） */
+  bg_blur?: number
+  /** 背景图蒙板：透明度百分比（0–100，越大越清透；默认 45） */
+  bg_mask?: number
   created_at: string
   updated_at: string
 }
@@ -103,6 +107,9 @@ export interface SaveReminderInput {
   accent?: string
   /** 仪式感卡片的背景图（见 utils/ceremony-backgrounds.ts）；不传＝不改，空串＝清掉背景 */
   background?: string
+  /** 背景图蒙板：虚化像素数（0–24）/ 透明度百分比（0–100）；不传＝不改 */
+  bg_blur?: number
+  bg_mask?: number
   version?: number
 }
 

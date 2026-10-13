@@ -111,6 +111,15 @@ type Reminder struct {
 	// 空 = 用配色渐变；"preset:<key>" = 内置主题图（随前端产物走，不会被删）；
 	// "/uploads/..." = 用户上传的图片（卡片删除时清理，见 background.go）。
 	Background string `gorm:"size:255" json:"background,omitempty"`
+	// BgBlur / BgMask 是背景图的**蒙板**两个指标（用户 2026-10-13 要求
+	// 「卡片背景增加蒙板功能，可调整虚化、透明度两个指标」）：
+	//   BgBlur 虚化：给背景图加多少像素的高斯模糊（0–24，0 = 不虚化）
+	//   BgMask 透明度：压在背景图上的那层暗色蒙板的**透明程度**百分比
+	//                 （0–100：越大越清透、背景越亮；越小蒙板越浓、字越清楚）
+	// 默认写在建表里：老卡片迁移过来就是 blur=0 / mask=45（透明度 45%，
+	// 也就是蒙板浓度 55%，与上一版写死在样式里的观感一致）。
+	BgBlur int `gorm:"not null;default:0" json:"bg_blur,omitempty"`
+	BgMask int `gorm:"not null;default:45" json:"bg_mask,omitempty"`
 	CompletedAt         *time.Time        `gorm:"index:idx_reminders_user_completed" json:"completed_at"`
 	SnoozedUntil        *time.Time        `json:"snoozed_until"`
 	Position            int               `gorm:"not null;default:0" json:"position"`

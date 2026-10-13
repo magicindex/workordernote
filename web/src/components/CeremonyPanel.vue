@@ -27,6 +27,8 @@
         :data-ceremony-days="entry.days"
         :data-ceremony-bg="entry.accent || 'default'"
         :data-ceremony-image="cardImage(entry) ? (entry.background || '') : ''"
+        :data-ceremony-bg-blur="entry.bgBlur || 0"
+        :data-ceremony-bg-mask="entry.bgMask ?? 45"
       >
         <!-- 背景图（用户 2026-10-13）：预设主题图或自己上传的图片。
              只在本机有文件的上传图在对端会加载失败 → @error 把它从这张卡片上去掉，
@@ -35,11 +37,19 @@
           v-if="cardImage(entry)"
           :src="cardImage(entry)"
           class="ceremony-bg-img"
+          :class="{ 'ceremony-bg-img-blurred': (entry.bgBlur || 0) > 0 }"
+          :style="{ filter: (entry.bgBlur || 0) > 0 ? `blur(${entry.bgBlur}px)` : 'none' }"
           alt=""
           aria-hidden="true"
           @error="markImageFailed(entry.id)"
         />
-        <span v-if="cardImage(entry)" class="ceremony-bg-scrim" aria-hidden="true"></span>
+        <span
+          v-if="cardImage(entry)"
+          class="ceremony-bg-scrim"
+          :style="{ backgroundImage: maskGradient(entry.bgMask) }"
+          :data-ceremony-bg-mask="entry.bgMask ?? 45"
+          aria-hidden="true"
+        ></span>
         <!-- 倒计时**放到最上面、放大**（用户 2026-10-10 要求：卡片加高、倒计时醒目）：
              天数用 30px 的字、单位小一号，整块带底色，一眼就能看到还有多少天。 -->
         <div
@@ -190,6 +200,37 @@
               <span class="ceremony-bg-label">{{ bg.label }}</span>
             </button>
           </div>
+          <!-- 背景蒙板（用户 2026-10-13：「背景增加蒙板功能，可调整虚化、透明度两个指标」）：
+               选了背景图才出现 —— 虚化让照片柔和，透明度控制压在上面的暗色蒙板有多淡
+               （越小蒙板越浓、字越清楚）。 -->
+          <div v-if="form.background" class="mt-2 space-y-1.5 rounded-xl border border-border/70 bg-muted/30 p-2">
+            <label class="flex items-center gap-2 text-[11px] font-bold text-muted-foreground">
+              <span class="w-14 shrink-0">虚化</span>
+              <input
+                v-model.number="form.bgBlur"
+                type="range" min="0" max="24" step="1"
+                class="h-1.5 flex-1 accent-brand-500"
+                data-ceremony-form-bg-blur
+              />
+              <span class="w-10 shrink-0 text-right tabular-nums">{{ form.bgBlur }}px</span>
+            </label>
+            <label class="flex items-center gap-2 text-[11px] font-bold text-muted-foreground">
+              <span class="w-14 shrink-0">透明度</span>
+              <input
+                v-model.number="form.bgMask"
+                type="range" min="0" max="100" step="5"
+                class="h-1.5 flex-1 accent-brand-500"
+                data-ceremony-form-bg-mask
+              />
+              <span class="w-10 shrink-0 text-right tabular-nums">{{ form.bgMask }}%</span>
+            </label>
+            <p class="text-[11px] font-medium text-muted-foreground">
+              透明度越大背景越清透；越小蒙板越浓、字越清楚。
+            </p>
+            <p v-if="form.bgMask >= 80" class="text-[11px] font-semibold text-amber-600 dark:text-amber-400" data-ceremony-form-bg-mask-warn>
+              透明度偏高：背景很亮（浅色照片或浅色主题图）时，卡面上的白字可能看不清，建议 30–60%。
+            </p>
+          </div>
           <div class="mt-2 flex flex-wrap items-center gap-2">
             <label class="btn-secondary !h-8 !px-3 !text-[11px] cursor-pointer">
               {{ uploadingBackground ? '上传中…' : '上传图片' }}
@@ -258,7 +299,10 @@ const dateAnchor = ref<HTMLElement | null>(null)
 const editingId = ref<number | null>(null)
 const removeTarget = ref<ReminderItem | null>(null)
 
-const form = reactive({ title: '', dueAt: '' as string, repeat: 'yearly', calendar: 'solar', accent: '', background: '' })
+const form = reactive({
+  title: '', dueAt: '' as string, repeat: 'yearly', calendar: 'solar', accent: '', background: '',
+  bgBlur: 0, bgMask: 45, // 背景蒙板：虚化像素 / 透明度百分比（见 server/reminder/models.go）
+})
 const uploadingBackground = ref(false)
 // 图片加载失败的卡片（对端没有这个上传文件时）：这张卡回落到配色渐变，不显示破图
 const failedImages = ref<Set<number>>(new Set())
@@ -296,6 +340,17 @@ function heroStyle(entry: { accent?: string; id: number }) {
  * 默认档的浅色卡面是不透明浅底，这里按卡面颜色自动给一套深字（含次级文字的柔化色）；
  * 选了颜色的卡面只是薄薄一层同色系浅淡底，字色交回主题。
  */
+/**
+ * 蒙板层：压住背景图的暗色渐变，浓度由「透明度」反推 ——
+ * 透明度 45%（默认）= 蒙板浓度 55%，与上一版写死的 rgba(2,6,23,.42→.62) 观感一致。
+ * 透明度 100% = 不压蒙板（背景原样），0% = 全黑（只剩字）。
+ */
+function maskGradient(mask?: number | null): string {
+  const transparency = Math.min(100, Math.max(0, mask ?? 45))
+  const alpha = (100 - transparency) / 100
+  return `linear-gradient(180deg, rgba(2, 6, 23, ${(alpha * 0.76).toFixed(3)}) 0%, rgba(2, 6, 23, ${alpha.toFixed(3)}) 100%)`
+}
+
 function cardImage(entry: { background?: string; id: number }): string {
   if (failedImages.value.has(entry.id)) return ''
   return backgroundImageUrl(entry.background)
@@ -366,6 +421,8 @@ const cards = computed(() => items.value
       cycle: item.cycle_index || 0,
       accent: item.accent || '',
       background: item.background || '',
+      bgBlur: item.bg_blur ?? 0,
+      bgMask: item.bg_mask ?? 45,
     }
   })
   // 排序（用户 2026-10-11 要求「倒计时最短的在最前边，以此类推」）：
@@ -393,11 +450,26 @@ async function load() {
 watch(() => props.list.id, () => { void load() }, { immediate: true })
 onMounted(() => { if (!items.value.length) void load() })
 
+/**
+ * 表单复位：把**所有**字段都拉回默认值，再叠加 overrides。
+ *
+ * 为什么不能只 assign 一部分：配色、背景图、蒙板都是「上一张卡片带过来的」状态，
+ * 只改标题/日期的话，用「常用事项模板」新建出来的卡片会莫名其妙继承上一张卡片的
+ * 背景图与蒙板（2026-10-13 实测踩到：三张模板卡片被写进了 preset: 背景）。
+ */
+function resetForm(overrides: Partial<typeof form> = {}) {
+  Object.assign(form, {
+    title: '', dueAt: '', repeat: 'yearly', calendar: 'solar',
+    accent: '', background: '', bgBlur: 0, bgMask: 45,
+    ...overrides,
+  })
+}
+
 function openCreate() {
   editingId.value = null
   const d = new Date()
   d.setHours(9, 0, 0, 0)
-  Object.assign(form, { title: '', dueAt: toLocalIso(d), repeat: 'yearly', calendar: 'solar', accent: '', background: '' })
+  resetForm({ dueAt: toLocalIso(d) })
   createOpen.value = true
 }
 
@@ -410,6 +482,8 @@ function edit(entry: ReminderItem) {
     calendar: entry.calendar === 'lunar' ? 'lunar' : 'solar',
     accent: entry.accent || '',
     background: entry.background || '',
+    bgBlur: entry.bg_blur ?? 0,
+    bgMask: entry.bg_mask ?? 45,
   })
   createOpen.value = true
 }
@@ -451,6 +525,8 @@ async function save() {
       calendar: form.calendar as SaveReminderInput['calendar'],
       accent: form.accent,
       background: form.background,
+      bg_blur: form.bgBlur,
+      bg_mask: form.bgMask,
       channels: ['inapp'],
     }
     if (editingId.value) await updateReminder(editingId.value, { ...payload, version: items.value.find((i) => i.id === editingId.value)?.version })
@@ -532,10 +608,11 @@ async function nextLunar(month: number, day: number) {
 async function choosePreset(preset: (typeof PRESETS)[number]) {
   editingId.value = null
   if (preset.needsDate) {
-    // 需要日期的：把表单填好让用户选日期（农历生日让他用农历选择器）
+    // 需要日期的：把表单填好让用户选日期（农历生日让他用农历选择器）。
+    // **整表复位**再填 —— 否则会继承上一张卡片的配色/背景图/蒙板。
     const d = new Date()
     d.setHours(9, 0, 0, 0)
-    Object.assign(form, {
+    resetForm({
       title: preset.title,
       dueAt: toLocalIso(d),
       repeat: 'yearly',
@@ -561,6 +638,8 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
       due_at: toLocalIso(when),
       repeat_rule: 'yearly',
       calendar: preset.lunar ? 'lunar' : 'solar',
+      // 模板建出来的卡片不继承任何「上一张」的状态
+      accent: '', background: '', bg_blur: 0, bg_mask: 45,
       channels: ['inapp'],
     })
     presetOpen.value = false
@@ -652,7 +731,10 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 /* 背景图（用户 2026-10-13）：图片铺满整卡，上面压一层暗色蒙版保证白字可读；
    卡片自身的配色渐变仍在内联 style 里 —— 图片没加载出来/对端没有这个文件时就是它。 */
 .ceremony-bg-img { @apply pointer-events-none absolute inset-0 h-full w-full object-cover; }
-.ceremony-bg-scrim { @apply pointer-events-none absolute inset-0; background: linear-gradient(180deg, rgba(2, 6, 23, .42) 0%, rgba(2, 6, 23, .62) 100%); }
+/* 蒙板层：颜色/浓度由 maskGradient() 内联给（可调「透明度」） */
+.ceremony-bg-scrim { @apply pointer-events-none absolute inset-0; }
+/* 虚化时放大一点：否则模糊会把卡片边缘也「吃掉」，四边透出底色 */
+.ceremony-bg-img-blurred { transform: scale(1.08); }
 .ceremony-card > *:not(.ceremony-bg-img):not(.ceremony-bg-scrim) { position: relative; z-index: 1; }
 /* 背景图选择器（预设主题图 + 纯色） */
 .ceremony-bg-option { @apply flex flex-col items-center gap-1 overflow-hidden rounded-xl border border-border/70 bg-surface p-1 text-[10px] font-bold text-muted-foreground transition hover:border-brand-500/40; }

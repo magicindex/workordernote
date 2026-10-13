@@ -136,3 +136,66 @@ func TestDeleteReminderCleansBackgroundFile(t *testing.T) {
 		t.Fatalf("卡片删除后背景图应被清理，实际 err=%v", err)
 	}
 }
+
+// 背景蒙板两个指标的默认值与范围（用户 2026-10-13 要求「可调整虚化、透明度」）：
+// 不传 → 虚化 0 / 透明度 45；超范围一律拒绝；更新时缺省表示「不改」。
+func TestBackgroundMaskDefaultsAndRanges(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const userID = 341
+	bg := "preset:birthday"
+	due := time.Now().Add(time.Hour)
+	created, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "蒙板默认值", Kind: KindTask, DueAt: &due, RepeatRule: "none", Background: &bg,
+	})
+	if err != nil {
+		t.Fatalf("建卡片失败：%v", err)
+	}
+	if created.BgBlur != 0 || created.BgMask != defaultBgMask {
+		t.Fatalf("没传蒙板时应是 blur=0 / mask=%d，实际 %d / %d", defaultBgMask, created.BgBlur, created.BgMask)
+	}
+
+	// 显式传值
+	blur, mask := 8, 20
+	updated, err := updateReminder(appDB, userID, created.ID, SaveReminderInput{
+		Title: created.Title, Kind: KindTask, ListID: created.ListID,
+		DueAt: created.DueAt, RepeatRule: "none", Version: created.Version,
+		BgBlur: &blur, BgMask: &mask,
+	})
+	if err != nil {
+		t.Fatalf("更新失败：%v", err)
+	}
+	if updated.BgBlur != 8 || updated.BgMask != 20 {
+		t.Fatalf("虚化/透明度没落库：%d / %d", updated.BgBlur, updated.BgMask)
+	}
+
+	// 缺省 = 不改
+	kept, err := updateReminder(appDB, userID, created.ID, SaveReminderInput{
+		Title: created.Title, Kind: KindTask, ListID: created.ListID,
+		DueAt: created.DueAt, RepeatRule: "none", Version: updated.Version,
+	})
+	if err != nil {
+		t.Fatalf("更新失败：%v", err)
+	}
+	if kept.BgBlur != 8 || kept.BgMask != 20 {
+		t.Fatalf("没传蒙板时应保持原值，实际 %d / %d", kept.BgBlur, kept.BgMask)
+	}
+
+	// 超范围拒绝
+	blurTooBig, maskTooBig, negative := maxBgBlur+1, 101, -1
+	cases := []struct {
+		name string
+		in   SaveReminderInput
+	}{
+		{"虚化过大", SaveReminderInput{Title: "x", Kind: KindTask, DueAt: &due, RepeatRule: "none", BgBlur: &blurTooBig}},
+		{"虚化为负", SaveReminderInput{Title: "x", Kind: KindTask, DueAt: &due, RepeatRule: "none", BgBlur: &negative}},
+		{"透明度过大", SaveReminderInput{Title: "x", Kind: KindTask, DueAt: &due, RepeatRule: "none", BgMask: &maskTooBig}},
+		{"透明度为负", SaveReminderInput{Title: "x", Kind: KindTask, DueAt: &due, RepeatRule: "none", BgMask: &negative}},
+	}
+	for _, c := range cases {
+		if _, err := createReminder(appDB, userID, c.in); err == nil {
+			t.Fatalf("%s 应该被拒绝", c.name)
+		}
+	}
+}
