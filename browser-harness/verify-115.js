@@ -178,6 +178,15 @@ const api = (page, p, method = 'GET', body = null, extraHeaders = null) => page.
         mask: mask ? { min: mask.min, max: mask.max, value: mask.value, type: mask.type } : null,
       };
     }, cardId);
+    // 用户 2026-10-13 反馈「201:8908 没有看到蒙板设置」：原来要**先选背景图**才出现，
+    // 等于藏起来了 —— 现在没选图时也显示，只是置灰 + 一句提示。
+    const maskBlockAlways = await page.evaluate(() => {
+      const block = document.querySelector('[data-ceremony-form-bg-mask-block]');
+      const need = document.querySelector('[data-ceremony-form-bg-mask-need]');
+      return { block: !!block, needText: (need?.textContent || '').trim() };
+    });
+    check('蒙板设置常显（不选背景图也能看到这一块）', maskBlockAlways.block === true, JSON.stringify(maskBlockAlways));
+
     check('选了背景图后出现「虚化」滑块（0–24）',
       !!maskSliders.blur && maskSliders.blur.type === 'range' && maskSliders.blur.min === '0' && maskSliders.blur.max === '24',
       JSON.stringify(maskSliders.blur));
