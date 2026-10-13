@@ -371,15 +371,20 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
           .find((h) => (h.closest('[data-ceremony-card]')?.textContent || '').includes(t));
         return {
           id: it?.id, apiAccent: it?.accent,
+          // 倒计时已经没有自己的底色块（2026-10-13 起直接压在卡面上）：
+          // 看卡片的渐变，以及倒计时用的字色变量。
+          cardBg: hero ? getComputedStyle(hero.closest('[data-ceremony-card]')).backgroundImage : '',
           heroBg: hero ? getComputedStyle(hero).backgroundImage : '',
-          heroInk: hero ? getComputedStyle(hero).color : '',
+          heroInk: hero ? getComputedStyle(hero).getPropertyValue('--ceremony-ink').trim() : '',
         };
       }, { b: BASE, t: accentTitle });
       if (accented.id) createdIds.push(accented.id);
       // 紫罗兰档的深色渐变两端（#7c3aed → #5b21b6，0.21.0 起把色板换深以保证白字对比度）
-      check('选「紫罗兰」保存后：接口里 accent=violet、卡片倒计时块换成对应渐变',
-        accented.apiAccent === 'violet' && /linear-gradient/.test(accented.heroBg)
-          && /124, 58, 237/.test(accented.heroBg) && /91, 33, 182/.test(accented.heroBg),
+      check('选「紫罗兰」保存后：接口里 accent=violet、整张卡片换成对应渐变（倒计时同色）',
+        accented.apiAccent === 'violet' && /linear-gradient/.test(accented.cardBg)
+          && /124, 58, 237/.test(accented.cardBg) && /91, 33, 182/.test(accented.cardBg)
+          // CSS 变量里存的是内联写的原值（#ffffff），不是计算后的 rgb()，两种写法都认
+          && /^#fff(fff)?$/i.test(accented.heroInk) || accented.heroInk === 'rgb(255, 255, 255)',
         JSON.stringify(accented));
       // 再打开编辑：色板应选中 violet；改成「默认」保存 → accent 清空
       await page.evaluate((t) => {
@@ -417,10 +422,13 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
         defaultCards.length > 0 && defaultCards.every((c) => /linear-gradient/.test(c.cardBg)
           && !/rgba\(0, 0, 0, 0\)/.test(c.cardBg)),
         JSON.stringify(defaultCards.slice(0, 2)));
-      check('浅色是「随机搭配」：多张默认卡不会全一个色，且每张卡的倒计时块都比卡面更浓（两者不同）',
-        new Set(defaultCards.map((c) => c.cardBg)).size >= Math.min(2, defaultCards.length)
-          && defaultCards.every((c) => c.heroBg && c.heroBg !== c.cardBg),
+      check('浅色是「随机搭配」：多张默认卡不会全一个色',
+        new Set(defaultCards.map((c) => c.cardBg)).size >= Math.min(2, defaultCards.length),
         JSON.stringify({ distinct: new Set(defaultCards.map((c) => c.cardBg)).size, total: defaultCards.length }));
+      // 用户 2026-10-13：「倒计时不增加卡片效果，直接显示在大卡片中」
+      check('倒计时没有自己的底色/圆角块了（背景透明，直接压在卡片上）',
+        defaultCards.length > 0 && defaultCards.every((c) => !c.heroBg || c.heroBg === 'none' || /rgba\(0, 0, 0, 0\)/.test(c.heroBg)),
+        JSON.stringify(defaultCards.slice(0, 2).map((c) => c.heroBg)));
 
       const card = await page.evaluate(() => {
         const c = document.querySelector('[data-ceremony-card]');
@@ -456,22 +464,50 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
         return [...document.querySelectorAll('[data-ceremony-card]')].map((c) => {
           const hero = c.querySelector('[data-ceremony-countdown]');
           const title = c.querySelector('[data-ceremony-title]');
-          const heroStops = stops(hero);
           const cardStops = stops(c);
-          const heroInk = getComputedStyle(hero).color;
+          // 倒计时数字现在是「渐变字 + 透明色」（流光），量不到 color：
+          // 用 --ceremony-ink（就是它原来的字色）跟**卡面**渐变比 —— 倒计时直接压在卡面上。
+          const heroInk = hero ? getComputedStyle(hero).getPropertyValue('--ceremony-ink').trim() : '';
           const titleInk = getComputedStyle(title).color;
           return {
             accent: c.getAttribute('data-ceremony-bg'),
-            hero: heroStops.length ? Number(Math.min(...heroStops.map((x) => cr(heroInk, x))).toFixed(2)) : null,
+            hero: cardStops.length && heroInk ? Number(Math.min(...cardStops.map((x) => cr(heroInk, x))).toFixed(2)) : null,
             title: cardStops.length ? Number(Math.min(...cardStops.map((x) => cr(titleInk, x))).toFixed(2)) : null,
             heroInk,
             titleInk,
           };
         });
       });
-      check('每张卡的倒计时字色与它的渐变底色对比度足够（≥3.5，浅底自动配深字）',
+      check('每张卡的倒计时字色与卡面渐变对比度足够（≥3.5，浅底自动配深字）',
         contrast.length > 0 && contrast.every((c) => c.hero === null || c.hero >= 3.5),
         JSON.stringify(contrast.map((c) => [c.accent, c.hero, c.heroInk])));
+
+      // 流光：数字是渐变字 + background-clip:text + 扫光动画（用户 2026-10-13 要求）
+      const flow = await page.evaluate(() => {
+        const b = document.querySelector('[data-ceremony-countdown] b');
+        if (!b) return null;
+        const style = getComputedStyle(b);
+        return {
+          bg: style.backgroundImage.slice(0, 90),
+          size: style.backgroundSize,
+          clip: style.webkitBackgroundClip || style.backgroundClip,
+          fill: style.webkitTextFillColor || style.color,
+          anim: style.animationName,
+          duration: style.animationDuration,
+        };
+      });
+      check('倒计时数字是渐变字并裁在文字里（流光的前提）',
+        !!flow && /linear-gradient/.test(flow.bg) && flow.clip === 'text', JSON.stringify(flow));
+      check('数字有持续跑动的流光动画',
+        !!flow && /ceremony-countdown-flow/.test(flow.anim) && parseFloat(flow.duration) > 0.2,
+        JSON.stringify(flow));
+      await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+      const reduced = await page.evaluate(() => {
+        const b = document.querySelector('[data-ceremony-countdown] b');
+        return b ? getComputedStyle(b).animationName : null;
+      });
+      check('系统开了「减少动态效果」时流光停下（只留静态亮色数字）', reduced === 'none', String(reduced));
+      await page.emulateMediaFeatures([]);
       check('每张卡的标题字色与卡面底色对比度足够（≥4.5，浅色卡面不会被白字糊住）',
         contrast.length > 0 && contrast.every((c) => c.title === null || c.title >= 4.5),
         JSON.stringify(contrast.map((c) => [c.accent, c.title, c.titleInk])));

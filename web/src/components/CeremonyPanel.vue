@@ -267,12 +267,17 @@ const swatchGradient = (a: CardAccent) => `linear-gradient(135deg, ${a.from} 0%,
  * （按 id 稳定随机，见 utils/card-accents.ts），不再是一块死灰。
  */
 function heroStyle(entry: { accent?: string; id: number }) {
+  // 倒计时**不再有自己的卡片效果**（用户 2026-10-13：「倒计时不增加卡片效果，直接显示在
+  // 大卡片中」）：这里只给字色与流光要用的三个变量，不再画独立底色/描边。
+  //   --ceremony-ink       数字的基色（对比度用例读它：文字本身是 background-clip:text + 透明色）
+  //   --ceremony-flow-base 流光渐变的两端（比基色略淡一点，光带扫过才看得出来）
+  //   --ceremony-flow-shine 扫过的那道光
+  const ink = heroInk(entry.accent, entry.id)
   return {
-    // 整张卡片现在就是这套渐变（见 cardStyle），倒计时块再叠一层极淡的白纱 +
-    // 一圈描边，才能从同色卡面上「浮」出来（用户 2026-10-13：卡片颜色与倒计时一致）。
-    backgroundImage: `linear-gradient(0deg, rgba(255,255,255,.14), rgba(255,255,255,.14)), ${heroGradient(entry.accent, entry.id)}`,
-    color: heroInk(entry.accent, entry.id),
-    borderColor: 'rgba(255,255,255,.28)',
+    color: ink,
+    '--ceremony-ink': ink,
+    '--ceremony-flow-base': ink === '#ffffff' ? 'rgba(255, 255, 255, .78)' : 'rgba(15, 23, 42, .82)',
+    '--ceremony-flow-shine': ink === '#ffffff' ? '#ffffff' : 'rgba(255, 255, 255, .95)',
   }
 }
 /**
@@ -585,8 +590,34 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 /* 图标底盘：跟着卡面字色走的一层薄底（原来是固定的玫瑰色块，在彩色卡面上很跳） */
 .ceremony-icon { background: var(--ceremony-chip, rgba(255,255,255,.18)); color: inherit; }
 /* 倒计时：大字 + 底色，放在卡片最上面 */
-.ceremony-hero { @apply flex items-baseline justify-center gap-2 rounded-xl border border-transparent px-3.5 py-3 text-center text-[16px] font-extrabold leading-none sm:px-4; }
-.ceremony-hero b { @apply text-[36px] font-black leading-none tracking-tight sm:text-[44px]; }
+/* 倒计时直接显示在大卡片里：没有自己的底色、圆角与边框（用户 2026-10-13 要求）。 */
+.ceremony-hero { @apply flex items-baseline justify-center gap-2 text-center text-[16px] font-extrabold leading-none; }
+/* 数字「流光」：渐变字 + 背景位移动画，一道亮光从左到右扫过数字
+   （和登录页/新建窗口的 .flow-frame 是同一套视觉语言）。
+   prefers-reduced-motion 时停住动画、定在中点，只留静态的亮色数字。 */
+.ceremony-hero b {
+  @apply text-[36px] font-black leading-none tracking-tight sm:text-[44px];
+  background-image: linear-gradient(100deg,
+    var(--ceremony-flow-base, #ffffff) 0%,
+    var(--ceremony-flow-base, #ffffff) 38%,
+    var(--ceremony-flow-shine, #ffffff) 50%,
+    var(--ceremony-flow-base, #ffffff) 62%,
+    var(--ceremony-flow-base, #ffffff) 100%);
+  background-size: 220% 100%;
+  background-position: 50% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: ceremony-countdown-flow 2.8s linear infinite;
+}
+@keyframes ceremony-countdown-flow {
+  0% { background-position: 130% 0; }
+  100% { background-position: -130% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ceremony-hero b { animation: none; }
+}
 /* 「快到了」/「已过」不再改底色（会盖掉卡面渐变），只加粗提示由字号承担 */
 .ceremony-days-soon { @apply tracking-tight; }
 .ceremony-days-past { @apply opacity-90; }

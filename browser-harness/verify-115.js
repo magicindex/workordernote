@@ -104,7 +104,10 @@ const api = (page, p, method = 'GET', body = null, extraHeaders = null) => page.
       // ① 颜色一致：整卡与倒计时是同一套靛蓝渐变（同一组色值），字色也相同
       const hasIndigo = (bg) => bg.includes('79, 70, 229') && bg.includes('55, 48, 163');
       check('整张卡片用的就是倒计时那套配色（靛蓝两端都在）', hasIndigo(cardState.cardBg), cardState.cardBg.slice(0, 120));
-      check('倒计时块也是同一套配色', hasIndigo(cardState.heroBg), cardState.heroBg.slice(0, 120));
+      // 用户 2026-10-13：「倒计时不增加卡片效果，直接显示在大卡片中」→ 它自己没有底色块了
+      check('倒计时没有自己的底色块（直接显示在卡片上）',
+        !cardState.heroBg || cardState.heroBg === 'none' || /rgba\(0, 0, 0, 0\)/.test(cardState.heroBg),
+        cardState.heroBg.slice(0, 120));
       check('整卡与倒计时的字色一致（都不再各来一套）',
         cardState.cardColor === cardState.heroColor, `${cardState.cardColor} vs ${cardState.heroColor}`);
       // ② 内置主题图真的挂上了，而且是构建产物里的资源（不是外链）
