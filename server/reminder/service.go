@@ -522,7 +522,7 @@ func getReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error) {
 	}
 	var list List
 	_ = db.Where("id = ? AND user_id = ?", item.ListID, userID).First(&list).Error
-	dto := ReminderDTO{Reminder: item, ListName: list.Name, ListColor: list.Color}
+	dto := ReminderDTO{Reminder: item, ListName: list.Name, ListColor: list.Color, CanDelete: item.UserID == userID}
 	for _, ch := range channels {
 		dto.Channels = append(dto.Channels, ch.Channel)
 		if ch.Channel == ChannelEmail {
@@ -765,6 +765,7 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 			ListName:       listNames[row.ListID],
 			ListColor:      listColors[row.ListID],
 			CycleIndex:     cycle,
+			CanDelete:      row.UserID == userID,
 		})
 	}
 	return result, nil

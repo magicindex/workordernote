@@ -378,6 +378,7 @@
       :channels="channels"
       presentation="modal"
       @saved="onEditorSaved"
+      @deleted="onEditorDeleted"
     />
 
     <!-- 行菜单：右键 / 行尾「⋯」都能开（共享组件，Teleport 到 body，位置按实际尺寸收进视口） -->
@@ -951,6 +952,11 @@ function editFromView() {
 }
 async function onEditorSaved() {
   await load()
+}
+/** 编辑弹窗里直接删除（用户 2026-10-13 加）：重新载入日历并提示。 */
+async function onEditorDeleted() {
+  await load()
+  showToast('提醒已删除')
 }
 
 /**

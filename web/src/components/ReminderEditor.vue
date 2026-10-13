@@ -14,9 +14,26 @@
               {{ (isCreate ? '新建' : '编辑') + (editing.kind === 'note' ? '记事' : '提醒') }}
             </h2>
           </div>
-          <button class="row-action !opacity-100" aria-label="关闭" @click="close">
-            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18" stroke-width="2" stroke-linecap="round"/></svg>
-          </button>
+          <div class="flex items-center gap-1.5">
+            <!-- 删除（用户 2026-10-13：编辑弹窗「在同行右侧增加删除按钮」）：
+                 只有**创建这条提醒的用户**能删 —— can_delete 由服务端按 user_id 判定，
+                 不是创建者就置灰并说明原因（服务端那条路本来也只认创建者，删别人的 404）。 -->
+            <button
+              v-if="!isCreate && editing.id"
+              type="button"
+              class="row-action !opacity-100 hover:!text-rose-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-inherit"
+              :disabled="!canDelete"
+              :title="canDelete ? '删除这条提醒' : '只有创建这条提醒的用户可以删除'"
+              :aria-label="canDelete ? '删除提醒' : '只有创建者可以删除'"
+              data-editor-delete
+              @click="confirmOpen = true"
+            >
+              <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="row-action !opacity-100" aria-label="关闭" @click="close">
+              <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
         </div>
 
         <p v-if="errorMsg" class="mx-4 mt-3 rounded-xl bg-destructive/10 px-3 py-2 text-xs font-semibold text-destructive sm:mx-6">{{ errorMsg }}</p>
@@ -118,17 +135,29 @@
           </div>
         </form>
       </aside>
+
+      <ConfirmDialog
+        :model-value="confirmOpen"
+        danger
+        title="删除提醒"
+        :message="`确定删除「${editing.title || '这条提醒'}」吗？删除后这条不再提醒，也无法恢复。`"
+        confirm-text="删除"
+        :busy="deleting"
+        @update:model-value="(v: boolean) => { if (!v) confirmOpen = false }"
+        @confirm="doDelete"
+      />
     </div>
   </Transition>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import ConfirmDialog from './ConfirmDialog.vue'
 import { RouterLink } from 'vue-router'
 import LunarDatePicker from './LunarDatePicker.vue'
 import RepeatNotifySelect from './RepeatNotifySelect.vue'
 import {
-  createReminder, getReminder, updateReminder,
+  createReminder, deleteReminder, getReminder, updateReminder,
   type ChannelStatus, type ReminderChannel, type ReminderItem, type ReminderKind,
   type ReminderList, type SaveReminderInput,
 } from '../api/reminder'
@@ -156,6 +185,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   /** 保存成功。父组件据此刷新自己的列表/日历 */
   saved: []
+  /** 删除成功（用户在编辑弹窗里点了删除并确认）。父组件据此刷新并提示 */
+  deleted: []
 }>()
 
 const isCreate = computed(() => props.preset != null)
@@ -170,6 +201,11 @@ const blankInput = (): SaveReminderInput & { id?: number } => ({
 const editing = reactive<SaveReminderInput & { id?: number }>(blankInput())
 const saving = ref(false)
 const loading = ref(false)
+// 删除确认框与进行中状态（用户 2026-10-13 要求编辑弹窗里能直接删）
+const confirmOpen = ref(false)
+const deleting = ref(false)
+/** 能不能删：服务端按 user_id 判定（只有创建这条的用户可以）。 */
+const canDelete = ref(true)
 const errorMsg = ref('')
 const dateOpen = ref(false)
 const dateAnchor = ref<HTMLElement | null>(null)
@@ -215,6 +251,7 @@ function enableEnd() {
 }
 
 function applyItem(item: ReminderItem) {
+  canDelete.value = item.can_delete !== false
   Object.assign(editing, {
     id: item.id, title: item.title, notes: item.notes, kind: item.kind || 'task', list_id: item.list_id,
     priority: item.priority, due_at: item.due_at, all_day: item.all_day,
@@ -290,6 +327,32 @@ function toggleEmailTarget(id: number) {
 }
 
 function close() { emit('update:modelValue', false) }
+
+/**
+ * 删除这条提醒（编辑弹窗头部那个按钮）。
+ *
+ * 权限：**只有创建这条提醒的用户能删**。界面按服务端给的 can_delete 显示/置灰按钮；
+ * 服务端删除接口自己也按 user_id 过滤 —— 删别人的条目一律 404，绕不过去。
+ */
+async function doDelete() {
+  if (!editing.id || deleting.value) return
+  deleting.value = true
+  errorMsg.value = ''
+  try {
+    await deleteReminder(editing.id)
+    confirmOpen.value = false
+    emit('update:modelValue', false)
+    emit('deleted')
+  } catch (error: any) {
+    confirmOpen.value = false
+    const status = error?.response?.status
+    errorMsg.value = status === 404
+      ? '这条提醒不存在，或者不属于当前账号（只有创建者可以删除）'
+      : (error?.response?.data?.message || '删除失败，请重试')
+  } finally {
+    deleting.value = false
+  }
+}
 
 async function save() {
   if (!editing.title?.trim() || saving.value) return

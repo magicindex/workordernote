@@ -257,6 +257,11 @@ type ReminderDTO struct {
 	// 已完成过 N 次，这一次就是第 N+1 次。非循环项目固定为 0（前端不显示这个角标）。
 	// 值由 listReminders 里一条聚合查询一次算出（不给每行单独查，避免 N+1）。
 	CycleIndex int `json:"cycle_index"`
+	// CanDelete 表示**当前这个请求的用户能不能删这条**（用户 2026-10-13 要求
+	// 「删除只对创建提醒用户有效」）：判据是这条的 user_id 与请求用户一致。
+	// 服务端删除接口本来就按 user_id 过滤（删别人的一律 404），这个字段是给界面用的 ——
+	// 不是创建者就不显示/禁用删除按钮，而不是等点了才报错。
+	CanDelete bool `json:"can_delete"`
 }
 
 // supportedListColors 是清单颜色的白名单。它与前端 utils/list-colors.ts 的

@@ -596,6 +596,7 @@
         :lists="navLists"
         :channels="selectableChannels"
         @saved="onEditorSaved"
+        @deleted="onEditorDeleted"
       />
 
       <!-- 打印完成记录：勾选要打印的列，纸张方向/字号按列数自动适配 -->
@@ -1404,6 +1405,12 @@ async function onEditorSaved() {
   await loadItems()
   changed()
   showToast('提醒已保存')
+}
+/** 编辑弹窗里直接删除（用户 2026-10-13 加）：刷新列表并提示。 */
+async function onEditorDeleted() {
+  await loadItems()
+  changed()
+  showToast('提醒已删除')
 }
 async function toggleComplete(item: ReminderItem) {
   // 记事默认就是完成，没有「完成 / 恢复」这回事：恢复会把它变成一个没有

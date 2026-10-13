@@ -78,6 +78,8 @@ export interface ReminderItem {
   accent?: string
   /** 仪式感卡片的背景图：`preset:<key>`（内置主题图）或 `/uploads/...`（自己上传的图片） */
   background?: string
+  /** 当前用户能不能删这条（只有创建者可以；服务端按 user_id 判定） */
+  can_delete?: boolean
   /** 背景图蒙板：虚化像素数（0–24，0 = 不虚化） */
   bg_blur?: number
   /** 背景图蒙板：透明度百分比（0–100，越大越清透；默认 45） */
