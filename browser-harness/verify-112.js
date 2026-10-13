@@ -207,20 +207,17 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
     await page.keyboard.press('Escape').catch(() => {});
     await sleep(500);
 
-    // =============== 3. 过期时间：新建默认时间 + 逾期口径 ===============
-    const expire = await page.evaluate(async (base) => {
-      const t = localStorage.getItem('reminders.token') || sessionStorage.getItem('reminders.token');
-      const j = await (await fetch(base + '/api/configs/public', { headers: { Authorization: 'Bearer ' + t } })).json();
-      return String(j?.data?.task_expire_time || '');
-    }, BASE);
-    check('后台公开配置里有「任务过期时间」，默认 23:59', expire === '23:59', expire);
+    // =============== 3. 新建默认时间（写死 23:59）+ 逾期口径 ===============
+    // 用户 2026-10-13：「今天/明天/本周末这些芯片的时间一律 23:59，除非自己手动改」——
+    // 默认时刻写死在前端，后台那个「新建提醒默认结束时间」配置项已经删掉。
+    const expire = '23:59';
 
     await openQuickAdd(page);
     await sleep(600);
     const chipText = await page.evaluate(() => document.querySelector('[data-quick-date]')?.textContent.replace(/\s+/g, ' ').trim() || '');
     const today = new Date();
     const wantSuffix = `${today.getMonth() + 1}月${today.getDate()}日 ${expire}`;
-    check('新建提醒的默认时间 = 当天「过期时间」（不再是当前时刻）',
+    check('新建提醒的默认时间写死 23:59（不再跟任何后台配置联动）',
       chipText.includes(wantSuffix), `${chipText} vs ${wantSuffix}`);
 
     // 逾期口径：昨天 23:00 的 → 已逾期；今天 09:00 的 → **还没逾期**（要等今天 23:59 + 宽限）

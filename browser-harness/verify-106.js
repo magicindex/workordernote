@@ -194,14 +194,8 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     });
     const today2 = new Date();
     const label2 = `${today2.getFullYear()}年${today2.getMonth() + 1}月${today2.getDate()}日`;
-    // 0.20 起默认时间是**后台的「过期时间」**（task_expire_time，默认 23:59），
-    // 不再是「当前时刻」—— 从公开配置里读那个值来比。
-    const expireCfg = await page.evaluate(async (base) => {
-      const t = localStorage.getItem('reminders.token') || sessionStorage.getItem('reminders.token');
-      const res = await fetch(base + '/api/configs/public', { headers: { Authorization: 'Bearer ' + t } });
-      const j = await res.json().catch(() => ({}));
-      return String(j?.data?.task_expire_time || '23:59');
-    }, BASE);
+    // 默认时刻现在**写死 23:59**（用户 2026-10-13；原来的 task_expire_time 配置已删）
+    const expireCfg = '23:59';
     const mins = (s) => {
       const m = /(\d{2}):(\d{2})/.exec(s || '');
       return m ? Number(m[1]) * 60 + Number(m[2]) : -1;

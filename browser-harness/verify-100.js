@@ -344,12 +344,13 @@ const overflowFinder = () => {
         check('弹窗上只有「知道了 / 稍后提醒」，没有「完成」',
           buttons.some((b) => b.startsWith('知道了')) && buttons.some((b) => b.includes('稍后提醒')) && !buttons.includes('完成'),
           JSON.stringify(buttons));
-        // 主按钮文案必须写明「点了会怎样」（用户 2026-10-12 要求）：
-        // 默认偏好（知道了后提醒频率 = 0）写「知道了（任务延期明天提醒）」；
-        // 若偏好设成了 N 分钟，则写「知道了（N 分钟后再提醒）」。
+        // 主按钮文案必须写明「点了会怎样」，而且**与后台偏好那一项的文案一致**
+        // （用户 2026-10-12 要求写清楚；2026-10-13 进一步要求「显示保持与后台一致」）。
+        // 后台「点『知道了』后的提醒频率」的选项文案见 web/src/utils/reminder-options.ts。
+        const ACK_LABELS = ['第二天（当天不再提示）', '30 分钟后', '1 小时后', '2 小时后', '4 小时后'];
         const ackLabel = buttons.find((b) => b.startsWith('知道了')) || '';
-        check('「知道了」按钮写明延期到什么时候（不是光写知道了）',
-          /^知道了（.+）$/.test(ackLabel) && (ackLabel.includes('明天') || /分钟后再提醒/.test(ackLabel)),
+        check('「知道了」按钮写明延期到什么时候（与后台偏好文案一致）',
+          ACK_LABELS.some((label) => ackLabel === `知道了（${label}）`),
           ackLabel);
         // 当前弹的是哪一条（A 或 B）：按标题认，别依赖顺序
         const firstTitle = await page.evaluate(() => document.querySelector('[role="alertdialog"] h2')?.innerText || '');
