@@ -54,6 +54,9 @@
           <template v-else-if="entry.days > 1">还有 <b>{{ entry.days }}</b> 天</template>
           <template v-else>已过 <b>{{ -entry.days }}</b> 天</template>
         </div>
+        <!-- 倒计时与下方信息之间的分隔线（用户 2026-10-13 要求）：
+             半透明、跟卡面字色同色系 —— 深色卡面是白线，浅色卡面是深线。 -->
+        <span class="ceremony-divider" data-ceremony-divider aria-hidden="true"></span>
         <!-- 图标挪到内容**左侧**并放大 2 倍（用户 2026-10-12：「图标放内容左侧放大2倍」）；
              名称 / 时间 / 循环 / 次数等一并放大。整组（图标 + 文字）在卡片里居中。 -->
         <div class="ceremony-body">
@@ -283,6 +286,8 @@ function heroStyle(entry: { accent?: string; id: number }) {
     '--ceremony-flow-1': white ? '#a5b4fc' : '#4338ca',
     '--ceremony-flow-2': white ? '#d8b4fe' : '#7e22ce',
     '--ceremony-flow-3': white ? '#67e8f9' : '#0e7490',
+    // 倒计时与信息之间的分隔线：跟字色同色系的一条半透明细线
+    '--ceremony-divider': white ? 'rgba(255, 255, 255, .30)' : 'rgba(15, 23, 42, .20)',
   }
 }
 /**
@@ -580,7 +585,7 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 /* 图标：从 36px 方框 / 22px 图标放大 2 倍 → 64px 方框 / 44px 图标（用户 2026-10-12） */
 .ceremony-icon { @apply flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl; }
 /* 内容整组（图标 + 文字）在卡片里居中，文字内部左对齐 */
-.ceremony-body { @apply mt-3 flex items-center justify-center gap-3; }
+.ceremony-body { @apply flex items-center justify-center gap-3; }
 .ceremony-actions { @apply mt-2.5 flex items-center justify-center gap-2 text-center text-[13px] font-semibold text-muted-foreground; }
 /* 名称 / 时间 / 次数都放大（用户 2026-10-12：「所有内容均放大」） */
 .ceremony-title { @apply truncate text-[19px] font-extrabold leading-6; }
@@ -633,6 +638,13 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 }
 @media (prefers-reduced-motion: reduce) {
   .ceremony-hero b { animation: none; }
+}
+/* 倒计时与信息之间的横线（用户 2026-10-13）：
+   1px、半透明、跟卡面字色同色系；上下留白由这里的 margin 控制，
+   信息块自己的 mt-3 让位（见 .ceremony-body）。 */
+.ceremony-divider {
+  @apply my-3 block h-px w-full shrink-0 border-0;
+  background: var(--ceremony-divider, rgba(255, 255, 255, .3));
 }
 /* 「快到了」/「已过」不再改底色（会盖掉卡面渐变），只加粗提示由字号承担 */
 .ceremony-days-soon { @apply tracking-tight; }

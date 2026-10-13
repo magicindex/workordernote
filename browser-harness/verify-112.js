@@ -450,6 +450,39 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
       check('仪式感卡片加高了（≥165px）', !!card && card.cardH >= 165, JSON.stringify(card));
       check('倒计时在标题**上方**（卡片最上面那块）',
         !!card && !card.missing && card.heroTop < card.titleTop, JSON.stringify(card));
+      // 用户 2026-10-13：「倒计时和下面信息中间用横线隔开」
+      const divider = await page.evaluate(() => {
+        const c = document.querySelector('[data-ceremony-card]');
+        if (!c) return null;
+        const hero = c.querySelector('[data-ceremony-countdown]');
+        const line = c.querySelector('[data-ceremony-divider]');
+        const body = c.querySelector('.ceremony-body');
+        if (!hero || !line || !body) return { missing: true };
+        const style = getComputedStyle(line);
+        const r = (el) => el.getBoundingClientRect();
+        return {
+          heroBottom: Math.round(r(hero).bottom),
+          lineTop: Math.round(r(line).top),
+          lineBottom: Math.round(r(line).bottom),
+          bodyTop: Math.round(r(body).top),
+          width: Math.round(r(line).width),
+          cardWidth: Math.round(r(c).width),
+          height: parseFloat(style.height),
+          color: style.backgroundColor,
+          // 横线要真的可见：不是 transparent、也不是整块实色
+          alpha: Number((/rgba?\([^)]*?([0-9.]+)\)$/.exec(style.backgroundColor) || [])[1] ?? 1),
+        };
+      });
+      check('倒计时与下方信息之间有横线（位置就在两者之间、横向铺满）',
+        !!divider && !divider.missing
+          && divider.lineTop >= divider.heroBottom - 1 && divider.lineBottom <= divider.bodyTop + 1
+          && divider.width >= divider.cardWidth * 0.8,
+        JSON.stringify(divider));
+      check('横线可见且是半透明的（细线、不是一块色块）',
+        !!divider && !divider.missing && divider.height > 0 && divider.width > 0
+          && /rgba|rgb/.test(divider.color) && divider.alpha > 0.05 && divider.alpha < 0.7,
+        JSON.stringify(divider));
+
       // 用户 2026-10-11 又说「倒计时还不够显眼，继续放大」：桌面 44px（手机 36px）
       check('倒计时放大醒目（大数字 ≥36px，比正文大一截）',
         !!card && !card.missing && card.bigFont >= 36 && card.bigFont > card.heroFont,
