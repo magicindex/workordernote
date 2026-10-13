@@ -340,6 +340,9 @@ function heroStyle(entry: { accent?: string; id: number }) {
     '--ceremony-flow-1': white ? '#a5b4fc' : '#4338ca',
     '--ceremony-flow-2': white ? '#d8b4fe' : '#7e22ce',
     '--ceremony-flow-3': white ? '#67e8f9' : '#0e7490',
+    // 数字描边（用户 2026-10-13：「背景暗时看不清，增加白边」）：
+    // 深色卡面（白字）描白边；浅色卡面（深字）描一层同族深边，边缘更清晰。
+    '--ceremony-stroke': white ? 'rgba(255, 255, 255, .92)' : 'rgba(15, 23, 42, .28)',
     // 倒计时与信息之间的分隔线：跟字色同色系的一条半透明细线
     '--ceremony-divider': white ? 'rgba(255, 255, 255, .30)' : 'rgba(15, 23, 42, .20)',
   }
@@ -690,12 +693,12 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 .ceremony-icon { background: var(--ceremony-chip, rgba(255,255,255,.18)); color: inherit; }
 /* 倒计时：大字 + 底色，放在卡片最上面 */
 /* 倒计时直接显示在大卡片里：没有自己的底色、圆角与边框（用户 2026-10-13 要求）。 */
-.ceremony-hero { @apply flex items-baseline justify-center gap-2 text-center text-[16px] font-extrabold leading-none; }
+.ceremony-hero { @apply flex items-baseline justify-center gap-2 text-center text-[18px] font-extrabold leading-none; }
 /* 数字「流光」：渐变字 + 背景位移动画，一道亮光从左到右扫过数字
    （和登录页/新建窗口的 .flow-frame 是同一套视觉语言）。
    prefers-reduced-motion 时停住动画、定在中点，只留静态的亮色数字。 */
 .ceremony-hero b {
-  @apply text-[36px] font-black leading-none tracking-tight sm:text-[44px];
+  @apply text-[44px] font-black leading-none tracking-tight sm:text-[52px];
   /* 彩色流光：靛蓝 → 紫 → 青 三段滚动（两端回到基色，整体色调仍贴着卡面字色） */
   background-image: linear-gradient(100deg,
     var(--ceremony-ink, #ffffff) 0%,
@@ -710,7 +713,14 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
+  /* 描边：-webkit-text-stroke 画在字形轮廓上，和渐变填充叠在一起 —— 深色卡面上
+     数字就有一圈亮白边（用户 2026-10-13：「背景暗时看不清，增加白边」）。
+     不支持这个属性的内核忽略它即可，不影响渐变字。 */
+  -webkit-text-stroke: 1.6px var(--ceremony-stroke, rgba(255, 255, 255, .9));
   animation: ceremony-countdown-flow 2.8s linear infinite;
+}
+@media (max-width: 640px) {
+  .ceremony-hero b { -webkit-text-stroke-width: 1.3px; }
 }
 /* 兜底：老内核不支持 background-clip:text 时字会整个透明、等于看不见 —— 退回静态字色 */
 @supports not ((background-clip: text) or (-webkit-background-clip: text)) {
