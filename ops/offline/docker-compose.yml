@@ -1,0 +1,35 @@
+# 工作序记（WorkOrderNote）离线部署用 compose 文件。
+#
+# 所有变量都由同目录的 .env 提供（install.sh 会生成/更新它）。
+# pull_policy: never 是离线部署的关键：即使本机没有该镜像，也**不要**去联网拉取，
+# 而是让安装脚本从包内 tar 加载，报错时提示清晰。
+services:
+  workordernote:
+    image: ${IMAGE:-workordernote:0.3.0}
+    pull_policy: never
+    container_name: ${CONTAINER_NAME:-workordernote}
+    labels:
+      # 挡住 watchtower：本项目用本地专有标签，绝不能被上游原版覆盖。
+      com.centurylinklabs.watchtower.enable: "false"
+      # 显示名（仓库名只能是 workordernote 小写形式，给人看的名字放标签里）。
+      org.opencontainers.image.title: "WorkOrderNote"
+    # 数据目录属主是谁就以谁的身份跑容器，避免「容器写不进 SQLite 且不报错」。
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      - "${PORT:-8906}:8906"
+    volumes:
+      - ${DATA_DIR:-./data}:/app/data
+      # 镜像已内置 tzdata，再挂本机 localtime 是双保险。
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - ENV=release
+      - DATA_DIR=/app/data
+      - TZ=${TZ:-Asia/Shanghai}
+    # 镜像默认 CMD 不带 -log-console，加上后 docker logs 才有内容可查。
+    command: ["-data-dir", "/app/data", "-web-dir", "./static/dist", "-log-console"]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

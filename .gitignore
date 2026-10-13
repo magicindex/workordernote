@@ -68,3 +68,8 @@ tmp/*
 
 # AI 工具本地目录
 .zcode/
+
+# 回归测试套件（browser-harness/）：依赖与截图不入库，跑之前 npm install
+browser-harness/node_modules/
+browser-harness/shots/
+browser-harness/*.log

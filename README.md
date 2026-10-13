@@ -113,6 +113,25 @@ docker compose logs -f          # 需要 -log-console（compose 示例里已带�
 
 ---
 
+## 回归测试与部署运维
+
+| 目录 | 说明 |
+| --- | --- |
+| `browser-harness/` | **浏览器回归套件**（39 个套件 / 1000+ 项断言）：登录、列表与日历、信用卡账单、记事本、仪式感卡片、通知弹窗、清单排序、免打扰与逾期提醒、卡片背景图、双机同步、离线包安装……跑之前先 `cd browser-harness && npm install`，用法见该目录的 `README.md` 与 `run-all.sh`。 |
+| `ops/` | **部署与发版**：201 / 200 两台飞牛的部署记录与逐版本变更、发版台账（`待发布改动.md`）、离线包打包脚本与模板、数据体检脚本。入口见 `ops/README.md`。 |
+
+常用的两条：
+
+```bash
+# 全量回归（默认打沙箱 8908；也可指向刚起好的临时容器）
+APP_URL=http://127.0.0.1:8908 bash browser-harness/run-all.sh
+
+# 打 Docker 离线一键安装包（默认读仓库 VERSION）
+bash ops/build-offline-package.sh
+```
+
+---
+
 ## 原项目信息
 
 | 项目 | 内容 |
