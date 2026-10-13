@@ -206,17 +206,10 @@ func init() {
 		Group:  "reminder", Label: "任务过期多久算逾期",
 		Description: "到期后多久开始标「已逾期」（默认 30 分钟；新建任务的默认时间是当前时刻，留一点宽限更自然）",
 	})
-	// 「新建提醒的默认结束时间」（默认 23:59）。它只负责**新建时的默认时刻**
-	// （见 HomeView.defaultQuickDue），不再参与逾期判定 —— 逾期判定搬到了下面的
-	// 个人偏好「逾期提醒时间」（用户 2026-10-12 要求把两件事拆开：
-	// 「新建结束时间默认 23:59」与「逾期提醒时间设 20:30」）。
-	RegisterConfig(ConfigDef{
-		Key: "task_expire_time", Scope: ScopeSystem, Type: TypeTime,
-		Default: "23:59",
-		Public:  true,
-		Group:   "reminder", Label: "新建提醒默认结束时间",
-		Description: "新建提醒时默认填的时刻（默认 23:59）；只影响新建的默认值，不参与逾期判定",
-	})
+	// 说明（2026-10-13）：原来这里有个「新建提醒默认结束时间」(task_expire_time)。
+	// 用户明确要求「今天/明天/本周末这些芯片的时间一律 23:59，除非自己手动改」，
+	// 所以默认时刻直接写死在前端（HomeView.DEFAULT_DUE_TIME），这个配置项删掉了。
+	// 留个记录：老库里可能还有 task_expire_time 那一行，没人读，无害。
 	RegisterConfig(ConfigDef{
 		Key: "theme_mode", Scope: ScopeUser, Type: TypeSelect,
 		Default: "system", Options: []string{"system", "light", "dark", "sun"},

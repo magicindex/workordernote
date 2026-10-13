@@ -85,12 +85,24 @@ func processJob(db *gorm.DB, candidate DeliveryJob) {
 		finishCancelled(db, job.ID, "REMINDER_CHANGED")
 		return
 	}
-	// 过期重复提醒的链条任务按“到期时间 + k×间隔”落在 DueAt 之后，属于预期；
-	// 其余 ScheduledFor 与 DueAt 不一致的任务都是过期 occurrence 的陈旧任务。
-	if !sameInstant(*item.DueAt, job.ScheduledFor) &&
+	// 两种「预期之内」的时刻：
+	//   · 不晚于结束时间 —— **首次提醒**（用户 2026-10-13：开始提醒时间那天先弹一次，
+	//     例如结束 23:59、开始提醒 06:00 → 06:00 就弹）以及稍后提醒；
+	//   · 晚于结束时间 —— 过期重复提醒的链条（到期时间 + k×间隔）。
+	// 其余（既晚于结束时间、又不在重复链上）才判成条目已改的陈旧任务。
+	if job.ScheduledFor.After(*item.DueAt) &&
 		!(item.RepeatNotifyMinutes > 0 && job.ScheduledFor.After(*item.DueAt)) {
 		finishCancelled(db, job.ID, "REMINDER_CHANGED")
 		return
+	}
+	if !sameInstant(*item.DueAt, job.ScheduledFor) && job.ScheduledFor.Before(*item.DueAt) {
+		// 早于结束时间：只可能是首次提醒（或稍后提醒），仍然有效 —— 但要是这条的
+		// 结束时间已经被改到比它更早，那它才是陈旧的。
+		stamp := effectiveStamp(item)
+		if stamp != nil && job.ScheduledFor.After(*stamp) {
+			finishCancelled(db, job.ID, "REMINDER_CHANGED")
+			return
+		}
 	}
 	var link ReminderChannel
 	if err := db.Where("reminder_id = ? AND user_id = ? AND channel = ? AND enabled = ?", item.ID, item.UserID, job.Channel, true).First(&link).Error; err != nil {

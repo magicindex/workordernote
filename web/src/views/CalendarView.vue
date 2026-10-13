@@ -458,12 +458,9 @@ const dayKey = (d: Date) => keyOf(d.getFullYear(), d.getMonth() + 1, d.getDate()
 const viewMode = ref<'month' | 'week'>('month')
 // 后台「周起始日」（系统配置，默认周一）：月历表头与周视图第一列都跟着它
 const weekStartPref = ref<'monday' | 'sunday'>('monday')
-// 「过期时间」（后台偏好 task_expire_time，默认 23:59）：日历里新建提醒的默认时分
-const expireTime = ref('23:59')
-const expireTimeParts = computed(() => {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(expireTime.value.trim())
-  return m ? { h: Number(m[1]), m: Number(m[2]) } : { h: 23, m: 59 }
-})
+// 日历里新建提醒的默认时分：**写死 23:59**（用户 2026-10-13：芯片/默认时间一律 23:59，
+// 除非手动改），不再跟后台配置联动。
+const expireTimeParts = computed(() => ({ h: 23, m: 59 }))
 const weekdays = computed(() => (weekStartPref.value === 'sunday'
   ? ['日', '一', '二', '三', '四', '五', '六']
   : ['一', '二', '三', '四', '五', '六', '日']))
@@ -562,8 +559,6 @@ async function loadWeekStart() {
     // /api/configs 会把用户作用域的键合并进来，历史上可能留下同名用户行）
     const res = await getPublicConfigs()
     const cfgAll = (res.data?.data || {}) as Record<string, unknown>
-    const expire = String(cfgAll.task_expire_time || '').trim()
-    if (/^\d{1,2}:\d{2}$/.test(expire)) expireTime.value = expire
     const v = String(cfgAll.calendar_week_start || '')
     if (v === 'sunday' || v === 'monday') {
       weekStartPref.value = v

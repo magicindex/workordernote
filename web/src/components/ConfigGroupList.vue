@@ -127,6 +127,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
+import { ACK_MINUTES_LABELS, NOTIFY_MINUTES_LABELS } from '../utils/reminder-options'
 import type { ConfigMeta } from '../api/config'
 
 interface RowState {
@@ -159,9 +160,10 @@ const selectOptionLabelMap: Record<string, Record<string, string>> = {
     dark: '深色',
     sun: '日出日落',
   },
-  // 提醒频率（分钟）→ 中文；0 单独说成「第二天」，避免用户以为是「立刻」
-  reminder_notify_minutes: { '5': '每 5 分钟', '10': '每 10 分钟', '15': '每 15 分钟', '30': '每 30 分钟', '60': '每小时' },
-  reminder_ack_minutes: { '0': '第二天（当天不再提示）', '30': '30 分钟后', '60': '1 小时后', '120': '2 小时后', '240': '4 小时后' },
+  // 提醒频率 / 「知道了」后的提醒频率：文案在 utils/reminder-options.ts（弹窗按钮也读同一份，
+  // 用户 2026-10-13 要求「显示保持与后台一致」）
+  reminder_notify_minutes: NOTIFY_MINUTES_LABELS,
+  reminder_ack_minutes: ACK_MINUTES_LABELS,
   // 城市 id 与 web/src/utils/sun.ts 的 SUN_CITIES 一一对应，改一处要改两处。
   sun_location: {
     beijing: '北京', shanghai: '上海', tianjin: '天津', chongqing: '重庆',

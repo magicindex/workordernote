@@ -517,6 +517,7 @@ import {
 } from '../api/reminder'
 import { getAllConfigs, getVersion } from '../api/config'
 import { connectReminderEvents, type RealtimeNotification, type ReminderRealtimeEvent } from '../services/reminderRealtime'
+import { ackMinutesLabel } from '../utils/reminder-options'
 import { LIST_COLOR_NAMES, listColorHex, listColorLabel } from '../utils/list-colors'
 import { onFnOSGatewayOrigin } from '../utils/gateway'
 
@@ -985,9 +986,10 @@ const ackMinutes = computed(() => authStore.reminderAckMinutes || 0)
 // 点『知道了』它就出了逾期」——只写「知道了」让人以为是关掉提示，实际上是把提醒
 // 顺延（默认第二天），逾期分组也跟着变了。文案按偏好的「知道了后提醒频率」走：
 // 0 = 明年同一时间（写「延期明天提醒」），否则写实际分钟数，别写死。
-const ackLabel = computed(() => (ackMinutes.value > 0
-  ? `知道了（${ackMinutes.value} 分钟后再提醒）`
-  : '知道了（任务延期明天提醒）'))
+// 按钮文案 = 后台偏好「点『知道了』后的提醒频率」的**选项文案**（用户 2026-10-13 要求
+// 「内容等于后台偏好…显示保持与后台一致」）：后台选「1 小时后」，按钮就是
+// 「知道了（1 小时后）」；选「第二天（当天不再提示）」，按钮就是同一句话。
+const ackLabel = computed(() => `知道了（${ackMinutesLabel(ackMinutes.value)}）`)
 const ackHint = computed(() => (ackMinutes.value > 0
   ? `要完成请到列表里勾选；${ackMinutes.value} 分钟后会再提醒一次`
   : '要完成请到列表里勾选；今天不再提示，明天同一时间继续提醒'))

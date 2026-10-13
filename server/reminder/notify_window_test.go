@@ -130,3 +130,59 @@ func TestNotifyOverdueOncePerDay(t *testing.T) {
 		t.Fatalf("静默结束后应补发 1 条逾期提醒，实际 %d", got)
 	}
 }
+
+// 第一次提醒时刻（用户 2026-10-13：「开始提醒时间」＝当天第一次提醒弹窗）：
+// 取「结束时间」与「生效日当天的开始提醒时间」里更早的那个。
+func TestFirstRemindAt(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const userID = 351
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	due := time.Date(2026, 10, 20, 23, 59, 0, 0, loc) // 结束时间 23:59
+	item := Reminder{UserID: userID, ListID: 1, Title: "第一次提醒", DueAt: &due, RepeatRule: "none"}
+	if err := appDB.Create(&item).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// 开始提醒时间 06:00 → 当天 06:00 就先弹
+	setUserConfig(t, "reminder_all_day_time", "06:00", userID)
+	got := firstRemindAt(appDB, item).In(loc)
+	want := time.Date(2026, 10, 20, 6, 0, 0, 0, loc)
+	if !got.Equal(want) {
+		t.Fatalf("开始提醒 06:00 时首次提醒应是当天 06:00，实际 %s", got.Format(time.RFC3339))
+	}
+
+	// 开始提醒时间 00:00 = 不提前 → 就是结束时间
+	setUserConfig(t, "reminder_all_day_time", "00:00", userID)
+	if got := firstRemindAt(appDB, item).In(loc); !got.Equal(due) {
+		t.Fatalf("开始提醒 00:00 时首次提醒应等于结束时间，实际 %s", got.Format(time.RFC3339))
+	}
+
+	// 结束时间本来就早于开始提醒时间（凌晨 05:00 到期）→ 还是到点弹
+	early := time.Date(2026, 10, 20, 5, 0, 0, 0, loc)
+	earlyItem := Reminder{UserID: userID, ListID: 1, Title: "凌晨到期", DueAt: &early, RepeatRule: "none"}
+	if err := appDB.Create(&earlyItem).Error; err != nil {
+		t.Fatal(err)
+	}
+	setUserConfig(t, "reminder_all_day_time", "06:00", userID)
+	if got := firstRemindAt(appDB, earlyItem).In(loc); !got.Equal(early) {
+		t.Fatalf("结束时间早于开始提醒时间时应按结束时间，实际 %s", got.Format(time.RFC3339))
+	}
+
+	// 建出的投递任务用的是这个时刻（而不是结束时间）
+	setUserConfig(t, "reminder_all_day_time", "06:00", userID)
+	created, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "排程检查", Kind: KindTask, DueAt: &due, RepeatRule: "none", Channels: []string{"inapp"},
+	})
+	if err != nil {
+		t.Fatalf("建提醒失败：%v", err)
+	}
+	var job DeliveryJob
+	if err := appDB.Where("reminder_id = ?", created.ID).Order("id ASC").First(&job).Error; err != nil {
+		t.Fatalf("没排到投递任务：%v", err)
+	}
+	if got := job.ScheduledFor.In(loc).Format("2006-01-02 15:04"); got != "2026-10-20 06:00" {
+		t.Fatalf("投递任务应排在当天 06:00，实际 %s", got)
+	}
+}

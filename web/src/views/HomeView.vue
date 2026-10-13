@@ -217,6 +217,12 @@
                   data-quick-date
                   @click="quickDateOpen = !quickDateOpen"
                 >{{ quick.due_at ? formatFullDue(quick.due_at) : '选择日期' }}</button>
+                <!-- 剩余时间：实时显示「剩余 时:分」（用户 2026-10-13 要求） -->
+                <span
+                  v-if="quickRemaining"
+                  class="quick-chip !cursor-default !border-transparent !bg-muted/40 !text-muted-foreground"
+                  data-quick-remaining
+                >{{ quickRemaining }}</span>
                 <button
                   v-if="quick.due_at"
                   type="button"
@@ -738,24 +744,22 @@ const editorOpen = ref(false)
 const clockNow = ref(Date.now())
 const toast = reactive<{ message: string; type: 'success' | 'error' }>({ message: '', type: 'success' })
 
-// 新建提醒的默认时间 = **当天的「新建提醒默认结束时间」**（系统配置 `task_expire_time`，默认 23:59）。
+// 新建提醒的默认结束时间：**写死 23:59**。
 //
-// 历史：0.16.5 曾按用户要求改成「当前时刻」；2026-10-10 用户又要求后台加这个设置，
-// 并明确「新建预填这个时间」——所以默认是当天 23:59（跟着偏好走）。
-//
-// 2026-10-12 起它**只管新建的默认值**：「逾期」判定搬到了个人偏好「逾期提醒时间」
-// （task_overdue_time，见下面的 overdueTimeParts）——用户要的是「新建默认 23:59」
-// 与「逾期时间 20:30」两件事互不影响。
+// 用户 2026-10-13 明确：「今天 / 明天 / 本周末这些芯片的时间一律 23:59，除非自己手动
+// 自定义设定结束时间，否则不做改变」——所以不再跟任何后台设置联动（原来跟着
+// task_expire_time 走，顺手把那个配置项删掉了，见 server/sysconfig/registry.go）。
+// 逾期判定看的是个人偏好「逾期提醒时间」（task_overdue_time，见 overdueTimeParts），
+// 与这里的默认时刻互不影响。
+const DEFAULT_DUE_TIME = '23:59'
 function defaultQuickDue(): string {
   const d = new Date()
-  d.setHours(defaultDueParts.value.h, defaultDueParts.value.m, 0, 0)
+  const { h, m } = clockParts(DEFAULT_DUE_TIME)
+  d.setHours(h, m, 0, 0)
   return toLocalIso(d)
 }
 // 「任务过期多久算逾期」按**分钟**存，前端从公开配置读（系统级设置，公开接口里的就是权威值）。
 const overdueGraceMinutes = ref(30)
-// 「新建提醒默认结束时间」（HH:MM，默认 23:59）：只用于新建时的预填。
-const defaultDueTime = ref('23:59')
-const defaultDueParts = computed(() => clockParts(defaultDueTime.value))
 // 「逾期提醒时间」（个人偏好 task_overdue_time，默认 23:59）：**到期日当天过了这个点
 // 就算逾期**，与任务写了几点无关（写 00:00 表示按到期时刻算、不按天顺延）。
 const overdueTimeParts = computed(() => clockParts(authStore.reminderOverdueTime))
@@ -767,6 +771,27 @@ function clockParts(value: string): { h: number; m: number } {
   if (h < 0 || h > 23 || m < 0 || m > 59) return { h: 23, m: 59 }
   return { h, m }
 }
+/**
+ * 快速新建里的「剩余时间」：距离所选结束时间还有多久（用户 2026-10-13 要求
+ * 「新建提醒 增加剩余时间（实时显示时：分）」）。
+ *
+ * 分钟级实时（页面本来就有 clockNow 每分钟跳一次）。超过一天就先写天数，
+ * 后面仍是「时:分」——用户要的时:分不被天数吃掉。
+ */
+const quickRemaining = computed(() => {
+  if (!quick.due_at) return ''
+  const target = new Date(quick.due_at).getTime()
+  if (Number.isNaN(target)) return ''
+  const diff = target - clockNow.value
+  const total = Math.abs(diff)
+  const days = Math.floor(total / 86400000)
+  const hours = Math.floor((total % 86400000) / 3600000)
+  const minutes = Math.floor((total % 3600000) / 60000)
+  const hm = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+  const body = days > 0 ? `${days} 天 ${hm}` : hm
+  return diff < 0 ? `已过 ${body}` : `剩余 ${body}`
+})
+
 const blankInput = (): SaveReminderInput => ({
   title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: defaultQuickDue(),
   start_at: null, end_at: null,
@@ -1337,9 +1362,11 @@ function setPreset(kind: string) {
   quickDueCleared.value = false
   const d = new Date()
   d.setSeconds(0, 0)
-  if (kind === 'today') d.setHours(20, 0)
-  if (kind === 'tomorrow') { d.setDate(d.getDate() + 1); d.setHours(9, 0) }
-  if (kind === 'weekend') { const add = (6 - d.getDay() + 7) % 7 || 7; d.setDate(d.getDate() + add); d.setHours(9, 0) }
+  if (kind === 'tomorrow') d.setDate(d.getDate() + 1)
+  if (kind === 'weekend') { const add = (6 - d.getDay() + 7) % 7 || 7; d.setDate(d.getDate() + add) }
+  // 所有芯片的时间一律 23:59（用户 2026-10-13；原来今天＝20:00、明天/本周末＝09:00）
+  const { h, m } = clockParts(DEFAULT_DUE_TIME)
+  d.setHours(h, m, 0, 0)
   quick.due_at = toLocalIso(d)
 }
 /** 明确「这条不要日期」。只有这里会把日期清空，并且立刻给出可见提示。 */
@@ -1617,8 +1644,7 @@ async function loadOverdueGrace() {
     const cfg = (res.data?.data || {}) as Record<string, unknown>
     const v = Number(cfg.task_overdue_after_minutes)
     if (Number.isFinite(v) && v >= 0) overdueGraceMinutes.value = v
-    const t = String(cfg.task_expire_time || '').trim()
-    if (/^\d{1,2}:\d{2}$/.test(t)) defaultDueTime.value = t
+    // 默认结束时间已经写死 23:59（DEFAULT_DUE_TIME），不再读配置
   } catch { /* 拿不到就按默认 30 分钟 / 23:59 */ }
 }
 onMounted(() => {

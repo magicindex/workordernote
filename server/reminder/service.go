@@ -472,13 +472,24 @@ func rebuildJobs(tx *gorm.DB, reminder Reminder, channels []string) error {
 	}
 	// Keep all delivery timestamps in UTC. This matters for SQLite because the
 	// scheduler's timestamp predicate compares the stored values as text.
-	scheduledFor := reminder.DueAt.UTC()
+	//
+	// 首次提醒时刻（用户 2026-10-13 要求）：**「开始提醒时间」= 当天第一次弹窗**。
+	// 取「结束时间」与「到期日当天的开始提醒时间」里更早的那个 —— 例如结束时间
+	// 23:59、开始提醒时间 06:00，那么到期那天 06:00 就会先弹一次，之后按
+	// 「提醒频率」重复（见 scheduleRepeatNotify），过了「逾期提醒时间」再标逾期。
+	// 已经过了那个点（比如下午才建今天的任务）就按「现在」排，下一轮调度就弹。
+	scheduledFor := firstRemindAt(tx, reminder)
+	if scheduledFor.IsZero() {
+		scheduledFor = reminder.DueAt.UTC()
+	}
+	// 注意：**不把过去时刻夹到「现在」** —— 调度器本来就会捞 run_at <= now 的任务，
+	// 夹一下反而会让投递任务的时间戳与「首次提醒时刻」对不上（用例与排查都靠它）。
 	runAt := scheduledFor
 	if reminder.SnoozedUntil != nil {
 		runAt = reminder.SnoozedUntil.UTC()
 	}
 	for _, ch := range channels {
-		raw := fmt.Sprintf("%d|%s|%s|%d", reminder.ID, reminder.DueAt.UTC().Format(time.RFC3339Nano), ch, reminder.Version)
+		raw := fmt.Sprintf("%d|%s|%s|%d", reminder.ID, scheduledFor.Format(time.RFC3339Nano), ch, reminder.Version)
 		sum := sha256.Sum256([]byte(raw))
 		job := DeliveryJob{
 			UserID: reminder.UserID, ReminderID: reminder.ID, Channel: ch,

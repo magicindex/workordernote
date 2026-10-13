@@ -106,22 +106,20 @@ func init() {
 
 	sysconfig.RegisterConfig(sysconfig.ConfigDef{
 		Key: "reminder_default_channels", Scope: sysconfig.ScopeUser, Type: sysconfig.TypeString,
-		Default: "inapp", Group: "notification", Label: "默认提醒渠道",
+		Default: "inapp", Group: "reminder", Label: "默认提醒渠道",
 		Description: "新提醒默认使用的渠道，多个渠道以英文逗号分隔",
 	})
-	// 「开始提醒时间」（用户 2026-10-12 要求）：**每天这个时间之前不发任何提醒**，
-	// 类似手机的免打扰 —— 0:00 起静默，到这个点之后才把到点的提醒依次通知出去
-	// （到点的、全天的、逾期的都算，见 dispatcher.go 的 inQuietHours）。
+	// 「开始提醒时间」（用户 2026-10-12 起用、2026-10-13 明确）：**当天第一次提醒弹窗的时间**
+	// —— 到期日当天的任务，从这个点就开始提醒（取「结束时间」与「当天这个点」里更早的
+	// 那个，见 notify_window.go 的 firstRemindAt），之后按「提醒频率」重复；
+	// 同时它也是每天的免打扰边界：0:00–这个点之间不发任何提醒（dispatcher.go 的 inQuietHours）。
 	//
-	// 这个键以前叫「全天提醒时间」：注册了但代码里从没读过，是个死配置。语义按用户
-	// 要求改成「开始提醒时间」，**键名保留**（改键名要迁移，不值当）。
-	//
-	// **默认 00:00 = 不静默**（老用户 / 没设置过的安装行为完全不变）；用户自己在
-	// 偏好设置里填了 06:00 之类才生效（他这台机器上库里已有 08:00）。
+	// 这个键以前叫「全天提醒时间」：注册了但代码里从没读过，是个死配置。**键名保留**
+	// （改键名要迁移，不值当）。**默认 00:00 = 不提前也不静默**（没设置过的安装行为不变）。
 	sysconfig.RegisterConfig(sysconfig.ConfigDef{
 		Key: "reminder_all_day_time", Scope: sysconfig.ScopeUser, Type: sysconfig.TypeTime,
-		Default: "00:00", Group: "notification", Label: "开始提醒时间",
-		Description: "每天这个时间之前不提醒（相当于免打扰）；00:00 = 不静默。到点后按各自的提醒时间依次通知",
+		Default: "00:00", Group: "reminder", Label: "开始提醒时间",
+		Description: "当天第一次提醒的时间：到期日当天到这个点就先提醒一次（之后按提醒频率重复）；这个点之前不提醒",
 	})
 
 	apps.Register(apps.App{

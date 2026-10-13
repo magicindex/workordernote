@@ -81,6 +81,48 @@ func quietStart(db *gorm.DB, userID uint) string {
 	return start
 }
 
+// effectiveStamp 是条目「生效时间」的原始值：稍后提醒 > 时间段结束 > 时间段开始 > 到期时间。
+// 与列表/日历口径一致（见 handlers.go 的 effectiveDue）。
+func effectiveStamp(item Reminder) *time.Time {
+	for _, stamp := range []*time.Time{item.SnoozedUntil, item.EndAt, item.StartAt, item.DueAt} {
+		if stamp != nil {
+			return stamp
+		}
+	}
+	return nil
+}
+
+// firstRemindAt 算「这一条的**第一次提醒时刻**」（用户 2026-10-13 明确：
+// 「开始提醒时间」＝当天第一次提醒弹窗的时间，从早上就开始提醒）。
+//
+// 取「生效时间」与「生效日当天的开始提醒时间」里**更早**的那个：
+// 例如结束时间 23:59、开始提醒时间 06:00 → 到期那天 06:00 就先弹一次；
+// 结束时间本来就早于开始提醒时间（比如凌晨 05:00 到期）→ 还是到点弹。
+// 之后的重复由 scheduleRepeatNotify 按「提醒频率」接着排；逾期判定不受影响。
+//
+// 返回零值表示这条没有时间（不该排提醒）。
+func firstRemindAt(db *gorm.DB, item Reminder) time.Time {
+	stamp := effectiveStamp(item)
+	if stamp == nil {
+		return time.Time{}
+	}
+	start := quietStart(db, item.UserID)
+	// 00:00 = 不提前提醒（与「不静默」同一个约定）：首次提醒就是结束时间本身。
+	if start == "00:00" {
+		return stamp.UTC()
+	}
+	h, m, ok := clockParts(start)
+	if !ok {
+		return stamp.UTC()
+	}
+	local := stamp.In(shanghai())
+	dayStart := time.Date(local.Year(), local.Month(), local.Day(), h, m, 0, 0, shanghai())
+	if dayStart.Before(*stamp) {
+		return dayStart.UTC()
+	}
+	return stamp.UTC()
+}
+
 // inQuietHours 判断此刻是否在「开始提醒时间」之前的静默窗口里：每天 [00:00, start)。
 //
 // start 写成 00:00 时不静默（否则一整天都不提醒，等于把功能关掉，不是用户的本意）。
