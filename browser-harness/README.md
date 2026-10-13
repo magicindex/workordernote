@@ -824,3 +824,15 @@ resetOverduePolicyCache()                    // 进程内 2 秒缓存也要清
   （更粗，深色卡面=白边）。量样式要用 `getComputedStyle(b, '::before')`；**「就是今天」
   那张卡片的 `<b>` 里是文字、没有 `data-count`**，外圈 content 会是空串 —— 要取
   `b[data-count]` 去断言（`verify-112` 本轮先假红过一次）。
+
+## 清理容器只按名字删（2026-10-13 血的教训）
+
+发版收尾清理临时容器时，我用 `docker rm -f $(docker ps -q --filter ancestor=alpine:latest)`
+「顺手」删掉 skopeo 用的 alpine 容器 —— **`--filter ancestor=` 会匹配派生镜像**，
+而本项目的 `workordernote` 就是 `FROM alpine:latest`，结果把**201 生产 8906 与沙箱 8908
+两个容器一起删了**（数据目录没动，所以只丢了容器、没丢数据；已用 compose 与原来的
+`docker run` 参数原样恢复并逐项核对指纹一致）。
+
+- ✅ 只删自己启动的那个：`docker rm -f wsn-iter`（按名字），或者启动时把 ID 记下来。
+- ❌ 不要用 `--filter ancestor=<基础镜像>` 批量删：它匹配的是**整棵镜像树**。
+- ❌ 也不要用 `pkill -f <模式>`（README 另一处写过：它会先杀掉自己）。

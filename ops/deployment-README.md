@@ -274,11 +274,27 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   （= Gitea Release 附件）、`pkg/WorkOrderNote-0.24.0-offline-amd64.tar.gz` md5
 >   `4e52c5282c30b6f1738f1424a804b12a`、tar sha256 `e79d5fb4d4a3c53fbdc4aac74194b35a0b1e88abf1b082adcd1f77464d1dbbc8`；
 >   200 是通过 `docker load` 加载（镜像 ID 同为 `sha256:acec90fcadc3…`）。
-> - 构件同步进 Gitea：Release `v0.24.0`（附镜像与离线包）与容器仓库
->   `192.168.3.200:3000/cyberzero/workordernote:0.24.0`。
+> - 构件同步进 Gitea：Release `v0.24.0`（附镜像与离线包，tag 指向 `04cb90d`）与容器仓库
+>   `192.168.3.200:3000/cyberzero/workordernote:0.24.0`（manifest digest
+>   `sha256:14e15022df3ac48da44d4a2689f1c6eda9ad9b2cf5951980119c5509496775b7`；回读 pull
+>   回来的镜像 ID 同为 `sha256:acec90fcadc3…`）。
+>   **推镜像的方式换了**：原来用的「alpine 里 `apk add skopeo` + skopeo copy」这轮卡住
+>   （apk 拉依赖太慢，10 分钟没动静），改成 `docker login 192.168.3.200:3000` 后直接
+>   `docker push`（本机 daemon 早就把 `192.168.3.200:3000` 当 insecure registry）——
+>   第一次直接 push 报 `unauthorized: reqPackageAccess`，**先 login 就正常了**。
 > - **一条仓库侧的坑**：`reminders-upstream/ops/offline/` 少了 `.env.example`（镜像进仓库时漏了
 >   隐藏文件），在仓库里直接跑 `ops/build-offline-package.sh` 会在第 2 步报 `cp: cannot stat`。
 >   已把文件补进仓库；本轮实际用的是 `reminders-deploy/build-offline-package.sh`（模板完整）。
+> - **一条流程自省（我的失误，已恢复）**：收尾清理 skopeo 临时容器时我图省事写了
+>   `docker rm -f $(docker ps -q --filter ancestor=alpine:latest)` —— `ancestor` 过滤器会匹配
+>   **从这个镜像派生出来的所有镜像**，而 `workordernote` 正是 `FROM alpine:latest`，于是
+>   **201 生产 8906 与沙箱 8908 两个容器被一起删掉了**（数据目录没动，所以没丢数据）。
+>   发现后立刻用 compose（`/vol1/1000/Docker/reminders/docker-compose.yml`）与原来的
+>   `docker run` 参数把两个容器原样恢复：镜像、端口、`user 1000:1001`、restart 策略、
+>   volume、watchtower 标签逐项核对，健康检查通过，**201 == 200 指纹与删之前完全一致**
+>   （清单 `edffe23d32`、卡片 `50c58560da`、提醒 `709adfca07`、完成 `cb31f20787`；5/9/61/23/5）。
+>   规矩：**清理容器只按名字或自己启动时记下的 ID 来删**（`docker rm -f wsn-iter`），
+>   永远不要用 `--filter ancestor=` 去批量删。
 
 ### 2026-10-13：0.23.4（201 生产 / 200 生产 / 沙箱 8908 上线）—— 编辑提醒弹窗同一行右侧加删除按钮（带确认）；删除只对创建者有效
 
