@@ -72,6 +72,11 @@ docker run --rm -v "$PWD/pkg/WorkOrderNote-$VERSION-offline/image":/src:ro alpin
     docker://192.168.3.200:3000/cyberzero/workordernote:$VERSION"
 ```
 
+本仓库的默认远端就是 Gitea（`origin`），上游 GitHub 是 `upstream`；本机已用 Gitea 访问令牌
+（`workordernote-push`，只有仓库读写权限）配好免密，`git fetch/push` 不用输密码。
+镜像仓库是 **HTTP**，本机已把 `192.168.3.200:3000` 写进 docker 的 `insecure-registries`，
+可以直接 `docker pull 192.168.3.200:3000/cyberzero/workordernote:<版本>`。
+
 推完可以回读校验：`skopeo inspect --tls-verify=false --creds ... docker://192.168.3.200:3000/cyberzero/workordernote:$VERSION`。
 本机要直接 `docker pull` 这个仓库，得先把 `192.168.3.200:3000` 加进 daemon 的 `insecure-registries`（HTTP）。
 

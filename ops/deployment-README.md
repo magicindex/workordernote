@@ -281,9 +281,16 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >     （离线包，44MB）、`SHA256SUMS-0.23.0.txt`；
 >   · **容器仓库** `192.168.3.200:3000/cyberzero/workordernote:0.23.0`（skopeo 直推，回读校验
 >     digest `sha256:a01ffb2d6e9b…`，labels 里 version `0.23.0` / revision `fa4543b`）。
->     ⚠️ 本机 docker 要直接 `docker pull` 这个 HTTP 仓库，需要把 `192.168.3.200:3000` 加进
->     `/etc/docker/daemon.json` 的 `insecure-registries` 并重启 dockerd（`live-restore` 开着，
->     现有容器不会重启）—— 这一步要用户点头才做，见待办。
+>     本机 docker 已经能直接拉：`192.168.3.200:3000` 已加进 `/etc/docker/daemon.json` 的
+>     `insecure-registries`（备份 `daemon.json.bak-20261013-104051`），重启 dockerd 后**现有 72 个
+>     容器一个没重启**（`live-restore` 生效），`docker pull 192.168.3.200:3000/cyberzero/workordernote:0.23.0`
+>     实测成功（digest `sha256:a01ffb2d6e9b…`）。注意：飞牛 Docker 应用以后若重写 daemon.json，
+>     这一项要再加一次。
+> - **Git 默认远端已切到 Gitea**：`origin` = Gitea（`remote.pushDefault=origin`），上游 GitHub 改名
+>   `upstream`；工作分支从 `feat-note` 改回 `main` 并跟踪 `origin/main`（旧的浅克隆 main 留作
+>   `main-github-shallow`）。免密走 **Gitea 访问令牌**（`workordernote-push`，仅仓库读写权限，
+>   存在本机 `~/.git-credentials`，600）：`git fetch/push` 已实测不需要密码；
+>   令牌随时可在 Gitea「设置 → 应用」里删除。
 
 ### 2026-10-13：0.22.0（201 生产 / 200 生产 / 沙箱 8908 上线）—— 清单页排序；开始提醒时间（免打扰）+ 逾期提醒时间；仪式感卡片颜色统一 + 背景图；别处确认过的通知不再重复显示
 
