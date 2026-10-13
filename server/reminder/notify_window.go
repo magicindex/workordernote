@@ -123,6 +123,40 @@ func firstRemindAt(db *gorm.DB, item Reminder) time.Time {
 	return stamp.UTC()
 }
 
+// firstRemindDelay 是「新建之后至少隔多久才第一次提醒」（用户 2026-10-13 要求
+// 「新建提醒，10分钟以后开始第一次提醒」）。刚建完立刻弹窗，用户还没离开编辑页面、
+// 也没来得及看内容，既烦又容易误点「知道了」。
+const firstRemindDelay = 10 * time.Minute
+
+// firstRemindSchedule 返回这条提醒**当前应有的首次提醒时刻**，是调度与「这条投递任务
+// 还算不算数」两处共用的唯一口径（不一致就会出现「刚排好就被当成陈旧任务丢掉」）：
+//
+//	firstRemindAt（结束时间 / 当天开始提醒时间里更早的那个，见上）
+//	→ 不早于「创建时间 + 10 分钟」（新建后先给人 10 分钟）
+//	→ 不晚于结束时间（结束时间还在未来时把 10 分钟那条夹回来；已经过期的保持
+//	  10 分钟，让「新建后不再立刻弹」这条优先）
+func firstRemindSchedule(db *gorm.DB, item Reminder) time.Time {
+	scheduled := firstRemindAt(db, item)
+	if scheduled.IsZero() {
+		return time.Time{}
+	}
+	// 「稍后提醒」是用户**明确点出来的时刻**（UI 只会给未来时间），不吃这 10 分钟 ——
+	// 手点的几点就是几点，不能被悄悄推后。
+	if item.SnoozedUntil == nil {
+		if earliest := item.CreatedAt.Add(firstRemindDelay); scheduled.Before(earliest) {
+			scheduled = earliest.UTC()
+		}
+	}
+	// 结束时间还没到、却被 10 分钟这条顶到了结束时间之后 → 夹回结束时间本身
+	// （例如 15:25 建一条 15:30 到期的：10 分钟后是 15:35，就该在 15:30 提醒）。
+	// 结束时间**已经过去**时不夹（那种条目按 10 分钟这条走：不再立刻弹，见用例 ③）。
+	if item.SnoozedUntil == nil && item.DueAt != nil &&
+		scheduled.After(item.DueAt.UTC()) && item.DueAt.After(time.Now()) {
+		scheduled = item.DueAt.UTC()
+	}
+	return scheduled
+}
+
 // inQuietHours 判断此刻是否在「开始提醒时间」之前的静默窗口里：每天 [00:00, start)。
 //
 // start 写成 00:00 时不静默（否则一整天都不提醒，等于把功能关掉，不是用户的本意）。

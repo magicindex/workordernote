@@ -127,6 +127,10 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     const ackId = due.body?.data?.id ?? null;
     if (ackId) created.push(ackId);
     check('造一条到点提醒（用于验证弹窗文案）', !!ackId);
+    // 0.24.0 起「新建之后至少 10 分钟才第一次提醒」（见服务端 firstRemindSchedule）：
+    // 这条用例考的是站内通知与跨设备确认，不是新建口径，所以「稍后提醒」到 3 秒后
+    // —— 稍后提醒是用户明确点的时刻，不吃那 10 分钟。
+    if (ackId) await api(page, `/api/reminder/items/${ackId}/snooze`, 'POST', { until: new Date(Date.now() + 3000).toISOString() });
 
     let buttonText = '';
     for (let i = 0; i < 7 && !buttonText; i += 1) {

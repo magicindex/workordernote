@@ -123,6 +123,10 @@ const notificationsFor = async (page, reminderID, type) => {
       const quietID = madeQuiet.body?.data?.id ?? null;
       if (quietID) created.push(quietID);
       check('造一条刚过期的提醒（用于验证静默）', !!quietID);
+      // 0.24.0 起「新建之后至少 10 分钟才第一次提醒」（用户 2026-10-13，见服务端
+      // firstRemindSchedule）：下面这几条用例考的是站内通知/弹窗本身，不是新建口径，
+      // 所以把这条「稍后提醒」到 3 秒后 —— 稍后提醒是用户明确点的时刻，不吃那 10 分钟。
+      if (quietID) await api(page, `/api/reminder/items/${quietID}/snooze`, 'POST', { until: new Date(Date.now() + 3000).toISOString() });
       await sleep(80_000);
       const quietNotes = quietID ? await notificationsFor(page, quietID) : [];
       check(`静默窗口里不发提醒（等了 80 秒，通知数 ${quietNotes.length}）`,

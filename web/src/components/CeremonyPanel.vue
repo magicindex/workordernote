@@ -60,9 +60,9 @@
           :data-ceremony-accent="entry.accent || 'default'"
         >
           <template v-if="entry.days === 0">就是<b>今天</b></template>
-          <template v-else-if="entry.days === 1">还有 <b>1</b> 天</template>
-          <template v-else-if="entry.days > 1">还有 <b>{{ entry.days }}</b> 天</template>
-          <template v-else>已过 <b>{{ -entry.days }}</b> 天</template>
+          <template v-else-if="entry.days === 1">还有 <b data-count="1">1</b> 天</template>
+          <template v-else-if="entry.days > 1">还有 <b :data-count="entry.days">{{ entry.days }}</b> 天</template>
+          <template v-else>已过 <b :data-count="-entry.days">{{ -entry.days }}</b> 天</template>
         </div>
         <!-- 倒计时与下方信息之间的分隔线（用户 2026-10-13 要求）：
              半透明、跟卡面字色同色系 —— 深色卡面是白线，浅色卡面是深线。 -->
@@ -78,8 +78,9 @@
               <span v-if="entry.lunar" class="tiny-badge ml-1">农历</span>
               <span v-if="entry.repeatLabel" class="tiny-badge ml-1">{{ entry.repeatLabel }}</span>
             </p>
-            <p v-if="entry.cycle > 0 || entry.notes" class="ceremony-extra">
-              <span v-if="entry.cycle > 0" class="tiny-badge" :data-ceremony-cycle="entry.id">第 {{ entry.cycle }} 次</span>
+            <p v-if="entry.passLabel || entry.cycle > 0 || entry.notes" class="ceremony-extra">
+              <span v-if="entry.passLabel" class="tiny-badge" :data-ceremony-cycle="entry.id" data-ceremony-pass>{{ entry.passLabel }}</span>
+              <span v-else-if="entry.cycle > 0" class="tiny-badge" :data-ceremony-cycle="entry.id">第 {{ entry.cycle }} 次</span>
               <span v-if="entry.notes" class="truncate">{{ entry.notes }}</span>
             </p>
           </div>
@@ -127,7 +128,7 @@
           <input v-model="form.title" class="compact-input mt-1" maxlength="100" data-ceremony-form-title placeholder="例如：妈妈生日" />
         </label>
         <div class="field-label relative">
-          日期
+          {{ form.dateField }}
           <button ref="dateAnchor" type="button" class="compact-input mt-1 flex h-9 w-full items-center justify-between px-3 text-left text-xs" data-ceremony-form-date @click="dateOpen = !dateOpen">
             <span>{{ form.dueAt ? formatFull(form.dueAt) : '选择日期' }}</span>
             <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-muted-foreground" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2" stroke-width="1.8"/><path d="M8 3v4m8-4v4M3 10h18" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -312,6 +313,10 @@ const removeTarget = ref<ReminderItem | null>(null)
 const form = reactive({
   title: '', dueAt: '' as string, repeat: 'yearly', calendar: 'solar', accent: '', background: '',
   bgBlur: 0, bgMask: 45, // 背景蒙板：虚化像素 / 透明度百分比（见 server/reminder/models.go）
+  // 日期这一栏的标题：生日模板写「出生年月日」、纪念日写「结婚年月日」，
+  // 其余（含「新建事项」）还是「日期」——用户 2026-10-13：「选择生日模板日期模板
+  // 改成 出生年月日会不会更好理解」。
+  dateField: '日期',
 })
 const uploadingBackground = ref(false)
 // 图片加载失败的卡片（对端没有这个上传文件时）：这张卡回落到配色渐变，不显示破图
@@ -340,9 +345,13 @@ function heroStyle(entry: { accent?: string; id: number }) {
     '--ceremony-flow-1': white ? '#a5b4fc' : '#4338ca',
     '--ceremony-flow-2': white ? '#d8b4fe' : '#7e22ce',
     '--ceremony-flow-3': white ? '#67e8f9' : '#0e7490',
-    // 数字描边（用户 2026-10-13：「背景暗时看不清，增加白边」）：
-    // 深色卡面（白字）描白边；浅色卡面（深字）描一层同族深边，边缘更清晰。
+    // 数字描边（两层，用户 2026-10-13）：
+    //   --ceremony-stroke = **外圈**（深色卡面白边、浅色卡面同族深边）；
+    //   --ceremony-edge   = **内圈**，贴在渐变字边缘、比外圈细 —— 用户要求
+    //   「白色边内侧加黑边衬托数字更清晰」：深色卡面白边里再压一道黑边，
+    //   浅色卡面深边里压一道白边，数字在两种卡面上都立得住。
     '--ceremony-stroke': white ? 'rgba(255, 255, 255, .92)' : 'rgba(15, 23, 42, .28)',
+    '--ceremony-edge': white ? 'rgba(2, 6, 23, .62)' : 'rgba(255, 255, 255, .9)',
     // 倒计时与信息之间的分隔线：跟字色同色系的一条半透明细线
     '--ceremony-divider': white ? 'rgba(255, 255, 255, .30)' : 'rgba(15, 23, 42, .20)',
   }
@@ -417,14 +426,82 @@ function daysUntil(iso: string | null | undefined) {
   return Math.round((midnight(d) - midnight(new Date())) / 86400000)
 }
 
+/**
+ * 年度循环事项（生日 / 结婚纪念日 / 节日…）的「下一次」与「已过多少次」。
+ *
+ * 为什么要单独算：`due_at` 存的是**第一次**的那个日子 —— 生日就是出生那天
+ * （用户填了 1989-09-17）。直接拿它跟今天做差就成了**累积天数**，卡片上显示
+ * 「已过 13540 天」（用户 2026-10-13 报的问题）。生日/纪念日要看的是
+ * 「下一次还有多少天」+「已经过了多少次」，不是从出生到今天一共多少天。
+ *
+ * 返回 null 表示这条不该按年度看（比如中考这种一次性日期、或者没日期）。
+ */
+function nextSolarAnnual(from: Date) {
+  const today = new Date()
+  const midnight = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  let next = new Date(today.getFullYear(), from.getMonth(), from.getDate())
+  if (midnight(next) < midnight(today)) next = new Date(today.getFullYear() + 1, from.getMonth(), from.getDate())
+  return next
+}
+
+/** 农历年度循环：拿「月:日」锚点问服务端今年的公历日期，过了就取明年。 */
+async function nextLunarAnnual(anchor: string) {
+  const [rawMonth, day] = anchor.split(':').map((v) => Number(v))
+  const month = Math.abs(rawMonth || 0)
+  if (!month || !day) return null
+  const year = new Date().getFullYear()
+  for (const y of [year, year + 1]) {
+    try {
+      const res = await convertLunarDate({ lunar_year: y, lunar_month: month, lunar_day: day })
+      const converted = res.data?.data
+      if (!converted) continue
+      const when = new Date(converted.year, converted.month - 1, converted.day)
+      if (daysUntil(when.toISOString()) !== null && (daysUntil(when.toISOString()) as number) >= 0) return when
+    } catch { /* 试下一年 */ }
+  }
+  return null
+}
+
+/** 农历年度事项的下一次（异步算完放这里；没算出来就回落到 due_at 的老口径）。 */
+const lunarAnnual = ref<Record<number, { days: number; passed: number }>>({})
+
+async function loadLunarAnnual() {
+  const out: Record<number, { days: number; passed: number }> = {}
+  for (const item of items.value) {
+    if (item.repeat_rule !== 'yearly' || item.calendar !== 'lunar' || !item.due_at || !item.lunar_anchor) continue
+    const next = await nextLunarAnnual(item.lunar_anchor)
+    if (!next) continue
+    const days = daysUntil(next.toISOString())
+    if (days === null) continue
+    out[item.id] = { days, passed: Math.max(0, next.getFullYear() - new Date(item.due_at).getFullYear() - 1) }
+  }
+  lunarAnnual.value = out
+}
+
 const cards = computed(() => items.value
   .map((item) => {
-    const days = daysUntil(item.due_at)
     const lunar = item.calendar === 'lunar'
     const d = item.due_at ? new Date(item.due_at) : null
+    // 年度循环（生日/纪念日/节日…）：下一次的月-日 + 已经过过几次。
+    // due_at 是「第一次」的日期，不能直接跟今天做差（那会变成「已过 13540 天」）。
+    const annual = item.repeat_rule === 'yearly' && !!d
+    const progress = annual
+      ? (lunar ? lunarAnnual.value[item.id] : (() => {
+          const next = nextSolarAnnual(d as Date)
+          return { days: daysUntil(next.toISOString()) as number, passed: Math.max(0, next.getFullYear() - (d as Date).getFullYear() - 1) }
+        })())
+      : null
+    const days = progress ? progress.days : daysUntil(item.due_at)
+    // 「已过 N 次生日」/「第 N 次生日」（今天正是那一次）
+    const noun = /生日/.test(item.title) ? '生日' : ''
+    const passLabel = !progress || progress.passed <= 0
+      ? ''
+      : days === 0 ? `第 ${progress.passed + 1} 次${noun}` : `已过 ${progress.passed} 次${noun}`
     return {
       ...item,
       icon: item.kind === 'note' ? 'notebook' : (item.repeat_rule === 'yearly' && /生日|纪念/.test(item.title) ? 'cake' : 'ceremony'),
+      annual: !!annual,
+      passLabel,
       days: days ?? 9999,
       undated: days === null,
       daysClass: days === null ? '' : days < 0 ? 'ceremony-days-past' : days <= 7 ? 'ceremony-days-soon' : '',
@@ -453,6 +530,7 @@ async function load() {
   try {
     const res = await getReminders({ view: 'all', status: 'all', list_id: props.list.id, sort: 'created_desc' })
     items.value = res.data?.data || []
+    void loadLunarAnnual()
   } catch {
     items.value = []
   } finally {
@@ -473,7 +551,7 @@ onMounted(() => { if (!items.value.length) void load() })
 function resetForm(overrides: Partial<typeof form> = {}) {
   Object.assign(form, {
     title: '', dueAt: '', repeat: 'yearly', calendar: 'solar',
-    accent: '', background: '', bgBlur: 0, bgMask: 45,
+    accent: '', background: '', bgBlur: 0, bgMask: 45, dateField: '日期',
     ...overrides,
   })
 }
@@ -497,6 +575,7 @@ function edit(entry: ReminderItem) {
     background: entry.background || '',
     bgBlur: entry.bg_blur ?? 0,
     bgMask: entry.bg_mask ?? 45,
+    dateField: /生日/.test(entry.title) ? '出生年月日' : /纪念|金婚/.test(entry.title) ? '结婚年月日' : '日期',
   })
   createOpen.value = true
 }
@@ -577,11 +656,11 @@ async function confirmRemove() {
  * lunar = 按农历月日（七夕/中秋/春节…），创建时用服务端的农历换算接口算下一次的公历日期，
  * 并把农历锚点一起存进去（这样每年都能按农历重复）。
  */
-const PRESETS: { key: string; label: string; hint: string; icon: string; title: string; needsDate?: boolean; lunar?: boolean; month?: number; day?: number }[] = [
-  { key: 'birthday-solar', label: '生日（公历）', hint: '填出生日期，每年重复', icon: 'cake', title: '生日', needsDate: true },
-  { key: 'birthday-lunar', label: '生日（农历）', hint: '填农历生日，每年按农历重复', icon: 'cake', title: '生日', needsDate: true, lunar: true },
-  { key: 'anniversary', label: '结婚纪念日', hint: '填结婚日期，每年重复', icon: 'ceremony', title: '结婚纪念日', needsDate: true },
-  { key: 'golden-wedding', label: '金婚纪念', hint: '结婚 50 周年（填结婚日期）', icon: 'ceremony', title: '金婚纪念', needsDate: true },
+const PRESETS: { key: string; label: string; hint: string; icon: string; title: string; needsDate?: boolean; lunar?: boolean; month?: number; day?: number; dateField?: string }[] = [
+  { key: 'birthday-solar', label: '生日（公历）', hint: '填出生日期，每年重复', icon: 'cake', title: '生日', needsDate: true, dateField: '出生年月日' },
+  { key: 'birthday-lunar', label: '生日（农历）', hint: '填农历生日，每年按农历重复', icon: 'cake', title: '生日', needsDate: true, lunar: true, dateField: '出生年月日' },
+  { key: 'anniversary', label: '结婚纪念日', hint: '填结婚日期，每年重复', icon: 'ceremony', title: '结婚纪念日', needsDate: true, dateField: '结婚年月日' },
+  { key: 'golden-wedding', label: '金婚纪念', hint: '结婚 50 周年（填结婚日期）', icon: 'ceremony', title: '金婚纪念', needsDate: true, dateField: '结婚年月日' },
   { key: 'valentine', label: '情人节', hint: '2 月 14 日', icon: 'ceremony', title: '情人节', month: 2, day: 14 },
   { key: 'qixi', label: '七夕', hint: '农历七月初七', icon: 'ceremony', title: '七夕', lunar: true, month: 7, day: 7 },
   { key: 'mid-autumn', label: '中秋', hint: '农历八月十五', icon: 'ceremony', title: '中秋节', lunar: true, month: 8, day: 15 },
@@ -630,6 +709,8 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
       dueAt: toLocalIso(d),
       repeat: 'yearly',
       calendar: preset.lunar ? 'lunar' : 'solar',
+      // 「出生年月日」/「结婚年月日」比干巴巴一个「日期」好懂
+      dateField: preset.dateField || '日期',
     })
     presetOpen.value = false
     createOpen.value = true
@@ -716,11 +797,28 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
   /* 描边：-webkit-text-stroke 画在字形轮廓上，和渐变填充叠在一起 —— 深色卡面上
      数字就有一圈亮白边（用户 2026-10-13：「背景暗时看不清，增加白边」）。
      不支持这个属性的内核忽略它即可，不影响渐变字。 */
-  -webkit-text-stroke: 1.6px var(--ceremony-stroke, rgba(255, 255, 255, .9));
+  position: relative;
+  /* 内圈描边（用户 2026-10-13「白色边内侧加黑边衬托数字更清晰」）：直接画在
+     <b> 自己身上，压住渐变字的边缘；它比外圈细，所以外圈那张白边会露在它外侧。
+     从外到内 = 白边 → 黑边 → 彩色渐变。 */
+  -webkit-text-stroke: 1.15px var(--ceremony-edge, rgba(2, 6, 23, .62));
   animation: ceremony-countdown-flow 2.8s linear infinite;
 }
+/* 外圈描边：同一串数字再叠一层放在 <b> 底下，只描边不填色（颜色交给上面的渐变）。
+   宽度比内圈大一档，于是白边只露在黑边外侧那一圈。 */
+.ceremony-hero b::before {
+  content: attr(data-count);
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background: none;
+  -webkit-text-stroke: 1.95px var(--ceremony-stroke, rgba(255, 255, 255, .92));
+}
 @media (max-width: 640px) {
-  .ceremony-hero b { -webkit-text-stroke-width: 1.3px; }
+  .ceremony-hero b { -webkit-text-stroke-width: .95px; }
+  .ceremony-hero b::before { -webkit-text-stroke-width: 1.55px; }
 }
 /* 兜底：老内核不支持 background-clip:text 时字会整个透明、等于看不见 —— 退回静态字色 */
 @supports not ((background-clip: text) or (-webkit-background-clip: text)) {
@@ -730,6 +828,8 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
     background-image: none;
     animation: none;
   }
+  /* 不支持 background-clip:text 的内核上，外层伪元素只剩一圈描边、看着像空心字 */
+  .ceremony-hero b::before { content: none; }
 }
 @keyframes ceremony-countdown-flow {
   0% { background-position: 130% 0; }

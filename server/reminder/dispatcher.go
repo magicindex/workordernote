@@ -90,7 +90,12 @@ func processJob(db *gorm.DB, candidate DeliveryJob) {
 	//     例如结束 23:59、开始提醒 06:00 → 06:00 就弹）以及稍后提醒；
 	//   · 晚于结束时间 —— 过期重复提醒的链条（到期时间 + k×间隔）。
 	// 其余（既晚于结束时间、又不在重复链上）才判成条目已改的陈旧任务。
+	// 「首次提醒」现在允许晚于结束时间（新建后至少 10 分钟那条口径，见
+	// firstRemindSchedule）：只要这条任务的时间戳与当前应有的首次提醒时刻一致，
+	// 它就是有效的，不能当成「条目已改」丢掉。
+	expectedFirst := firstRemindSchedule(db, item)
 	if job.ScheduledFor.After(*item.DueAt) &&
+		!sameInstant(job.ScheduledFor, expectedFirst) &&
 		!(item.RepeatNotifyMinutes > 0 && job.ScheduledFor.After(*item.DueAt)) {
 		finishCancelled(db, job.ID, "REMINDER_CHANGED")
 		return

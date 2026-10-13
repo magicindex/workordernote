@@ -553,22 +553,41 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
       check('系统开了「减少动态效果」时流光停下（只留静态亮色数字）', reduced === 'none', String(reduced));
       await page.emulateMediaFeatures([]);
 
-      // 用户 2026-10-13：「倒计时 背景暗时看不清，增加白边」
+      // 用户 2026-10-13：「倒计时 背景暗时看不清，增加白边」→ 随后又要求
+      // 「白色边内侧加黑边衬托数字更清晰」。现在是**两层描边**：
+      //   <b> 自己是内圈（细，深色卡面=黑边）；
+      //   ::before 那层是外圈（粗，深色卡面=白边），露在内圈外侧。
       const stroke = await page.evaluate(() => {
-        const b = document.querySelector('[data-ceremony-countdown] b');
+        // 取一张**带数字**的卡片：「就是今天」那张的 <b> 里是文字、没有 data-count，
+        // 外圈那层复制不出东西（content 会是空串），拿它断言会假红。
+        const b = document.querySelector('[data-ceremony-countdown] b[data-count]')
+          || document.querySelector('[data-ceremony-countdown] b');
         const hero = b?.closest('[data-ceremony-countdown]');
         if (!b) return null;
-        const style = getComputedStyle(b);
+        const read = (decl) => ({
+          width: decl.getPropertyValue('-webkit-text-stroke-width') || decl.webkitTextStrokeWidth || '',
+          color: decl.getPropertyValue('-webkit-text-stroke-color') || decl.webkitTextStrokeColor || '',
+        });
+        const outerDecl = getComputedStyle(b, '::before');
         return {
-          width: style.getPropertyValue('-webkit-text-stroke-width') || style.webkitTextStrokeWidth || '',
-          color: style.getPropertyValue('-webkit-text-stroke-color') || style.webkitTextStrokeColor || '',
+          inner: read(getComputedStyle(b)),
+          outer: { ...read(outerDecl), content: outerDecl.content, fill: outerDecl.getPropertyValue('-webkit-text-fill-color') || '' },
+          count: b.getAttribute('data-count') || '',
           ink: hero ? getComputedStyle(hero).getPropertyValue('--ceremony-ink').trim() : '',
         };
       });
-      check('倒计时数字有描边（宽度 > 0）',
-        !!stroke && parseFloat(stroke.width) > 0, JSON.stringify(stroke));
-      check('深色卡面（白字）的描边是白的',
-        !!stroke && (stroke.ink === '#ffffff' ? /255, 255, 255/.test(stroke.color) : true),
+      check('倒计时数字有内圈描边（宽度 > 0）',
+        !!stroke && parseFloat(stroke.inner.width) > 0, JSON.stringify(stroke));
+      check('外圈描边比内圈粗（白边才会露在黑边外侧）',
+        !!stroke && parseFloat(stroke.outer.width) > parseFloat(stroke.inner.width), JSON.stringify(stroke));
+      check('外圈那层复制了同一串数字（content = 数字本身、只描边不填色）',
+        !!stroke && !!stroke.count && stroke.outer.content === `"${stroke.count}"`
+          && /transparent|rgba\(0, 0, 0, 0\)/.test(stroke.outer.fill),
+        JSON.stringify(stroke));
+      check('深色卡面：内圈是黑边、外圈是白边',
+        !!stroke && (stroke.ink === '#ffffff'
+          ? /2, 6, 23/.test(stroke.inner.color) && /255, 255, 255/.test(stroke.outer.color)
+          : true),
         JSON.stringify(stroke));
       check('每张卡的标题字色与卡面底色对比度足够（≥4.5，浅色卡面不会被白字糊住）',
         contrast.length > 0 && contrast.every((c) => c.title === null || c.title >= 4.5),

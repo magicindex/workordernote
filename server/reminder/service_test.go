@@ -106,6 +106,38 @@ func TestYearlyLeapDayUsesEndOfFebruary(t *testing.T) {
 	}
 }
 
+// backdateCreated 把提醒的创建时间往前挪，绕开「新建后 10 分钟才第一次提醒」这条
+// 新口径（用户 2026-10-13，见 firstRemindSchedule）：下面这些用例考的是「到点投递」
+// 与「重复提醒链条」，需要投递任务立刻就是到点的状态，所以先把创建时间做旧再重排任务。
+func backdateCreated(t *testing.T, reminderID uint, ago time.Duration) {
+	t.Helper()
+	if err := appDB.Model(&Reminder{}).Where("id = ?", reminderID).
+		Update("created_at", time.Now().Add(-ago)).Error; err != nil {
+		t.Fatalf("backdate created_at: %v", err)
+	}
+	var item Reminder
+	if err := appDB.First(&item, reminderID).Error; err != nil {
+		t.Fatal(err)
+	}
+	var links []ReminderChannel
+	if err := appDB.Where("reminder_id = ? AND enabled = ?", reminderID, true).Find(&links).Error; err != nil {
+		t.Fatal(err)
+	}
+	channels := make([]string, 0, len(links))
+	for _, link := range links {
+		channels = append(channels, link.Channel)
+	}
+	if err := rebuildJobs(appDB, item, channels); err != nil {
+		t.Fatalf("rebuild jobs: %v", err)
+	}
+	// 重排会把「创建时按 10 分钟口径排的那条」标成 cancelled；用例后面会用
+	// First() 取「这条提醒的投递任务」，留着旧行会先取到它（本轮就这么假红过）。
+	if err := appDB.Where("reminder_id = ? AND status = ?", reminderID, "cancelled").
+		Delete(&DeliveryJob{}).Error; err != nil {
+		t.Fatalf("purge cancelled jobs: %v", err)
+	}
+}
+
 func TestInAppDeliveryCreatesNotificationOnce(t *testing.T) {
 	cleanup := testDB(t)
 	defer cleanup()
@@ -120,6 +152,7 @@ func TestInAppDeliveryCreatesNotificationOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	backdateCreated(t, created.ID, time.Hour)
 
 	dispatchDueJobs(appDB)
 	dispatchDueJobs(appDB)
@@ -164,6 +197,7 @@ func TestHandlingReminderRetiresUnreadDueNotification(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		backdateCreated(t, created.ID, time.Hour)
 		ids = append(ids, created.ID)
 	}
 	dispatchDueJobs(appDB)
@@ -274,6 +308,7 @@ func TestRepeatNotifyRequeuesUntilCompleted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	backdateCreated(t, created.ID, time.Hour)
 
 	dispatchDueJobs(appDB)
 
@@ -325,6 +360,7 @@ func TestRepeatNotifyRecurringAdvancesOnCompletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	backdateCreated(t, created.ID, time.Hour)
 
 	dispatchDueJobs(appDB)
 
@@ -374,6 +410,7 @@ func TestRepeatNotifyChainKeepsFiringWhileUncompleted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	backdateCreated(t, created.ID, time.Hour)
 
 	countNotifications := func() int64 {
 		var n int64
@@ -436,6 +473,7 @@ func TestRepeatNotifyCatchUpSkipsMissedIntervals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	backdateCreated(t, created.ID, time.Hour)
 
 	dispatchDueJobs(appDB)
 

@@ -478,9 +478,24 @@ func rebuildJobs(tx *gorm.DB, reminder Reminder, channels []string) error {
 	// 23:59、开始提醒时间 06:00，那么到期那天 06:00 就会先弹一次，之后按
 	// 「提醒频率」重复（见 scheduleRepeatNotify），过了「逾期提醒时间」再标逾期。
 	// 已经过了那个点（比如下午才建今天的任务）就按「现在」排，下一轮调度就弹。
-	scheduledFor := firstRemindAt(tx, reminder)
+	scheduledFor := firstRemindSchedule(tx, reminder)
 	if scheduledFor.IsZero() {
 		scheduledFor = reminder.DueAt.UTC()
+	}
+	// 离「逾期提醒时间」已经不足 10 分钟时**一条普通提醒都不发**（用户 2026-10-13：
+	// 「低于10分钟到逾期设定时间的的不再提醒，直接给出逾期提醒」）：这种时候再弹一次
+	// 「到点了」紧接着就是「已逾期」，自相矛盾；逾期提醒由 notifyOverdue 按点发出。
+	//
+	// 比较的基准是**创建时间 + 10 分钟**（「10 分钟以后才开始第一次提醒」这件事本身的
+	// 时刻）：逾期时间落在它之前 = 这条提醒还没来得及第一次提醒就已经逾期了。
+	// 不用 scheduledFor 去比 —— 「逾期时间写成 00:00 = 到期即逾期」时两者是同一个时刻，
+	// 拿它比会把「两小时后到期」的普通提醒也一起挡掉。
+	if reminder.SnoozedUntil == nil {
+		_, cutoff := overduePolicy(tx, reminder.UserID)
+		earliest := reminder.CreatedAt.Add(firstRemindDelay)
+		if deadline := overdueDeadlineOf(reminder, cutoff); !deadline.IsZero() && !deadline.After(earliest) {
+			return nil
+		}
 	}
 	// 注意：**不把过去时刻夹到「现在」** —— 调度器本来就会捞 run_at <= now 的任务，
 	// 夹一下反而会让投递任务的时间戳与「首次提醒时刻」对不上（用例与排查都靠它）。
