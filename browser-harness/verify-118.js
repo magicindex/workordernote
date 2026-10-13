@@ -105,27 +105,36 @@ const readPage = (page) => page.evaluate((content) => {
     const me = mee.body?.data?.username || '';
 
     // ---------------- 0. 准备第二个账号 ----------------
-    const before = await api(page, '/api/reminder/nudges/users');
-    let candidates = before.body?.data || [];
-    if (!candidates.length) {
-      const sys = await api(page, '/api/configs/system');
-      const configs = sys.body?.data || {};
-      originalAllowRegister = configs.allow_register ?? null;
+    //
+    // **一律自己建一个探针账号**，绝不借用实例上已有的第二个账号：接收方那几条断言
+    // 要真的以对方身份登录（点「已收到 / 已完成」、看角标），而别人的密码我们不知道。
+    // ——2026-10-13 在沙箱（8908）上就踩了这条：实例上本来有「测试同事」，
+    // 套件拿它当接收方，切账号登录时 1002「用户名或密码错误」，后面整段崩掉，
+    // 表现成「沙箱上这个新功能不可用」，其实是套件自己的问题。
+    const boot = await api(page, '/api/bootstrap');
+    originalAllowRegister = (boot.body?.data?.configs || {}).allow_register ?? null;
+    if (String(originalAllowRegister) !== 'true') {
       await api(page, '/api/configs', 'PUT', { key: 'allow_register', value: 'true' });
-      const reg = await api(page, '/api/auth/register', 'POST', { username: PROBE_USER, password: PROBE_PASS });
-      createdUserId = reg.body?.data?.user?.id ?? null;
-      if (!createdUserId) {
-        // 有些版本注册接口只回 token，不回 user 对象
-        const list = await api(page, '/api/users');
-        createdUserId = (list.body?.data || []).find((u) => u.username === PROBE_USER)?.id ?? null;
-      }
-      await api(page, '/api/configs', 'PUT', { key: 'allow_register', value: String(originalAllowRegister ?? 'false') });
-      const after = await api(page, '/api/reminder/nudges/users');
-      candidates = after.body?.data || [];
     }
-    check('实例上存在第二个可提醒的用户（没有就临时建一个）', candidates.length > 0, JSON.stringify(candidates));
-    probeId = candidates[0]?.id ?? null;
-    if (!probeId) throw new Error('没有可提醒的第二个用户，无法继续');
+    const reg = await api(page, '/api/auth/register', 'POST', { username: PROBE_USER, password: PROBE_PASS });
+    createdUserId = reg.body?.data?.user?.id ?? null;
+    if (!createdUserId) {
+      // 有些版本注册接口只回 token，不回 user 对象
+      const list = await api(page, '/api/users');
+      const rows = list.body?.data?.items || list.body?.data || [];
+      createdUserId = rows.find((u) => u.username === PROBE_USER)?.id ?? null;
+    }
+    if (String(originalAllowRegister) !== 'true') {
+      await api(page, '/api/configs', 'PUT', { key: 'allow_register', value: String(originalAllowRegister ?? 'false') });
+      await sleep(2500); // 公开设置缓存 2 秒，回读前先等一下
+    }
+    check('临时探针账号已建好（用自己的账号做接收方，不借用别人的）', !!createdUserId, `id=${createdUserId}`);
+
+    const after = await api(page, '/api/reminder/nudges/users');
+    const candidates = after.body?.data || [];
+    probeId = candidates.find((u) => u.username === PROBE_USER)?.id ?? null;
+    check('探针账号出现在「可提醒对象」里', !!probeId, JSON.stringify(candidates));
+    if (!probeId) throw new Error('探针账号没建起来，无法继续');
 
     // ---------------- 1. 入口与两列 ----------------
     await gotoRetry(page, BASE + '/admin');
@@ -164,8 +173,8 @@ const readPage = (page) => page.evaluate((content) => {
         probe,
       };
     }, PROBE_USER);
-    check('点「提醒@他」打开新建弹窗，下拉里列出其他用户',
-      picker.open && picker.options.some((o) => String(o.value) === String(probeId)),
+    check('点「提醒@他」打开新建弹窗，下拉里列出其他用户（含探针账号）',
+      picker.open && picker.options.some((o) => String(o.value) === String(probeId) && o.text === PROBE_USER),
       JSON.stringify(picker));
     check('下拉里没有自己（不能自己提醒自己）',
       picker.open && me && !picker.options.some((o) => o.text === me),
@@ -356,6 +365,11 @@ const readPage = (page) => page.evaluate((content) => {
     const users = await api(page, '/api/reminder/nudges/users');
     check('清理干净：临时探针账号已删除', !(users.body?.data || []).some((u) => u.username === PROBE_USER),
       JSON.stringify(users.body?.data));
+    const bootAfter = await api(page, '/api/bootstrap');
+    const nowAllow = (bootAfter.body?.data?.configs || {}).allow_register ?? null;
+    check('清理干净：注册开关已还原（按生效值比对）',
+      String(nowAllow) === String(originalAllowRegister),
+      `现在是 ${nowAllow}，原本 ${originalAllowRegister}`);
   });
 
   console.log(`\n结果：${passed} 项通过，${failed} 项失败`);
