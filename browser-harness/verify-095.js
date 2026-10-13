@@ -105,6 +105,12 @@ function findApk() {
   console.log(`  安装包：${apkPath ? path.basename(apkPath) : '（没找到，先跑 android-shell/build-apk.sh）'}`);
 
   await withTab(async (page) => {
+    // 这个套件会切到「外网」档并把选择记进 localStorage（ui_android_addr）——
+    // 不清掉的话，run-all 里重试的那一次（或紧接着单跑的下一次）一进来就是 wan，
+    // 「地址有内网 / 外网两档，默认内网」立刻假红（本轮踩了两次）。
+    await page.goto(BASE + '/login', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    await page.evaluate(() => { try { localStorage.removeItem('ui_android_addr'); } catch {} });
+
     // ---------- 1. 普通浏览器里没有「服务器地址」入口 ----------
     await login(page, BASE);
     // 想看登录页得先清登录态（0.14.0 起已登录访问 /login 会被守卫送回工作台）
