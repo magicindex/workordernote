@@ -26,6 +26,7 @@ const BIRTH = '1989-09-17';
 const BIRTH_TITLE = `自检生日-${STAMP}`;
 const LUNAR_TITLE = `自检农历生日-${STAMP}`;
 const QUIET_TITLE = `自检立刻弹-${STAMP}`;
+const ADVANCE_TITLE = `自检提前提醒-${STAMP}`;
 
 let passed = 0;
 let failed = 0;
@@ -194,6 +195,105 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       if (btn) btn.click();
     });
     await sleep(600);
+
+    // ---------------- ④ 提前几天开始提醒 ----------------
+    // 「开始提醒时间」下新增的个人偏好：到期日往前 N 天开始提醒；
+    // 只在「离到期日超过 N 天」时生效，创建时就已经在 N 天内的按正常流程。
+    // 用管理员的投递台账（/api/reminder/admin/deliveries）看排出来的首次提醒时刻。
+    const ADMIN_API = '/api/reminder/admin/deliveries';
+    const boot0 = await api(page, '/api/bootstrap');
+    const originalAdvance = (boot0.body?.data?.configs || {}).reminder_advance_days ?? '0';
+    // 这一段用 06:00 做「开始提醒时间」（下面会设），断言里的时刻也按它算
+    const startClock = '06:00';
+
+    const advanceJobFor = async (reminderId) => {
+      const res = await api(page, ADMIN_API);
+      const rows = res.body?.data || [];
+      return rows.filter((j) => j.reminder_id === reminderId && j.status === 'pending')
+        .sort((a, b) => new Date(a.scheduled_for) - new Date(b.scheduled_for))[0] || null;
+    };
+    const makeItem = async (title, dueAt) => {
+      const res = await api(page, '/api/reminder/items', 'POST', {
+        title, due_at: dueAt, repeat_rule: 'none', channels: ['inapp'],
+      });
+      const id = res.body?.data?.id ?? null;
+      if (id) itemIds.push(id);
+      return id;
+    };
+    const inDays = (n, hour) => {
+      const d = new Date();
+      d.setDate(d.getDate() + n);
+      d.setHours(hour, 59, 0, 0);
+      return d.toISOString();
+    };
+
+    check('偏好设置里出现「提前几天开始提醒」', originalAdvance !== null, String(originalAdvance));
+    // 这台沙箱/迭代实例的「开始提醒时间」是 00:00（夜里跑回归用），提前窗口会落在 0 点 ——
+    // 为了断言跟真实用法一致，这里先把它设成 06:00，收尾还原。
+    const bootClock = (boot0.body?.data?.configs || {}).reminder_all_day_time ?? '00:00';
+    await api(page, '/api/configs', 'PUT', { key: 'reminder_all_day_time', value: '06:00' });
+    await api(page, '/api/configs', 'PUT', { key: 'reminder_advance_days', value: '3' });
+
+    // 设置页里也要真的看得见这一行（在「提醒」那张卡片里、和时间那一项挨着）
+    await gotoRetry(page, BASE + '/admin/settings');
+    await sleep(2200);
+    const settingRow = await page.evaluate(() => {
+      const row = document.querySelector('[data-config-key="reminder_advance_days"]');
+      if (!row) return null;
+      const card = row.closest('.surface');
+      const input = row.querySelector('input');
+      return {
+        label: (row.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 40),
+        card: card ? (card.querySelector('h2')?.textContent || '').trim() : '',
+        type: input ? input.getAttribute('type') : null,
+      };
+    });
+    check('偏好设置里有「提前几天开始提醒」这一行（数字输入、在「提醒」卡片里）',
+      !!settingRow && settingRow.card === '提醒' && settingRow.type === 'number' && /提前几天开始提醒/.test(settingRow.label),
+      JSON.stringify(settingRow));
+
+    // 10 天后到期（超过 3 天）→ 首次提醒应排在「到期日往前 3 天」的开始提醒时间
+    const farId = await makeItem(ADVANCE_TITLE, inDays(10, 23));
+    const farJob = farId ? await advanceJobFor(farId) : null;
+    const wantFar = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 10 - 3);
+      const [h, m] = String(startClock).split(':').map(Number);
+      d.setHours(h || 0, m || 0, 0, 0);
+      return d;
+    })();
+    check('离到期超过 3 天：首次提醒排在「到期日往前 3 天」那个时间点',
+      !!farJob && Math.abs(new Date(farJob.scheduled_for) - wantFar) < 90_000,
+      `排到 ${farJob?.scheduled_for}，期望约 ${wantFar.toISOString()}（开始提醒时间 ${startClock}）`);
+
+    // 明天到期（在 3 天之内）→ 按正常流程：排在到期日当天的开始提醒时间
+    const nearId = await makeItem(`${ADVANCE_TITLE}-近`, inDays(1, 23));
+    const nearJob = nearId ? await advanceJobFor(nearId) : null;
+    const wantNear = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      const [h, m] = String(startClock).split(':').map(Number);
+      d.setHours(h || 0, m || 0, 0, 0);
+      return d;
+    })();
+    check('离到期不到 3 天：按正常流程（到期日当天的开始提醒时间）',
+      !!nearJob && Math.abs(new Date(nearJob.scheduled_for) - wantNear) < 90_000,
+      `排到 ${nearJob?.scheduled_for}，期望约 ${wantNear.toISOString()}`);
+
+    // 还原偏好（也顺带验证写入后缓存立刻失效：改回 0 之后新建的应当回到正常流程）
+    await api(page, '/api/configs', 'PUT', { key: 'reminder_advance_days', value: String(originalAdvance ?? '0') });
+    await api(page, '/api/configs', 'PUT', { key: 'reminder_all_day_time', value: String(bootClock) });
+    const afterId = await makeItem(`${ADVANCE_TITLE}-还原`, inDays(10, 23));
+    const afterJob = afterId ? await advanceJobFor(afterId) : null;
+    // 还原后：开始提醒时间回到 00:00（= 不提前，就是到期时刻本身），提前天数 0
+    check('把「提前天数」改回 0 后立刻生效（新提醒回到正常流程 = 到期时刻）',
+      !!afterJob && Math.abs(new Date(afterJob.scheduled_for) - new Date(inDays(10, 23))) < 90_000,
+      `排到 ${afterJob?.scheduled_for}`);
+
+    const bootAfter = await api(page, '/api/bootstrap');
+    check('清理前：提前天数已还原',
+      String((bootAfter.body?.data?.configs || {}).reminder_advance_days ?? '') === String(originalAdvance),
+      String((bootAfter.body?.data?.configs || {}).reminder_advance_days));
 
     // ---------------- 清理 ----------------
     for (const id of itemIds) {

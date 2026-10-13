@@ -278,3 +278,17 @@ func TestUpdateConfigAllowsEmptyString(t *testing.T) {
 		t.Fatal("int 型配置传空值应当被 Validate 拒绝")
 	}
 }
+
+// 配置写入后的钩子：注册了回调的包（例如 reminder 的窗口缓存）必须在写成功后收到通知，
+// 否则「改完设置马上新建提醒」会按旧口径排进投递队列（见 RegisterChangeHook 的注释）。
+func TestConfigChangeHookFires(t *testing.T) {
+	var gotKey string
+	var gotUser uint
+	RegisterChangeHook(func(key string, userID uint) {
+		gotKey, gotUser = key, userID
+	})
+	notifyConfigChanged("reminder_advance_days", 42)
+	if gotKey != "reminder_advance_days" || gotUser != 42 {
+		t.Fatalf("钩子没有收到配置变化：key=%q user=%d", gotKey, gotUser)
+	}
+}

@@ -33,11 +33,60 @@ const (
 var (
 	quietMu    sync.Mutex
 	quietCache = map[uint]quietEntry{}
+
+	advanceMu    sync.Mutex
+	advanceCache = map[uint]advanceEntry{}
 )
 
 type quietEntry struct {
 	start string
 	at    time.Time
+}
+
+// advanceEntry 是「提前几天开始提醒」的进程内缓存（与开始提醒时间同一个 TTL）。
+type advanceEntry struct {
+	days int
+	at   time.Time
+}
+
+// resetWindowCache 让下一次读取重新查库（配置刚改完、测试用）。
+func resetWindowCache(userID uint) {
+	quietMu.Lock()
+	delete(quietCache, userID)
+	quietMu.Unlock()
+	advanceMu.Lock()
+	delete(advanceCache, userID)
+	advanceMu.Unlock()
+}
+
+// advanceDaysMax 是「提前几天」的上限：再长也没有意义，还能挡住手滑写进去的 99999
+// （那样「提前窗口」会直接落到几年前，反而变成「立刻提醒」）。
+const advanceDaysMax = 60
+
+// advanceDays 读个人偏好「提前几天开始提醒」（reminder_advance_days，默认 0 = 不提前）。
+func advanceDays(db *gorm.DB, userID uint) int {
+	advanceMu.Lock()
+	if entry, ok := advanceCache[userID]; ok && time.Since(entry.at) < quietCacheTTL {
+		days := entry.days
+		advanceMu.Unlock()
+		return days
+	}
+	advanceMu.Unlock()
+
+	days := 0
+	if v, err := sysconfig.GetConfig(db, "reminder_advance_days", userID); err == nil {
+		if n, convErr := strconv.Atoi(strings.TrimSpace(v)); convErr == nil && n > 0 {
+			days = n
+		}
+	}
+	if days > advanceDaysMax {
+		days = advanceDaysMax
+	}
+
+	advanceMu.Lock()
+	advanceCache[userID] = advanceEntry{days: days, at: time.Now()}
+	advanceMu.Unlock()
+	return days
 }
 
 // clockParts 把 "HH:MM" 拆成时、分。
@@ -102,6 +151,41 @@ func effectiveStamp(item Reminder) *time.Time {
 //
 // 返回零值表示这条没有时间（不该排提醒）。
 func firstRemindAt(db *gorm.DB, item Reminder) time.Time {
+	normal := normalFirstRemindAt(db, item)
+	if normal.IsZero() {
+		return normal
+	}
+	stamp := effectiveStamp(item)
+	start := quietStart(db, item.UserID)
+	h, m, clockOK := clockParts(start)
+	if !clockOK {
+		h, m = 0, 0
+	}
+	// 「提前几天开始提醒」（用户 2026-10-13）：到期日往前 N 天那天的「开始提醒时间」
+	// 就是提前窗口的起点。**只在创建时离到期日还超过 N 天的时候才用它** ——
+	// 创建时已经在 N 天之内（今天到期、明天到期…）的按正常流程走，也就是
+	// normalFirstRemindAt 那套老口径（到期日当天那个点）。
+	//
+	// 注意这一段在「开始提醒时间 = 00:00」之前判：00:00 的含义是「到期日当天不提前
+	// 提醒、也不静默」，而「提前 N 天」是另一件事 —— 用户既然设了提前天数，就用
+	// 00:00 作为那一天的时刻（也就是窗口从 (到期日-N) 的 0 点开）。
+	if stamp != nil {
+		if days := advanceDays(db, item.UserID); days > 0 && !item.CreatedAt.IsZero() {
+			local := stamp.In(shanghai())
+			windowDay := local.AddDate(0, 0, -days)
+			windowStart := time.Date(windowDay.Year(), windowDay.Month(), windowDay.Day(), h, m, 0, 0, shanghai())
+			if windowStart.After(item.CreatedAt) && windowStart.Before(*stamp) {
+				return windowStart.UTC()
+			}
+		}
+	}
+	return normal
+}
+
+// normalFirstRemindAt 是**正常流程**的首次提醒时刻（不看提前天数）：到期日当天那个
+// 「开始提醒时间」，比结束时间还早就用它，否则就是结束时间本身。
+// 提前窗口的边界、以及「窗口内每天只提醒一次到哪天为止」都用它。
+func normalFirstRemindAt(db *gorm.DB, item Reminder) time.Time {
 	stamp := effectiveStamp(item)
 	if stamp == nil {
 		return time.Time{}

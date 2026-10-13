@@ -222,11 +222,26 @@ func scheduleRepeatNotify(tx *gorm.DB, item Reminder, job DeliveryJob) error {
 	if item.RepeatNotifyMinutes <= 0 || item.DueAt == nil {
 		return nil
 	}
-	next := job.ScheduledFor.Add(time.Duration(item.RepeatNotifyMinutes) * time.Minute)
-	// 逾期一段时间后才开启/重建链条时，被跳过的间隔不再逐个补发（避免一次性
-	// 轰炸一串过期通知），直接从现在起排下一个完整间隔。
-	if now := time.Now().UTC(); !next.After(now) {
-		next = now.Add(time.Duration(item.RepeatNotifyMinutes) * time.Minute)
+	interval := time.Duration(item.RepeatNotifyMinutes) * time.Minute
+	next := job.ScheduledFor.Add(interval)
+	now := time.Now().UTC()
+	// 「提前几天开始提醒」的窗口内**每天只在「开始提醒时间」提醒一次**
+	// （用户 2026-10-13；见 firstRemindAt 的窗口口径）：提前几天是为了让人心里有数，
+	// 不是从三天前就按「提醒频率」每 15 分钟弹一次 —— 那会变成几百条通知。
+	// 到了到期日那天的首次提醒时刻（normal），再恢复「首次提醒 + 提醒频率」的老口径。
+	if normal := normalFirstRemindAt(tx, item); !normal.IsZero() && next.Before(normal) {
+		next = job.ScheduledFor.AddDate(0, 0, 1)
+		// 停机跨过几天时，把窗口内的“每天一次”追到下一个未来的点，而不是补发一串。
+		for !next.After(now) {
+			next = next.AddDate(0, 0, 1)
+		}
+		if next.After(normal) {
+			next = normal
+		}
+	} else if !next.After(now) {
+		// 逾期一段时间后才开启/重建链条时，被跳过的间隔不再逐个补发（避免一次性
+		// 轰炸一串过期通知），直接从现在起排下一个完整间隔。
+		next = now.Add(interval)
 	}
 	raw := fmt.Sprintf("%d|%s|%s|chain", item.ID, job.Channel, next.UTC().Format(time.RFC3339Nano))
 	sum := sha256.Sum256([]byte(raw))

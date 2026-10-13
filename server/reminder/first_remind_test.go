@@ -141,3 +141,120 @@ func TestFirstRemindScheduleHonoursSnooze(t *testing.T) {
 		t.Fatalf("同一条没有稍后提醒时应当按创建后 10 分钟，实际 %v", got)
 	}
 }
+
+// 「提前几天开始提醒」（用户 2026-10-13：「开始提醒时间，增加提前几天开始提醒，
+// 低于几天的按照正常流程走，超过提醒天数的等符合设定时间后再开始执行提醒」）。
+func TestFirstRemindAdvanceDays(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const userID = 704
+	setUserConfig(t, "reminder_all_day_time", "06:00", userID)
+	loc := shanghai()
+	now := time.Now()
+	startOfToday := time.Date(now.In(loc).Year(), now.In(loc).Month(), now.In(loc).Day(), 0, 0, 0, 0, loc)
+
+	at := func(dayOffset, hour int) time.Time {
+		d := startOfToday.AddDate(0, 0, dayOffset)
+		return time.Date(d.Year(), d.Month(), d.Day(), hour, 0, 0, 0, loc)
+	}
+	// 造一条「10 天后 23:59 到期、今天创建的」提醒：离到期超过 3 天
+	due10 := at(10, 23)
+	item := Reminder{UserID: userID, CreatedAt: now.Add(-time.Minute), DueAt: &due10, RepeatRule: "none"}
+
+	// 没设提前天数（默认 0）：老口径 —— 到期日当天 06:00
+	setUserConfig(t, "reminder_advance_days", "0", userID)
+	if got := firstRemindAt(appDB, item); !sameInstant(got, at(10, 6).UTC()) {
+		t.Fatalf("提前 0 天时首次提醒应为到期日 06:00，实际 %v", got)
+	}
+
+	// 提前 3 天：窗口 = 到期日往前 3 天（也就是 7 天后）的 06:00
+	setUserConfig(t, "reminder_advance_days", "3", userID)
+	if got := firstRemindAt(appDB, item); !sameInstant(got, at(7, 6).UTC()) {
+		t.Fatalf("提前 3 天时首次提醒应为 7 天后的 06:00，实际 %v", got)
+	}
+	if got := firstRemindSchedule(appDB, item); !sameInstant(got, at(7, 6).UTC()) {
+		t.Fatalf("调度用的首次提醒时刻也应当是窗口起点，实际 %v", got)
+	}
+
+	// 创建时已经在窗口之内（明天到期 < 提前 3 天）：按正常流程 —— 明天 06:00，不是立刻
+	dueTomorrow := at(1, 23)
+	inside := Reminder{UserID: userID, CreatedAt: now.Add(-time.Minute), DueAt: &dueTomorrow, RepeatRule: "none"}
+	if got := firstRemindAt(appDB, inside); !sameInstant(got, at(1, 6).UTC()) {
+		t.Fatalf("窗口之内创建的应当按正常流程（明天 06:00），实际 %v", got)
+	}
+
+	// 窗口还没到来就创建（今天创建、窗口在 7 天后）→ 用窗口；窗口那天之后再创建 → 正常流程
+	// （这里用 CreatedAt 模拟「窗口已经过去才创建」）
+	lateCreated := Reminder{UserID: userID, CreatedAt: at(8, 12), DueAt: &due10, RepeatRule: "none"}
+	if got := firstRemindAt(appDB, lateCreated); !sameInstant(got, at(10, 6).UTC()) {
+		t.Fatalf("窗口过了才创建的应当按正常流程（到期日 06:00），实际 %v", got)
+	}
+}
+
+// 提前窗口内「每天只在开始提醒时间提醒一次」，到了到期日那天恢复「提醒频率」。
+func TestAdvanceWindowRepeatsOncePerDay(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const userID = 705
+	setUserConfig(t, "reminder_all_day_time", "06:00", userID)
+	setUserConfig(t, "reminder_advance_days", "3", userID)
+
+	loc := shanghai()
+	now := time.Now()
+	startOfToday := time.Date(now.In(loc).Year(), now.In(loc).Month(), now.In(loc).Day(), 0, 0, 0, 0, loc)
+	at := func(dayOffset, hour int) time.Time {
+		d := startOfToday.AddDate(0, 0, dayOffset)
+		return time.Date(d.Year(), d.Month(), d.Day(), hour, 0, 0, 0, loc)
+	}
+	due := at(10, 23)
+
+	item := Reminder{
+		ID: 1, UserID: userID, CreatedAt: now.Add(-time.Minute), DueAt: &due,
+		RepeatRule: "none", RepeatNotifyMinutes: 15,
+	}
+	first := firstRemindAt(appDB, item)
+	if !sameInstant(first, at(7, 6).UTC()) {
+		t.Fatalf("窗口起点应为 7 天后的 06:00，实际 %v", first)
+	}
+
+	// 窗口内第一次投递之后：下一个不是 15 分钟后，而是**第二天同一时刻**
+	job := DeliveryJob{UserID: userID, ReminderID: 1, Channel: ChannelInApp, ScheduledFor: first}
+	if err := scheduleRepeatNotify(appDB, item, job); err != nil {
+		t.Fatal(err)
+	}
+	var chain DeliveryJob
+	if err := appDB.Where("reminder_id = ? AND channel = ? AND status = ?", uint(1), ChannelInApp, "pending").
+		Order("scheduled_for ASC").First(&chain).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !sameInstant(chain.ScheduledFor, at(8, 6).UTC()) {
+		t.Fatalf("窗口内应当每天只排一次（第二天 06:00），实际 %v", chain.ScheduledFor)
+	}
+}
+
+// 「开始提醒时间 = 00:00（不提前、也不静默）」时，提前天数仍然生效：
+// 窗口从 (到期日 - N 天) 的 0 点开始，而不是被 00:00 这条口径吃掉。
+func TestAdvanceDaysWorksWithMidnightStart(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const userID = 706
+	setUserConfig(t, "reminder_all_day_time", "00:00", userID)
+	setUserConfig(t, "reminder_advance_days", "3", userID)
+
+	loc := shanghai()
+	now := time.Now()
+	startOfToday := time.Date(now.In(loc).Year(), now.In(loc).Month(), now.In(loc).Day(), 0, 0, 0, 0, loc)
+	dayAt := func(offset, hour int) time.Time {
+		d := startOfToday.AddDate(0, 0, offset)
+		return time.Date(d.Year(), d.Month(), d.Day(), hour, 0, 0, 0, loc)
+	}
+	due := dayAt(10, 23)
+	item := Reminder{UserID: userID, CreatedAt: now.Add(-time.Minute), DueAt: &due, RepeatRule: "none"}
+
+	if got := firstRemindAt(appDB, item); !sameInstant(got, dayAt(7, 0).UTC()) {
+		t.Fatalf("00:00 + 提前 3 天：窗口应为 7 天后的 0 点，实际 %v", got)
+	}
+}

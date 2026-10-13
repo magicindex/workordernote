@@ -836,3 +836,16 @@ resetOverduePolicyCache()                    // 进程内 2 秒缓存也要清
 - ✅ 只删自己启动的那个：`docker rm -f wsn-iter`（按名字），或者启动时把 ID 记下来。
 - ❌ 不要用 `--filter ancestor=<基础镜像>` 批量删：它匹配的是**整棵镜像树**。
 - ❌ 也不要用 `pkill -f <模式>`（README 另一处写过：它会先杀掉自己）。
+
+## 「提前几天开始提醒」怎么断言（`verify-119`，2026-10-13 晚）
+
+- 排期这种东西在界面上看不见，唯一能断言的窗口是**管理员的投递台账**
+  `GET /api/reminder/admin/deliveries`（返回 `DeliveryJob`：`reminder_id` / `scheduled_for` /
+  `status`）。套件就是这么验「提前 3 天」与「正常流程」两种排期的 —— 别去等真实弹窗（要等好几天）。
+- 台账里同一个提醒可能有多条（首次 + 重复链条），断言要**先按 `reminder_id` 过滤、取
+  `status=pending` 里 `scheduled_for` 最早的那条**。
+- 沙箱/迭代实例的「开始提醒时间」是 `00:00`（夜里跑回归用），提前窗口会落在 0 点 ——
+  套件里先把它设成 `06:00` 再断言、收尾还原；断言里的期望时刻也跟着用 `06:00` 算，
+  不要再从 `/api/configs` 读那个值（读到的是改之前的，本轮就这么假红过一次）。
+- **配置写入现在会立刻让缓存失效**（`sysconfig.RegisterChangeHook` → `resetWindowCache`）：
+  改完「开始提醒时间 / 提前天数」不用再等 30 秒 TTL，新建的提醒马上按新口径排期。

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"sync"
 
 	"gorm.io/gorm"
 
@@ -107,6 +108,33 @@ func GetConfig(db *gorm.DB, key string, userID uint) (string, error) {
 		return "", err
 	}
 	return config.Value, nil
+}
+
+// changeHooks 是「配置刚写完」的回调：进程内缓存的那些读取路径（例如提醒的
+// 「开始提醒时间」30 秒缓存）靠它立刻失效，不用等 TTL 过期。
+//
+// 为什么需要：改完设置马上新建一条提醒时，缓存里还是旧值 —— 那条提醒会被按旧口径
+// 排进投递队列，而且**排完就定了**（要再编辑一次才会重排），用户看到的是「我明明改了设置」。
+var (
+	changeHooksMu sync.Mutex
+	changeHooks   []func(key string, userID uint)
+)
+
+// RegisterChangeHook 注册一个配置写入后的回调（在 init 里注册，进程内只调一次）。
+func RegisterChangeHook(fn func(key string, userID uint)) {
+	changeHooksMu.Lock()
+	changeHooks = append(changeHooks, fn)
+	changeHooksMu.Unlock()
+}
+
+// notifyConfigChanged 在配置成功写入后调用（同包内 handlers 用）。
+func notifyConfigChanged(key string, userID uint) {
+	changeHooksMu.Lock()
+	hooks := append([]func(string, uint){}, changeHooks...)
+	changeHooksMu.Unlock()
+	for _, fn := range hooks {
+		fn(key, userID)
+	}
 }
 
 func UpdateConfig(db *gorm.DB, key string, value string, userID uint) error {

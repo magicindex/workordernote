@@ -123,6 +123,21 @@ func init() {
 		Default: "00:00", Group: "reminder", Label: "开始提醒时间",
 		Description: "当天第一次提醒的时间：到期日当天到这个点就先提醒一次（之后按提醒频率重复）；这个点之前不提醒",
 	})
+	// 「提前几天开始提醒」（用户 2026-10-13）：与「开始提醒时间」配套 —— 到期日往前数 N 天，
+	// 从那天 的「开始提醒时间」起就开始提醒（提前几天，心里有数）。
+	//
+	// **只在「离到期日超过 N 天」时生效**：创建时就已经在 N 天之内的（今天到期、明天到期…）
+	// 按正常流程走 —— 就是原来的口径，到期日当天那个「开始提醒时间」才第一次提醒。
+	// 0 = 不提前（默认，老行为一点不变）。
+	//
+	// 窗口内**每天只在「开始提醒时间」提醒一次**（不是从三天前就按「提醒频率」每 15 分钟
+	// 弹一次）；到了到期日那天，恢复「首次提醒 + 提醒频率」的老口径（见 dispatcher.go
+	// 的 scheduleRepeatNotify）。
+	sysconfig.RegisterConfig(sysconfig.ConfigDef{
+		Key: "reminder_advance_days", Scope: sysconfig.ScopeUser, Type: sysconfig.TypeInt,
+		Default: "0", Public: true, Group: "reminder", Label: "提前几天开始提醒",
+		Description: "到期日前几天开始提醒（0 = 不提前）。只在离到期日超过这个天数时生效；创建时已经在几天内的按正常流程（到期日当天的开始提醒时间）。窗口内每天只在开始提醒时间提醒一次",
+	})
 
 	apps.Register(apps.App{
 		Name:        "reminder",
@@ -143,6 +158,14 @@ func init() {
 		},
 	})
 
+	// 「开始提醒时间」与「提前几天开始提醒」是 30 秒进程内缓存的（它们在调度热路径上）。
+	// 配置一改就让缓存失效，否则「改完设置马上新建的提醒」会按旧口径排进投递队列，
+	// 而且排完就定了（要再编辑一次才会重排）—— 见 sysconfig.RegisterChangeHook。
+	sysconfig.RegisterChangeHook(func(key string, userID uint) {
+		if key == "reminder_all_day_time" || key == "reminder_advance_days" {
+			resetWindowCache(userID)
+		}
+	})
 	scheduler.Register(scheduler.Job{
 		Name:       "reminder-delivery",
 		Interval:   time.Minute,

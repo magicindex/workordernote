@@ -21,6 +21,9 @@ func resetOverduePolicyCache() {
 	quietMu.Lock()
 	quietCache = map[uint]quietEntry{}
 	quietMu.Unlock()
+	advanceMu.Lock()
+	advanceCache = map[uint]advanceEntry{}
+	advanceMu.Unlock()
 }
 
 // setPublicConfig 写一条系统级公开配置（测试用）。

@@ -157,6 +157,9 @@ func handleUpdateConfig(db *gorm.DB) gin.HandlerFunc {
 				return
 			}
 		}
+		// 写成功之后让进程内缓存立刻失效（见 sysconfig.RegisterChangeHook）：
+		// 否则「刚改完设置就新建提醒」会按旧口径排进投递队列。
+		notifyConfigChanged(req.Key, userID)
 		response.Success(c, nil)
 	}
 }
