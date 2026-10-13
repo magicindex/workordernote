@@ -1485,7 +1485,10 @@ function collapseQuickAdd() {
     逾期分组卡片与行上的「已逾期」标记共用这一个函数，避免两处口径跑偏。 */
 function overdueStamp(item: ReminderItem): number | null {
   if (item.completed_at || item.kind === 'note') return null
-  const raw = item.snoozed_until || item.end_at || item.start_at || item.due_at
+  // **不看 snoozed_until**（用户 2026-10-13：「逾期项目点击知道了，提醒依然保留在逾期栏目，
+  // 只是按后台设定时间进行下一次提示」）：稍后提醒/知道了只决定「什么时候再提醒我」，
+  // 不该把一条已经逾期的任务从「已逾期」分组里摘掉。与服务端 deadlineStamp 同一口径。
+  const raw = item.end_at || item.start_at || item.due_at
   if (!raw) return null
   const t = new Date(raw).getTime()
   return Number.isNaN(t) ? null : t

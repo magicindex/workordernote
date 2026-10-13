@@ -117,8 +117,8 @@ func TestNewCardAlwaysLandsInBucket(t *testing.T) {
 		Count(&remindersInBucket).Error; err != nil {
 		t.Fatal(err)
 	}
-	if remindersInBucket != 3 {
-		t.Fatalf("应该在卡包清单里生成 3 条提醒，实际 %d", remindersInBucket)
+	if remindersInBucket != 1 {
+		t.Fatalf("卡包清单里应该只有 1 条还款日提醒（账单日/提前提醒都不再生成），实际 %d", remindersInBucket)
 	}
 }
 
@@ -163,8 +163,8 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 4 {
-		t.Fatalf("开启时应看到 4 条，实际 %d", len(items))
+	if len(items) != 2 {
+		t.Fatalf("开启时应看到 2 条（1 条卡片还款提醒 + 1 条普通任务），实际 %d", len(items))
 	}
 	week, err := listCalendarItems(appDB, userID, now.AddDate(0, 0, -1), now.AddDate(0, 0, 40), nil)
 	if err != nil {
@@ -212,7 +212,7 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 	// 注意：普通提醒的 card_id 是 0（不是 NULL），所以这里要用 card_id > 0 来数卡片提醒。
 	appDB.Model(&Reminder{}).Where("user_id = ? AND card_id > 0 AND deleted_at IS NULL", userID).Count(&reminders)
 	appDB.Model(&List{}).Where("user_id = ? AND template = ? AND deleted_at IS NULL", userID, listTemplateCard).Count(&lists)
-	if cards != 1 || reminders != 3 || lists != 1 {
+	if cards != 1 || reminders != 1 || lists != 1 {
 		t.Fatalf("关闭只是隐藏，数据应保留：cards=%d reminders=%d lists=%d", cards, reminders, lists)
 	}
 
@@ -221,8 +221,8 @@ func TestDisableCreditCardHidesButKeepsData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 4 {
-		t.Fatalf("重新打开后应恢复到 4 条，实际 %d", len(items))
+	if len(items) != 2 {
+		t.Fatalf("重新打开后应恢复到 2 条，实际 %d", len(items))
 	}
 }
 

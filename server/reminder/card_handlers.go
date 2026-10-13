@@ -533,7 +533,10 @@ func retractCardPayment(tx *gorm.DB, card Card, dueDate time.Time) (Reminder, bo
 	if res.RowsAffected == 0 {
 		return item, false, nil
 	}
-	item.DueAt = &dueDate
+	// 滚回本期时保持卡片提醒的时间口径：**还款日 23:59**（用户 2026-10-13）。
+	// dueDate 来自账单期的还款日，是当天 0 点，直接用会把它改回半夜。
+	fixedDue := time.Date(dueDate.Year(), dueDate.Month(), dueDate.Day(), cardDueClockHour, cardDueClockMinute, 0, 0, dueDate.Location())
+	item.DueAt = &fixedDue
 	item.CompletedAt = nil
 	item.SnoozedUntil = nil
 	item.Version++

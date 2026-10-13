@@ -97,6 +97,40 @@ func init() {
 		},
 	})
 
+	// 0.26.0：信用卡提醒口径修正（用户 2026-10-13）——
+	//   ① 「账单日」提醒不再生成（账单日只在卡片页面用）、「还款日前 N 天提醒」也被
+	//      「从账单日提醒到还款日」的新窗口取代 —— 这两类老数据在这里软删；
+	//   ② 还款日提醒的到期时间原来是当天 **0 点**，改成 **23:59**（与新建提醒一致）。
+	// 只动 card_id 指向的、还没删的提醒；已经完成的保持完成状态（只改时刻）。
+	database.Upgrades = append(database.Upgrades, database.Upgrade{
+		Version: "0.26.0", Name: "fix_card_plan_reminders",
+		Upgrade: func(db *gorm.DB) error {
+			now := time.Now()
+			if err := db.Model(&Reminder{}).
+				Where("card_id <> 0 AND card_role IN ? AND deleted_at IS NULL", []string{cardRoleStatement, cardRoleAdvance}).
+				Updates(map[string]interface{}{"deleted_at": now, "updated_at": now}).Error; err != nil {
+				return err
+			}
+			var rows []Reminder
+			if err := db.Where("card_id <> 0 AND deleted_at IS NULL AND due_at IS NOT NULL").Find(&rows).Error; err != nil {
+				return err
+			}
+			loc, _ := time.LoadLocation("Asia/Shanghai")
+			for i := range rows {
+				due := rows[i].DueAt.In(loc)
+				if due.Hour() == cardDueClockHour && due.Minute() == cardDueClockMinute {
+					continue
+				}
+				fixed := time.Date(due.Year(), due.Month(), due.Day(), cardDueClockHour, cardDueClockMinute, 0, 0, loc)
+				if err := db.Model(&Reminder{}).Where("id = ?", rows[i].ID).
+					Updates(map[string]interface{}{"due_at": fixed, "updated_at": now}).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	})
+
 	database.RegisterModels(
 		&List{}, &Reminder{}, &ReminderChannel{}, &Completion{},
 		// 「提醒@他」：多人之间互相推的提醒消息（见 nudge.go）

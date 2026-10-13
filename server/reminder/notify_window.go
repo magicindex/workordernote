@@ -161,6 +161,18 @@ func firstRemindAt(db *gorm.DB, item Reminder) time.Time {
 	if !clockOK {
 		h, m = 0, 0
 	}
+	// 信用卡还款提醒的窗口起点（用户 2026-10-13：「信用卡还款从账单日开始，直到还款日」）：
+	// 还款日那条从**本期账单日**开始提醒，还款提醒那条从**还款日 − N 天**开始。
+	// 与全局的「提前几天开始提醒」比，它是**按卡片算的**（账单日到还款日的天数每张卡不同），
+	// 所以先判它。同样只在「创建时窗口还没到」的时候才用。
+	if stamp != nil && !item.CreatedAt.IsZero() {
+		if windowStart, ok := cardRemindWindowStart(db, item); ok {
+			start := time.Date(windowStart.Year(), windowStart.Month(), windowStart.Day(), h, m, 0, 0, shanghai())
+			if start.After(item.CreatedAt) && start.Before(*stamp) {
+				return start.UTC()
+			}
+		}
+	}
 	// 「提前几天开始提醒」（用户 2026-10-13）：到期日往前 N 天那天的「开始提醒时间」
 	// 就是提前窗口的起点。**只在创建时离到期日还超过 N 天的时候才用它** ——
 	// 创建时已经在 N 天之内（今天到期、明天到期…）的按正常流程走，也就是
@@ -257,19 +269,27 @@ func inQuietHours(db *gorm.DB, userID uint, now time.Time) bool {
 	return local.Hour()*60+local.Minute() < h*60+m
 }
 
+// deadlineStamp 是「逾期基准时间」：时间段结束 > 时间段开始 > 到期时间 ——
+// 也就是 effectiveStamp 那条链**去掉「稍后提醒」**。
+//
+// 为什么不算稍后提醒（用户 2026-10-13：「逾期项目点击知道了，提醒依然保留在逾期栏目，
+// 只是按后台设定时间进行下一次提示」）：弹窗上点「知道了」原来会把它「稍后提醒」到
+// 设定时间（默认第二天），于是那条**明明已经逾期**的任务就从「已逾期」分组里消失了 ——
+// 用户看到的是「点一下知道了，欠着的事就不算逾期了」。稍后提醒只该决定「什么时候再提醒我」，
+// 不该改变「这件事已经逾期」这个事实。
+func deadlineStamp(item Reminder) *time.Time {
+	for _, stamp := range []*time.Time{item.EndAt, item.StartAt, item.DueAt} {
+		if stamp != nil {
+			return stamp
+		}
+	}
+	return nil
+}
+
 // overdueDeadlineOf 算出这条任务的「逾期判定时刻」（与 SQL 里的 overdueDeadlineExpr 同一口径）：
 // 生效时间所在那一天（本地日期）的「逾期提醒时间」；写 00:00 时就是生效时刻本身。
 func overdueDeadlineOf(item Reminder, cutoff string) time.Time {
-	stamp := item.SnoozedUntil
-	if stamp == nil {
-		stamp = item.EndAt
-	}
-	if stamp == nil {
-		stamp = item.StartAt
-	}
-	if stamp == nil {
-		stamp = item.DueAt
-	}
+	stamp := deadlineStamp(item)
 	if stamp == nil {
 		return time.Time{}
 	}

@@ -653,10 +653,17 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 	preset := "(repeat_rule <> 'none' OR start_at IS NOT NULL OR (due_at IS NOT NULL AND " + tsUTC(effectiveDue) + " >= datetime(?)))"
 	switch view {
 	case "today":
-		// 今天页：生效时间在今天的 + 逾期未完成的。逾期靠排序（due_at 升序）自然置顶，
+		// 今天页：生效时间在今天的 + **已经逾期的**。逾期靠排序（due_at 升序）自然置顶，
 		// 前端再打个「逾期」标记（用户要求：今天页只显示今天的信息，逾期的置顶）。
-		// 「稍后到明天」的条目不在今天页 —— 它已经属于明天了。
-		q = q.Where(openOnly+"due_at IS NOT NULL AND "+tsUTC(effectiveDue)+" < datetime(?)", sqlTimeArg(endToday))
+		//
+		// 逾期的这一支**不看稍后提醒**（用户 2026-10-13：「逾期项目点击知道了，提醒依然
+		// 保留在逾期栏目，只是按后台设定时间进行下一次提示」）：点「知道了」会把它稍后提醒
+		// 到设定时间，但那条任务**本来就逾期**，不能因此从今天页的「已逾期」里消失。
+		// 普通（还没逾期）的条目仍然按生效时间算 —— 「稍后到明天」的就不在今天页了。
+		_, cutoff := overduePolicy(db, userID)
+		overdueExpr := overdueDeadlineExpr("COALESCE(end_at, start_at, due_at)", cutoff) + " < datetime(?)"
+		q = q.Where(openOnly+"due_at IS NOT NULL AND ("+tsUTC(effectiveDue)+" < datetime(?) OR "+overdueExpr+")",
+			sqlTimeArg(endToday), sqlTimeArg(now))
 	case "planned":
 		// 计划页＝「预设信息」：有循环规则的、有时间段（计划页建的就是这种）、
 		// 或者排在明天及以后的任务。今天页里那些「就今天办」的普通任务不会在这里

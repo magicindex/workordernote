@@ -3,11 +3,16 @@ package reminder
 import (
 	"testing"
 	"time"
+
+	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 // 需求 1（用户 2026-10-13）：
-//   「新建提醒，10分钟以后开始第一次提醒，低于10分钟到逾期设定时间的的不再提醒，
-//     直接给出逾期提醒」
+//
+//	「新建提醒，10分钟以后开始第一次提醒，低于10分钟到逾期设定时间的的不再提醒，
+//	  直接给出逾期提醒」
 //
 // 两条口径都在 firstRemindSchedule / rebuildJobs 里，这里把它们逐条钉住。
 func TestFirstRemindScheduleDelaysFreshReminders(t *testing.T) {
@@ -257,4 +262,57 @@ func TestAdvanceDaysWorksWithMidnightStart(t *testing.T) {
 	if got := firstRemindAt(appDB, item); !sameInstant(got, dayAt(7, 0).UTC()) {
 		t.Fatalf("00:00 + 提前 3 天：窗口应为 7 天后的 0 点，实际 %v", got)
 	}
+}
+
+// 「逾期项目点击知道了（稍后提醒），提醒依然保留在逾期栏目」（用户 2026-10-13）：
+// 逾期判定**不看 snoozed_until** —— 今天页里它还在，/summary 的 overdue 也还数它。
+func TestOverdueSurvivesAcknowledge(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	gin.SetMode(gin.TestMode)
+
+	const userID = 707
+	if _, err := ensureDefaultList(appDB, userID); err != nil {
+		t.Fatal(err)
+	}
+
+	overdueDue := time.Now().AddDate(0, 0, -2)
+	created, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "逾期了还被顺延", Kind: KindTask, DueAt: &overdueDue, RepeatRule: "none", Channels: []string{ChannelInApp},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 点「知道了」= 稍后提醒到明天（前端 ackCurrentAlert 就是这么做的）
+	if _, err := snoozeReminder(appDB, userID, created.ID, time.Now().AddDate(0, 0, 1)); err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := listReminders(appDB, userID, "today", "", nil, false, "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, item := range items {
+		if item.ID == created.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("逾期、被稍后提醒的条目必须留在今天页（已逾期栏）：%v", titlesOfTest(items))
+	}
+
+	rec := nudgeRequest(t, handleSummary(appDB), userID, http.MethodGet, "", nil)
+	data := nudgeData[map[string]any](t, rec)
+	if got := int64(data["overdue"].(float64)); got != 1 {
+		t.Fatalf("/summary 的 overdue 应当算上它（1），实际 %d", got)
+	}
+}
+
+func titlesOfTest(items []ReminderDTO) []string {
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		out = append(out, item.Title)
+	}
+	return out
 }

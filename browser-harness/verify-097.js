@@ -254,25 +254,34 @@ const setSelect = (page, sel, value) => page.evaluate(({ sel, value }) => {
       check('卡片创建成功且挂在信用卡栏目下',
         !!card1 && card1.list_id === bucketId && card1.statement_day === 5 && card1.due_day === 25,
         JSON.stringify({ id: card1?.id, list: card1?.list_id, day: card1?.statement_day, due: card1?.due_day }));
-      check('卡片默认提前 3 天提醒', card1?.advance_days === 3, String(card1?.advance_days));
+      // 用户 2026-10-13：卡片不再单独「提前 N 天提醒」（被「从账单日提醒到还款日」覆盖），
+      // 卡片设置里也没有那一项了 —— 这里只确认接口字段还在（老数据不丢）。
+      check('卡片设置里不再有「提前提醒」下拉（字段仍在接口里）',
+        Number.isFinite(card1?.advance_days), String(card1?.advance_days));
+      const advanceSelect = await page.evaluate(() => !!document.querySelector('[data-card-advance]'));
+      check('卡片编辑弹窗里没有 data-card-advance 了', advanceSelect === false);
       const listsAfterCard = (await api(page, '/api/reminder/lists')).body?.data || [];
       check('侧栏栏目的角标带上卡片数量（比原来多 1）',
         (listsAfterCard.find((l) => l.id === bucketId)?.card_count || 0) === beforeCards + 1,
         `${beforeCards} → ${listsAfterCard.find((l) => l.id === bucketId)?.card_count}`);
 
-      // ---------- 4. 自动生成的三条提醒 ----------
+      // ---------- 4. 自动生成的还款提醒（只有一条） ----------
       const plan = (await itemsAll()).filter((i) => i.card_id === card1?.id);
       const byRole = Object.fromEntries(plan.map((i) => [i.card_role, i]));
-      check('生成了账单日/还款日/提前提醒三条',
-        plan.length === 3 && !!byRole.statement && !!byRole.due && !!byRole.advance,
+      check('只生成 1 条提醒（还款日）；账单日/提前提醒都不再生成',
+        plan.length === 1 && !!byRole.due && !byRole.statement && !byRole.advance,
         JSON.stringify(plan.map((i) => i.card_role)));
-      check('三条都挂在卡片上且按月循环',
+      check('挂在卡片上且按月循环',
         plan.every((i) => i.card_id === card1?.id && i.repeat_rule === 'monthly' && i.all_day === true),
         JSON.stringify(plan.map((i) => `${i.card_role}:${i.card_id}/${i.repeat_rule}`)));
+      // 到期时间 = 还款日 23:59（用户 2026-10-13：「信用卡新建时间同新建提醒一致默认 23:59」）
+      check('到期时间落在还款日 23:59',
+        !!byRole.due && new Date(byRole.due.due_at).getHours() === 23 && new Date(byRole.due.due_at).getMinutes() === 59,
+        byRole.due?.due_at);
       check('标题带银行与卡名',
         !!byRole.due && byRole.due.title.includes(BANK) && byRole.due.title.includes(CARD), byRole.due?.title);
 
-      // 信用卡的「账单日/还款日/提前提醒」也要进日历数据（日历里能按信用卡账单筛选）
+      // 信用卡的还款日也要进日历数据（日历里能按信用卡账单筛选）
       const calRange = (await api(page, `/api/reminder/calendar?from=${isoDay(addDays(new Date(), -25))}&to=${isoDay(addDays(new Date(), 44))}`)).body?.data || [];
       const cardDays = calRange.filter((c) => c.card_id === card1.id);
       check('信用卡的日子出现在日历数据里（带 card_role）',
@@ -563,7 +572,7 @@ const setSelect = (page, sel, value) => page.evaluate(({ sel, value }) => {
       const faceCount = await page.evaluate(() => document.querySelectorAll('[data-card-face]').length);
       check('面板上的卡面数与卡片数一致', faceCount === twoCards.length, `${faceCount} vs ${twoCards.length}`);
       const plan2 = (await itemsAll()).filter((i) => i.card_id === card1.id || i.card_id === card2?.id);
-      check('两张新卡共六条提醒', plan2.length === 6, String(plan2.length));
+      check('两张新卡共两条提醒（每卡只有一条还款日提醒）', plan2.length === 2, String(plan2.length));
 
       // 给卡 2 记本期金额 → 它会作为「本周待还」出现在长条卡片里
       await page.evaluate((id) => document.querySelector(`[data-card-set-amount="${id}"]`).click(), card2.id);
@@ -762,12 +771,15 @@ const setSelect = (page, sel, value) => page.evaluate(({ sel, value }) => {
       await sleep(2200);
       const secondAfter = (await cardsOf()).find((c) => c.id === card2.id);
       const secondPlan = (await itemsAll()).filter((i) => i.card_id === card2.id);
-      const statementReminder = secondPlan.find((i) => i.card_role === 'statement');
+      const dueReminder = secondPlan.find((i) => i.card_role === 'due');
       check('改账单日后卡片信息更新', secondAfter?.statement_day === 12, String(secondAfter?.statement_day));
-      check('该卡的账单日提醒日期跟着变（12 号）',
-        !!statementReminder && new Date(statementReminder.due_at).getDate() === 12,
-        statementReminder ? `day=${new Date(statementReminder.due_at).getDate()}` : '没有账单日提醒');
-      check('重建后仍是三条（不越改越多）', secondPlan.length === 3, String(secondPlan.length));
+      check('不再有账单日提醒（账单日只在卡片页面用）', !secondPlan.some((i) => i.card_role === 'statement'),
+        JSON.stringify(secondPlan.map((i) => i.card_role)));
+      // 第二张卡的还款日就是「今天」（见第 9 节），改它的账单日不该动还款日提醒
+      check('还款日提醒的到期时间不受账单日影响（仍是它自己的还款日）',
+        !!dueReminder && new Date(dueReminder.due_at).getDate() === new Date().getDate(),
+        dueReminder ? `day=${new Date(dueReminder.due_at).getDate()}` : '没有还款日提醒');
+      check('重建后仍是 1 条（不越改越多）', secondPlan.length === 1, String(secondPlan.length));
 
       // ---------- 11. 删除卡片 → 提醒一并消失 ----------
       await openCardDrawer(page, card2.id);
@@ -811,8 +823,12 @@ const setSelect = (page, sel, value) => page.evaluate(({ sel, value }) => {
       await api(page, '/api/configs', 'PUT', { key: 'credit_card_enabled', value: 'true' });
       await sleep(2600);
       const itemsBack = (await itemsAll()).filter((i) => !!i.card_id);
-      check('重新打开后卡片提醒回到列表', itemsBack.length === beforeCardReminders + 3,
-        `${beforeCardReminders + 3} 期望 / ${itemsBack.length} 实际`);
+      // 此刻还活着的自检卡片只有 card1（第二张在第 11 节删掉了）→ 它那**一条**还款日提醒要回来；
+      // 列表里其余的是实例上本来就有的卡片提醒，只断言「不比关之前少」。
+      const mineBack = itemsBack.filter((i) => i.card_id === card1.id);
+      check('重新打开后卡片提醒回到列表',
+        mineBack.length === 1 && itemsBack.length >= beforeCardReminders + 1,
+        `本卡 ${mineBack.length} 条 / 列表共 ${itemsBack.length}（关前 ${beforeCardReminders}）`);
       await page.goto(ROOT + `/admin/list/${bucketId}`, { waitUntil: 'domcontentloaded' });
       await waitSel(page, '[data-card-panel]', 20000);
       await sleep(800);

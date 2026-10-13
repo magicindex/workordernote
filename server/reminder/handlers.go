@@ -996,7 +996,7 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		// 而且「到期日当天过了个人偏好里的逾期提醒时间就算逾期」（task_overdue_time，默认 23:59）。
 		grace, cutoff := overduePolicy(db, userID)
 		overdueBefore := now.Add(-grace)
-		selectArgs := []interface{}{sqlTimeArg(endToday), userID}
+		selectArgs := []interface{}{sqlTimeArg(endToday), sqlTimeArg(now), userID}
 		if len(hiddenCards) > 0 {
 			// 栏目关掉时，它那些卡片提醒的完成记录也不该再计入角标。
 			completedExpr = `COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
@@ -1011,10 +1011,17 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		// 口径与列表一致：用「生效时间」COALESCE(snoozed_until, due_at) ——
 		// 稍后提醒过的条目不算今天/逾期（它已经挪到稍后那一刻，见 service.go 的同名注释）。
 		effectiveDue := "COALESCE(snoozed_until, due_at)"
-		todayExpr := "COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND " +
-			tsUTC(effectiveDue) + " < datetime(?) THEN 1 ELSE 0 END), 0) AS today"
+		// 逾期基准**不看 snoozed_until**（用户 2026-10-13：「点知道了，提醒依然保留在逾期栏目」）：
+		// 稍后提醒只决定「什么时候再提醒」，不该把一条已经逾期的任务从「已逾期」里摘出去。
+		// 与 Go 侧 deadlineStamp 同一口径。
+		deadlineDue := "COALESCE(end_at, start_at, due_at)"
+		// 「今天」角标与今天页同一口径：生效时间在今天之内的 **或已经逾期的**
+		// （逾期那一支不看 snoozed_until，见 deadlineDue 的说明 —— 点「知道了」不该
+		// 让一条逾期的任务从今天页/角标里消失）。
+		todayExpr := "COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND (" +
+			tsUTC(effectiveDue) + " < datetime(?) OR " + overdueDeadlineExpr(deadlineDue, cutoff) + " < datetime(?)) THEN 1 ELSE 0 END), 0) AS today"
 		overdueExpr := "COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND " +
-			overdueDeadlineExpr(effectiveDue, cutoff) + " < datetime(?) THEN 1 ELSE 0 END), 0) AS overdue"
+			overdueDeadlineExpr(deadlineDue, cutoff) + " < datetime(?) THEN 1 ELSE 0 END), 0) AS overdue"
 		q := db.Model(&Reminder{}).
 			Select(todayExpr+`,
 				COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS planned,

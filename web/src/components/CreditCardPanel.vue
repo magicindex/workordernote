@@ -94,7 +94,7 @@
           </p>
           <p class="relative mt-2 text-[11px] opacity-80">
             免息期 {{ summaryOf(card).grace }} 天
-            <span v-if="card.advance_days > 0"> · 还款日前 {{ card.advance_days }} 天提醒</span>
+            <span> · 账单日起提醒，还款日 23:59 到期</span>
             <span v-if="!card.auto_repeat"> · 未开自动循环</span>
           </p>
           <!-- 账期进度：账单日 → 还款日前三天；进了最后 3 天整条变红 -->

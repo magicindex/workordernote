@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"smallgo/server/database"
+
+	"gorm.io/gorm"
 )
 
 func cardTestLoc(t *testing.T) *time.Location {
@@ -124,8 +127,10 @@ func TestGenerateCardPlanWithAdvance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(created) != 3 {
-		t.Fatalf("应生成 3 条提醒（账单日/还款日/提前提醒），实际 %d", len(created))
+	// 用户 2026-10-13：账单日只在卡片页面用、不再生成提醒；「还款日前 N 天提醒」被
+	// 「从账单日提醒到还款日」的窗口取代 —— 所以每张卡只留**一条**还款日提醒。
+	if len(created) != 1 {
+		t.Fatalf("应生成 1 条提醒（还款日），实际 %d", len(created))
 	}
 	roles := map[string]Reminder{}
 	for _, r := range created {
@@ -137,15 +142,34 @@ func TestGenerateCardPlanWithAdvance(t *testing.T) {
 			t.Errorf("应为全天 + 按月循环，实际 allDay=%v repeat=%s", r.AllDay, r.RepeatRule)
 		}
 	}
-	advance, ok := roles[cardRoleAdvance]
+	if _, ok := roles[cardRoleStatement]; ok {
+		t.Error("账单日提醒不该再生成（账单日只在卡片页面用）")
+	}
+	if _, ok := roles[cardRoleAdvance]; ok {
+		t.Error("「还款日前 N 天提醒」已被「从账单日提醒到还款日」的窗口取代，不该再有独立提醒")
+	}
+	due, ok := roles[cardRoleDue]
 	if !ok {
-		t.Fatal("缺少提前提醒")
+		t.Fatal("缺少还款日提醒")
 	}
-	if got := advance.DueAt.Format("2006-01-02"); got != "2026-10-22" {
-		t.Errorf("还款日前 3 天应为 10-22，实际 %s", got)
+	if got := due.DueAt.Format("2006-01-02"); got != "2026-10-25" {
+		t.Errorf("还款日应为 10-25，实际 %s", got)
 	}
-	if due := roles[cardRoleDue]; due.DueAt.Format("2006-01-02") != "2026-10-25" {
-		t.Errorf("还款日应为 10-25，实际 %s", due.DueAt.Format("2006-01-02"))
+	// 到期时间统一是**还款日 23:59**（用户 2026-10-13：「信用卡新建时间同新建提醒一致默认 23:59」）
+	if h, m := due.DueAt.Hour(), due.DueAt.Minute(); h != 23 || m != 59 {
+		t.Errorf("还款日提醒应落在 23:59，实际 %02d:%02d", h, m)
+	}
+	// 提前窗口从**本期账单日**开始（用户 2026-10-13：「信用卡还款从账单日开始，直到还款日」）
+	window, ok := cardRemindWindowStart(appDB, due)
+	if !ok || window.Format("2006-01-02") != "2026-10-05" {
+		t.Errorf("窗口起点应为本期账单日 10-05，实际 %v（ok=%v）", window, ok)
+	}
+	if first := firstRemindAt(appDB, due); !first.Equal(window.UTC()) && !sameInstant(first, window.UTC()) {
+		// 卡片提醒是「创建时窗口还没到」才用窗口；这条的 CreatedAt 是生成那一刻（10-06 10:00），
+		// 而窗口 10-05 06:00 已经过去 → 落到正常流程（还款日当天）
+		if !sameInstant(first, normalFirstRemindAt(appDB, due)) {
+			t.Errorf("首次提醒应为正常流程或窗口起点，实际 %v", first)
+		}
 	}
 }
 
@@ -471,5 +495,85 @@ func TestPaidPeriodAdvancesToNextCycle(t *testing.T) {
 	}
 	if after.UnpaidCount != 0 || after.UnpaidTotal != 0 {
 		t.Fatalf("已还的期不该再算进未还合计：%d 期 / %d 分", after.UnpaidCount, after.UnpaidTotal)
+	}
+}
+
+// 迁移 0.26.0（用户 2026-10-13）：老的「账单日」「还款日前 N 天」提醒软删，
+// 还款日提醒的到期时间从 0 点改到 23:59 —— 只动时间，不碰完成状态。
+func TestFixCardPlanRemindersUpgrade(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const userID = 93
+	loc := cardTestLoc(t)
+	list, err := ensureDefaultList(appDB, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := Card{UserID: userID, ListID: list.ID, Name: "老卡", Bank: "招行", StatementDay: 5, DueDay: 25}
+	if err := appDB.Create(&card).Error; err != nil {
+		t.Fatal(err)
+	}
+	// 造三条「旧口径」提醒：账单日 / 还款日 / 提前提醒，时间都在当天 0 点
+	midnight := func(day int) time.Time {
+		return time.Date(2026, time.October, day, 0, 0, 0, 0, loc)
+	}
+	doneAt := time.Now()
+	rows := []Reminder{
+		{UserID: userID, ListID: list.ID, CardID: card.ID, CardRole: cardRoleStatement, Title: "老卡 账单日", DueAt: ptrTime(midnight(5)), Kind: KindTask, RepeatRule: "monthly"},
+		{UserID: userID, ListID: list.ID, CardID: card.ID, CardRole: cardRoleDue, Title: "老卡 还款日", DueAt: ptrTime(midnight(25)), Kind: KindTask, RepeatRule: "monthly"},
+		{UserID: userID, ListID: list.ID, CardID: card.ID, CardRole: cardRoleAdvance, Title: "老卡 还款提醒（还有 3 天）", DueAt: ptrTime(midnight(22)), Kind: KindTask, RepeatRule: "monthly"},
+		{UserID: userID, ListID: list.ID, CardID: card.ID, CardRole: cardRoleDue, Title: "老卡 还款日（已完成）", DueAt: ptrTime(midnight(25)), Kind: KindTask, RepeatRule: "monthly", CompletedAt: &doneAt},
+	}
+	if err := appDB.Create(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// 找出注册表里那条迁移并执行（与升级流程用的是同一个函数）
+	var upgrade func(*gorm.DB) error //nolint
+	for _, u := range database.Upgrades {
+		if u.Version == "0.26.0" && u.Name == "fix_card_plan_reminders" {
+			upgrade = u.Upgrade
+		}
+	}
+	if upgrade == nil {
+		t.Fatal("注册表里找不到 fix_card_plan_reminders 迁移")
+	}
+	if err := upgrade(appDB); err != nil {
+		t.Fatal(err)
+	}
+
+	alive := func(role string) int64 {
+		var n int64
+		if err := appDB.Model(&Reminder{}).
+			Where("card_id = ? AND card_role = ? AND deleted_at IS NULL", card.ID, role).Count(&n).Error; err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if got := alive(cardRoleStatement); got != 0 {
+		t.Errorf("账单日提醒应被软删，实际还剩 %d", got)
+	}
+	if got := alive(cardRoleAdvance); got != 0 {
+		t.Errorf("提前提醒应被软删，实际还剩 %d", got)
+	}
+	if got := alive(cardRoleDue); got != 2 {
+		t.Errorf("两条还款日提醒都应保留（含已完成那条），实际 %d", got)
+	}
+	var kept []Reminder
+	if err := appDB.Where("card_id = ? AND card_role = ? AND deleted_at IS NULL", card.ID, cardRoleDue).
+		Order("id ASC").Find(&kept).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range kept {
+		if h, m := r.DueAt.In(loc).Hour(), r.DueAt.In(loc).Minute(); h != 23 || m != 59 {
+			t.Errorf("到期时间应改成 23:59，实际 %02d:%02d（%s）", h, m, r.Title)
+		}
+		if d := r.DueAt.In(loc).Day(); d != 25 {
+			t.Errorf("日期不该变，%s 的日号成了 %d", r.Title, d)
+		}
+	}
+	if kept[1].CompletedAt == nil {
+		t.Error("已完成状态不该被迁移清掉")
 	}
 }

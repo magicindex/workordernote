@@ -163,22 +163,38 @@ func TestTodayViewFollowsSnooze(t *testing.T) {
 	}
 	loc := shanghai()
 	now := time.Now().In(loc)
-	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 
-	// 今天早些时候到期（已经过了），但被「稍后提醒」到明天 00:30。
-	due := midnight.Add(-6 * time.Hour)
-	snoozed := midnight.AddDate(0, 0, 1).Add(30 * time.Minute)
+	// ① 还没逾期（到期时间在接下去几小时）→ 稍后到明天，就不在今天页了：
+	//    今天页看的是「生效时间」（COALESCE(snoozed_until, due_at)）。
+	futureDue := now.Add(2 * time.Hour)
 	created, err := createReminder(appDB, userID, SaveReminderInput{
-		Title: "稍后到明天", ListID: list.ID, DueAt: &due, RepeatRule: "none",
+		Title: "稍后到明天", ListID: list.ID, DueAt: &futureDue, RepeatRule: "none",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := appDB.Model(&Reminder{}).Where("id = ?", created.ID).
-		Update("snoozed_until", snoozed).Error; err != nil {
+		Update("snoozed_until", futureDue.AddDate(0, 0, 1)).Error; err != nil {
 		t.Fatal(err)
 	}
+
+	// ② 已经逾期（前天就该做完）→ 即使点了「知道了」（稍后提醒到明天），也必须留在今天页的
+	//    「已逾期」里（用户 2026-10-13：「逾期项目点击知道了，提醒依然保留在逾期栏目，
+	//    只是按后台设定时间进行下一次提示」）。
+	overdueDue := now.AddDate(0, 0, -2)
+	overdueItem, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "逾期了还被顺延", ListID: list.ID, DueAt: &overdueDue, RepeatRule: "none",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := appDB.Model(&Reminder{}).Where("id = ?", overdueItem.ID).
+		Update("snoozed_until", now.AddDate(0, 0, 1)).Error; err != nil {
+		t.Fatal(err)
+	}
+
 	// 对照：今天到期、没稍后的
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 	plainDue := midnight.Add(23 * time.Hour)
 	if _, err := createReminder(appDB, userID, SaveReminderInput{
 		Title: "今天正常", ListID: list.ID, DueAt: &plainDue, RepeatRule: "none",
@@ -195,7 +211,10 @@ func TestTodayViewFollowsSnooze(t *testing.T) {
 		got[r.Title] = true
 	}
 	if got["稍后到明天"] {
-		t.Errorf("稍后到明天的条目不该留在今天页：%v", titlesOf(today))
+		t.Errorf("还没逾期、稍后到明天的条目不该留在今天页：%v", titlesOf(today))
+	}
+	if !got["逾期了还被顺延"] {
+		t.Errorf("已经逾期、被稍后提醒的条目必须留在今天页（已逾期栏）：%v", titlesOf(today))
 	}
 	if !got["今天正常"] {
 		t.Errorf("今天页少了没稍后的那条：%v", titlesOf(today))

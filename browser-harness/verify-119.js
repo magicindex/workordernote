@@ -27,6 +27,8 @@ const BIRTH_TITLE = `自检生日-${STAMP}`;
 const LUNAR_TITLE = `自检农历生日-${STAMP}`;
 const QUIET_TITLE = `自检立刻弹-${STAMP}`;
 const ADVANCE_TITLE = `自检提前提醒-${STAMP}`;
+const ACK_OVERDUE_TITLE = `自检逾期顺延-${STAMP}`;
+const CARD_NAME = `自检卡${STAMP % 1000}`;
 
 let passed = 0;
 let failed = 0;
@@ -43,10 +45,18 @@ async function gotoRetry(page, url, tries = 3) {
   return false;
 }
 
+/** /items 的返回体一会儿是数组、一会儿是 {items:[]}：统一取一次，别再各处各写一份。 */
+const itemsOf = (body) => {
+  const d = body?.body?.data ?? body?.data;
+  return Array.isArray(d) ? d : (d?.items || []);
+};
 const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ base, p, method, body }) => {
   const token = localStorage.getItem('reminders.token') || sessionStorage.getItem('reminders.token');
   const res = await fetch(base + p, {
     method,
+    // 不走浏览器缓存：/api/bootstrap 这种 GET 被缓存过的话，读到的是**改配置之前**的旧值
+    // （本轮「开始提醒时间」就因此读成 06:00、排期却是 00:00，白红一次）
+    cache: 'no-store',
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -295,6 +305,83 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       String((bootAfter.body?.data?.configs || {}).reminder_advance_days ?? '') === String(originalAdvance),
       String((bootAfter.body?.data?.configs || {}).reminder_advance_days));
 
+    // ---------------- ⑤ 逾期项目点「知道了」后仍在「已逾期」 ----------------
+    // 用户原话：「逾期项目点击知道了，提醒依然保留在逾期栏目，只是按后台设定时间进行下一次提示」。
+    // 「知道了」在前端就是「稍后提醒到设定时间」，这里直接用稍后提醒接口模拟。
+    const twoDaysAgo = new Date(Date.now() - 2 * 86400_000).toISOString();
+    const ackId = await makeItem(ACK_OVERDUE_TITLE, twoDaysAgo);
+    check('造一条两天前就该做完的提醒（已逾期）', !!ackId);
+    if (ackId) {
+      await api(page, `/api/reminder/items/${ackId}/snooze`, 'POST', {
+        until: new Date(Date.now() + 86400_000).toISOString(),
+      });
+      const todayList = itemsOf(await api(page, '/api/reminder/items?view=today&status=all'));
+      check('点「知道了」（稍后提醒到明天）之后，它仍在今天页的列表里',
+        todayList.some((i) => i.id === ackId), JSON.stringify(todayList.map((i) => i.title).slice(0, 6)));
+      const summary = (await api(page, '/api/reminder/summary')).body?.data || {};
+      check('首页角标里它依然算逾期', Number(summary.overdue) >= 1, `overdue=${summary.overdue}`);
+
+      await gotoRetry(page, BASE + '/admin');
+      await sleep(2600);
+      const overdueCard = await page.evaluate((title) => {
+        const cards = [...document.querySelectorAll('[data-day-group]')];
+        const hit = cards.find((c) => (c.getAttribute('data-day-group') || '').includes('overdue'));
+        return hit ? (hit.innerText || '').includes(title) : false;
+      }, ACK_OVERDUE_TITLE);
+      check('界面上它确实待在「已逾期」那张卡片里', overdueCard === true);
+    }
+
+    // ---------------- ⑥ 信用卡：还款提醒从账单日开始，到期 = 还款日 23:59 ----------------
+    const buckets = (await api(page, '/api/reminder/lists')).body?.data || [];
+    const cardBucket = buckets.find((l) => l.template === 'credit_card');
+    check('存在「信用卡账单」栏目', !!cardBucket, JSON.stringify(buckets.map((l) => l.template)));
+    if (cardBucket) {
+      // 这一段固定用 06:00 做「开始提醒时间」，免得受前面还原/缓存的影响（断言里的时刻也按它算）
+      await api(page, '/api/configs', 'PUT', { key: 'reminder_all_day_time', value: '06:00' });
+      // 账单日选**两天后**（保证窗口还没到），还款日选它的 10 天后（跨月也行）
+      const now = new Date();
+      const stmtDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2);
+      const dueDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 12);
+      const made = await api(page, '/api/reminder/cards', 'POST', {
+        name: CARD_NAME, bank: '招商银行', statement_day: stmtDate.getDate(), due_day: dueDate.getDate(),
+        list_id: cardBucket.id, auto_repeat: false,
+      });
+      const newCardId = made.body?.data?.id ?? null;
+      check('建一张自检信用卡', !!newCardId, JSON.stringify(made.body).slice(0, 160));
+      if (newCardId) {
+        const all = itemsOf(await api(page, '/api/reminder/items?view=all&status=all'));
+        const plan = all.filter((i) => i.card_id === newCardId);
+        check('只生成一条还款提醒（账单日/提前提醒都不再生成）',
+          plan.length === 1 && plan[0].card_role === 'due', JSON.stringify(plan.map((i) => i.card_role)));
+        const dueAt = plan[0] ? new Date(plan[0].due_at) : null;
+        check('还款提醒到期时间 = 还款日 23:59',
+          !!dueAt && dueAt.getDate() === dueDate.getDate() && dueAt.getHours() === 23 && dueAt.getMinutes() === 59,
+          plan[0]?.due_at ?? '没有还款提醒');
+
+        // 首次提醒应当排在**本期账单日**（由投递台账看）
+        const job = plan[0] ? await advanceJobFor(plan[0].id) : null;
+        if (!dueAt) {
+          check('首次提醒从本期账单日开始（不是还款日当天）', false, '没有还款提醒，无法判断排期');
+        } else {
+        const clockNow = '06:00'; // 上面刚设的
+        const [ch, cm] = String(clockNow).split(':').map(Number);
+        const wantWindow = (() => {
+          let d = new Date(dueAt.getFullYear(), dueAt.getMonth(), stmtDate.getDate());
+          if (d > dueAt) d = new Date(dueAt.getFullYear(), dueAt.getMonth() - 1, stmtDate.getDate());
+          d.setHours(ch || 0, cm || 0, 0, 0);
+          return d;
+        })();
+        check('首次提醒从本期账单日开始（不是还款日当天）',
+          !!job && Math.abs(new Date(job.scheduled_for) - wantWindow) < 90_000,
+          `排到 ${job?.scheduled_for}，期望约 ${wantWindow.toISOString()}（开始提醒时间 ${clockNow}）`);
+        }
+
+        // 清理这张卡（连带它的提醒），并把开始提醒时间还原
+        await api(page, `/api/reminder/cards/${newCardId}`, 'DELETE');
+        await api(page, '/api/configs', 'PUT', { key: 'reminder_all_day_time', value: String(bootClock) });
+      }
+    }
+
     // ---------------- 清理 ----------------
     for (const id of itemIds) {
       if (id) await api(page, `/api/reminder/items/${id}`, 'DELETE');
@@ -304,8 +391,10 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       const d = gone.body?.data;
       return Array.isArray(d) ? d : d?.items || [];
     })();
-    check('清理干净：自检条目都不在了',
-      !left.some((i) => String(i.title).includes('自检生日') || String(i.title).includes('自检立刻弹')));
+    const leftovers = left
+      .filter((i) => String(i.title).includes('自检') && String(i.title).includes(String(STAMP)))
+      .map((i) => i.title);
+    check('清理干净：自检条目都不在了', leftovers.length === 0, JSON.stringify(leftovers));
   });
 
   console.log(`\n结果：${passed} 项通过，${failed} 项失败`);

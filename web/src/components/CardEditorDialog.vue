@@ -65,17 +65,9 @@
           <option v-for="d in 31" :key="d" :value="d">{{ d }} 号</option>
         </select>
       </label>
-      <label class="block">
-        <span class="text-xs font-bold text-foreground">提前提醒</span>
-        <select v-model.number="form.advance_days" class="compact-input mt-1.5" data-card-advance>
-          <option :value="0">不提前提醒</option>
-          <option :value="1">还款日前 1 天</option>
-          <option :value="2">还款日前 2 天</option>
-          <option :value="3">还款日前 3 天</option>
-          <option :value="5">还款日前 5 天</option>
-          <option :value="7">还款日前 7 天</option>
-        </select>
-      </label>
+      <!-- 「还款日前 N 天提前提醒」这一项没有了（用户 2026-10-13）：还款提醒现在是
+           **从账单日一直提醒到还款日**，账单日到还款日通常 20 天上下，任何「提前 N 天」
+           都落在窗口里、等于重复。字段仍随卡片保存（老数据不丢），只是不再单独生成提醒。 -->
       <label class="flex items-center gap-2 self-end text-xs font-semibold text-foreground">
         <input v-model="form.auto_repeat" type="checkbox" class="h-4 w-4 rounded border-border" data-card-repeat />
         自动循环（每月都生成提醒）
@@ -97,7 +89,7 @@
       </p>
       <p class="mt-0.5 text-muted-foreground">
         免息期 <b class="text-foreground">{{ preview.grace }}</b> 天
-        <span v-if="form.advance_days > 0"> · 还款日前 {{ form.advance_days }} 天会提前提醒</span>
+        <span> · 从账单日开始提醒，一直到还款日；还款日 23:59 到期</span>
       </p>
     </div>
 

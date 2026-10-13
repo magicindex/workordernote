@@ -47,6 +47,58 @@ func nextDayOccurrence(day int, now time.Time) time.Time {
 	return at
 }
 
+// 信用卡生成的提醒一律落在**还款日当天的 23:59**（用户 2026-10-13：「信用卡新建时间同
+// 新建提醒一致默认 23:59」）：原来生成在 0 点，等于半夜弹窗、而且当天零点就算到期。
+const (
+	cardDueClockHour   = 23
+	cardDueClockMinute = 59
+)
+
+// cardDayAt 返回「从今天算起还没过去的那个每月 day 号」的指定时刻（默认还款日的 23:59）。
+func cardDayAt(day int, now time.Time, hour, minute int) time.Time {
+	d := nextDayOccurrence(day, now)
+	return time.Date(d.Year(), d.Month(), d.Day(), hour, minute, 0, 0, d.Location())
+}
+
+// cardRemindWindowStart 是信用卡提醒的**提前窗口起点**（用户 2026-10-13：
+// 「信用卡还款从账单日开始，直到还款日」）：
+//
+//	· 还款日那条 → **本期账单日**（账单日当天到「开始提醒时间」就开始提醒）；
+//	· 还款提醒（还有 N 天）→ 还款日往前 N 天。
+//
+// 窗口起点只用来决定「第一次提醒什么时候开始」（见 notify_window.go 的 firstRemindAt），
+// **到期时间仍然是还款日** —— 今天/计划/统计页的逾期口径都按还款日算。
+func cardRemindWindowStart(db *gorm.DB, item Reminder) (time.Time, bool) {
+	if item.CardID == 0 || item.DueAt == nil {
+		return time.Time{}, false
+	}
+	var card Card
+	if err := db.Where("id = ? AND deleted_at IS NULL", item.CardID).First(&card).Error; err != nil {
+		return time.Time{}, false
+	}
+	if !validCardDay(card.StatementDay) || !validCardDay(card.DueDay) {
+		return time.Time{}, false
+	}
+	due := item.DueAt.In(shanghai())
+	switch item.CardRole {
+	case cardRoleAdvance:
+		if card.AdvanceDays <= 0 {
+			return time.Time{}, false
+		}
+		return due.AddDate(0, 0, -card.AdvanceDays), true
+	case cardRoleDue:
+		// 这一期还款日对应的账单日：账单日在还款日之前 —— 还款日 ≤ 账单日 号数的卡是
+		// 「本月账单日 → 下月还款日」（跨月），这时账单日要退到上个月。
+		statement := dateWithDay(due.Year(), due.Month(), card.StatementDay, due.Location())
+		if statement.After(due) {
+			prev := due.AddDate(0, -1, 0)
+			statement = dateWithDay(prev.Year(), prev.Month(), card.StatementDay, due.Location())
+		}
+		return statement, true
+	}
+	return time.Time{}, false
+}
+
 // graceDaysBetween 是账单日到它对应还款日的天数（免息期）。
 func graceDaysBetween(statementDay, dueDay int, now time.Time) int {
 	statement := nextDayOccurrence(statementDay, now)
@@ -190,29 +242,34 @@ func generateCardPlan(db *gorm.DB, card *Card, now time.Time) ([]Reminder, error
 		note := cardPlanNote(*card, summary)
 		name := cardDisplayName(*card)
 
+		// 信用卡只生成**还款**相关的提醒（用户 2026-10-13：
+		// 「修正账单日仅在卡片页面使用，今天、计划页面 逾期时间计算采用还款日，到期时间为还款日」）：
+		//   · 账单日过去也有一条「X 账单日」提醒，它在列表里是一条「到期时间＝账单日」的任务，
+		//     账单日一过就变「已逾期」—— 可钱是还款日才要还，用户看到的就是「逾期时间错位」。
+		//     现在账单日只在卡片页面用（卡面/摘要里都有），不再生成提醒（老数据由
+		//     register.go 的 drop_card_statement_reminders 迁移软删）。
+		//   · 到期时间一律是**还款日 23:59**（用户 2026-10-13：「信用卡新建时间同新建提醒一致
+		//     默认 23:59」；原来生成在当天 0 点，等于半夜就提醒、当天零点就算到期）。
+		//   · 提醒**从本期账单日开始**（用户 2026-10-13：「信用卡还款从账单日开始，直到还款日，
+		//     如果没有还款确认则提示逾期」）—— 窗口起点由 cardRemindWindowStart 按卡片算，
+		//     窗口内每天只在「开始提醒时间」提醒一次（见 dispatcher.go 的 scheduleRepeatNotify），
+		//     过了还款日还没确认还款就是逾期（逾期提醒照发）。
+		// 每张卡只留**一条**还款提醒（用户 2026-10-13）：
+		//   · 「账单日」那条不再生成（账单日只在卡片页面用）；
+		//   · 原来的「还款日前 N 天提醒」（cardRoleAdvance）也不再单独生成 —— 新口径是
+		//     **从账单日一直提醒到还款日**，账单日到还款日通常 20 天上下，任何「提前 N 天」
+		//     都落在这个窗口里，等于重复。卡片设置里的「提前提醒天数」相应地不再出现在界面上
+		//     （字段保留，老数据不删，同步也不受影响）。
+		dueAt := cardDayAt(card.DueDay, now, cardDueClockHour, cardDueClockMinute)
 		specs := []struct {
 			role  string
 			title string
-			day   int
+			due   time.Time
 		}{
-			{cardRoleStatement, name + " 账单日", card.StatementDay},
-			{cardRoleDue, name + " 还款日", card.DueDay},
-		}
-		if card.AdvanceDays > 0 {
-			// 「还款日前 N 天」不是一个固定的号数：按还款日推算日期更准，
-			// 所以这一条用绝对日期 + 同规则重复，而不是「每月某号」。
-			due := nextDayOccurrence(card.DueDay, now).AddDate(0, 0, -card.AdvanceDays)
-			specs = append(specs, struct {
-				role  string
-				title string
-				day   int
-			}{cardRoleAdvance, fmt.Sprintf("%s 还款提醒（还有 %d 天）", name, card.AdvanceDays), due.Day()})
+			{cardRoleDue, name + " 还款日", dueAt},
 		}
 		for _, spec := range specs {
-			due := nextDayOccurrence(spec.day, now)
-			if spec.role == cardRoleAdvance {
-				due = nextDayOccurrence(card.DueDay, now).AddDate(0, 0, -card.AdvanceDays)
-			}
+			due := spec.due
 			row := Reminder{
 				UserID: card.UserID, ListID: card.ListID, CardID: card.ID, CardRole: spec.role,
 				Title: spec.title, Notes: note, Kind: KindTask, DueAt: &due, AllDay: true,
