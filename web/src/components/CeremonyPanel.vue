@@ -201,25 +201,35 @@
             </button>
           </div>
           <!-- 背景蒙板（用户 2026-10-13：「背景增加蒙板功能，可调整虚化、透明度两个指标」）：
-               选了背景图才出现 —— 虚化让照片柔和，透明度控制压在上面的暗色蒙板有多淡
-               （越小蒙板越浓、字越清楚）。 -->
-          <div v-if="form.background" class="mt-2 space-y-1.5 rounded-xl border border-border/70 bg-muted/30 p-2">
-            <label class="flex items-center gap-2 text-[11px] font-bold text-muted-foreground">
+               虚化让照片柔和，透明度控制压在上面的暗色蒙板有多淡（越小蒙板越浓、字越清楚）。
+               **一直显示**（哪怕还没选背景图）—— 之前是「选了背景图才出现」，用户 2026-10-13
+               反馈「没看到蒙板设置」：得先知道要选图才看得到，等于藏起来了。
+               没选图时滑块置灰 + 一句提示。 -->
+          <div class="mt-2 space-y-1.5 rounded-xl border border-border/70 bg-muted/30 p-2" data-ceremony-form-bg-mask-block>
+            <div class="flex flex-wrap items-baseline justify-between gap-x-2">
+              <span class="text-[11px] font-bold text-foreground">背景蒙板</span>
+              <span v-if="!form.background" class="text-[11px] font-medium text-muted-foreground" data-ceremony-form-bg-mask-need>
+                先在上面选一张背景图，再调虚化与透明度
+              </span>
+            </div>
+            <label class="flex items-center gap-2 text-[11px] font-bold text-muted-foreground" :class="{ 'opacity-50': !form.background }">
               <span class="w-14 shrink-0">虚化</span>
               <input
                 v-model.number="form.bgBlur"
                 type="range" min="0" max="24" step="1"
-                class="h-1.5 flex-1 accent-brand-500"
+                :disabled="!form.background"
+                class="h-1.5 flex-1 accent-brand-500 disabled:cursor-not-allowed"
                 data-ceremony-form-bg-blur
               />
               <span class="w-10 shrink-0 text-right tabular-nums">{{ form.bgBlur }}px</span>
             </label>
-            <label class="flex items-center gap-2 text-[11px] font-bold text-muted-foreground">
+            <label class="flex items-center gap-2 text-[11px] font-bold text-muted-foreground" :class="{ 'opacity-50': !form.background }">
               <span class="w-14 shrink-0">透明度</span>
               <input
                 v-model.number="form.bgMask"
                 type="range" min="0" max="100" step="5"
-                class="h-1.5 flex-1 accent-brand-500"
+                :disabled="!form.background"
+                class="h-1.5 flex-1 accent-brand-500 disabled:cursor-not-allowed"
                 data-ceremony-form-bg-mask
               />
               <span class="w-10 shrink-0 text-right tabular-nums">{{ form.bgMask }}%</span>
