@@ -268,16 +268,21 @@ const swatchGradient = (a: CardAccent) => `linear-gradient(135deg, ${a.from} 0%,
  */
 function heroStyle(entry: { accent?: string; id: number }) {
   // 倒计时**不再有自己的卡片效果**（用户 2026-10-13：「倒计时不增加卡片效果，直接显示在
-  // 大卡片中」）：这里只给字色与流光要用的三个变量，不再画独立底色/描边。
-  //   --ceremony-ink       数字的基色（对比度用例读它：文字本身是 background-clip:text + 透明色）
-  //   --ceremony-flow-base 流光渐变的两端（比基色略淡一点，光带扫过才看得出来）
-  //   --ceremony-flow-shine 扫过的那道光
+  // 大卡片中」）：这里只给字色与流光要用的变量，不再画独立底色/描边。
+  //   --ceremony-ink 数字的基色（也是流光渐变的两端；对比度用例读它 —— 数字本身是
+  //                  background-clip:text + 透明色，量不到 color）
+  //   --ceremony-flow-1/2/3 彩色流光的三段颜色（用户 2026-10-13：「使用彩色流光」）：
+  //                  深色卡面用**亮**的靛蓝/紫/青（一眼能看清），浅色卡面（琥珀/鎏金）
+  //                  用**深**的同色系（否则亮青亮紫压在浅金上会糊成一片）。
+  //                  与登录页/日历「月·周」那套 .flow-text 是同一个视觉语言。
   const ink = heroInk(entry.accent, entry.id)
+  const white = ink === '#ffffff'
   return {
     color: ink,
     '--ceremony-ink': ink,
-    '--ceremony-flow-base': ink === '#ffffff' ? 'rgba(255, 255, 255, .78)' : 'rgba(15, 23, 42, .82)',
-    '--ceremony-flow-shine': ink === '#ffffff' ? '#ffffff' : 'rgba(255, 255, 255, .95)',
+    '--ceremony-flow-1': white ? '#a5b4fc' : '#4338ca',
+    '--ceremony-flow-2': white ? '#d8b4fe' : '#7e22ce',
+    '--ceremony-flow-3': white ? '#67e8f9' : '#0e7490',
   }
 }
 /**
@@ -597,19 +602,30 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
    prefers-reduced-motion 时停住动画、定在中点，只留静态的亮色数字。 */
 .ceremony-hero b {
   @apply text-[36px] font-black leading-none tracking-tight sm:text-[44px];
+  /* 彩色流光：靛蓝 → 紫 → 青 三段滚动（两端回到基色，整体色调仍贴着卡面字色） */
   background-image: linear-gradient(100deg,
-    var(--ceremony-flow-base, #ffffff) 0%,
-    var(--ceremony-flow-base, #ffffff) 38%,
-    var(--ceremony-flow-shine, #ffffff) 50%,
-    var(--ceremony-flow-base, #ffffff) 62%,
-    var(--ceremony-flow-base, #ffffff) 100%);
-  background-size: 220% 100%;
+    var(--ceremony-ink, #ffffff) 0%,
+    var(--ceremony-flow-1, #a5b4fc) 22%,
+    var(--ceremony-flow-2, #d8b4fe) 42%,
+    var(--ceremony-flow-3, #67e8f9) 62%,
+    var(--ceremony-flow-1, #a5b4fc) 80%,
+    var(--ceremony-ink, #ffffff) 100%);
+  background-size: 260% 100%;
   background-position: 50% 0;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
   animation: ceremony-countdown-flow 2.8s linear infinite;
+}
+/* 兜底：老内核不支持 background-clip:text 时字会整个透明、等于看不见 —— 退回静态字色 */
+@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+  .ceremony-hero b {
+    color: var(--ceremony-ink, inherit);
+    -webkit-text-fill-color: var(--ceremony-ink, inherit);
+    background-image: none;
+    animation: none;
+  }
 }
 @keyframes ceremony-countdown-flow {
   0% { background-position: 130% 0; }

@@ -501,6 +501,15 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
       check('数字有持续跑动的流光动画',
         !!flow && /ceremony-countdown-flow/.test(flow.anim) && parseFloat(flow.duration) > 0.2,
         JSON.stringify(flow));
+      // 用户 2026-10-13 追加：「使用彩色流光」—— 渐变里要有多种颜色（不是单色白光扫过）
+      const flowColors = await page.evaluate(() => {
+        const b = document.querySelector('[data-ceremony-countdown] b');
+        if (!b) return null;
+        const stops = [...getComputedStyle(b).backgroundImage.matchAll(/rgb\([^)]+\)/g)].map((m) => m[0]);
+        return { stops, distinct: new Set(stops).size };
+      });
+      check('流光是彩色的（渐变里至少三种不同颜色，不是单色）',
+        !!flowColors && flowColors.distinct >= 3, JSON.stringify(flowColors));
       await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
       const reduced = await page.evaluate(() => {
         const b = document.querySelector('[data-ceremony-countdown] b');
