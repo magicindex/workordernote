@@ -46,6 +46,35 @@ APP_URL=http://127.0.0.1:8908 bash browser-harness/run-all.sh
 docker run --rm -v /vol1/1000/Docker/reminders/data:/data alpine:latest sh /dev/stdin < ops/verify-data.sh
 ```
 
+## 发版时把构件也放进仓库（Gitea）
+
+代码推到 Gitea（`origin` = <http://192.168.3.200:3000/cyberzero/WorkOrderNote>），构件走**两条路**：
+
+```bash
+VERSION=0.23.0
+
+# ① 打标签（Release 的锚点）
+git tag -a v$VERSION -m "工作序记 $VERSION" && git push origin v$VERSION
+
+# ② 建 Release 并挂附件（镜像 + 离线包 + 校验和）
+curl -u cyberzero:*** -H 'Content-Type: application/json' \
+  -d "{\"tag_name\":\"v$VERSION\",\"name\":\"工作序记 $VERSION\"}" \
+  http://192.168.3.200:3000/api/v1/repos/cyberzero/WorkOrderNote/releases
+curl -u cyberzero:*** -F "attachment=@pkg/WorkOrderNote-$VERSION-offline/image/workordernote-$VERSION-amd64.tar.gz" \
+  "http://192.168.3.200:3000/api/v1/repos/cyberzero/WorkOrderNote/releases/<id>/assets?name=workordernote-$VERSION-amd64.tar.gz"
+
+# ③ 镜像推进 Gitea 的容器仓库（用 alpine 里的 skopeo，不依赖本机 docker 的 insecure 配置）
+docker run --rm -v "$PWD/pkg/WorkOrderNote-$VERSION-offline/image":/src:ro alpine:latest sh -c "
+  sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories; apk add --no-cache skopeo >/dev/null
+  gunzip -c /src/workordernote-$VERSION-amd64.tar.gz > /tmp/img.tar
+  skopeo copy --dest-tls-verify=false --dest-creds 'cyberzero:***' \
+    docker-archive:/tmp/img.tar:workordernote:$VERSION \
+    docker://192.168.3.200:3000/cyberzero/workordernote:$VERSION"
+```
+
+推完可以回读校验：`skopeo inspect --tls-verify=false --creds ... docker://192.168.3.200:3000/cyberzero/workordernote:$VERSION`。
+本机要直接 `docker pull` 这个仓库，得先把 `192.168.3.200:3000` 加进 daemon 的 `insecure-registries`（HTTP）。
+
 ## 注意
 
 - **`browser-harness/` 的脚本里有测试账号的默认口令**（`APP_PASS` 的默认值，方便无人值守跑套件）。

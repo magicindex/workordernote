@@ -273,7 +273,17 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 > - 数据指纹（201 == 200）：清单 `6fc67d82ce`、卡片 `b5e17c0ab7`、提醒 `3881403059`、完成 `1290f3c9af`
 >   （5 清单 / 9 卡片 / 59 提醒 / 42 条完成记录）。公开设置 9 项一致；201 与 200 的个人偏好一致
 >   （沙箱按惯例保持「开始提醒时间 00:00 / 提醒频率 10 / 知道了后 0」，便于夜里跑回归）。
-> - 代码仓库（Gitea `cyberzero/WorkOrderNote`）同步推送。
+ - 代码仓库（Gitea `cyberzero/WorkOrderNote`）同步推送（Gitea 已设为默认远端 `origin`，
+  上游 GitHub 改名 `upstream`；本地分支改回 `main` 跟踪 `origin/main`）。
+> - **构件也放进 Gitea 仓库**：
+>   · Release <http://192.168.3.200:3000/cyberzero/WorkOrderNote/releases/tag/v0.23.0> —— 附了
+>     `workordernote-0.23.0-amd64.tar.gz`（镜像，45MB）、`WorkOrderNote-0.23.0-offline-amd64.tar.gz`
+>     （离线包，44MB）、`SHA256SUMS-0.23.0.txt`；
+>   · **容器仓库** `192.168.3.200:3000/cyberzero/workordernote:0.23.0`（skopeo 直推，回读校验
+>     digest `sha256:a01ffb2d6e9b…`，labels 里 version `0.23.0` / revision `fa4543b`）。
+>     ⚠️ 本机 docker 要直接 `docker pull` 这个 HTTP 仓库，需要把 `192.168.3.200:3000` 加进
+>     `/etc/docker/daemon.json` 的 `insecure-registries` 并重启 dockerd（`live-restore` 开着，
+>     现有容器不会重启）—— 这一步要用户点头才做，见待办。
 
 ### 2026-10-13：0.22.0（201 生产 / 200 生产 / 沙箱 8908 上线）—— 清单页排序；开始提醒时间（免打扰）+ 逾期提醒时间；仪式感卡片颜色统一 + 背景图；别处确认过的通知不再重复显示
 
