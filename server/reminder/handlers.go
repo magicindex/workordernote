@@ -54,6 +54,9 @@ func setupAuthRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	group.GET("/nudges", handleListNudges(db))
 	group.POST("/nudges", handleCreateNudge(db))
 	group.GET("/nudges/users", handleNudgeUsers(db))
+	// 「保存到清单」（接收人把别人推来的提醒存成自己的任务）与「提醒一下」（发起人再即时推一次）
+	group.POST("/nudges/:id/save", handleSaveNudgeToReminder(db))
+	group.POST("/nudges/:id/remind", handleRemindNudgeAgain(db))
 	group.POST("/nudges/:id/read", handleReadNudge(db))
 	group.POST("/nudges/:id/done", handleDoneNudge(db))
 	group.DELETE("/nudges/:id", handleDeleteNudge(db))

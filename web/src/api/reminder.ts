@@ -306,6 +306,11 @@ export interface Nudge {
   done_at?: string | null
   created_at: string
   can_delete: boolean
+  /** 「保存到清单」：存到哪个清单、以及那条任务是不是已完成（卡片状态与清单同步） */
+  reminder_id?: number | null
+  list_id?: number
+  list_name?: string
+  saved_done?: boolean
 }
 
 export interface NudgeBox {
@@ -329,6 +334,11 @@ export const listNudgeUsers = () => request.get('/api/reminder/nudges/users')
 export const createNudge = (data: { to_user_id: number; content: string; note?: string; due_at?: string | null }) =>
   request.post('/api/reminder/nudges', data)
 export const readNudge = (id: number) => request.post(`/api/reminder/nudges/${id}/read`)
+/** 「保存到清单」：把别人推来的提醒变成自己某个清单里的待办任务。 */
+export const saveNudgeToList = (id: number, listId: number) =>
+  request.post(`/api/reminder/nudges/${id}/save`, { list_id: listId })
+/** 「提醒一下」：再即时推一次给对方（对方立刻收到站内通知/弹窗）。 */
+export const remindNudgeAgain = (id: number) => request.post(`/api/reminder/nudges/${id}/remind`)
 export const doneNudge = (id: number) => request.post(`/api/reminder/nudges/${id}/done`)
 export const deleteNudge = (id: number) => request.delete(`/api/reminder/nudges/${id}`)
 

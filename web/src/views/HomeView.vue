@@ -643,6 +643,11 @@ import ExportDialog from '../components/ExportDialog.vue'
 import CreditCardPanel from '../components/CreditCardPanel.vue'
 import CeremonyPanel from '../components/CeremonyPanel.vue'
 import { listColorHex } from '../utils/list-colors'
+import {
+  overdueStamp as overdueStampShared,
+  overdueDeadlineAt as overdueDeadlineShared,
+  isOverdueAt as isOverdueShared,
+} from '../utils/overdue'
 import { getPublicConfigs } from '../api/config'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import {
@@ -1483,34 +1488,24 @@ function collapseQuickAdd() {
     再加上宽限时间才算逾期）；其余看到期时间。
     记事没有排期，永远不算逾期；已完成的也不算。
     逾期分组卡片与行上的「已逾期」标记共用这一个函数，避免两处口径跑偏。 */
+// 逾期判定的口径统一放在 utils/overdue.ts（首页看板用的是同一份，抄一份迟早跑偏）：
+// 生效时间不看 snoozed_until、按「逾期提醒时间」当天算、再加宽限分钟。
 function overdueStamp(item: ReminderItem): number | null {
-  if (item.completed_at || item.kind === 'note') return null
-  // **不看 snoozed_until**（用户 2026-10-13：「逾期项目点击知道了，提醒依然保留在逾期栏目，
-  // 只是按后台设定时间进行下一次提示」）：稍后提醒/知道了只决定「什么时候再提醒我」，
-  // 不该把一条已经逾期的任务从「已逾期」分组里摘掉。与服务端 deadlineStamp 同一口径。
-  const raw = item.end_at || item.start_at || item.due_at
-  if (!raw) return null
-  const t = new Date(raw).getTime()
-  return Number.isNaN(t) ? null : t
+  return overdueStampShared(item)
 }
 /** 逾期判定的**截止时刻**：到期时刻与「当天过期时间」取晚的那个。
     （用户 2026-10-10：当天到这个点才算过期；若到期时刻本来就晚于它，就按到期时刻。） */
 function overdueDeadline(item: ReminderItem): number | null {
   const t = overdueStamp(item)
-  if (t === null) return null
-  const { h, m } = overdueTimeParts.value
-  // 00:00 = 按到期时刻算、不按天顺延（沿用这个设置项旧口径里 00:00 的含义）。
-  if (h === 0 && m === 0) return t
-  const d = new Date(t)
-  // 「到期日当天过了这个点就算逾期」：与任务写了几点无关 —— 新建提醒默认 23:59，
-  // 若取「两者较晚」，用户把逾期时间设成 20:30 就永远看不出效果（这正是要修的）。
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0, 0).getTime()
+  return overdueDeadlineShared(item, overdueTimeParts.value)
 }
 function isOverdue(item: ReminderItem) {
-  const t = overdueDeadline(item)
-  if (t === null) return false
   // 过了「宽限时间」才算逾期：默认时间就是当前时刻，不留余量的话新建即逾期
-  return t + overdueGraceMinutes.value * 60_000 < clockNow.value
+  return isOverdueShared(item, {
+    cutoff: overdueTimeParts.value,
+    graceMinutes: overdueGraceMinutes.value,
+    now: clockNow.value,
+  })
 }
 // 日期按钮用完整格式：选中后能直接核对年月日时分，避免跨年日期歧义。
 function formatFullDue(value: string | null | undefined) {

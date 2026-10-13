@@ -346,8 +346,8 @@
     </div>
 
     <nav class="mobile-tabbar" :class="{ 'mobile-tabbar-hidden': keyboardOpen }">
-      <RouterLink to="/admin" class="mobile-tab" :class="{ active: route.path === '/admin' }"><span v-html="smartNav[0].icon"></span><small>今天</small></RouterLink>
-      <RouterLink to="/admin/planned" class="mobile-tab" :class="{ active: route.path === '/admin/planned' }"><span v-html="smartNav[1].icon"></span><small>计划</small></RouterLink>
+      <RouterLink to="/admin" class="mobile-tab" :class="{ active: route.path === '/admin' }"><span v-html="smartNav[1].icon"></span><small>今天</small></RouterLink>
+      <RouterLink to="/admin/planned" class="mobile-tab" :class="{ active: route.path === '/admin/planned' }"><span v-html="smartNav[2].icon"></span><small>计划</small></RouterLink>
       <!-- 信用卡账单：手机端也要有直接入口（抽屉里也有，但底部标签是主要导航）。
            只有个人偏好打开、且确实有这一栏时才出现。 -->
       <RouterLink
@@ -388,8 +388,9 @@
       :busy="alertBusy"
       :error="alertError"
       :snooze-label="`稍后提醒（${notifyMinutes} 分钟后）`"
-      :ack-label="ackLabel"
-      :ack-hint="ackHint"
+      :show-snooze="!currentAlertIsNudge"
+      :ack-label="currentAlertIsNudge ? '知道了' : ackLabel"
+      :ack-hint="currentAlertIsNudge ? '去「提醒@他」页面查看并处理' : ackHint"
       @ack="ackCurrentAlert"
       @snooze="snoozeCurrentAlert"
       @dismiss="dismissCurrentAlert"
@@ -593,6 +594,8 @@ const icons = {
 }
 
 const smartNav = [
+  // 「首页」排在最上面（用户 2026-10-13：「智能清单：今天上方增加首页」）
+  { to: '/admin/home', label: '首页', key: 'home', tone: 'bg-brand-500/12 text-brand-500', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-5.5h-5V21H5a1 1 0 0 1-1-1v-9.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
   { to: '/admin', label: '今天', key: 'today', tone: 'bg-blue-500/12 text-blue-500', icon: icons.today },
   { to: '/admin/planned', label: '计划', key: 'planned', tone: 'bg-amber-500/12 text-amber-500', icon: icons.planned },
   { to: '/admin/all', label: '全部', key: 'all', tone: 'bg-violet-500/12 text-violet-500', icon: icons.all },
@@ -988,6 +991,8 @@ function playReminderSound() {
 interface DueAlert {
   notificationID: number
   reminderID?: number
+  /** 通知类型：nudge_* 是「提醒@他」推来的，弹窗文案与按钮不一样 */
+  type?: string
   title: string
   body: string
   createdAt: string
@@ -1009,13 +1014,18 @@ const ackMinutes = computed(() => authStore.reminderAckMinutes || 0)
 // 「内容等于后台偏好…显示保持与后台一致」）：后台选「1 小时后」，按钮就是
 // 「知道了（1 小时后）」；选「第二天（当天不再提示）」，按钮就是同一句话。
 const ackLabel = computed(() => `知道了（${ackMinutesLabel(ackMinutes.value)}）`)
+// 当前弹窗是「提醒@他」推来的通知吗（那种没有关联任务，文案与按钮都不一样）
+const currentAlertIsNudge = computed(() => NUDGE_NOTIFICATION_TYPES.includes(String(currentAlert.value?.type || '')))
 const ackHint = computed(() => (ackMinutes.value > 0
   ? `要完成请到列表里勾选；${ackMinutes.value} 分钟后会再提醒一次`
   : '要完成请到列表里勾选；今天不再提示，明天同一时间继续提醒'))
 
 // 会弹「屏幕中央弹窗」的站内通知类型：到点提醒 + 逾期提醒（用户 2026-10-12 加的
 // 「到了逾期提醒时间还没完成就提醒」）。其它类型（例如渠道投递失败）仍是轻量 toast。
-const ALERT_NOTIFICATION_TYPES = ['reminder_due', 'reminder_overdue']
+// 提醒@他推来的通知（收到 / 对方又提醒你一次）也走中央弹窗（用户 2026-10-13：
+// 「提醒一下……即时发送提醒弹窗」）；它们没有关联任务，所以弹窗里不给「稍后提醒」。
+const ALERT_NOTIFICATION_TYPES = ['reminder_due', 'reminder_overdue', 'nudge_received', 'nudge_reminded']
+const NUDGE_NOTIFICATION_TYPES = ['nudge_received', 'nudge_reminded']
 
 function enqueueDueAlert(notification: ReminderRealtimeEvent['notification']) {
   if (!notification || !ALERT_NOTIFICATION_TYPES.includes(notification.type)) return
@@ -1023,6 +1033,7 @@ function enqueueDueAlert(notification: ReminderRealtimeEvent['notification']) {
   alertQueue.value.push({
     notificationID: notification.id,
     reminderID: notification.reminder_id,
+    type: notification.type,
     title: notification.title,
     body: notification.body,
     createdAt: notification.created_at,
@@ -1269,17 +1280,46 @@ function syncKeyboardState() {
 
 // 只在本次会话的第一次进入时套用「默认首页」，之后用户点「今天」不该被再拽去日历。
 let defaultViewApplied = false
+// 「默认首页」偏好（default_view）：home=首页看板 / list=列表（今天）/ calendar=日历。
+// 用户 2026-10-13 加了首页看板并要求「打开默认显示页」，所以默认值是 home；
+// 手机上没有日历视图，设成日历也按列表进。
+const defaultView = ref<'home' | 'list' | 'calendar'>('home')
+function defaultViewTarget(): { name: string } {
+  if (defaultView.value === 'calendar' && !isNarrowNow()) return { name: 'Calendar' }
+  if (defaultView.value === 'home') return { name: 'Dashboard' }
+  return { name: 'Home' }
+}
 async function applyDefaultViewOnce() {
   if (defaultViewApplied) return
   defaultViewApplied = true
-  if (route.name !== 'Home') return
   try {
     const res = await getAllConfigs()
-    // 手机上没有日历视图：默认首页即使设成「日历」，也按列表首页进
-    if (res.data?.data?.default_view === 'calendar' && !isNarrowNow()) await router.replace({ name: 'Calendar' })
+    const value = String(res.data?.data?.default_view || 'home')
+    defaultView.value = value === 'calendar' ? 'calendar' : value === 'list' ? 'list' : 'home'
   } catch {
-    /* 读不到就按列表首页来，不该因为一个偏好读失败挡住进入应用 */
+    /* 读不到就按首页看板来，不该因为一个偏好读失败挡住进入应用 */
   }
+  if (route.name !== 'Home') return
+  const target = defaultViewTarget()
+  if (String(route.name) !== target.name) await router.replace(target)
+}
+
+// 「10 分钟不操作默认展示页」（用户 2026-10-13）：空闲满 10 分钟且不在首页时，自动回首页看板。
+// 只有停在 /admin 里的页面才跳（登录页、注册页不掺和）；任何指针/键盘/滚轮/触摸操作都会重新计时。
+const IDLE_BACK_TO_HOME_MS = 10 * 60 * 1000
+let idleTimer: ReturnType<typeof setTimeout> | undefined
+function armIdleTimer() {
+  if (idleTimer) clearTimeout(idleTimer)
+  idleTimer = setTimeout(() => {
+    if (!route.path.startsWith('/admin')) return
+    // 「默认展示页」= 默认首页偏好那一档（默认就是首页看板）
+    const target = defaultViewTarget()
+    if (String(route.name) === target.name) return
+    void router.push(target)
+  }, IDLE_BACK_TO_HOME_MS)
+}
+function onUserActivity() {
+  armIdleTimer()
 }
 
 onMounted(() => {
@@ -1291,6 +1331,11 @@ onMounted(() => {
   document.addEventListener('pointerdown', unlockReminderSound, { once: true })
   document.addEventListener('keydown', unlockReminderSound, { once: true })
   document.addEventListener('visibilitychange', refreshWhenVisible)
+  // 空闲回首页看板：任何操作都重新计时（见 armIdleTimer）
+  armIdleTimer()
+  for (const evt of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
+    window.addEventListener(evt, onUserActivity, { passive: true })
+  }
   // 网关域上没有本地 JWT 也要连：那条路的身份来自网关注入的 X-Trim-*。
   if (authStore.token || onFnOSGatewayOrigin()) stopRealtime = connectReminderEvents(authStore.token, handleRealtimeEvent)
   fnosSessionTimer = window.setInterval(() => { void checkFnOSSession() }, FNOS_SESSION_POLL_MS)
@@ -1312,6 +1357,10 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', unlockReminderSound)
   document.removeEventListener('keydown', unlockReminderSound)
   document.removeEventListener('visibilitychange', refreshWhenVisible)
+  if (idleTimer) clearTimeout(idleTimer)
+  for (const evt of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
+    window.removeEventListener(evt, onUserActivity)
+  }
 })
 </script>
 

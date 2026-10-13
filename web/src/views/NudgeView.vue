@@ -19,6 +19,12 @@
     </div>
 
     <div
+      v-if="toast"
+      class="mb-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/[.06] px-4 py-2.5 text-xs font-bold text-emerald-600 dark:text-emerald-300"
+      data-nudge-toast
+    >{{ toast }}</div>
+
+    <div
       v-if="errorMsg"
       class="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-rose-500/25 bg-rose-500/[.06] px-4 py-3 text-xs font-bold text-rose-500"
       data-nudge-error
@@ -65,6 +71,16 @@
               </span>
             </div>
             <div class="mt-2.5 flex items-center gap-2">
+              <!-- 「提醒一下」（用户 2026-10-13）：再即时推一次，对方那边立刻弹窗 -->
+              <button
+                v-if="!item.done_at"
+                type="button"
+                class="rounded-xl bg-sky-500/10 px-3 py-1.5 text-[11px] font-bold text-sky-600 transition hover:bg-sky-500/20 disabled:opacity-50 dark:text-sky-300"
+                title="立即再提醒对方一次（对方会收到站内弹窗）"
+                data-nudge-remind
+                :disabled="busyId === item.id"
+                @click="remindAgain(item)"
+              >{{ busyId === item.id ? '发送中…' : '提醒一下' }}</button>
               <button
                 v-if="item.can_delete"
                 type="button"
@@ -112,8 +128,8 @@
                 {{ statusText(item) }}
               </span>
             </div>
-            <div class="mt-2.5 flex items-center gap-2">
-              <template v-if="!item.done_at">
+            <div class="mt-2.5 flex flex-wrap items-center gap-2">
+              <template v-if="!item.done_at && !item.saved_done">
                 <button
                   v-if="!item.read_at"
                   type="button"
@@ -127,7 +143,23 @@
                   data-nudge-done
                   @click="markDone(item)"
                 >已完成</button>
+                <!-- 「保存到清单」（用户 2026-10-13）：把别人推来的提醒变成自己的待办任务，
+                     在清单里勾完这张卡也会跟着变成已完成 -->
+                <button
+                  v-if="!item.reminder_id"
+                  type="button"
+                  class="rounded-xl bg-brand-500/10 px-3 py-1.5 text-[11px] font-bold text-brand-600 transition hover:bg-brand-500/20 dark:text-brand-300"
+                  data-nudge-save
+                  @click="openSave(item)"
+                >保存到清单</button>
+                <span
+                  v-else
+                  class="rounded-xl bg-brand-500/10 px-3 py-1.5 text-[11px] font-bold text-brand-600 dark:text-brand-300"
+                  data-nudge-saved
+                >已存到「{{ item.list_name || '清单' }}」{{ item.saved_done ? '（已完成）' : '' }}</span>
               </template>
+              <!-- 完成之后（不管是本页点的「已完成」，还是在清单里勾完同步过来的 done_at）
+                   这一行只剩「删除」，状态由右上角那个「已完成」标出来。 -->
               <button
                 type="button"
                 class="rounded-xl border border-border bg-surface px-3 py-1.5 text-[11px] font-bold text-muted-foreground transition hover:bg-muted"
@@ -140,6 +172,33 @@
         </ul>
       </section>
     </div>
+
+    <!-- 保存到清单：选一个自己的清单，把它变成一条待办任务 -->
+    <Modal v-model="saveOpen" title="保存到清单" size="md">
+      <p class="text-xs leading-5 text-muted-foreground">
+        把这条提醒存成自己清单里的待办任务；在清单里勾完，这张卡片也会跟着变成「已完成」，
+        对方同样会收到回执。
+      </p>
+      <p class="mt-3 rounded-2xl bg-muted/50 px-3.5 py-2.5 text-sm font-bold text-foreground">{{ saveTarget?.content }}</p>
+      <label class="mt-4 block">
+        <span class="text-xs font-bold text-foreground">存到哪个清单</span>
+        <select v-model.number="saveListId" class="modal-field mt-2" data-nudge-save-list>
+          <option :value="0" disabled>请选择清单</option>
+          <option v-for="l in lists" :key="l.id" :value="l.id">{{ l.name }}</option>
+        </select>
+      </label>
+      <p v-if="saveError" class="mt-3 rounded-2xl bg-rose-500/[.07] px-4 py-2.5 text-xs font-bold text-rose-500" data-nudge-save-error>{{ saveError }}</p>
+      <div class="mt-5 flex justify-end gap-3">
+        <button type="button" class="rounded-xl border border-border bg-surface px-4 py-2 text-xs font-bold text-foreground transition hover:bg-muted" @click="saveOpen = false">取消</button>
+        <button
+          type="button"
+          class="rounded-xl bg-brand-500 px-5 py-2 text-sm font-bold text-white disabled:opacity-50"
+          :disabled="!saveListId || savingNudge"
+          data-nudge-save-submit
+          @click="submitSave"
+        >{{ savingNudge ? '保存中…' : '保存' }}</button>
+      </div>
+    </Modal>
 
     <Modal v-model="composerOpen" title="提醒@他" size="lg">
       <form class="space-y-4" @submit.prevent="submit">
@@ -200,8 +259,9 @@ import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Modal from '../components/Modal.vue'
 import { useAuthStore } from '../stores/auth'
+import request from '../api/request'
 import {
-  createNudge, deleteNudge, doneNudge, listNudges, listNudgeUsers, readNudge,
+  createNudge, deleteNudge, doneNudge, listNudges, listNudgeUsers, readNudge, remindNudgeAgain, saveNudgeToList,
   type Nudge, type NudgeBox, type NudgeUser,
 } from '../api/reminder'
 
@@ -215,6 +275,16 @@ const errorMsg = ref('')
 const formError = ref('')
 const composerOpen = ref(false)
 const form = reactive({ toUserId: 0, content: '', note: '', dueDate: '', dueTime: '' })
+// 「保存到清单」：选一个自己的清单
+const lists = ref<{ id: number; name: string }[]>([])
+const saveOpen = ref(false)
+const saveTarget = ref<Nudge | null>(null)
+const saveListId = ref(0)
+const saveError = ref('')
+const savingNudge = ref(false)
+// 「提醒一下」：正在发送的那条（按 id 显示「发送中…」）
+const busyId = ref(0)
+const toast = ref('')
 
 function describe(error: unknown, fallback: string) {
   const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -230,6 +300,56 @@ async function load() {
     errorMsg.value = describe(error, '读取「提醒@他」失败，请稍后重试')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadLists() {
+  try {
+    const { data } = await request.get('/api/reminder/lists')
+    const rows = data?.data?.items || data?.data || []
+    lists.value = rows.map((l: { id: number; name: string }) => ({ id: l.id, name: l.name }))
+  } catch {
+    lists.value = []
+  }
+}
+
+function openSave(item: Nudge) {
+  saveTarget.value = item
+  saveListId.value = 0
+  saveError.value = ''
+  saveOpen.value = true
+  void loadLists()
+}
+
+async function submitSave() {
+  const target = saveTarget.value
+  if (!target || !saveListId.value) return
+  savingNudge.value = true
+  saveError.value = ''
+  try {
+    await saveNudgeToList(target.id, saveListId.value)
+    saveOpen.value = false
+    await load()
+    toast.value = '已保存到清单'
+    window.setTimeout(() => { if (toast.value === '已保存到清单') toast.value = '' }, 4000)
+  } catch (error) {
+    saveError.value = describe(error, '保存失败，请稍后重试')
+  } finally {
+    savingNudge.value = false
+  }
+}
+
+/** 「提醒一下」：再即时推一次给对方。 */
+async function remindAgain(item: Nudge) {
+  busyId.value = item.id
+  try {
+    await remindNudgeAgain(item.id)
+    toast.value = '已再提醒一次'
+    window.setTimeout(() => { if (toast.value === '已再提醒一次') toast.value = '' }, 4000)
+  } catch (error) {
+    errorMsg.value = describe(error, '提醒失败，请稍后重试')
+  } finally {
+    busyId.value = 0
   }
 }
 

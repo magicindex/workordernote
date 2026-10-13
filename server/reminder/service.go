@@ -877,6 +877,8 @@ func completeReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error)
 	if err != nil {
 		return ReminderDTO{}, err
 	}
+	// 「提醒@他」存到清单的那条任务：勾完以后卡片状态也要跟着变（用户 2026-10-13）。
+	syncNudgeFromReminder(db, userID, reminderID, true)
 	return getReminder(db, userID, reminderID)
 }
 
@@ -909,6 +911,8 @@ func restoreReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error) 
 	if err != nil {
 		return ReminderDTO{}, err
 	}
+	// 撤销完成时，存到清单的那条也回到「待处理」（与完成同一套同步）。
+	syncNudgeFromReminder(db, userID, reminderID, false)
 	return getReminder(db, userID, reminderID)
 }
 

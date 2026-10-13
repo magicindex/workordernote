@@ -237,9 +237,12 @@ func init() {
 	})
 	RegisterConfig(ConfigDef{
 		Key: "default_view", Scope: ScopeUser, Type: TypeSelect,
-		Default: "list", Options: []string{"list", "calendar"},
+		// 用户 2026-10-13 加了「首页」看板（14 天待办 + 已逾期两列）并要求
+		// 「打开默认显示页」——所以默认值从 list 改成 home，老库里显式写成 list 的
+		// 由 0.27.0 的迁移一并改到 home（仍可在偏好里自己改回列表视图）。
+		Default: "home", Options: []string{"home", "list", "calendar"},
 		Group: "appearance", Label: "默认首页",
-		Description: "打开应用时先进哪个视图；之后仍可随时用右上角按钮切换",
+		Description: "打开应用时先进哪个视图（首页看板 / 列表视图 / 日历视图）；之后仍可随时用右上角按钮切换",
 	})
 	// 提醒频率：控制「到点的提醒多久再提醒一次」与「点『知道了』之后多久再提醒」。
 	// 都是个人偏好（每人一份），选项值是分钟数。

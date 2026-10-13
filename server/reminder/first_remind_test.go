@@ -31,18 +31,26 @@ func TestFirstRemindScheduleDelaysFreshReminders(t *testing.T) {
 	}
 	created := now.Add(-time.Minute)
 
-	// ① 今天 23:59 到期、下午才建：首次提醒 = 创建后 10 分钟，而不是当天 06:00（已经过去）
+	// ① 今天 23:59 到期、当天 06:00 已经过去才建：首次提醒 = 创建后 10 分钟，
+	//    而不是当天 06:00（已经过去）。
+	//
+	// 注意**接近午夜**跑测试时有个正常分支：10 分钟那条会越过 23:59，于是按
+	// 「不晚于结束时间」夹回 23:59（以前这里写死了期望，跨午夜就会假红）。
 	fresh := Reminder{UserID: userID, CreatedAt: created, DueAt: ptrTime(todayAt(23, 59)), RepeatRule: "none"}
 	got := firstRemindSchedule(appDB, fresh)
 	want := created.Add(firstRemindDelay).UTC()
-	if !sameInstant(got, want) {
-		t.Fatalf("新建的已过点任务：首次提醒应为创建后 10 分钟 %v，实际 %v", want, got)
-	}
-	if !got.After(now) {
-		t.Fatalf("首次提醒不该是过去时刻（会立刻弹窗），实际 %v（现在 %v）", got, now)
-	}
-	if got.Equal(fresh.DueAt.UTC()) {
-		t.Fatal("10 分钟这条口径没生效：还是结束时间本身")
+	if fresh.DueAt.After(created.Add(firstRemindDelay)) {
+		if !sameInstant(got, want) {
+			t.Fatalf("新建的已过点任务：首次提醒应为创建后 10 分钟 %v，实际 %v", want, got)
+		}
+		if !got.After(now) {
+			t.Fatalf("首次提醒不该是过去时刻（会立刻弹窗），实际 %v（现在 %v）", got, now)
+		}
+		if got.Equal(fresh.DueAt.UTC()) {
+			t.Fatal("10 分钟这条口径没生效：还是结束时间本身")
+		}
+	} else if !sameInstant(got, fresh.DueAt.UTC()) {
+		t.Fatalf("离午夜不到 10 分钟时，应夹回结束时间 %v，实际 %v", fresh.DueAt.UTC(), got)
 	}
 
 	// ② 结束时间只剩 5 分钟：10 分钟那条会越过结束时间 → 夹回结束时间（不能晚于它）
@@ -57,11 +65,14 @@ func TestFirstRemindScheduleDelaysFreshReminders(t *testing.T) {
 		t.Fatalf("已过期的新建任务首次提醒应为创建后 10 分钟，实际 %v", got)
 	}
 
-	// ④ 一小时后到期、但今天的「开始提醒时间」（06:00）已经过去：首次提醒仍是
-	//    「创建后 10 分钟」—— 既没有立刻弹，也不会被早上那个点拉回过去
-	later := Reminder{UserID: userID, CreatedAt: created, DueAt: ptrTime(now.Add(time.Hour)), RepeatRule: "none"}
-	if got := firstRemindSchedule(appDB, later); !sameInstant(got, created.Add(firstRemindDelay).UTC()) {
-		t.Fatalf("今天已过「开始提醒时间」的任务首次提醒应为创建后 10 分钟，实际 %v", got)
+	// ④ 三天后到期的任务：不受 10 分钟那条影响，仍然按到期日当天的「开始提醒时间」
+	//    （用「三天后」而不是「一小时后」，免得跨午夜时到期日的 06:00 还没到、口径变成
+	//     结束时间本身 —— 那种时刻依赖测试员钟点的断言最容易假红，本轮就踩过）
+	threeDays := now.In(loc).AddDate(0, 0, 3)
+	threeDue := time.Date(threeDays.Year(), threeDays.Month(), threeDays.Day(), 23, 59, 0, 0, loc)
+	later := Reminder{UserID: userID, CreatedAt: created, DueAt: &threeDue, RepeatRule: "none"}
+	if got := firstRemindSchedule(appDB, later); !sameInstant(got, firstRemindAt(appDB, later)) {
+		t.Fatalf("三天后到期的任务首次提醒应按正常流程 %v，实际 %v", firstRemindAt(appDB, later), got)
 	}
 
 	// ⑤ 明天到期的任务：开始提醒时间（明天 06:00）仍然生效 —— 这条老口径不能被改掉

@@ -52,6 +52,16 @@ type Nudge struct {
 	DoneAt    *time.Time     `json:"done_at,omitempty"`
 	CreatedAt time.Time      `gorm:"index" json:"created_at"`
 	DeletedAt gorm.DeletedAt `json:"-"`
+
+	// 「保存到清单」（用户 2026-10-13）：接收人可以把别人推来的提醒存进自己的某个清单，
+	// 变成一条真正的待办任务；ReminderID 指向那条任务，ListID/ListName 记下存到了哪里。
+	//
+	// 状态同步：任务在清单里被勾完 → nudges.done_at 跟着写上（见 service.go 的
+	// syncNudgeFromReminder），于是「提醒@他」页面上这张卡也变成「已完成」、
+	// 发起人同样收到「已完成」回执 —— 用户要求的「清单 完成同步当前页卡片状态」。
+	ReminderID *uint  `gorm:"index" json:"reminder_id,omitempty"`
+	ListID     uint   `json:"list_id,omitempty"`
+	ListName   string `gorm:"size:60" json:"list_name,omitempty"`
 }
 
 // NudgeDTO 给界面用：把两个用户名带上，省得前端再查一次用户表。
@@ -66,6 +76,9 @@ type NudgeDTO struct {
 	// 注意删除是**软删这一条记录本身**：删完两边（发起人 / 接收人）都不再看到它，
 	// 界面上的措辞也照这个来（撤回 / 删除，hover 提示写了「你和他都不再看到这条」）。
 	CanDelete bool `json:"can_delete"`
+	// SavedDone 是「存到清单的那条任务已经完成了」（用户 2026-10-13：「清单 完成同步
+	// 当前页卡片状态」）。没存到清单时为 false —— 界面据此把卡片画成已完成。
+	SavedDone bool `json:"saved_done"`
 }
 
 // NudgeUser 是「提醒@他」里可选的对象：只要账号还在、状态正常就能被提醒。
@@ -91,11 +104,28 @@ func nudgeDTOs(db *gorm.DB, rows []Nudge, me uint) []NudgeDTO {
 			names[u.ID] = u.Username
 		}
 	}
+	// 「保存到清单」的任务状态：一次把这批 nudge 关联的任务查出来，避免 N+1。
+	savedDone := map[uint]bool{}
+	reminderIDs := make([]uint, 0, len(rows))
+	for _, row := range rows {
+		if row.ReminderID != nil {
+			reminderIDs = append(reminderIDs, *row.ReminderID)
+		}
+	}
+	if len(reminderIDs) > 0 {
+		var linked []Reminder
+		if err := db.Select("id, completed_at").Where("id IN ?", reminderIDs).Find(&linked).Error; err == nil {
+			for _, r := range linked {
+				savedDone[r.ID] = r.CompletedAt != nil
+			}
+		}
+	}
 	for _, row := range rows {
 		direction := "received"
 		if row.FromUserID == me {
 			direction = "sent"
 		}
+		linkedDone := row.ReminderID != nil && savedDone[*row.ReminderID]
 		out = append(out, NudgeDTO{
 			Nudge:        row,
 			FromUsername: names[row.FromUserID],
@@ -103,6 +133,7 @@ func nudgeDTOs(db *gorm.DB, rows []Nudge, me uint) []NudgeDTO {
 			Direction:    direction,
 			// 接收人随时可以把自己的那一侧删掉；发起人只能在对方还没做完时撤回。
 			CanDelete: row.FromUserID == me && row.DoneAt == nil || row.ToUserID == me,
+			SavedDone: linkedDone,
 		})
 	}
 	return out
@@ -293,6 +324,115 @@ func handleDoneNudge(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// handleSaveNudgeToReminder 「保存到清单」（用户 2026-10-13）：接收人把别人推来的提醒
+// 变成自己清单里的一条待办任务。
+//
+// 只有**接收人**能存（发起人自己那条本来就在自己的清单里）；已经存过的不再重复建，
+// 直接把现有的那条返回（幂等）。存下来的任务：
+//   · 标题 = 提醒内容，备注 = 备注 +「来自 X 的提醒」；
+//   · 结束时间 = 提醒里写的期望时间（有就用），否则**今天 23:59**（与新建提醒一致）；
+//   · 只上站内通知（和别处一样，其它渠道要用户自己绑定）。
+func handleSaveNudgeToReminder(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		me := currentUserID(c)
+		row, ok := loadNudgeFor(db, c, me, true)
+		if !ok {
+			return
+		}
+		var in struct {
+			ListID uint `json:"list_id"`
+		}
+		if err := c.ShouldBindJSON(&in); err != nil {
+			response.ErrorBadRequest(c, "参数无效")
+			return
+		}
+		var list List
+		if err := db.Where("id = ? AND user_id = ? AND deleted_at IS NULL", in.ListID, me).First(&list).Error; err != nil {
+			response.ErrorBadRequest(c, "请选择一个自己的清单")
+			return
+		}
+		// 已经存过：把那条任务原样返回（幂等，不重复建）。
+		if row.ReminderID != nil {
+			var existing []Nudge
+			existing = append(existing, *row)
+			response.Success(c, nudgeDTOs(db, existing, me)[0])
+			return
+		}
+		var sender database.User
+		_ = db.Select("id, username").Where("id = ?", row.FromUserID).First(&sender).Error
+		due := row.DueAt
+		if due == nil {
+			loc, _ := time.LoadLocation("Asia/Shanghai")
+			local := time.Now().In(loc)
+			today := time.Date(local.Year(), local.Month(), local.Day(), 23, 59, 0, 0, loc)
+			due = &today
+		}
+		notes := row.Note
+		if sender.Username != "" {
+			if notes != "" {
+				notes += "\n"
+			}
+			notes += "来自「" + sender.Username + "」的提醒@他"
+		}
+		title := truncateRunes(row.Content, 100)
+		created, err := createReminder(db, me, SaveReminderInput{
+			Title: title, Notes: notes, ListID: list.ID, Kind: KindTask,
+			DueAt: due, RepeatRule: "none", Channels: []string{ChannelInApp},
+		})
+		if err != nil {
+			response.ErrorInternal(c, "保存到清单失败")
+			return
+		}
+		if err := db.Model(&Nudge{}).Where("id = ?", row.ID).
+			Updates(map[string]interface{}{"reminder_id": created.ID, "list_id": list.ID, "list_name": list.Name}).Error; err != nil {
+			response.ErrorInternal(c, "保存到清单失败")
+			return
+		}
+		updated := *row
+		updated.ReminderID = &created.ID
+		updated.ListID = list.ID
+		updated.ListName = list.Name
+		publishDataChanged(me, "nudge", "saved", row.ID, originClientID(c))
+		publishDataChanged(row.FromUserID, "nudge", "saved", row.ID, "")
+		var list2 []Nudge
+		list2 = append(list2, updated)
+		response.Success(c, nudgeDTOs(db, list2, me)[0])
+	}
+}
+
+// handleRemindNudgeAgain 「提醒一下」（用户 2026-10-13）：我推给别人的提醒，再即时推一次 ——
+// 对方立刻收到一条站内通知（前端会弹窗/提示），不用等下一次自然提醒。
+func handleRemindNudgeAgain(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		me := currentUserID(c)
+		row, ok := loadNudgeFor(db, c, me, false)
+		if !ok {
+			return
+		}
+		if row.FromUserID != me {
+			response.Error(c, http.StatusNotFound, response.CodeNotFound, "提醒不存在")
+			return
+		}
+		if row.DoneAt != nil {
+			response.ErrorBadRequest(c, "对方已经完成了，不用再提醒")
+			return
+		}
+		var sender database.User
+		_ = db.Select("id, username").Where("id = ?", me).First(&sender).Error
+		body := row.Note
+		if body == "" {
+			body = "去「提醒@他」页面查看并处理"
+		}
+		notifyNudge(db, row.ToUserID, "nudge_reminded",
+			"「"+sender.Username+"」又提醒了你一次："+truncateRunes(row.Content, nudgeNotifyTitleRunes), body)
+		publishDataChanged(row.ToUserID, "nudge", "reminded", row.ID, "")
+		publishDataChanged(me, "nudge", "reminded", row.ID, originClientID(c))
+		var list []Nudge
+		list = append(list, *row)
+		response.Success(c, nudgeDTOs(db, list, me)[0])
+	}
+}
+
 // handleDeleteNudge 发起人撤回（对方还没做完）或接收人删除（两边一起不再显示）。
 func handleDeleteNudge(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -354,4 +494,53 @@ func notifyNudge(db *gorm.DB, userID uint, kind, title, body string) {
 		return
 	}
 	publishNotification(notification)
+}
+
+// syncNudgeFromReminder 把「保存到清单」那条任务的完成状态**同步回 nudge 卡片**
+// （用户 2026-10-13：「清单 完成同步当前页卡片状态」）：
+//
+//	完成   → nudge 也标完成，并给发起人发一条「已完成」回执（消息面板里看得到）；
+//	撤销完成 → 清掉 done_at，卡片回到「待处理」。
+//
+// 只认「这条任务确实是从我收到的那条提醒存出来的」：用 reminder_id + to_user_id 双重限定，
+// 免得别的账号的任务恰好对上 id。
+func syncNudgeFromReminder(db *gorm.DB, ownerID, reminderID uint, completed bool) {
+	var rows []Nudge
+	if err := db.Where("reminder_id = ? AND to_user_id = ?", reminderID, ownerID).Find(&rows).Error; err != nil {
+		return
+	}
+	if len(rows) == 0 {
+		return
+	}
+	now := time.Now()
+	var owner database.User
+	_ = db.Select("id, username").Where("id = ?", ownerID).First(&owner).Error
+	for _, row := range rows {
+		if completed {
+			if row.DoneAt != nil {
+				continue
+			}
+			updates := map[string]interface{}{"done_at": &now}
+			if row.ReadAt == nil {
+				updates["read_at"] = &now
+			}
+			if err := db.Model(&Nudge{}).Where("id = ?", row.ID).Updates(updates).Error; err != nil {
+				continue
+			}
+			notifyNudge(db, row.FromUserID, "nudge_done",
+				"「"+owner.Username+"」已完成你提醒的事", truncateRunes(row.Content, nudgeNotifyTitleRunes))
+			publishDataChanged(row.FromUserID, "nudge", "done", row.ID, "")
+			publishDataChanged(row.ToUserID, "nudge", "done", row.ID, "")
+			continue
+		}
+		if row.DoneAt == nil {
+			continue
+		}
+		if err := db.Model(&Nudge{}).Where("id = ?", row.ID).
+			Update("done_at", gorm.Expr("NULL")).Error; err != nil {
+			continue
+		}
+		publishDataChanged(row.FromUserID, "nudge", "restored", row.ID, "")
+		publishDataChanged(row.ToUserID, "nudge", "restored", row.ID, "")
+	}
 }

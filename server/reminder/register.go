@@ -131,6 +131,21 @@ func init() {
 		},
 	})
 
+	// 0.27.0：用户 2026-10-13 要求「打开默认显示页」＝新的「首页」看板，所以把老库里
+	// 显式写成 list 的默认首页一并改到 home（这条只改**恰好是旧默认值 list** 的行；
+	// 已经手动改成 calendar 的不动；改完用户仍可在偏好设置里改回去）。
+	database.Upgrades = append(database.Upgrades, database.Upgrade{
+		Version: "0.27.0", Name: "default_view_home_dashboard",
+		Upgrade: func(db *gorm.DB) error {
+			// 用显式 SQL：Model(&SystemConfig{}) 这种复合主键（user_id + key）的模型，
+			// 传空结构体时 GORM 会带上零值主键条件，导致一条都匹配不上（本轮就踩了：
+			// 迁移记录了、值却没改）。这里要改的是**用户自己那条**（user_id = 1 之类），
+			// 所以不能按 user_id = 0 限定。
+			return db.Exec("UPDATE system_configs SET value = ? WHERE key = ? AND value = ?",
+				"home", "default_view", "list").Error
+		},
+	})
+
 	database.RegisterModels(
 		&List{}, &Reminder{}, &ReminderChannel{}, &Completion{},
 		// 「提醒@他」：多人之间互相推的提醒消息（见 nudge.go）

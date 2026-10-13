@@ -187,6 +187,7 @@ const selectOptionLabelMap: Record<string, Record<string, string>> = {
     xlarge: '特大',
   },
   default_view: {
+    home: '首页看板',
     list: '列表视图',
     calendar: '日历视图',
   },

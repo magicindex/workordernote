@@ -63,7 +63,8 @@ withTab(async (page) => {
 
   const originalDefaultView = await readConfig('default_view');
   console.log(`  原值：default_view=${originalDefaultView}`);
-  check('能读到原默认首页', originalDefaultView === 'list' || originalDefaultView === 'calendar', String(originalDefaultView));
+  check('能读到原默认首页（首页看板 / 列表 / 日历）',
+    ['home', 'list', 'calendar'].includes(String(originalDefaultView)), String(originalDefaultView));
 
   // 切到「另一个」值再验，这样无论用户原本设的是哪个，用例都有意义
   const otherView = originalDefaultView === 'calendar' ? 'list' : 'calendar';
@@ -87,7 +88,9 @@ withTab(async (page) => {
     await goto(page, '/admin/settings');
     await waitFor(page, () => [...document.querySelectorAll('select')].some(
       (s) => [...s.options].some((o) => o.textContent.trim() === '日历视图')), { timeout: 8000 }).catch(() => {});
-    await pickDefaultView(originalDefaultView === 'calendar' ? '日历视图' : '列表视图');
+    const restoreLabel = originalDefaultView === 'calendar' ? '日历视图'
+      : originalDefaultView === 'home' ? '首页看板' : '列表视图';
+    await pickDefaultView(restoreLabel);
     restored = await readConfig('default_view');
     if (restored === originalDefaultView) break;
   }
@@ -111,13 +114,28 @@ withTab(async (page) => {
   // ---------- 3) 新建提醒默认今天 ----------
   // 用**具体清单页**（不受「默认首页」设置影响）；「全部」页 0.18.3 起不再有新建入口。
   console.log('\n[3] 新建提醒默认选中今天');
-  const firstListId = await page.evaluate(async (base) => {
-    const token = localStorage.getItem('reminders.token');
-    const res = await fetch(base + '/api/reminder/lists', { headers: { Authorization: 'Bearer ' + token } });
-    const json = await res.json().catch(() => ({}));
-    const list = (json.data || []).find((l) => !l.template);
-    return list ? list.id : null;
-  }, BASE);
+  // 取一个普通清单的 id：**带重试**。这一段紧跟在切换默认首页之后，很容易撞上
+  // 登录/公开接口限流（fetch 失败 → firstListId 为 null → 后面落到 /admin，
+  // 而默认首页现在是「首页看板」，快捷新建那几条就全假红了）。
+  let firstListId = null;
+  for (let attempt = 1; attempt <= 3 && !firstListId; attempt += 1) {
+    firstListId = await page.evaluate(async (base) => {
+      const token = localStorage.getItem('reminders.token');
+      const res = await fetch(base + '/api/reminder/lists', { cache: 'no-store', headers: { Authorization: 'Bearer ' + token } });
+      const json = await res.json().catch(() => ({}));
+      const rows = json.data?.items || json.data || [];
+      const list = rows.find((l) => !l.template);
+      return list ? list.id : null;
+    }, BASE);
+    if (!firstListId) await sleep(4000);
+  }
+  if (!firstListId) {
+    // 拿不到清单：把默认首页临时切成列表视图，至少让 /admin 落在今天页（后面会还原）
+    await goto(page, '/admin/settings');
+    await sleep(1200);
+    await pickDefaultView('列表视图');
+    await sleep(1200);
+  }
   await goto(page, firstListId ? `/admin/list/${firstListId}` : '/admin', 1600);
   await openQuickAdd(page);
   await page.evaluate(() => {

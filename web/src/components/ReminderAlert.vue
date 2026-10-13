@@ -45,7 +45,9 @@
                 <svg v-if="busy" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 {{ busy ? '处理中…' : ackText }}
               </button>
-              <button type="button" class="btn-ghost w-full" :disabled="busy" @click="emit('snooze')">
+              <!-- 「稍后提醒」要有可以顺延的提醒才显示：提醒@他推来的通知没有关联任务，
+                   按钮点了也只能标已读 —— 藏掉更诚实（用户 2026-10-13 的「提醒一下」弹窗）。 -->
+              <button v-if="showSnooze" type="button" class="btn-ghost w-full" :disabled="busy" @click="emit('snooze')">
                 {{ snoozeText }}
               </button>
               <!-- 兜底出口：操作失败时（网络断了、服务端报错）总得能关掉，
@@ -81,6 +83,8 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
+  /** 是否显示「稍后提醒」：提醒@他推来的通知没有关联任务，给 false。 */
+  showSnooze?: boolean
   open: boolean
   title?: string
   body?: string
@@ -99,6 +103,7 @@ const props = withDefaults(defineProps<{
   title: '',
   body: '',
   createdAt: '',
+  showSnooze: true,
   pendingCount: 0,
   busy: false,
   error: '',

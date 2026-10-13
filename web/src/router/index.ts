@@ -31,6 +31,9 @@ const router = createRouter({
       component: () => import('../layouts/MainLayout.vue'),
       meta: { requiresAuth: true },
       children: [
+        // 「首页」看板（用户 2026-10-13）：14 天待办 + 已逾期两列。**打开应用的默认页**，
+        // 10 分钟不操作也回到这里（见 MainLayout 的空闲跳转）。
+        { path: 'home', name: 'Dashboard', component: () => import('../views/HomeDashboardView.vue'), meta: { title: '首页' } },
         { path: '', name: 'Home', component: () => import('../views/HomeView.vue'), meta: { reminderView: 'today', title: '今天' } },
         { path: 'planned', name: 'Planned', component: () => import('../views/HomeView.vue'), meta: { reminderView: 'planned', title: '计划' } },
         { path: 'all', name: 'AllReminders', component: () => import('../views/HomeView.vue'), meta: { reminderView: 'all', title: '全部' } },
@@ -53,6 +56,7 @@ const router = createRouter({
     },
     {
       // 后期 / 用于免登录的门户或前端页面，当前先重定向到后台首页。
+      // 进「今天」还是「首页」看板由个人偏好 default_view 决定（见 MainLayout.applyDefaultViewOnce）。
       path: '/',
       redirect: '/admin',
       meta: { requiresAuth: false }

@@ -92,6 +92,8 @@ const readPage = (page) => page.evaluate((content) => {
 
 (async () => {
   let probeId = null;
+  // 「保存到清单」存出来的任务（收尾要删掉）
+  const createdTaskIds = [];
   let createdUserId = null;
   let nudgeId = null;
   const nudgeIds = [];
@@ -344,6 +346,116 @@ const readPage = (page) => page.evaluate((content) => {
     check('390px 手机：两列都在、新建按钮在、不横向溢出',
       mobile.columns === 2 && mobile.newBtn && mobile.overflow <= 1, JSON.stringify(mobile));
     await page.setViewport({ width: 1440, height: 1000 });
+
+    // ---------------- 8. 「保存到清单」与「提醒一下」（用户 2026-10-13） ----------------
+    // 先把上一条（已完成）之外再造一条**未完成**的，用来验这两个新按钮。
+    const extra = await api(page, '/api/reminder/nudges', 'POST', {
+      to_user_id: probeId, content: `${CONTENT}-待办`, note: '存进清单看看',
+    });
+    const extraId = extra.body?.data?.id ?? null;
+    if (extraId) nudgeIds.push(extraId);
+    check('再造一条待处理的提醒（用于保存到清单 / 提醒一下）', !!extraId);
+
+    // —— 发起人点「提醒一下」——
+    await loginAs(page, process.env.APP_USER || '王耀辉', process.env.APP_PASS || 'Wyh!1984yelq.');
+    await gotoRetry(page, BASE + '/admin/nudges');
+    await sleep(2200);
+    const remindClicked = await page.evaluate((content) => {
+      const row = [...document.querySelectorAll('[data-nudge-item]')].find((li) => (li.innerText || '').includes(content));
+      const btn = row?.querySelector('[data-nudge-remind]');
+      if (!btn) return 'missing';
+      btn.click();
+      return 'ok';
+    }, `${CONTENT}-待办`);
+    check('「我提醒他人」卡片上有「提醒一下」按钮并点得到', remindClicked === 'ok', remindClicked);
+    await sleep(2000);
+
+    // —— 接收人点「保存到清单」——
+    // （「提醒一下」的站内通知是发给**接收人**的，所以切过去之后再看）
+    await loginAs(page, PROBE_USER, PROBE_PASS);
+    const reminded = await api(page, '/api/reminder/notifications');
+    check('点「提醒一下」后对方立刻收到一条提醒（nudge_reminded 站内通知）',
+      (reminded.body?.data || []).some((n) => n.type === 'nudge_reminded'),
+      JSON.stringify((reminded.body?.data || []).map((n) => n.type).slice(0, 5)));
+    await gotoRetry(page, BASE + '/admin/nudges');
+    await sleep(2200);
+    const saveListId = await page.evaluate(async ({ base }) => {
+      const token = localStorage.getItem('reminders.token');
+      const res = await fetch(base + '/api/reminder/lists', { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' });
+      const body = await res.json();
+      const rows = body?.data?.items || body?.data || [];
+      const inbox = rows.find((l) => l.name === '收件箱') || rows[0];
+      return inbox ? inbox.id : 0;
+    }, { base: BASE });
+    const saveOpened = await page.evaluate((content) => {
+      const row = [...document.querySelectorAll('[data-nudge-item]')].find((li) => (li.innerText || '').includes(content));
+      const btn = row?.querySelector('[data-nudge-save]');
+      if (!btn) return 'missing';
+      btn.click();
+      return 'ok';
+    }, `${CONTENT}-待办`);
+    check('「别人提醒我」卡片上有「保存到清单」按钮并点得到', saveOpened === 'ok', saveOpened);
+    await sleep(800);
+    await page.evaluate((listId) => {
+      const sel = document.querySelector('[data-nudge-save-list]');
+      if (!sel) return;
+      sel.value = String(listId);
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }, saveListId);
+    await sleep(300);
+    await page.evaluate(() => document.querySelector('[data-nudge-save-submit]')?.click());
+    await sleep(2200);
+
+    const savedCard = await page.evaluate((content) => {
+      const row = [...document.querySelectorAll('[data-nudge-item]')].find((li) => (li.innerText || '').includes(content));
+      return row ? { text: (row.innerText || '').replace(/\s+/g, ' ').trim(), saved: !!row.querySelector('[data-nudge-saved]') } : null;
+    }, `${CONTENT}-待办`);
+    check('保存后卡片显示「已存到「某个清单」」', !!savedCard && savedCard.saved && /已存到/.test(savedCard.text),
+      JSON.stringify(savedCard));
+
+    // 清单里真的多了一条待办
+    const listItems = await page.evaluate(async ({ base, listId }) => {
+      const token = localStorage.getItem('reminders.token');
+      const res = await fetch(`${base}/api/reminder/items?view=all&status=all&list_id=${listId}`, { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' });
+      const body = await res.json();
+      const d = body?.data;
+      return Array.isArray(d) ? d : (d?.items || []);
+    }, { base: BASE, listId: saveListId });
+    const savedTask = listItems.find((i) => String(i.title).includes(`${CONTENT}-待办`));
+    check('清单里真的多了一条待办任务', !!savedTask, JSON.stringify(listItems.map((i) => i.title).slice(0, 6)));
+    if (savedTask) createdTaskIds.push(savedTask.id);
+
+    // 清单里勾完 → 卡片状态同步成「清单里已完成」，发起人也收到回执
+    if (savedTask) {
+      await page.evaluate(async ({ base, id }) => {
+        const token = localStorage.getItem('reminders.token');
+        await fetch(`${base}/api/reminder/items/${id}/complete`, { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+      }, { base: BASE, id: savedTask.id });
+      await sleep(1500);
+      await gotoRetry(page, BASE + '/admin/nudges');
+      await sleep(2400);
+      const syncedCard = await page.evaluate((content) => {
+        const row = [...document.querySelectorAll('[data-nudge-item]')].find((li) => (li.innerText || '').includes(content));
+        if (!row) return null;
+        return {
+          text: (row.innerText || '').replace(/\s+/g, ' ').trim(),
+          hasDone: (row.innerText || '').includes('已完成'),
+          actions: ['[data-nudge-read]', '[data-nudge-done]', '[data-nudge-save]'].filter((sel) => !!row.querySelector(sel)),
+        };
+      }, `${CONTENT}-待办`);
+      check('清单里勾完后，这张卡片也变成「已完成」（动作按钮收起来）',
+        !!syncedCard && syncedCard.hasDone && syncedCard.actions.length === 0, JSON.stringify(syncedCard));
+
+      const afterComplete = await api(page, '/api/reminder/nudges');
+      const row = [...(afterComplete.body?.data?.sent || []), ...(afterComplete.body?.data?.received || [])]
+        .find((n) => n.id === extraId);
+      check('接口侧这条 nudge 也变成了已完成', !!row && !!row.done_at && row.saved_done === true, JSON.stringify(row));
+    }
+
+    // 收尾：删掉存出来的那条任务（nudge 本身在下面的清理里删）
+    for (const id of createdTaskIds) {
+      await api(page, `/api/reminder/items/${id}`, 'DELETE');
+    }
 
     // ---------------- 清理 ----------------
     for (const id of nudgeIds) {
