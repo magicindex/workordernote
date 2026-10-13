@@ -160,26 +160,45 @@ const itemsOf = (res) => {
       !(board.upcoming || []).some((r) => r.text.includes(T.far)) && !(board.overdue || []).some((r) => r.text.includes(T.far)),
       JSON.stringify({ upcoming: (board.upcoming || []).some((r) => r.text.includes(T.far)), overdue: (board.overdue || []).some((r) => r.text.includes(T.far)) }));
 
+    // 栏目图标（用户 2026-10-14：「首页栏目前边不显示复选框，显示栏目图标」）
+    const iconInfo = await page.evaluate((title) => {
+      const row = [...document.querySelectorAll('[data-home-item]')].find((li) => (li.innerText || '').includes(title));
+      if (!row) return null;
+      return {
+        hasIcon: !!row.querySelector('[data-home-icon]'),
+        hasSvg: !!row.querySelector('[data-home-icon] svg'),
+        hasCheckbox: !!row.querySelector('[data-home-complete]') || !!row.querySelector('input[type="checkbox"]'),
+      };
+    }, T.today);
+    check('每行前面是栏目图标（有图标、有 svg）', !!iconInfo && iconInfo.hasIcon && iconInfo.hasSvg, JSON.stringify(iconInfo));
+    check('每行前面没有复选框了', !!iconInfo && iconInfo.hasCheckbox === false, JSON.stringify(iconInfo));
+
     check('第一列写明是「未来 14 天待办」并解释了级别字',
       (board.legends[0] || '').includes('未来 14 天待办') && /急/.test(board.legends[0]) && /今/.test(board.legends[0]),
       JSON.stringify(board.legends[0]));
     check('第二列写明是「已逾期」', (board.legends[1] || '').includes('已逾期'), JSON.stringify(board.legends[1]));
 
-    // ---------------- 4. 看板上直接勾完成 ----------------
+    // ---------------- 4. 点一条 → 定位到对应清单并高亮 ----------------
     const todayId = created[1];
-    const clicked = await page.evaluate((id) => {
-      const btn = document.querySelector(`[data-home-complete="${id}"]`);
-      if (!btn) return false;
-      btn.click();
+    const todayListId = (await api(page, '/api/reminder/items/' + todayId)).body?.data?.list_id ?? null;
+    const gotoOk = await page.evaluate((id) => {
+      const row = document.querySelector(`[data-home-goto="${id}"]`);
+      if (!row) return false;
+      row.click();
       return true;
     }, todayId);
-    check('看板上能直接勾完成', clicked === true);
-    await sleep(2600);
-    const afterComplete = await page.evaluate((title) => {
-      const col = document.querySelector('[data-home-column="upcoming"]');
-      return col ? (col.innerText || '').includes(title) : null;
-    }, T.today);
-    check('勾完之后那条从看板上消失了', afterComplete === false, String(afterComplete));
+    check('看板上的条目点得动', gotoOk === true);
+    await sleep(3000);
+    const gotoState = await page.evaluate(() => ({
+      path: location.pathname,
+      query: location.search,
+      highlighted: [...document.querySelectorAll('.reminder-highlight')].map((el) => el.getAttribute('data-reminder-row')),
+    }));
+    check('点击后定位到它所在的清单（/admin/list/<清单 id>?highlight=<任务 id>）',
+      !!todayListId && gotoState.path === `/admin/list/${todayListId}` && gotoState.query.includes(`highlight=${todayId}`),
+      JSON.stringify({ gotoState, todayListId }));
+    check('清单里那一条被高亮出来了（滚到视野里 + 闪底色）',
+      gotoState.highlighted.includes(String(todayId)), JSON.stringify(gotoState));
 
     // ---------------- 清理 ----------------
     for (const id of created) {

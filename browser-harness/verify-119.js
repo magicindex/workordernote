@@ -28,6 +28,7 @@ const LUNAR_TITLE = `自检农历生日-${STAMP}`;
 const QUIET_TITLE = `自检立刻弹-${STAMP}`;
 const ADVANCE_TITLE = `自检提前提醒-${STAMP}`;
 const ACK_OVERDUE_TITLE = `自检逾期顺延-${STAMP}`;
+const ACK_TODAY_TITLE = `自检今天顺延-${STAMP}`;
 const CARD_NAME = `自检卡${STAMP % 1000}`;
 
 let passed = 0;
@@ -321,14 +322,45 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       const summary = (await api(page, '/api/reminder/summary')).body?.data || {};
       check('首页角标里它依然算逾期', Number(summary.overdue) >= 1, `overdue=${summary.overdue}`);
 
+      // 今天页的「已逾期」卡片（默认首页现在是「首页」看板，所以先把默认首页临时切回列表视图）
+      const dvNow = (await api(page, '/api/configs')).body?.data?.default_view ?? 'home';
+      await api(page, '/api/configs', 'PUT', { key: 'default_view', value: 'list' });
       await gotoRetry(page, BASE + '/admin');
-      await sleep(2600);
+      await sleep(2800);
       const overdueCard = await page.evaluate((title) => {
         const cards = [...document.querySelectorAll('[data-day-group]')];
         const hit = cards.find((c) => (c.getAttribute('data-day-group') || '').includes('overdue'));
         return hit ? (hit.innerText || '').includes(title) : false;
       }, ACK_OVERDUE_TITLE);
       check('界面上它确实待在「已逾期」那张卡片里', overdueCard === true);
+      await api(page, '/api/configs', 'PUT', { key: 'default_view', value: String(dvNow) });
+    }
+
+    // 未逾期的条目同样：稍后提醒不改创建/到期时间，只是把下一次提醒推迟
+    // （用户 2026-10-14：「未逾期项目同样，不改变创建、到期时间，只是延迟提醒时间」）
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 0, 0);
+    const beforeDue = todayEnd.toISOString();
+    const soonId = await makeItem(ACK_TODAY_TITLE, beforeDue);
+    check('造一条今天 23:59 到期的提醒（未逾期）', !!soonId);
+    if (soonId) {
+      await api(page, `/api/reminder/items/${soonId}/snooze`, 'POST', {
+        until: new Date(Date.now() + 86400_000).toISOString(),
+      });
+      const after = (await api(page, `/api/reminder/items/${soonId}`)).body?.data;
+      check('稍后提醒不改到期时间',
+        !!after && Math.abs(new Date(after.due_at) - new Date(beforeDue)) < 2000,
+        JSON.stringify({ before: beforeDue, after: after?.due_at }));
+      const todayList2 = itemsOf(await api(page, '/api/reminder/items?view=today&status=all'));
+      check('未逾期、被稍后提醒的条目也还留在今天页',
+        todayList2.some((i) => i.id === soonId), JSON.stringify(todayList2.map((i) => i.title).slice(0, 6)));
+      // 下一次提醒确实推迟了：投递任务的 run_at 在明天
+      const jobs = (await api(page, '/api/reminder/admin/deliveries')).body?.data || [];
+      const job = jobs.filter((j) => j.reminder_id === soonId && j.status === 'pending')
+        .sort((a, b) => new Date(a.run_at) - new Date(b.run_at))[0];
+      check('把下一次提醒推迟到稍后那一刻（投递 run_at 在明天以后）',
+        !!job && new Date(job.run_at) > new Date(Date.now() + 3600_000),
+        `run_at=${job?.run_at}`);
     }
 
     // ---------------- ⑥ 信用卡：还款提醒从账单日开始，到期 = 还款日 23:59 ----------------

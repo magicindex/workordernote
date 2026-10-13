@@ -131,6 +131,10 @@ func quietStart(db *gorm.DB, userID uint) string {
 }
 
 // effectiveStamp 是条目「生效时间」的原始值：稍后提醒 > 时间段结束 > 时间段开始 > 到期时间。
+//
+// **只在「投递调度」这条链上用**（见 rebuildJobs 的 run_at）。列表/分组/逾期一律走
+// deadlineStamp（不看稍后提醒）—— 用户 2026-10-14：「逾期项目点击稍后提醒后不应该移出
+// 逾期栏目，只是再次提醒时间延迟；未逾期项目同样，不改变创建、到期时间，只是延迟提醒时间」。
 // 与列表/日历口径一致（见 handlers.go 的 effectiveDue）。
 func effectiveStamp(item Reminder) *time.Time {
 	for _, stamp := range []*time.Time{item.SnoozedUntil, item.EndAt, item.StartAt, item.DueAt} {
@@ -155,7 +159,7 @@ func firstRemindAt(db *gorm.DB, item Reminder) time.Time {
 	if normal.IsZero() {
 		return normal
 	}
-	stamp := effectiveStamp(item)
+	stamp := deadlineStamp(item)
 	start := quietStart(db, item.UserID)
 	h, m, clockOK := clockParts(start)
 	if !clockOK {
@@ -198,7 +202,7 @@ func firstRemindAt(db *gorm.DB, item Reminder) time.Time {
 // 「开始提醒时间」，比结束时间还早就用它，否则就是结束时间本身。
 // 提前窗口的边界、以及「窗口内每天只提醒一次到哪天为止」都用它。
 func normalFirstRemindAt(db *gorm.DB, item Reminder) time.Time {
-	stamp := effectiveStamp(item)
+	stamp := deadlineStamp(item)
 	if stamp == nil {
 		return time.Time{}
 	}
@@ -236,17 +240,15 @@ func firstRemindSchedule(db *gorm.DB, item Reminder) time.Time {
 	if scheduled.IsZero() {
 		return time.Time{}
 	}
-	// 「稍后提醒」是用户**明确点出来的时刻**（UI 只会给未来时间），不吃这 10 分钟 ——
-	// 手点的几点就是几点，不能被悄悄推后。
-	if item.SnoozedUntil == nil {
-		if earliest := item.CreatedAt.Add(firstRemindDelay); scheduled.Before(earliest) {
-			scheduled = earliest.UTC()
-		}
+	// 稍后提醒**不参与**这个口径（用户 2026-10-14：它只延迟提醒时间）：投递时刻由
+	// rebuildJobs 的 run_at（= snoozed_until）负责，这里算的始终是「正常流程」的首次提醒。
+	if earliest := item.CreatedAt.Add(firstRemindDelay); scheduled.Before(earliest) {
+		scheduled = earliest.UTC()
 	}
 	// 结束时间还没到、却被 10 分钟这条顶到了结束时间之后 → 夹回结束时间本身
 	// （例如 15:25 建一条 15:30 到期的：10 分钟后是 15:35，就该在 15:30 提醒）。
 	// 结束时间**已经过去**时不夹（那种条目按 10 分钟这条走：不再立刻弹，见用例 ③）。
-	if item.SnoozedUntil == nil && item.DueAt != nil &&
+	if item.DueAt != nil &&
 		scheduled.After(item.DueAt.UTC()) && item.DueAt.After(time.Now()) {
 		scheduled = item.DueAt.UTC()
 	}

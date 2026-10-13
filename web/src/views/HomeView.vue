@@ -515,7 +515,8 @@
               v-for="item in group.items"
               :key="item.id"
               class="reminder-row group"
-              :class="{ 'reminder-completed': !!item.completed_at && item.kind !== 'note', 'reminder-overdue': isOverdue(item) }"
+              :class="{ 'reminder-completed': !!item.completed_at && item.kind !== 'note', 'reminder-overdue': isOverdue(item), 'reminder-highlight': highlightedId === item.id }"
+              :data-reminder-row="item.id"
             >
               <button
                 class="complete-button"
@@ -660,6 +661,9 @@ import {
 const authStore = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+// 「首页」看板点某条任务 → 跳到它所在的清单，并带上 ?highlight=<id>：
+// 这里把那条滚进视野 + 闪一下底色，用户一眼能找到（用户 2026-10-14：「首页点击提醒定位到对应清单」）。
+const highlightedId = ref(0)
 const items = ref<ReminderItem[]>([])
 // 「已完成」的数据源与普通列表不同（历史表 ∪ 完成记录），单独存一份。
 const completedItems = ref<CompletedItem[]>([])
@@ -1136,6 +1140,8 @@ async function loadData() {
     // 否则首屏进来 monthRange 是空的、两个箭头都置灰（翻月点击无效）。
     if (view.value === 'all') await loadMonthRange()
     await loadItems()
+    // 数据到位后再定位一次（从首页看板点进来时，高亮的那条此刻才在 DOM 里）
+    applyHighlightFromRoute()
   } catch (err: any) {
     showToast(err.response?.data?.message || '读取提醒失败', 'error')
   } finally {
@@ -1533,7 +1539,8 @@ function dueLabel(item: ReminderItem) {
     return stamp ? `记于 ${formatDue(stamp)}` : '无日期'
   }
   if (item.start_at) {
-    const startText = formatDue(item.snoozed_until || item.start_at)
+    // 稍后提醒不改展示时间（用户 2026-10-14），行里始终显示原来的排期
+    const startText = formatDue(item.start_at)
     if (!item.end_at) return startText
     const sameDay = new Date(item.start_at).toDateString() === new Date(item.end_at).toDateString()
     const endText = sameDay
@@ -1541,7 +1548,7 @@ function dueLabel(item: ReminderItem) {
       : formatDue(item.end_at)
     return `${startText} – ${endText}`
   }
-  return item.due_at ? formatDue(item.snoozed_until || item.due_at) : '无日期'
+  return item.due_at ? formatDue(item.due_at) : '无日期'
 }
 
 /** 一条提醒「算哪一天」：有计划时间段看开始时间，否则看到期时间；记事看记录时间。
@@ -1549,7 +1556,7 @@ function dueLabel(item: ReminderItem) {
 function dayKeyOf(item: ReminderItem): string {
   const stamp = item.kind === 'note'
     ? (item.completed_at || item.created_at)
-    : (item.snoozed_until || item.start_at || item.due_at)
+    : (item.start_at || item.due_at)
   if (!stamp) return 'undated'
   const d = new Date(stamp)
   if (Number.isNaN(d.getTime())) return 'undated'
@@ -1652,6 +1659,21 @@ async function loadOverdueGrace() {
     // 默认结束时间已经写死 23:59（DEFAULT_DUE_TIME），不再读配置
   } catch { /* 拿不到就按默认 30 分钟 / 23:59 */ }
 }
+/** 从 URL 的 ?highlight= 取要高亮的那条，滚过去闪一下。 */
+function applyHighlightFromRoute() {
+  const raw = Number(route.query.highlight || 0)
+  if (!raw) {
+    highlightedId.value = 0
+    return
+  }
+  highlightedId.value = raw
+  void nextTick(() => {
+    const el = document.querySelector(`[data-reminder-row="${raw}"]`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+  window.setTimeout(() => { highlightedId.value = 0 }, 4000)
+}
+
 onMounted(() => {
   loadData()
   void loadOverdueGrace()
@@ -1661,6 +1683,7 @@ onMounted(() => {
   window.addEventListener('reminder-realtime', refreshRealtimeData)
   window.addEventListener('reminder-realtime-resume', refreshRealtimeData)
   window.addEventListener('keydown', onShortcut)
+  applyHighlightFromRoute()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('open-quick-reminder', expandQuickAdd)
@@ -1719,6 +1742,12 @@ function onShortcut(e: KeyboardEvent) {
 .reminder-row { @apply relative flex min-h-0 items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-muted/40 sm:gap-3 sm:px-4 sm:py-3; content-visibility: auto; contain-intrinsic-size: 64px; }
 .reminder-row::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 2px; background: transparent; }
 .reminder-overdue::before { background: #f43f5e; }
+/* 从「首页」看板点进来定位到的那一条：底色闪一下，一眼能找到 */
+.reminder-highlight { @apply bg-brand-500/[.09]; animation: reminder-highlight-flash 1.6s ease-in-out 2; }
+@keyframes reminder-highlight-flash {
+  0%, 100% { background-color: rgba(var(--color-brand-500) / .09); }
+  50% { background-color: rgba(var(--color-brand-500) / .2); }
+}
 .reminder-completed { @apply opacity-60; }
 .reminder-completed h3 { @apply line-through; }
 .complete-button { @apply flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-brand-500/35 text-white transition hover:scale-110 hover:border-brand-500 hover:bg-brand-500; }

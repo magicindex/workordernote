@@ -493,7 +493,11 @@ func rebuildJobs(tx *gorm.DB, reminder Reminder, channels []string) error {
 	if reminder.SnoozedUntil == nil {
 		_, cutoff := overduePolicy(tx, reminder.UserID)
 		earliest := reminder.CreatedAt.Add(firstRemindDelay)
-		if deadline := overdueDeadlineOf(reminder, cutoff); !deadline.IsZero() && !deadline.After(earliest) {
+		// 只对**还没逾期**的条目生效：逾期时间已经过去的（老任务、或者隔了好几天才重建链条的）
+		// 照常排提醒 —— 否则「编辑一条逾期任务」会把它的「提醒频率」链条一起弄没了，
+		// 而它的逾期提醒本来就是另一条路（notifyOverdue，每个任务每天一条）。
+		if deadline := overdueDeadlineOf(reminder, cutoff); !deadline.IsZero() &&
+			deadline.After(time.Now()) && !deadline.After(earliest) {
 			return nil
 		}
 	}
@@ -645,11 +649,11 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 	// 时间比较一律走 tsUTC()：SQLite 里时间是带偏移的文本，直接比会按字符串序
 	// 错位（说明见 sql_time.go）。
 	//
-	// 「生效时间」= COALESCE(snoozed_until, due_at)：点过「稍后提醒」的条目，时间已经
-	// 挪到稍后那一刻（行里显示的、按天分卡片用的都是这个时间）。今天 / 计划两个视图
-	// 必须用同一个口径，否则会出现「今天页里冒出一张『明天』的卡片」——2026-10-10 实测：
-	// 一条今天 00:00 到期、被稍后到明天 00:34 的条目还留在今天页，卡片头却写着「明天」。
-	effectiveDue := "COALESCE(snoozed_until, due_at)"
+	// 「排期时间」= COALESCE(end_at, start_at, due_at)：**不看 snoozed_until**
+	// （用户 2026-10-14：「稍后提醒……不改变创建、到期时间，只是延迟提醒时间」）。
+	// 稍后提醒只影响投递任务的 run_at（见 rebuildJobs），列表/分组/视图都按原来的排期走 ——
+	// 所以「稍后到明天」的条目仍然留在今天页，只是下一次提醒推迟了。
+	effectiveDue := "COALESCE(end_at, start_at, due_at)"
 	preset := "(repeat_rule <> 'none' OR start_at IS NOT NULL OR (due_at IS NOT NULL AND " + tsUTC(effectiveDue) + " >= datetime(?)))"
 	switch view {
 	case "today":

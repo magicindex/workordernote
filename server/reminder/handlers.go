@@ -1011,9 +1011,9 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		// COUNT —— /summary 的查询条数有测试盯着（performance_test.go，稳定态 2 条）。
 		nudgeExpr := `(SELECT COUNT(*) FROM nudges WHERE to_user_id = ? AND done_at IS NULL AND deleted_at IS NULL) AS nudge_pending`
 		selectArgs = append(selectArgs, userID, sqlTimeArg(overdueBefore))
-		// 口径与列表一致：用「生效时间」COALESCE(snoozed_until, due_at) ——
-		// 稍后提醒过的条目不算今天/逾期（它已经挪到稍后那一刻，见 service.go 的同名注释）。
-		effectiveDue := "COALESCE(snoozed_until, due_at)"
+		// 口径与列表一致：用「排期时间」COALESCE(end_at, start_at, due_at) ——
+		// **不看 snoozed_until**（用户 2026-10-14：稍后提醒只延迟提醒时间，不改到期时间）。
+		effectiveDue := "COALESCE(end_at, start_at, due_at)"
 		// 逾期基准**不看 snoozed_until**（用户 2026-10-13：「点知道了，提醒依然保留在逾期栏目」）：
 		// 稍后提醒只决定「什么时候再提醒」，不该把一条已经逾期的任务从「已逾期」里摘出去。
 		// 与 Go 侧 deadlineStamp 同一口径。

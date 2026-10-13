@@ -103,7 +103,7 @@ func processJob(db *gorm.DB, candidate DeliveryJob) {
 	if !sameInstant(*item.DueAt, job.ScheduledFor) && job.ScheduledFor.Before(*item.DueAt) {
 		// 早于结束时间：只可能是首次提醒（或稍后提醒），仍然有效 —— 但要是这条的
 		// 结束时间已经被改到比它更早，那它才是陈旧的。
-		stamp := effectiveStamp(item)
+		stamp := deadlineStamp(item)
 		if stamp != nil && job.ScheduledFor.After(*stamp) {
 			finishCancelled(db, job.ID, "REMINDER_CHANGED")
 			return

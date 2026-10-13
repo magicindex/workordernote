@@ -151,7 +151,7 @@ func TestCompletedRangeIsOffsetAware(t *testing.T) {
 // 2026-10-10 实测到的坑：一条今天 00:00 到期、被稍后到明天 00:34 的条目仍留在今天页，
 // 而列表行显示的时间与按天分卡片的卡片头都是「明天」—— 同一个页面上自相矛盾。
 // 现在今天页看 COALESCE(snoozed_until, due_at)，计划页的预设判断也用它。
-func TestTodayViewFollowsSnooze(t *testing.T) {
+func TestTodayViewKeepsSnoozedItems(t *testing.T) {
 	withShanghaiLocal(t)
 	cleanup := testDB(t)
 	defer cleanup()
@@ -164,23 +164,24 @@ func TestTodayViewFollowsSnooze(t *testing.T) {
 	loc := shanghai()
 	now := time.Now().In(loc)
 
-	// ① 还没逾期（到期时间在接下去几小时）→ 稍后到明天，就不在今天页了：
-	//    今天页看的是「生效时间」（COALESCE(snoozed_until, due_at)）。
-	futureDue := now.Add(2 * time.Hour)
-	created, err := createReminder(appDB, userID, SaveReminderInput{
-		Title: "稍后到明天", ListID: list.ID, DueAt: &futureDue, RepeatRule: "none",
+	// 用户 2026-10-14：「逾期项目点击稍后提醒后不应该移出逾期栏目，只是再次提醒时间延迟；
+	// 未逾期项目同样，不改变创建、到期时间，只是延迟提醒时间」。
+	// 所以今天页看的是**原来的排期**（不说 snoozed_until）：稍后到明天之后，
+	// 今天到期的还在今天页、逾期的一样在（并靠 isOverdue 归到「已逾期」分组）。
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+
+	todayDue := midnight.Add(23 * time.Hour)
+	todayItem, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "今天到期、稍后到明天", ListID: list.ID, DueAt: &todayDue, RepeatRule: "none",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := appDB.Model(&Reminder{}).Where("id = ?", created.ID).
-		Update("snoozed_until", futureDue.AddDate(0, 0, 1)).Error; err != nil {
+	if err := appDB.Model(&Reminder{}).Where("id = ?", todayItem.ID).
+		Update("snoozed_until", todayDue.AddDate(0, 0, 1)).Error; err != nil {
 		t.Fatal(err)
 	}
 
-	// ② 已经逾期（前天就该做完）→ 即使点了「知道了」（稍后提醒到明天），也必须留在今天页的
-	//    「已逾期」里（用户 2026-10-13：「逾期项目点击知道了，提醒依然保留在逾期栏目，
-	//    只是按后台设定时间进行下一次提示」）。
 	overdueDue := now.AddDate(0, 0, -2)
 	overdueItem, err := createReminder(appDB, userID, SaveReminderInput{
 		Title: "逾期了还被顺延", ListID: list.ID, DueAt: &overdueDue, RepeatRule: "none",
@@ -193,15 +194,6 @@ func TestTodayViewFollowsSnooze(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 对照：今天到期、没稍后的
-	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
-	plainDue := midnight.Add(23 * time.Hour)
-	if _, err := createReminder(appDB, userID, SaveReminderInput{
-		Title: "今天正常", ListID: list.ID, DueAt: &plainDue, RepeatRule: "none",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
 	today, err := listReminders(appDB, userID, "today", "", nil, false, "", "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -210,16 +202,14 @@ func TestTodayViewFollowsSnooze(t *testing.T) {
 	for _, r := range today {
 		got[r.Title] = true
 	}
-	if got["稍后到明天"] {
-		t.Errorf("还没逾期、稍后到明天的条目不该留在今天页：%v", titlesOf(today))
+	if !got["今天到期、稍后到明天"] {
+		t.Errorf("今天到期、被稍后提醒的条目仍应留在今天页：%v", titlesOf(today))
 	}
 	if !got["逾期了还被顺延"] {
 		t.Errorf("已经逾期、被稍后提醒的条目必须留在今天页（已逾期栏）：%v", titlesOf(today))
 	}
-	if !got["今天正常"] {
-		t.Errorf("今天页少了没稍后的那条：%v", titlesOf(today))
-	}
 
+	// 计划页是「明天及以后」：这两条的排期都在今天或更早，不该跑去计划页
 	planned, err := listReminders(appDB, userID, "planned", "", nil, false, "", "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -228,7 +218,20 @@ func TestTodayViewFollowsSnooze(t *testing.T) {
 	for _, r := range planned {
 		plannedTitles[r.Title] = true
 	}
-	if !plannedTitles["稍后到明天"] {
-		t.Errorf("稍后到明天的条目该出现在计划页（生效时间在明天）：%v", titlesOf(planned))
+	if plannedTitles["今天到期、稍后到明天"] || plannedTitles["逾期了还被顺延"] {
+		t.Errorf("稍后提醒不该把它们挪到计划页：%v", titlesOf(planned))
+	}
+
+	// 列表里显示的排期时间也不该被 snooze 改掉
+	items, err := listReminders(appDB, userID, "all", "", nil, false, "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items {
+		if item.ID == todayItem.ID {
+			if item.DueAt == nil || !sameInstant(*item.DueAt, todayDue.In(loc)) {
+				t.Errorf("稍后提醒不该改到期时间：%v", item.DueAt)
+			}
+		}
 	}
 }

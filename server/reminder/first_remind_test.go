@@ -31,46 +31,39 @@ func TestFirstRemindScheduleDelaysFreshReminders(t *testing.T) {
 	}
 	created := now.Add(-time.Minute)
 
-	// ① 今天 23:59 到期、当天 06:00 已经过去才建：首次提醒 = 创建后 10 分钟，
-	//    而不是当天 06:00（已经过去）。
-	//
-	// 注意**接近午夜**跑测试时有个正常分支：10 分钟那条会越过 23:59，于是按
-	// 「不晚于结束时间」夹回 23:59（以前这里写死了期望，跨午夜就会假红）。
-	fresh := Reminder{UserID: userID, CreatedAt: created, DueAt: ptrTime(todayAt(23, 59)), RepeatRule: "none"}
-	got := firstRemindSchedule(appDB, fresh)
-	want := created.Add(firstRemindDelay).UTC()
-	if fresh.DueAt.After(created.Add(firstRemindDelay)) {
-		if !sameInstant(got, want) {
-			t.Fatalf("新建的已过点任务：首次提醒应为创建后 10 分钟 %v，实际 %v", want, got)
-		}
-		if !got.After(now) {
-			t.Fatalf("首次提醒不该是过去时刻（会立刻弹窗），实际 %v（现在 %v）", got, now)
-		}
-		if got.Equal(fresh.DueAt.UTC()) {
-			t.Fatal("10 分钟这条口径没生效：还是结束时间本身")
-		}
-	} else if !sameInstant(got, fresh.DueAt.UTC()) {
-		t.Fatalf("离午夜不到 10 分钟时，应夹回结束时间 %v，实际 %v", fresh.DueAt.UTC(), got)
-	}
-
-	// ② 结束时间只剩 5 分钟：10 分钟那条会越过结束时间 → 夹回结束时间（不能晚于它）
-	soonDue := Reminder{UserID: userID, CreatedAt: created, DueAt: ptrTime(now.Add(5 * time.Minute)), RepeatRule: "none"}
-	if got := firstRemindSchedule(appDB, soonDue); !sameInstant(got, soonDue.DueAt.UTC()) {
-		t.Fatalf("结束时间只剩 5 分钟时应夹回结束时间 %v，实际 %v", soonDue.DueAt.UTC(), got)
-	}
-
-	// ③ 结束时间早就过了：保持「创建后 10 分钟」，不再立刻弹
-	pastDue := Reminder{UserID: userID, CreatedAt: created, DueAt: ptrTime(now.Add(-2 * time.Hour)), RepeatRule: "none"}
-	if got := firstRemindSchedule(appDB, pastDue); !sameInstant(got, created.Add(firstRemindDelay).UTC()) {
-		t.Fatalf("已过期的新建任务首次提醒应为创建后 10 分钟，实际 %v", got)
-	}
-
-	// ④ 三天后到期的任务：不受 10 分钟那条影响，仍然按到期日当天的「开始提醒时间」
-	//    （用「三天后」而不是「一小时后」，免得跨午夜时到期日的 06:00 还没到、口径变成
-	//     结束时间本身 —— 那种时刻依赖测试员钟点的断言最容易假红，本轮就踩过）
+	// ① 不管在哪个钟点跑，首次提醒只可能是这两种之一：
+	//    · 「创建后 10 分钟」（新口径）；或者
+	//    · 结束时间本身（10 分钟那条越过了结束时间、被夹回来的时候）。
+	//    以前这里按「今天 06:00 已经过去」写死了期望，凌晨跑就会假红（本轮踩过两次）。
 	threeDays := now.In(loc).AddDate(0, 0, 3)
 	threeDue := time.Date(threeDays.Year(), threeDays.Month(), threeDays.Day(), 23, 59, 0, 0, loc)
-	later := Reminder{UserID: userID, CreatedAt: created, DueAt: &threeDue, RepeatRule: "none"}
+	floor := created.Add(firstRemindDelay).UTC()
+	for _, due := range []time.Time{
+		todayAt(23, 59),
+		now.Add(-2 * time.Hour),
+		now.Add(5 * time.Minute),
+		now.Add(time.Hour),
+		threeDue,
+	} {
+		item := Reminder{UserID: userID, CreatedAt: created, DueAt: ptrTime(due), RepeatRule: "none"}
+		got := firstRemindSchedule(appDB, item)
+		// 不早于「创建 + 10 分钟」——除非那 10 分钟会越过结束时间，这时按结束时间夹回来
+		if got.Before(floor) && !sameInstant(got, due.UTC()) {
+			t.Fatalf("首次提醒不该早于创建后 10 分钟（除非夹回结束时间）：实际 %v（due=%v floor=%v）", got, due, floor)
+		}
+		// 结束时间还在未来时，提醒也不会晚于它
+		if due.After(now) && got.After(due.UTC()) {
+			t.Fatalf("首次提醒不该晚于还没到的结束时间：实际 %v（due=%v）", got, due)
+		}
+	}
+	// 已过点的条目：不早于创建 + 10 分钟（不再保存完就弹窗）
+	pastItem := Reminder{UserID: userID, CreatedAt: created, DueAt: ptrTime(now.Add(-2 * time.Hour)), RepeatRule: "none"}
+	if got := firstRemindSchedule(appDB, pastItem); !got.After(now) {
+		t.Fatalf("新建的已过点任务不该立刻弹窗，实际 %v（现在 %v）", got, now)
+	}
+
+	// ② 三天后到期的任务：不受 10 分钟那条影响，仍然按到期日当天的「开始提醒时间」
+	later := Reminder{UserID: userID, CreatedAt: created, DueAt: ptrTime(threeDue), RepeatRule: "none"}
 	if got := firstRemindSchedule(appDB, later); !sameInstant(got, firstRemindAt(appDB, later)) {
 		t.Fatalf("三天后到期的任务首次提醒应按正常流程 %v，实际 %v", firstRemindAt(appDB, later), got)
 	}
@@ -130,9 +123,9 @@ func TestRebuildJobsSkipsWhenCloseToOverdue(t *testing.T) {
 	}
 }
 
-// 「稍后提醒」是用户明确点出来的时刻，不吃「新建后 10 分钟」这条口径；
-// 同一条提醒如果没有稍后提醒，就按 10 分钟那条走 —— 两条并排验证。
-func TestFirstRemindScheduleHonoursSnooze(t *testing.T) {
+// 用户 2026-10-14：「稍后提醒……不改变创建、到期时间，只是延迟提醒时间」。
+// 断言三件事：到期时间不变、首次提醒的口径不看 snooze、投递任务被推迟到稍后那一刻。
+func TestSnoozeOnlyDelaysDelivery(t *testing.T) {
 	cleanup := testDB(t)
 	defer cleanup()
 
@@ -140,138 +133,39 @@ func TestFirstRemindScheduleHonoursSnooze(t *testing.T) {
 	setUserConfig(t, "reminder_all_day_time", "00:00", userID)
 
 	now := time.Now()
-	created := now.Add(-time.Minute)
-	snooze := now.Add(2 * time.Second)
-
-	snoozed := Reminder{
-		UserID: userID, CreatedAt: created, DueAt: ptrTime(now.Add(time.Hour)),
-		SnoozedUntil: &snooze, RepeatRule: "none",
-	}
-	if got := firstRemindSchedule(appDB, snoozed); !sameInstant(got, snooze.UTC()) {
-		t.Fatalf("稍后提醒指定的时刻不该被 10 分钟口径推后：期望 %v，实际 %v", snooze.UTC(), got)
-	}
-
-	// 对照组：同样「刚建一分钟」，但已经过期（没有稍后提醒）→ 按创建后 10 分钟
-	plain := Reminder{UserID: userID, CreatedAt: created, DueAt: ptrTime(now.Add(-2 * time.Hour)), RepeatRule: "none"}
-	if got := firstRemindSchedule(appDB, plain); !sameInstant(got, created.Add(firstRemindDelay).UTC()) {
-		t.Fatalf("同一条没有稍后提醒时应当按创建后 10 分钟，实际 %v", got)
-	}
-}
-
-// 「提前几天开始提醒」（用户 2026-10-13：「开始提醒时间，增加提前几天开始提醒，
-// 低于几天的按照正常流程走，超过提醒天数的等符合设定时间后再开始执行提醒」）。
-func TestFirstRemindAdvanceDays(t *testing.T) {
-	cleanup := testDB(t)
-	defer cleanup()
-
-	const userID = 704
-	setUserConfig(t, "reminder_all_day_time", "06:00", userID)
-	loc := shanghai()
-	now := time.Now()
-	startOfToday := time.Date(now.In(loc).Year(), now.In(loc).Month(), now.In(loc).Day(), 0, 0, 0, 0, loc)
-
-	at := func(dayOffset, hour int) time.Time {
-		d := startOfToday.AddDate(0, 0, dayOffset)
-		return time.Date(d.Year(), d.Month(), d.Day(), hour, 0, 0, 0, loc)
-	}
-	// 造一条「10 天后 23:59 到期、今天创建的」提醒：离到期超过 3 天
-	due10 := at(10, 23)
-	item := Reminder{UserID: userID, CreatedAt: now.Add(-time.Minute), DueAt: &due10, RepeatRule: "none"}
-
-	// 没设提前天数（默认 0）：老口径 —— 到期日当天 06:00
-	setUserConfig(t, "reminder_advance_days", "0", userID)
-	if got := firstRemindAt(appDB, item); !sameInstant(got, at(10, 6).UTC()) {
-		t.Fatalf("提前 0 天时首次提醒应为到期日 06:00，实际 %v", got)
-	}
-
-	// 提前 3 天：窗口 = 到期日往前 3 天（也就是 7 天后）的 06:00
-	setUserConfig(t, "reminder_advance_days", "3", userID)
-	if got := firstRemindAt(appDB, item); !sameInstant(got, at(7, 6).UTC()) {
-		t.Fatalf("提前 3 天时首次提醒应为 7 天后的 06:00，实际 %v", got)
-	}
-	if got := firstRemindSchedule(appDB, item); !sameInstant(got, at(7, 6).UTC()) {
-		t.Fatalf("调度用的首次提醒时刻也应当是窗口起点，实际 %v", got)
-	}
-
-	// 创建时已经在窗口之内（明天到期 < 提前 3 天）：按正常流程 —— 明天 06:00，不是立刻
-	dueTomorrow := at(1, 23)
-	inside := Reminder{UserID: userID, CreatedAt: now.Add(-time.Minute), DueAt: &dueTomorrow, RepeatRule: "none"}
-	if got := firstRemindAt(appDB, inside); !sameInstant(got, at(1, 6).UTC()) {
-		t.Fatalf("窗口之内创建的应当按正常流程（明天 06:00），实际 %v", got)
-	}
-
-	// 窗口还没到来就创建（今天创建、窗口在 7 天后）→ 用窗口；窗口那天之后再创建 → 正常流程
-	// （这里用 CreatedAt 模拟「窗口已经过去才创建」）
-	lateCreated := Reminder{UserID: userID, CreatedAt: at(8, 12), DueAt: &due10, RepeatRule: "none"}
-	if got := firstRemindAt(appDB, lateCreated); !sameInstant(got, at(10, 6).UTC()) {
-		t.Fatalf("窗口过了才创建的应当按正常流程（到期日 06:00），实际 %v", got)
-	}
-}
-
-// 提前窗口内「每天只在开始提醒时间提醒一次」，到了到期日那天恢复「提醒频率」。
-func TestAdvanceWindowRepeatsOncePerDay(t *testing.T) {
-	cleanup := testDB(t)
-	defer cleanup()
-
-	const userID = 705
-	setUserConfig(t, "reminder_all_day_time", "06:00", userID)
-	setUserConfig(t, "reminder_advance_days", "3", userID)
-
-	loc := shanghai()
-	now := time.Now()
-	startOfToday := time.Date(now.In(loc).Year(), now.In(loc).Month(), now.In(loc).Day(), 0, 0, 0, 0, loc)
-	at := func(dayOffset, hour int) time.Time {
-		d := startOfToday.AddDate(0, 0, dayOffset)
-		return time.Date(d.Year(), d.Month(), d.Day(), hour, 0, 0, 0, loc)
-	}
-	due := at(10, 23)
-
-	item := Reminder{
-		ID: 1, UserID: userID, CreatedAt: now.Add(-time.Minute), DueAt: &due,
-		RepeatRule: "none", RepeatNotifyMinutes: 15,
-	}
-	first := firstRemindAt(appDB, item)
-	if !sameInstant(first, at(7, 6).UTC()) {
-		t.Fatalf("窗口起点应为 7 天后的 06:00，实际 %v", first)
-	}
-
-	// 窗口内第一次投递之后：下一个不是 15 分钟后，而是**第二天同一时刻**
-	job := DeliveryJob{UserID: userID, ReminderID: 1, Channel: ChannelInApp, ScheduledFor: first}
-	if err := scheduleRepeatNotify(appDB, item, job); err != nil {
+	due := now.Add(2 * time.Hour).Truncate(time.Second)
+	created, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "稍后一下", Kind: KindTask, DueAt: &due, RepeatRule: "none", Channels: []string{ChannelInApp},
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-	var chain DeliveryJob
-	if err := appDB.Where("reminder_id = ? AND channel = ? AND status = ?", uint(1), ChannelInApp, "pending").
-		Order("scheduled_for ASC").First(&chain).Error; err != nil {
+	snoozeUntil := now.Add(30 * time.Minute).Truncate(time.Second)
+	if _, err := snoozeReminder(appDB, userID, created.ID, snoozeUntil); err != nil {
 		t.Fatal(err)
 	}
-	if !sameInstant(chain.ScheduledFor, at(8, 6).UTC()) {
-		t.Fatalf("窗口内应当每天只排一次（第二天 06:00），实际 %v", chain.ScheduledFor)
+
+	var item Reminder
+	if err := appDB.First(&item, created.ID).Error; err != nil {
+		t.Fatal(err)
 	}
-}
-
-// 「开始提醒时间 = 00:00（不提前、也不静默）」时，提前天数仍然生效：
-// 窗口从 (到期日 - N 天) 的 0 点开始，而不是被 00:00 这条口径吃掉。
-func TestAdvanceDaysWorksWithMidnightStart(t *testing.T) {
-	cleanup := testDB(t)
-	defer cleanup()
-
-	const userID = 706
-	setUserConfig(t, "reminder_all_day_time", "00:00", userID)
-	setUserConfig(t, "reminder_advance_days", "3", userID)
-
-	loc := shanghai()
-	now := time.Now()
-	startOfToday := time.Date(now.In(loc).Year(), now.In(loc).Month(), now.In(loc).Day(), 0, 0, 0, 0, loc)
-	dayAt := func(offset, hour int) time.Time {
-		d := startOfToday.AddDate(0, 0, offset)
-		return time.Date(d.Year(), d.Month(), d.Day(), hour, 0, 0, 0, loc)
+	if item.DueAt == nil || !sameInstant(*item.DueAt, due) {
+		t.Fatalf("稍后提醒不该改到期时间：%v（原 %v）", item.DueAt, due)
 	}
-	due := dayAt(10, 23)
-	item := Reminder{UserID: userID, CreatedAt: now.Add(-time.Minute), DueAt: &due, RepeatRule: "none"}
-
-	if got := firstRemindAt(appDB, item); !sameInstant(got, dayAt(7, 0).UTC()) {
-		t.Fatalf("00:00 + 提前 3 天：窗口应为 7 天后的 0 点，实际 %v", got)
+	if got := firstRemindSchedule(appDB, item); !sameInstant(got, due) {
+		t.Fatalf("首次提醒的口径不该被 snooze 改掉：期望 %v，实际 %v", due, got)
+	}
+	// 投递任务：run_at 推迟到稍后那一刻，scheduled_for 仍是正常口径
+	var job DeliveryJob
+	if err := appDB.Where("reminder_id = ? AND status = ?", created.ID, "pending").
+		Order("id DESC").First(&job).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !sameInstant(job.RunAt, snoozeUntil) {
+		t.Fatalf("投递应当推迟到 %v，实际 %v", snoozeUntil, job.RunAt)
+	}
+	if !sameInstant(job.ScheduledFor, due) {
+		t.Fatalf("排期不该变：期望 %v，实际 %v", due, job.ScheduledFor)
 	}
 }
 

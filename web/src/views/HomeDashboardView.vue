@@ -48,16 +48,17 @@
           <li
             v-for="row in upcoming"
             :key="row.item.id"
-            class="flex items-start gap-2.5 rounded-2xl border border-border/70 bg-surface/70 p-3"
+            class="flex cursor-pointer items-start gap-2.5 rounded-2xl border border-border/70 bg-surface/70 p-3 transition hover:border-brand-500/40 hover:bg-brand-500/[.04]"
             data-home-item
+            :data-home-goto="row.item.id"
+            :title="`去「${row.item.list_name || '清单'}」里看这条`"
+            @click="gotoList(row)"
           >
-            <button
-              type="button"
-              class="mt-0.5 h-4 w-4 shrink-0 rounded border border-border transition hover:border-brand-500"
-              :aria-label="`完成：${row.item.title}`"
-              :data-home-complete="row.item.id"
-              @click="complete(row)"
-            ></button>
+            <!-- 前面显示**栏目图标**（用户 2026-10-14：「首页栏目前边不显示复选框，显示栏目图标」），
+                 整行点进去就定位到它所在的清单 -->
+            <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-brand-500/10 text-brand-500" :data-home-icon="row.item.id">
+              <ListIcon :name="listIconOf(row.item)" :size="15" />
+            </span>
             <span class="mt-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-[11px] font-black" :class="row.tone" data-home-level>{{ row.level }}</span>
             <div class="min-w-0 flex-1">
               <p class="whitespace-pre-wrap break-words text-sm font-bold text-foreground">{{ row.item.title }}</p>
@@ -85,16 +86,17 @@
           <li
             v-for="row in overdue"
             :key="row.item.id"
-            class="flex items-start gap-2.5 rounded-2xl border border-rose-500/25 bg-rose-500/[.04] p-3"
+            class="flex cursor-pointer items-start gap-2.5 rounded-2xl border border-rose-500/25 bg-rose-500/[.04] p-3 transition hover:border-brand-500/40"
             data-home-item
+            :data-home-goto="row.item.id"
+            :title="`去「${row.item.list_name || '清单'}」里看这条`"
+            @click="gotoList(row)"
           >
-            <button
-              type="button"
-              class="mt-0.5 h-4 w-4 shrink-0 rounded border border-border transition hover:border-brand-500"
-              :aria-label="`完成：${row.item.title}`"
-              :data-home-complete="row.item.id"
-              @click="complete(row)"
-            ></button>
+            <!-- 前面显示**栏目图标**（用户 2026-10-14：「首页栏目前边不显示复选框，显示栏目图标」），
+                 整行点进去就定位到它所在的清单 -->
+            <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-brand-500/10 text-brand-500" :data-home-icon="row.item.id">
+              <ListIcon :name="listIconOf(row.item)" :size="15" />
+            </span>
             <span class="mt-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-[11px] font-black" :class="row.tone" data-home-level>{{ row.level }}</span>
             <div class="min-w-0 flex-1">
               <p class="whitespace-pre-wrap break-words text-sm font-bold text-foreground">{{ row.item.title }}</p>
@@ -111,13 +113,18 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { completeReminder, getReminders, type ReminderItem } from '../api/reminder'
+import { useRouter } from 'vue-router'
+import ListIcon from '../components/ListIcon.vue'
+import { getLists, getReminders, type ReminderItem } from '../api/reminder'
 import { useAuthStore } from '../stores/auth'
 import { clockParts, isOverdueAt, overdueStamp } from '../utils/overdue'
 
 // 「首页」看板（用户 2026-10-13）：打开应用默认落在这一页；10 分钟不操作也回到这里
 // （见 MainLayout 的空闲跳转）。左边 14 天内待办、右边所有逾期，标题前一个字标级别。
 const authStore = useAuthStore()
+const router = useRouter()
+// 清单 id → 图标 key（列表接口不返回 list_icon，这里自己查一份）
+const listIcons = ref<Record<number, string>>({})
 const items = ref<ReminderItem[]>([])
 const loading = ref(true)
 const errorMsg = ref('')
@@ -175,6 +182,18 @@ const overdue = computed(() => rows.value
   .filter((row) => row.level === '急')
   .sort((a, b) => new Date(a.item.due_at || 0).getTime() - new Date(b.item.due_at || 0).getTime()))
 
+async function loadListIcons() {
+  try {
+    const res = await getLists()
+    const rows = res.data?.data?.items || res.data?.data || []
+    const map: Record<number, string> = {}
+    for (const l of rows) map[l.id] = l.icon || 'list'
+    listIcons.value = map
+  } catch {
+    listIcons.value = {}
+  }
+}
+
 async function load() {
   try {
     // 不传 status：默认只取未完成的（status=all 才会带上已完成）
@@ -189,13 +208,15 @@ async function load() {
   }
 }
 
-async function complete(row: Row) {
-  try {
-    await completeReminder(row.item.id)
-    await load()
-  } catch {
-    errorMsg.value = '标记完成失败，请到清单里再试一次'
-  }
+/** 这一条属于哪个清单的图标（拿不到就用默认的清单图标）。 */
+function listIconOf(item: ReminderItem) {
+  return listIcons.value[item.list_id] || 'list'
+}
+
+/** 点一条 → 定位到它所在的清单，并高亮那一条（用户 2026-10-14：「首页点击提醒定位到对应清单」）。 */
+function gotoList(row: Row) {
+  if (!row.item.list_id) return
+  void router.push({ path: `/admin/list/${row.item.list_id}`, query: { highlight: String(row.item.id) } })
 }
 
 function formatDue(item: ReminderItem) {
@@ -212,10 +233,11 @@ function formatDue(item: ReminderItem) {
   return `${date} ${time}`
 }
 
-function onDataChanged() { void load() }
+function onDataChanged() { void load(); void loadListIcons() }
 
 onMounted(() => {
   void load()
+  void loadListIcons()
   clockTimer = setInterval(() => { clockNow.value = Date.now() }, 60_000)
   window.addEventListener('reminder-data-changed', onDataChanged)
 })
