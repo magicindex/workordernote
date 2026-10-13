@@ -481,8 +481,9 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
         JSON.stringify(divider));
 
       // 用户 2026-10-11 又说「倒计时还不够显眼，继续放大」：桌面 44px（手机 36px）
-      check('倒计时放大醒目（大数字 ≥36px，比正文大一截）',
-        !!card && !card.missing && card.bigFont >= 36 && card.bigFont > card.heroFont,
+      // 用户 2026-10-13 又要求「同时增加 2 个字号」：桌面 44 → **52px**（手机 36 → 44px）
+      check('倒计时再次放大（大数字 ≥44px，比正文大一截）',
+        !!card && !card.missing && card.bigFont >= 44 && card.bigFont > card.heroFont,
         JSON.stringify(card));
       // 字色可读性（用户 2026-10-11：「浅色背景影响字体显示，字体是白色的，自动调整字体颜色」）：
       // 每张卡的标题/日期字色与倒计时字色，都要跟它自己的渐变底色有足够对比度。
@@ -551,6 +552,24 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
       });
       check('系统开了「减少动态效果」时流光停下（只留静态亮色数字）', reduced === 'none', String(reduced));
       await page.emulateMediaFeatures([]);
+
+      // 用户 2026-10-13：「倒计时 背景暗时看不清，增加白边」
+      const stroke = await page.evaluate(() => {
+        const b = document.querySelector('[data-ceremony-countdown] b');
+        const hero = b?.closest('[data-ceremony-countdown]');
+        if (!b) return null;
+        const style = getComputedStyle(b);
+        return {
+          width: style.getPropertyValue('-webkit-text-stroke-width') || style.webkitTextStrokeWidth || '',
+          color: style.getPropertyValue('-webkit-text-stroke-color') || style.webkitTextStrokeColor || '',
+          ink: hero ? getComputedStyle(hero).getPropertyValue('--ceremony-ink').trim() : '',
+        };
+      });
+      check('倒计时数字有描边（宽度 > 0）',
+        !!stroke && parseFloat(stroke.width) > 0, JSON.stringify(stroke));
+      check('深色卡面（白字）的描边是白的',
+        !!stroke && (stroke.ink === '#ffffff' ? /255, 255, 255/.test(stroke.color) : true),
+        JSON.stringify(stroke));
       check('每张卡的标题字色与卡面底色对比度足够（≥4.5，浅色卡面不会被白字糊住）',
         contrast.length > 0 && contrast.every((c) => c.title === null || c.title >= 4.5),
         JSON.stringify(contrast.map((c) => [c.accent, c.title, c.titleInk])));
