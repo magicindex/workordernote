@@ -65,6 +65,8 @@ app.tgz
 # 临时测试与调试文件统一放这里，目录内内容不入库（仅保留 .gitkeep 占位）
 tmp/*
 !tmp/.gitkeep
+# 迭代容器用的本地后端二进制（挂进临时容器 /app/reminder，见 browser-harness/README.md）
+tmp-iter-bin/
 
 # AI 工具本地目录
 .zcode/

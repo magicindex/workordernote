@@ -38,6 +38,8 @@ const router = createRouter({
         // 日历是与列表并列的另一种看法，顶栏的「列表 / 日历」开关在这里切换。
         { path: 'calendar', name: 'Calendar', component: () => import('../views/CalendarView.vue'), meta: { title: '日历' } },
         { path: 'list/:id', name: 'ReminderList', component: () => import('../views/HomeView.vue'), meta: { reminderView: 'all', title: '我的清单' } },
+        // 「提醒@他」：多人之间互相推提醒（侧栏「我的清单」下的入口，开关是系统偏好 nudge_enabled）。
+        { path: 'nudges', name: 'Nudges', component: () => import('../views/NudgeView.vue'), meta: { title: '提醒@他' } },
         { path: 'notifications', name: 'Notifications', component: () => import('../views/NotificationsView.vue'), meta: { title: '通知中心' } },
         { path: 'channels', name: 'Channels', component: () => import('../views/ChannelsView.vue'), meta: { title: '通知方式' } },
         { path: 'profile', name: 'Profile', component: () => import('../views/ProfileView.vue') },

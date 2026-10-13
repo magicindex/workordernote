@@ -95,6 +95,25 @@
             <span v-if="summary.all" class="nav-count">{{ summary.all }}</span>
           </RouterLink>
 
+          <!-- 提醒@他（用户 2026-10-13）：多人之间互相推提醒的页面。开关是**后台
+               系统偏好** nudge_enabled（一个实例一份），关掉后这一行与页面一起隐藏。
+               角标 = 别人提醒我、我还没做完的条数（/summary 的 nudge_pending）。 -->
+          <RouterLink
+            v-if="authStore.nudgeEnabled"
+            to="/admin/nudges"
+            class="nav-row"
+            :class="{ 'nav-row-active': isActive('/admin/nudges') }"
+            :title="railActive ? '提醒@他' : '提醒@他：给别的用户推提醒，也看别人提醒我什么'"
+            data-nav-nudges
+            @click="mobileOpen = false"
+          >
+            <span class="nav-symbol h-5 w-5 bg-sky-500/12 text-sky-500">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15.5 8.5a3.5 3.5 0 1 0-7 0c0 4-2 4-2 5.5h11c0-1.5-2-1.5-2-5.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 17a1.6 1.6 0 0 0 3 0" stroke-width="1.7" stroke-linecap="round"/><circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/></svg>
+            </span>
+            <span class="flex-1">提醒@他</span>
+            <span v-if="summary.nudge_pending" class="nav-count">{{ summary.nudge_pending }}</span>
+          </RouterLink>
+
           <!-- 信用卡账单：固定栏目（不是普通清单）。由后台偏好控制显示，
                启用后卡片一律归到这一栏，用户不用（也不能）自己建这个清单。 -->
           <RouterLink

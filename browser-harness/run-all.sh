@@ -18,7 +18,7 @@ SUITES=(
   verify-ux verify-filters verify-013 verify-017 verify-icon verify-print verify-export
   verify-040 verify-050 verify-052 verify-060 verify-070 verify-080
   verify-090 verify-091 verify-092 verify-093 verify-094 verify-095 verify-096
-  verify-097 verify-099 verify-100 verify-101 verify-102 verify-103 verify-104 verify-105 verify-106 verify-107 verify-108 verify-109 verify-110 verify-111 verify-112 verify-113 verify-114 verify-115 verify-116 verify-117 verify-reminders
+  verify-097 verify-099 verify-100 verify-101 verify-102 verify-103 verify-104 verify-105 verify-106 verify-107 verify-108 verify-109 verify-110 verify-111 verify-112 verify-113 verify-114 verify-115 verify-116 verify-117 verify-118 verify-reminders
 )
 
 # 先探一下目标在不在：目标没起来的话每个套件都会「登录失败/全红」，白跑十几分钟

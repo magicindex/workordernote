@@ -289,6 +289,49 @@ export const restoreReminder = (id: number) => request.post(`/api/reminder/items
 export const snoozeReminder = (id: number, until: string) =>
   request.post(`/api/reminder/items/${id}/snooze`, { until })
 
+// 「提醒@他」：多人之间互相推提醒（后端见 server/reminder/nudge.go）。
+// 三个时间点就是全部状态：created_at 发出 → read_at 对方已收到 → done_at 对方已完成。
+export interface Nudge {
+  id: number
+  from_user_id: number
+  to_user_id: number
+  from_username: string
+  to_username: string
+  /** 这条显示在哪一列：sent=我提醒他人 / received=别人提醒我 */
+  direction: 'sent' | 'received'
+  content: string
+  note: string
+  due_at?: string | null
+  read_at?: string | null
+  done_at?: string | null
+  created_at: string
+  can_delete: boolean
+}
+
+export interface NudgeBox {
+  sent: Nudge[]
+  received: Nudge[]
+  counts: {
+    received_pending: number
+    received_unread: number
+    sent_pending: number
+    sent_done: number
+  }
+}
+
+export interface NudgeUser {
+  id: number
+  username: string
+}
+
+export const listNudges = () => request.get('/api/reminder/nudges')
+export const listNudgeUsers = () => request.get('/api/reminder/nudges/users')
+export const createNudge = (data: { to_user_id: number; content: string; note?: string; due_at?: string | null }) =>
+  request.post('/api/reminder/nudges', data)
+export const readNudge = (id: number) => request.post(`/api/reminder/nudges/${id}/read`)
+export const doneNudge = (id: number) => request.post(`/api/reminder/nudges/${id}/done`)
+export const deleteNudge = (id: number) => request.delete(`/api/reminder/nudges/${id}`)
+
 export const getNotifications = () => request.get('/api/reminder/notifications')
 export const getUnreadCount = () => request.get('/api/reminder/notifications/unread-count')
 export const markNotificationRead = (id: number) => request.post(`/api/reminder/notifications/${id}/read`)

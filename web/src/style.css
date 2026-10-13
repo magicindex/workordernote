@@ -251,6 +251,27 @@ textarea {
     @apply flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-muted hover:text-foreground sm:h-10 sm:w-10;
   }
 
+  /* 弹窗表单原子类（modal-label / modal-field / modal-help）。
+     原先只写在 ChannelsView 的 <style scoped> 里 —— scoped 只对那个组件的元素生效，
+     别的页面（例如 0.24.0 的「提醒@他」新建弹窗）照着写同样的类名时**一点样式都没有**：
+     输入框没有边框、没有高度，看起来跟页面其它地方完全不是一套。
+     和上面这批一样，提升为应用级原子类，谁都能用。 */
+  .modal-label {
+    @apply block text-sm font-bold text-foreground;
+  }
+  .modal-label span {
+    @apply text-rose-500;
+  }
+  .modal-label small {
+    @apply ml-1 text-xs font-medium text-muted-foreground;
+  }
+  .modal-field {
+    @apply h-11 w-full rounded-xl border border-border bg-surface px-3.5 text-sm font-normal outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 sm:h-12 sm:rounded-2xl sm:px-4;
+  }
+  .modal-help {
+    @apply mt-1 text-[11px] leading-4 text-muted-foreground;
+  }
+
   .quick-chip {
     @apply inline-flex h-7 items-center gap-1.5 rounded-lg border border-border/70 bg-surface px-2.5 text-[11px] font-semibold text-muted-foreground transition hover:border-brand-500/30 hover:text-brand-600 disabled:opacity-40 sm:h-8 sm:rounded-xl sm:px-3 sm:text-xs;
   }

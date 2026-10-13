@@ -56,6 +56,10 @@ export const useAuthStore = defineStore('auth', () => {
   const notebookEnabled = ref(true)
   // 「人生要有仪式感」栏目（生日/纪念日/节日/考试的倒计时卡片）——与记事本同样的个人偏好
   const ceremonyEnabled = ref(true)
+  // 「提醒@他」页面（用户 2026-10-13）：多人之间互相推提醒。
+  // **这个不是个人偏好，是管理员的后台系统偏好**（nudge_enabled，一个实例一份）：
+  // 关掉后侧栏入口与页面一起隐藏，已经发出去的提醒数据保留。
+  const nudgeEnabled = ref(true)
   // 提醒频率（分钟）：未处理的提醒多久再弹一次；点「知道了」之后多久再提醒（0 = 第二天）
   const reminderNotifyMinutes = ref(10)
   const reminderAckMinutes = ref(0)
@@ -127,6 +131,7 @@ export const useAuthStore = defineStore('auth', () => {
     creditCardEnabled.value = configs.credit_card_enabled !== 'false'
     notebookEnabled.value = configs.notebook_enabled !== 'false'
     ceremonyEnabled.value = configs.ceremony_enabled !== 'false'
+    nudgeEnabled.value = configs.nudge_enabled !== 'false'
     reminderNotifyMinutes.value = Number(configs.reminder_notify_minutes || 10) || 10
     reminderAckMinutes.value = Number(configs.reminder_ack_minutes || 0) || 0
     reminderOverdueTime.value = normalizeClockValue(configs.task_overdue_time) || '23:59'
@@ -379,12 +384,16 @@ export const useAuthStore = defineStore('auth', () => {
     ceremonyEnabled.value = on
   }
 
+  function setNudgeEnabled(on: boolean) {
+    nudgeEnabled.value = on
+  }
+
   function setReminderFrequencies(notifyMinutes: number, ackMinutes: number) {
     if (notifyMinutes > 0) reminderNotifyMinutes.value = notifyMinutes
     if (ackMinutes >= 0) reminderAckMinutes.value = ackMinutes
   }
 
   return { token, user, requireLogin, allowRegister, creditCardEnabled, setCreditCardEnabled, notebookEnabled, setNotebookEnabled,
-    ceremonyEnabled, setCeremonyEnabled, reloadBootstrap,
+    ceremonyEnabled, setCeremonyEnabled, nudgeEnabled, setNudgeEnabled, reloadBootstrap,
     reminderNotifyMinutes, reminderAckMinutes, reminderOverdueTime, setReminderFrequencies, setupRequired, siteTitle, hasSecurityQuestions, securityPromptDismissed, servicePort, fnosGatewayEntry, fnosApp, sessionSource, followsFnOSSession, isAuthenticated, isAdmin, init, resetInit, setToken, setUser, endSession, logout, dropIfFnOSSessionGone, checkSetupRequired, dismissSecurityPrompt, refreshSecurityQuestions }
 })

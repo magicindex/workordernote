@@ -790,3 +790,22 @@ resetOverduePolicyCache()                    // 进程内 2 秒缓存也要清
   去构建 `--target backend-builder` 会整层缓存失效（本轮因此白等两次）。想跑 Go 测试就用
   **上次构建时的原参数**，或干脆不传——缓存全中时几秒出镜像：
   `docker run --rm go-builder:0.9.0 go test ./...`（本轮全绿，退出码 0）。
+
+## 「提醒@他」套件（`verify-118`，2026-10-13 新增）
+
+- **这条用例需要第二个账号**：实例上只有一个账号时它会自己临时把 `allow_register` 打开、
+  注册一个一次性探针账号（`nudgeprobe<时间戳>`），收尾再**删账号 + 删提醒 + 还原注册开关**。
+  在只有一个账号的干净实例上跑也能过（29 项）；`clean-self-test.sh` 不管这类数据，
+  被打断后残留的探针账号要手动 `DELETE /api/users/<id>`。
+- **开关是系统偏好 `nudge_enabled`**（`ScopeSystem`，一台实例一份，不是个人偏好）：
+  关掉后**侧栏入口消失，直接访问 `/admin/nudges` 也会被送回首页**（`NudgeView` 里 watch + onMounted 兜底），
+  所以断言「页面不渲染」要用 `[data-nudge-page]` 存在与否，别用「路由 404」。
+- **角标口径是「别人提醒我、我还没做完」**（`/summary` 的 `nudge_pending`），**不是未读**：
+  对方点过「已收到」但还没点「已完成」时角标照旧挂着，做完才归零。
+- **本标签页自己的改动收不到 SSE 回声**：服务端广播按 `X-Client-Id` 跳过发起者
+  （`realtime.go` 的 `originClientID`），所以「改完之后侧栏角标要跟着变」必须由页面自己
+  `window.dispatchEvent(new CustomEvent('reminder-data-changed'))`（`NudgeView` 的 `changed()`）
+  —— 这是所有会改侧栏统计的新页面的通用坑，本轮就是漏了这一步、角标不归零才发现的。
+- 站内通知类型：接收人收到 `nudge_received`、发起人收到 `nudge_read` / `nudge_done`；
+  它们走**通知中心（消息面板）** 与 toast，**不进中央弹窗**（`ALERT_NOTIFICATION_TYPES` 只有
+  `reminder_due` / `reminder_overdue`）。

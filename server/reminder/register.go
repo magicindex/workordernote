@@ -99,6 +99,8 @@ func init() {
 
 	database.RegisterModels(
 		&List{}, &Reminder{}, &ReminderChannel{}, &Completion{},
+		// 「提醒@他」：多人之间互相推的提醒消息（见 nudge.go）
+		&Nudge{},
 		// 信用卡：卡片与每期账单（金额/还款状态）
 		&Card{}, &CardStatement{},
 		&ChannelBinding{}, &ProviderConfig{}, &QQBindCode{}, &DeliveryJob{}, &DeliveryAttempt{}, &Notification{},
