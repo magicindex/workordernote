@@ -46,7 +46,7 @@ async function gotoRetry(page, url, tries = 3) {
   return false;
 }
 
-const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ base, p, method, body }) => {
+const apiRaw = (page, p, method = 'GET', body = null) => page.evaluate(async ({ base, p, method, body }) => {
   const token = localStorage.getItem('reminders.token') || sessionStorage.getItem('reminders.token');
   const res = await fetch(base + p, {
     method,
@@ -58,6 +58,16 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
   try { json = JSON.parse(text); } catch { /* 非 JSON */ }
   return { status: res.status, body: json, text };
 }, { base: BASE, p, method, body });
+
+/** 接口调用：紧跟在页面跳转后偶尔会 Failed to fetch（请求被导航打断），这里补一次重试。 */
+const api = async (page, p, method = 'GET', body = null) => {
+  try {
+    return await apiRaw(page, p, method, body);
+  } catch {
+    await sleep(1200);
+    return apiRaw(page, p, method, body);
+  }
+};
 
 /** 以另一个账号登录：直接拿 token 写进 localStorage，再回到首页。 */
 async function loginAs(page, username, password) {
@@ -71,6 +81,8 @@ async function loginAs(page, username, password) {
   if (!token) throw new Error(`切换账号登录失败：${JSON.stringify(json).slice(0, 120)}`);
   await page.goto(BASE + '/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.evaluate((t) => { try { localStorage.setItem('reminders.token', t); } catch {} }, token);
+  // 刚 goto 过，给页面一点时间落定再发请求，免得 fetch 被导航打断
+  await sleep(700);
   return token;
 }
 
@@ -115,7 +127,13 @@ const readPage = (page) => page.evaluate((content) => {
     await page.setViewport({ width: 1440, height: 1000 });
     await login(page, BASE);
     // 当前登录用户名：用户对象不落 localStorage，问接口最稳。
-    const mee = await api(page, '/api/auth/me');
+    let mee;
+    try {
+      mee = await api(page, '/api/auth/me');
+    } catch (err) {
+      console.error('DEBUG url=', page.url(), 'token=', await page.evaluate(() => (localStorage.getItem('reminders.token') || '').slice(0, 12)), 'err=', String(err));
+      throw err;
+    }
     const me = mee.body?.data?.username || '';
 
     // ---------------- 0. 准备第二个账号 ----------------
@@ -157,6 +175,15 @@ const readPage = (page) => page.evaluate((content) => {
     if (String(originalNudge) !== 'true') {
       await putConfig(page, 'nudge_enabled', 'true');
       await sleep(1200);
+    }
+
+    // 清掉上一次跑被打断留下的自检提醒@他（否则页面里堆一堆旧卡片，
+    // 后面按内容找行的断言会跟着飘）。
+    const stale = await api(page, '/api/reminder/nudges');
+    for (const row of [...(stale.body?.data?.sent || []), ...(stale.body?.data?.received || [])]) {
+      if (String(row.content || '').includes('自检')) {
+        await api(page, `/api/reminder/nudges/${row.id}`, 'DELETE');
+      }
     }
 
     // ---------------- 1. 入口与两列 ----------------
@@ -348,7 +375,12 @@ const readPage = (page) => page.evaluate((content) => {
     await sleep(1500);
     const offPage = await page.evaluate(() => !!document.querySelector('[data-nudge-page]'));
     check('关掉后直接访问 /admin/nudges 是空白/兜底页（不再渲染这个页面）', offPage === false);
-    await putConfig(page, 'nudge_enabled', 'true');
+    // 先把页面挪回一个稳定页再写配置：关掉栏目时 /admin/nudges 会触发一次路由跳转，
+    // 紧跟着发的 fetch 会被打断（Failed to fetch，本轮踩了好几次）。
+    await gotoRetry(page, BASE + '/admin');
+    await sleep(1200);
+    const restoredFlag = await putConfig(page, 'nudge_enabled', 'true');
+    check('把后台偏好重新打开（写成功）', restoredFlag === true);
     await gotoRetry(page, BASE + '/admin');
     await sleep(2500);
     const onNav = await page.evaluate(() => !!document.querySelector('[data-nav-nudges]'));
@@ -498,7 +530,11 @@ const readPage = (page) => page.evaluate((content) => {
     }
     const leftover = await api(page, '/api/reminder/nudges');
     const rows = [...(leftover.body?.data?.sent || []), ...(leftover.body?.data?.received || [])];
-    check('清理干净：自检提醒都不在了', !rows.some((n) => (n.content || '').includes('自检提醒@他')), JSON.stringify(rows.map((n) => n.content)));
+    // 只看**本次**运行造的那些：更早的残留（被打断的跑留下的）里，已完成的那几条
+    // 按业务规则发起人本来就不能撤回，清不掉也不该算这次失败。
+    check('清理干净：本次的自检提醒都不在了',
+      !rows.some((n) => (n.content || '').includes(String(STAMP))),
+      JSON.stringify(rows.map((n) => n.content)));
     const users = await api(page, '/api/reminder/nudges/users');
     check('清理干净：临时探针账号已删除', !(users.body?.data || []).some((u) => u.username === PROBE_USER),
       JSON.stringify(users.body?.data));
