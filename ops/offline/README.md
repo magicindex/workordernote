@@ -97,3 +97,9 @@ Docker 的镜像仓库名**只允许小写**，所以镜像标签是 `workordern
 
 本应用是开源项目 **TechFunWay/reminders** 的衍生作品，遵循 MIT 许可，
 原项目的著作权与出处均予保留：<https://github.com/TechFunWay/reminders>
+
+- 原作品：Copyright (c) 2026 techfunway（MIT License）——完整许可文本见本包内的
+  `LICENSE` 文件，其中的著作权声明与许可声明均未作任何修改。
+- 本衍生作品：Copyright (c) 2026 WorkOrderNote（工作序记）贡献者——衍生说明见本包内的
+  `NOTICE` 文件。
+- 本软件与上游项目维护者无官方关联、未获其背书；问题请反馈给本项目的维护者。

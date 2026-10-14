@@ -9,6 +9,9 @@ WORKDIR /app
 COPY ca-certificates.crt /etc/ssl/cert.pem
 COPY reminder ./reminder
 COPY www ./static/dist
+# MIT：许可原文与衍生声明随镜像分发（上下文由 scripts/build-docker.sh 从发行包准备）
+COPY LICENSE ./LICENSE
+COPY NOTICE ./NOTICE
 
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
 USER appuser

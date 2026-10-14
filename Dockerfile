@@ -28,6 +28,10 @@ RUN adduser -D -u 1000 appuser
 WORKDIR /app
 COPY --from=backend-builder /out/reminder ./reminder
 COPY --from=frontend-builder /app/web/dist ./static/dist
+# MIT 要求「著作权声明与许可声明随所有副本分发」：LICENSE 原文与衍生声明 NOTICE
+# 一起放进镜像（/app/LICENSE、/app/NOTICE）。
+COPY LICENSE ./LICENSE
+COPY NOTICE ./NOTICE
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8906

@@ -63,7 +63,7 @@ const router = createRouter({
     },
     {
       // 兜底路由：飞牛远程地址的入口可能落在不带末尾斜杠的网关前缀上
-      //（如 /app/techfunway-reminders），vue-router 剥离 base 后得到的
+      //（如 /app/workordernote），vue-router 剥离 base 后得到的
       // 路径匹配不到任何路由，router-view 会渲染成一片空白（手机端白屏）。
       // 一律送回首页，未登录时由全局守卫转入登录页。
       path: '/:pathMatch(.*)*',

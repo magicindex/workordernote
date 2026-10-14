@@ -59,8 +59,11 @@ docker save "$IMAGE" | gzip -9 > "$STAGE/$IMAGE_TAR_REL"
 IMAGE_TAR_SHA=$(sha256sum "$STAGE/$IMAGE_TAR_REL" | awk '{print $1}')
 IMAGE_TAR_SIZE=$(stat -c%s "$STAGE/$IMAGE_TAR_REL")
 
-echo "-- 2/5 放入安装脚本与说明..."
+echo "-- 2/5 放入安装脚本、说明与许可文件..."
 cp "$TPL/install.sh" "$TPL/uninstall.sh" "$TPL/docker-compose.yml" "$TPL/README.md" "$TPL/.env.example" "$STAGE/"
+# MIT 要求「著作权声明与许可声明随所有副本分发」：LICENSE 原文 + 衍生声明 NOTICE
+# 随离线包分发（会被自动记入 manifest.json 的 files 与 SHA256SUMS）。
+cp "$REPO/LICENSE" "$REPO/NOTICE" "$STAGE/"
 chmod +x "$STAGE/install.sh" "$STAGE/uninstall.sh"
 
 echo "-- 3/5 生成 package.env ..."

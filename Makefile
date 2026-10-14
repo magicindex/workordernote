@@ -1,5 +1,5 @@
 APP_NAME := reminder
-DOCKER_IMAGE := techfunways/reminders
+DOCKER_IMAGE := workordernote
 PACKAGE_TARGET ?= fnos
 PORT ?= 8906
 DEV_DATA_DIR ?= ./data

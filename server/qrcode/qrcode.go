@@ -26,27 +26,10 @@ type QRCodeStat struct {
 func init() {
 	database.RegisterModels(&QRCodeStat{})
 
-	// Contribute a one-off data migration tracked in upgrade_records.
-	// Plain dotted-numeric Version matches the README/AGENTS examples;
-	// RunUpgrades strips a leading "v" before comparing.
-	database.Upgrades = append(database.Upgrades, database.Upgrade{
-		Version: "0.0.1",
-		Name:    "qrcode_seed_default_stat",
-		Upgrade: func(db *gorm.DB) error {
-			var count int64
-			if err := db.Model(&QRCodeStat{}).Count(&count).Error; err != nil {
-				return err
-			}
-			if count > 0 {
-				return nil
-			}
-			return db.Create(&QRCodeStat{
-				Content:   "https://techfunway.wycto.cn",
-				Size:      256,
-				CreatedAt: time.Now(),
-			}).Error
-		},
-	})
+	// 这里原本有一个 0.0.1 的一次性迁移（继承自上游模板示例），会在表为空时
+	// 种入一条内容为上游作者官网的二维码。作为衍生版本已移除该默认种子：
+	// 不再向用户预置任何指向第三方站点的内容，二维码由用户在「二维码」应用里自建。
+	// （已装实例中早先种入的那条记录不会被自动删除，避免误删用户数据/自建内容。）
 
 	apps.Register(apps.App{
 		Name:        "qrcode",

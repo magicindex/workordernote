@@ -7,10 +7,10 @@ desc                       = """
 """
 source                     = thirdparty
 platform                   = x86
-maintainer                 = 科技智趣坊（原项目）
-maintainer_url             = https://github.com/TechFunWay/reminders
+maintainer                 = 工作序记（WorkOrderNote）
+maintainer_url             = http://192.168.3.200:3000/cyberzero/workordernote
 distributor                = 工作序记（WorkOrderNote）
-distributor_url            = https://github.com/TechFunWay/reminders
+distributor_url            = http://192.168.3.200:3000/cyberzero/workordernote
 os_min_version             = 1.0.0
 ctl_stop                   = true
 desktop_uidir              = ui

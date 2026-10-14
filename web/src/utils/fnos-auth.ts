@@ -21,7 +21,7 @@ import { fnosTicket } from '../api/auth'
 import { SK } from './storage-keys'
 
 // 只接受指向「本应用」授权页的网关入口：同域其它应用（彩彩助手）也会写
-// fnos_gateway_url 这类键，必须按本应用前缀（/app/techfunway-reminders/）
+// fnos_gateway_url 这类键，必须按本应用前缀（/app/workordernote/）
 // 过滤，否则授权跳转会被拐到别家授权页——手机/桌面端因此报「无法访问
 // 页面」（入口里连端口都是别的应用拼错的）。
 function isOwnGatewayEntry(url: string | null | undefined): url is string {

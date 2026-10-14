@@ -73,13 +73,20 @@ LABEL org.opencontainers.image.title="WorkOrderNote" \
       org.opencontainers.image.created="${BUILD_TIME}" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.vendor="WorkOrderNote" \
-      org.opencontainers.image.source="https://github.com/TechFunWay/reminders"
+      org.opencontainers.image.source="http://192.168.3.200:3000/cyberzero/workordernote" \
+      org.opencontainers.image.url="http://192.168.3.200:3000/cyberzero/workordernote" \
+      org.opencontainers.image.documentation="http://192.168.3.200:3000/cyberzero/workordernote/src/branch/main/README.md" \
+      org.workordernote.upstream="https://github.com/TechFunWay/reminders"
 COPY --from=backend-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=tzdata-source /usr/share/zoneinfo /usr/share/zoneinfo
 RUN adduser -D -u 1000 appuser
 WORKDIR /app
 COPY --from=backend-builder /out/reminder ./reminder
 COPY --from=frontend-builder /app/web/dist ./static/dist
+# MIT 要求「著作权声明与许可声明随所有副本分发」：LICENSE 原文与衍生声明 NOTICE
+# 一起放进镜像（/app/LICENSE、/app/NOTICE），不依赖仓库或宿主机是否可见。
+COPY LICENSE ./LICENSE
+COPY NOTICE ./NOTICE
 RUN mkdir -p /app/data && chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8906

@@ -4,13 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-IMAGE="techfunways/reminders"
-BUILDER="techfunway-reminders-multiarch"
+IMAGE="${IMAGE:-workordernote}"
+BUILDER="workordernote-multiarch"
 VERSION="$(cat VERSION | tr -d '\n')"
 BUILD_TIME="$(date +%Y-%m-%dT%H:%M:%S)"
 GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
 OUTPUT_DIR="release/${VERSION}"
-OUTPUT_FILE="${OUTPUT_DIR}/techfunway-reminders-${VERSION}-multiarch.oci.tar"
+OUTPUT_FILE="${OUTPUT_DIR}/workordernote-${VERSION}-multiarch.oci.tar"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Error: Docker is required to build the multi-platform image."

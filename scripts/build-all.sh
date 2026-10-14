@@ -1,12 +1,12 @@
 #!/bin/bash
 # 全平台编译打包——产物格式对齐 brick-game 项目 release/<VERSION>/ 发行目录规范：
-#   techfunway-reminders-<VERSION>-{linux,darwin}-{amd64,arm64}.tar.gz
-#   techfunway-reminders-<VERSION>-windows-amd64.zip
+#   workordernote-<VERSION>-{linux,darwin}-{amd64,arm64}.tar.gz
+#   workordernote-<VERSION>-windows-amd64.zip
 #   docker-compose.yml（镜像 tag 钉死为当前版本）/ docker-compose.latest.yml
-#   CHANGELOG.md / screenshots/ + screenshots-<VERSION>.zip
+#   CHANGELOG.md / screenshots/ + screenshots-<VERSION>.zip / LICENSE + NOTICE
 # 发行包必备文件清单见 AGENTS.md「打包与发行」一节，两个打包脚本共同保证。
 #
-# 压缩包内为 <包名>/ 目录：reminder 二进制 + static/dist 前端资源
+# 压缩包内为 <包名>/ 目录：reminder 二进制 + static/dist 前端资源 + LICENSE/NOTICE
 # （启动示例：./reminder -web-dir ./static/dist -data-dir ./data）。
 # reminders 使用 CGO（mattn/go-sqlite3），各平台编译方式：
 #   linux        → golang:1.26-alpine 容器内 CGO_ENABLED=1 静态编译
@@ -18,7 +18,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 APP_NAME="reminder"
-PACKAGE_PREFIX="techfunway-reminders"
+PACKAGE_PREFIX="workordernote"
 VERSION=$(cat VERSION | tr -d '\n')
 BUILD_TIME=$(date +%Y-%m-%dT%H:%M:%S)
 GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -94,6 +94,8 @@ for PLATFORM in "${PLATFORMS[@]}"; do
     rm "server/${OUTPUT_NAME}"
   fi
   cp -R server/static/dist "${BUILD_DIR}/${OUTPUT_NAME}/static/dist"
+  # MIT：著作权声明与许可声明随副本分发（LICENSE 原文 + 衍生声明 NOTICE）
+  cp LICENSE NOTICE "${BUILD_DIR}/${OUTPUT_NAME}/"
 
   find "${BUILD_DIR}/${OUTPUT_NAME}" -name '.DS_Store' -delete
 
@@ -121,8 +123,14 @@ fi
 
 # 部署 compose 文件随发行产物分发；版本文件中的镜像 tag 替换为当前版本，
 # 拷贝到目标主机后 docker compose up -d 即可运行；latest 文件原样分发。
-sed "s|techfunways/reminders:latest|techfunways/reminders:${VERSION}|" deploy/docker-compose.yml > "${BUILD_DIR}/docker-compose.yml"
-cp deploy/docker-compose.latest.yml "${BUILD_DIR}/docker-compose.latest.yml"
-echo "Copied docker-compose.yml and docker-compose.latest.yml"
+# deploy/ 来自旧工作区，本仓库里不存在——当前发行物统一由
+# ops/build-offline-package.sh 生成（模板见 ops/offline/）。
+if [ -f deploy/docker-compose.yml ]; then
+  sed "s|workordernote:latest|workordernote:${VERSION}|" deploy/docker-compose.yml > "${BUILD_DIR}/docker-compose.yml"
+  cp deploy/docker-compose.latest.yml "${BUILD_DIR}/docker-compose.latest.yml"
+  echo "Copied docker-compose.yml and docker-compose.latest.yml"
+else
+  echo "notice: deploy/docker-compose.yml 不存在，跳过发行目录的 compose 文件"
+fi
 
 echo "All builds completed in ${BUILD_DIR}/"

@@ -27,19 +27,19 @@ import json
 with open("fnpack/app/ui/config", encoding="utf-8") as source:
     config = json.load(source)
 entries = config[".url"]
-main = entries.get("techfunway-reminders.main")
-login = entries.get("techfunway-reminders.FnOSLogin")
+main = entries.get("workordernote.main")
+login = entries.get("workordernote.FnOSLogin")
 if not main or main.get("type") != "url":
     raise SystemExit("fnOS desktop entry must use type=url")
-if main.get("protocol") != "" or main.get("gatewayPrefix") != "/app/techfunway-reminders" or main.get("gatewaySocket") != "app.sock":
+if main.get("protocol") != "" or main.get("gatewayPrefix") != "/app/workordernote" or main.get("gatewaySocket") != "app.sock":
     raise SystemExit("fnOS main entry must stay on the unified gateway (protocol=\"\" + gatewayPrefix + gatewaySocket)")
-if main.get("url") != "/app/techfunway-reminders":
-    raise SystemExit("fnOS main entry must open /app/techfunway-reminders")
+if main.get("url") != "/app/workordernote":
+    raise SystemExit("fnOS main entry must open /app/workordernote")
 if "port" in main:
     raise SystemExit("fnOS main entry must not point at the app's own TCP port (the fnOS App blocks that jump)")
-if not login or login.get("gatewayPrefix") != "/app/techfunway-reminders" or login.get("gatewaySocket") != "app.sock":
-    raise SystemExit("fnOS hidden entry must use the reminders unified gateway")
-if not login.get("noDisplay") or login.get("url") != "/app/techfunway-reminders/fnos-entry.html":
+if not login or login.get("gatewayPrefix") != "/app/workordernote" or login.get("gatewaySocket") != "app.sock":
+    raise SystemExit("fnOS hidden entry must use the workordernote unified gateway")
+if not login.get("noDisplay") or login.get("url") != "/app/workordernote/fnos-entry.html":
     raise SystemExit("fnOS hidden entry must point to the login trampoline and stay hidden")
 PY
 
@@ -103,6 +103,10 @@ for ARCH in "amd64" "arm64"; do
   # Copy frontend to app/ui
   cp -r server/static/dist/* "${BUILD_PACK}/app/ui/"
 
+  # MIT 要求「著作权声明与许可声明随所有副本分发」：LICENSE 原文与衍生声明 NOTICE
+  # 放进包内 app/ui（随静态资源一起安装，可在应用里访问到）。
+  cp LICENSE NOTICE "${BUILD_PACK}/app/ui/"
+
   # Generate manifest with correct platform
   if [ "$ARCH" = "amd64" ]; then
     FNOS_PLATFORM="x86"
@@ -147,8 +151,16 @@ if [ -d images/screenshots ]; then
   (cd "${BUILD_DIR}" && zip -qr "screenshots-${VERSION}.zip" screenshots)
 fi
 [ -f CHANGELOG.md ] && cp CHANGELOG.md "${BUILD_DIR}/CHANGELOG.md"
-sed "s|techfunways/reminders:latest|techfunways/reminders:${VERSION}|" deploy/docker-compose.yml > "${BUILD_DIR}/docker-compose.yml"
-cp deploy/docker-compose.latest.yml "${BUILD_DIR}/docker-compose.latest.yml"
+# 部署 compose 随发行目录分发。deploy/ 目录来自旧工作区，本仓库里并不存在——
+# 当前发行物统一由 ops/build-offline-package.sh 生成（模板见 ops/offline/）。
+if [ -f deploy/docker-compose.yml ]; then
+  sed "s|workordernote:latest|workordernote:${VERSION}|" deploy/docker-compose.yml > "${BUILD_DIR}/docker-compose.yml"
+  if [ -f deploy/docker-compose.latest.yml ]; then
+    cp deploy/docker-compose.latest.yml "${BUILD_DIR}/docker-compose.latest.yml"
+  fi
+else
+  echo "notice: deploy/docker-compose.yml 不存在，跳过发行目录的 compose 文件"
+fi
 
 # fnpack 构建用的是网关前缀版前端（VITE_BASE_PATH=/app/<包名>/），打完后恢复
 # 标准构建，避免开发服务器（make dev 直连端口模式）的静态资源被替换成前缀版。

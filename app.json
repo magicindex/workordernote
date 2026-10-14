@@ -3,8 +3,8 @@
   "display_name": "工作序记",
   "version": "0.0.1",
   "desc": "任务、记事与日历一体的提醒应用",
-  "author": "工作序记（基于 TechFunWay/reminders 衍生开发）",
-  "website": "https://techfunway.wycto.cn",
+  "author": "WorkOrderNote（工作序记）",
+  "website": "http://192.168.3.200:3000/cyberzero/workordernote",
   "port": 8906,
   "docker": {
     "image": "workordernote",
