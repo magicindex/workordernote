@@ -178,6 +178,40 @@ const itemsOf = (res) => {
       JSON.stringify(board.legends[0]));
     check('第二列写明是「已逾期」', (board.legends[1] || '').includes('已逾期'), JSON.stringify(board.legends[1]));
 
+    // ---------------- 3b. 每条后面的倒计时 + 标题条底色 ----------------
+    const extras = await page.evaluate((titles) => {
+      const rows = [...document.querySelectorAll('[data-home-item]')].filter((li) => titles.some((t) => (li.innerText || '').includes(t)));
+      return rows.map((li) => ({
+        text: (li.innerText || '').replace(/\s+/g, ' ').trim(),
+        remaining: (li.querySelector('[data-home-remaining]')?.innerText || '').trim(),
+      }));
+    }, [T.today, T.tomorrow, T.overdue]);
+    check('每条信息后面都有倒计时（剩余 / 已逾期）',
+      extras.length >= 3 && extras.every((r) => /剩余|已逾期/.test(r.remaining)),
+      JSON.stringify(extras.map((r) => r.remaining)));
+    check('今天到期的那条写的是「剩余 …」（带时:分）',
+      (find(extras, T.today)?.remaining || '').startsWith('剩余') && /\d{2}:\d{2}/.test(find(extras, T.today)?.remaining || ''),
+      JSON.stringify(find(extras, T.today)));
+    check('逾期的那条写的是「已逾期」（不再写剩余）',
+      (find(extras, T.overdue)?.remaining || '').startsWith('已逾期'), JSON.stringify(find(extras, T.overdue)));
+
+    const headBg = await page.evaluate(() => {
+      const read = (name) => {
+        const head = document.querySelector(`[data-home-head="${name}"]`);
+        if (!head) return null;
+        const css = getComputedStyle(head);
+        return { bg: css.backgroundColor, image: css.backgroundImage };
+      };
+      return { upcoming: read('upcoming'), overdue: read('overdue') };
+    });
+    const solid = (v) => !!v && v !== 'rgba(0, 0, 0, 0)' && v !== 'transparent';
+    check('「未来 14 天待办」标题条有底色',
+      solid(headBg.upcoming?.bg) || /gradient/.test(headBg.upcoming?.image || ''), JSON.stringify(headBg.upcoming));
+    check('「已逾期」标题条有底色（红色系）',
+      solid(headBg.overdue?.bg) && /^rgba?\((\d+), (\d+), (\d+)/.test(headBg.overdue.bg)
+        && Number(headBg.overdue.bg.match(/^rgba?\((\d+), (\d+), (\d+)/)[1]) > Number(headBg.overdue.bg.match(/^rgba?\((\d+), (\d+), (\d+)/)[3]),
+      JSON.stringify(headBg.overdue));
+
     // ---------------- 4. 点一条 → 定位到对应清单并高亮 ----------------
     const todayId = created[1];
     const todayListId = (await api(page, '/api/reminder/items/' + todayId)).body?.data?.list_id ?? null;

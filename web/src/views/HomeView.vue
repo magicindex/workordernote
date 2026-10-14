@@ -644,6 +644,7 @@ import ExportDialog from '../components/ExportDialog.vue'
 import CreditCardPanel from '../components/CreditCardPanel.vue'
 import CeremonyPanel from '../components/CeremonyPanel.vue'
 import { listColorHex } from '../utils/list-colors'
+import { remainingText } from '../utils/remaining'
 import {
   overdueStamp as overdueStampShared,
   overdueDeadlineAt as overdueDeadlineShared,
@@ -788,19 +789,7 @@ function clockParts(value: string): { h: number; m: number } {
  * 分钟级实时（页面本来就有 clockNow 每分钟跳一次）。超过一天就先写天数，
  * 后面仍是「时:分」——用户要的时:分不被天数吃掉。
  */
-const quickRemaining = computed(() => {
-  if (!quick.due_at) return ''
-  const target = new Date(quick.due_at).getTime()
-  if (Number.isNaN(target)) return ''
-  const diff = target - clockNow.value
-  const total = Math.abs(diff)
-  const days = Math.floor(total / 86400000)
-  const hours = Math.floor((total % 86400000) / 3600000)
-  const minutes = Math.floor((total % 3600000) / 60000)
-  const hm = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
-  const body = days > 0 ? `${days} 天 ${hm}` : hm
-  return diff < 0 ? `已过 ${body}` : `剩余 ${body}`
-})
+const quickRemaining = computed(() => remainingText(quick.due_at, clockNow.value))
 
 const blankInput = (): SaveReminderInput => ({
   title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: defaultQuickDue(),

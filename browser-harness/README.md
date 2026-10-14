@@ -877,3 +877,13 @@ resetOverduePolicyCache()                    // 进程内 2 秒缓存也要清
   在清单里勾完 → 卡片同步成「已完成」，`nudge.saved_done` 也变 true）与**提醒一下**
   （对方立刻收到 `nudge_reminded` 站内通知，而且这类通知**会弹窗** —— `nudge_*` 已加进
   `ALERT_NOTIFICATION_TYPES`，弹窗里不给「稍后提醒」）。
+
+## 首页看板倒计时 / 标题底色（0.29.0）与测试侧的两处加固
+
+- 看板每行末尾的倒计时在 `[data-home-remaining]`：未逾期是「剩余 N 天 时:分」（`utils/remaining.ts`
+  与快速新建的芯片共用一份格式化），逾期那列是「已逾期 N 天」。
+- 两列标题条在 `[data-home-head="upcoming"|"overdue"]`，底色分别取品牌蓝/玫瑰红（与今天页按天卡片一致）。
+- **测试实例把「默认首页」固定成 list**（`reminders-app.js` 的 `login()` 里 PUT）：0.27.0 起默认是首页
+  看板，而绝大多数套件假设 `goto('/admin')` 落在今天页 —— 改这一处比改几十个套件的导航靠谱；
+  要看默认落地行为的 `verify-ux` / `verify-120` 自己改再还原。
+- `verify-118` 会强制打开 `nudge_enabled` 并在收尾还原；切偏好的 PUT 带重试（路由切换会打断 fetch）。

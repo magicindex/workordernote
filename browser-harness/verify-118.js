@@ -74,6 +74,18 @@ async function loginAs(page, username, password) {
   return token;
 }
 
+/** 带重试的配置写入：切完偏好多半会伴随一次路由跳转，紧跟着发的 fetch 可能被打断。 */
+const putConfig = async (page, key, value, tries = 4) => {
+  for (let i = 0; i < tries; i += 1) {
+    try {
+      const res = await api(page, '/api/configs', 'PUT', { key, value });
+      if (res.status === 200) return true;
+    } catch { /* 页面正在跳转（关掉栏目会触发路由切换），fetch 会被打断 —— 重试 */ }
+    await sleep(1500);
+  }
+  return false;
+};
+
 /** 读页面上的两列状态。 */
 const readPage = (page) => page.evaluate((content) => {
   const col = (name) => document.querySelector(`[data-nudge-column="${name}"]`);
@@ -137,6 +149,15 @@ const readPage = (page) => page.evaluate((content) => {
     probeId = candidates.find((u) => u.username === PROBE_USER)?.id ?? null;
     check('探针账号出现在「可提醒对象」里', !!probeId, JSON.stringify(candidates));
     if (!probeId) throw new Error('探针账号没建起来，无法继续');
+
+    // 这条用例自己会开关 `nudge_enabled`；上一次跑被打断（比如登录限流）时会留在 false，
+    // 于是「侧栏有入口」那条一进来就假红。开头先读原值并强制打开，收尾再还原。
+    const bootNudge = await api(page, '/api/bootstrap');
+    const originalNudge = (bootNudge.body?.data?.configs || {}).nudge_enabled ?? 'true';
+    if (String(originalNudge) !== 'true') {
+      await putConfig(page, 'nudge_enabled', 'true');
+      await sleep(1200);
+    }
 
     // ---------------- 1. 入口与两列 ----------------
     await gotoRetry(page, BASE + '/admin');
@@ -318,7 +339,7 @@ const readPage = (page) => page.evaluate((content) => {
     check('回执用的是「提醒@他」自己的图标', center.withNudgeIcon === true, JSON.stringify(center));
 
     // ---------------- 7. 系统偏好开关 ----------------
-    await api(page, '/api/configs', 'PUT', { key: 'nudge_enabled', value: 'false' });
+    await putConfig(page, 'nudge_enabled', 'false');
     await gotoRetry(page, BASE + '/admin');
     await sleep(2500);
     const offNav = await page.evaluate(() => !!document.querySelector('[data-nav-nudges]'));
@@ -327,11 +348,15 @@ const readPage = (page) => page.evaluate((content) => {
     await sleep(1500);
     const offPage = await page.evaluate(() => !!document.querySelector('[data-nudge-page]'));
     check('关掉后直接访问 /admin/nudges 是空白/兜底页（不再渲染这个页面）', offPage === false);
-    await api(page, '/api/configs', 'PUT', { key: 'nudge_enabled', value: 'true' });
+    await putConfig(page, 'nudge_enabled', 'true');
     await gotoRetry(page, BASE + '/admin');
     await sleep(2500);
     const onNav = await page.evaluate(() => !!document.querySelector('[data-nav-nudges]'));
     check('重新打开后入口恢复', onNav === true);
+    // 还原成这条用例开始时读到的值（一般就是 true）
+    if (String(originalNudge) !== 'true') {
+      await putConfig(page, 'nudge_enabled', String(originalNudge));
+    }
 
     // ---------------- 8. 手机宽度 ----------------
     await gotoRetry(page, BASE + '/admin/nudges');

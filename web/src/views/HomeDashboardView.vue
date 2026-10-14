@@ -27,15 +27,16 @@
     </div>
 
     <div v-else class="grid gap-4 lg:grid-cols-2">
-      <!-- 第 1 列：未来 14 天待办 -->
-      <section class="rounded-[24px] border border-border/70 bg-surface/85 p-4 shadow-card backdrop-blur-xl sm:p-5" data-home-column="upcoming">
-        <header class="mb-1 flex items-center justify-between gap-2">
-          <h2 class="text-sm font-extrabold">未来 14 天待办</h2>
-          <span class="rounded-full bg-brand-500/10 px-2.5 py-0.5 text-[11px] font-bold text-brand-600 dark:text-brand-300">{{ upcoming.length }} 条</span>
+      <!-- 第 1 列：未来 14 天待办（标题条带底色，与「今天」页的按天卡片同一套样式） -->
+      <section class="home-col" data-home-column="upcoming">
+        <header class="home-col-head" data-home-head="upcoming">
+          <h2 class="home-col-label">未来 14 天待办</h2>
+          <span class="home-col-count">{{ upcoming.length }} 条</span>
         </header>
+        <div class="home-col-body">
         <!-- 列表自己的说明（用户 2026-10-13：「清单列表补充说明14天待办任务」）：
              14 天口径 + 标题前面那个级别字怎么读，都写在列表里，不用回看页头。 -->
-        <p class="mb-3 text-[11px] leading-4 text-muted-foreground" data-home-legend>
+        <p class="mb-3 mt-3 text-[11px] leading-4 text-muted-foreground" data-home-legend>
           到期时间落在今天到 14 天后、且还没逾期的任务（含循环任务的下一次）。
           标题前的字是级别：<b class="text-rose-500">急</b>=已逾期、
           <b class="text-amber-500">今</b>=今天、<b class="text-sky-500">明</b>=明天、
@@ -66,17 +67,25 @@
                 {{ formatDue(row.item) }}<template v-if="row.item.list_name"> · {{ row.item.list_name }}</template>
               </p>
             </div>
+            <!-- 倒计时（用户 2026-10-14：「首页每条信息后边增加倒计时，剩余x时间」）：
+                 与快速新建的「剩余 时:分」同一份口径，每分钟刷新。
+                 逾期的那一列不再写「剩余」，直接标「已逾期 N」 -->
+            <span class="mt-0.5 shrink-0 text-[11px] font-bold" :class="row.level === '急' ? 'text-rose-500' : 'text-muted-foreground'" data-home-remaining>
+              {{ remainingOf(row) }}
+            </span>
           </li>
         </ul>
+        </div>
       </section>
 
-      <!-- 第 2 列：所有逾期任务 -->
-      <section class="rounded-[24px] border border-border/70 bg-surface/85 p-4 shadow-card backdrop-blur-xl sm:p-5" data-home-column="overdue">
-        <header class="mb-1 flex items-center justify-between gap-2">
-          <h2 class="text-sm font-extrabold">已逾期</h2>
-          <span class="rounded-full bg-rose-500/10 px-2.5 py-0.5 text-[11px] font-bold text-rose-500">{{ overdue.length }} 条</span>
+      <!-- 第 2 列：所有逾期任务（标题条染一点红，与「今天」页那张「已逾期」卡片一致） -->
+      <section class="home-col" data-home-column="overdue">
+        <header class="home-col-head" data-home-head="overdue">
+          <h2 class="home-col-label">已逾期</h2>
+          <span class="home-col-count">{{ overdue.length }} 条</span>
         </header>
-        <p class="mb-3 text-[11px] leading-4 text-muted-foreground" data-home-legend-overdue>
+        <div class="home-col-body">
+        <p class="mb-3 mt-3 text-[11px] leading-4 text-muted-foreground" data-home-legend-overdue>
           到期日当天过了「逾期提醒时间」还没完成的都在这儿（点「知道了」顺延也不会离开这一栏）。
         </p>
         <p v-if="!overdue.length" class="rounded-2xl border border-dashed border-border bg-surface/40 px-4 py-10 text-center text-xs text-muted-foreground">
@@ -104,8 +113,10 @@
                 {{ formatDue(row.item) }}<template v-if="row.item.list_name"> · {{ row.item.list_name }}</template>
               </p>
             </div>
+            <span class="mt-0.5 shrink-0 text-[11px] font-bold text-rose-500" data-home-remaining>{{ remainingOf(row) }}</span>
           </li>
         </ul>
+        </div>
       </section>
     </div>
   </div>
@@ -118,6 +129,7 @@ import ListIcon from '../components/ListIcon.vue'
 import { getLists, getReminders, type ReminderItem } from '../api/reminder'
 import { useAuthStore } from '../stores/auth'
 import { clockParts, isOverdueAt, overdueStamp } from '../utils/overdue'
+import { remainingText } from '../utils/remaining'
 
 // 「首页」看板（用户 2026-10-13）：打开应用默认落在这一页；10 分钟不操作也回到这里
 // （见 MainLayout 的空闲跳转）。左边 14 天内待办、右边所有逾期，标题前一个字标级别。
@@ -219,6 +231,16 @@ function gotoList(row: Row) {
   void router.push({ path: `/admin/list/${row.item.list_id}`, query: { highlight: String(row.item.id) } })
 }
 
+/** 每行末尾的倒计时：逾期的写「已逾期 N 天」，其余的写「剩余 天 时:分」。 */
+function remainingOf(row: Row) {
+  if (row.level === '急') {
+    const days = dayDiff(row.item.due_at)
+    const late = days === null ? 0 : Math.max(0, -days)
+    return late > 0 ? `已逾期 ${late} 天` : '已逾期'
+  }
+  return remainingText(row.item.due_at, clockNow.value)
+}
+
 function formatDue(item: ReminderItem) {
   const raw = item.due_at
   if (!raw) return '未设日期'
@@ -246,3 +268,16 @@ onBeforeUnmount(() => {
   window.removeEventListener('reminder-data-changed', onDataChanged)
 })
 </script>
+
+<style scoped>
+/* 栏目卡片：与「今天」页的按天卡片同一套观感（标题条带底色 + 卡片圆角/边框/阴影） */
+.home-col { @apply overflow-hidden rounded-[22px] border border-border/70 bg-surface/85 shadow-card backdrop-blur-xl; }
+.home-col-head { @apply flex items-center gap-2 border-b border-border/60 bg-brand-500/10 px-4 py-2.5 sm:px-5; }
+.home-col-label { @apply text-[13px] font-extrabold tracking-tight text-brand-700 sm:text-sm dark:text-brand-300; }
+.home-col-count { @apply ml-auto text-[11px] font-bold text-brand-600/80 dark:text-brand-300/80; }
+.home-col-body { @apply px-4 pb-4 sm:px-5 sm:pb-5; }
+/* 逾期那一列：标题条与计数都染红，跟行里的「急」呼应 */
+.home-col[data-home-column='overdue'] .home-col-head { @apply bg-rose-500/10; }
+.home-col[data-home-column='overdue'] .home-col-label { @apply text-rose-600 dark:text-rose-400; }
+.home-col[data-home-column='overdue'] .home-col-count { @apply text-rose-500/80; }
+</style>

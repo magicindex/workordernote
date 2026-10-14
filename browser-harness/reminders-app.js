@@ -38,6 +38,17 @@ async function loginViaApi(page, base = APP) {
   }
   const token = json && json.data && json.data.token;
   if (!token) throw new Error(`API 登录失败（${status}）: ` + JSON.stringify(json).slice(0, 140));
+
+  // 测试实例上把「默认首页」固定成列表视图：0.27.0 起默认是「首页」看板，而绝大多数套件
+  // 都假设 `goto('/admin')` 落在**今天**页（快捷新建、日期芯片、按天卡片……）。改偏好比改
+  // 几十个套件的导航靠谱；要看默认落地行为的套件（verify-ux / verify-120）自己改再还原。
+  try {
+    await fetch(base.replace(/\/$/, '') + '/api/configs', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ key: 'default_view', value: 'list' }),
+    });
+  } catch { /* 只是让回归稳定，失败不拦 */ }
   // 必须先落到同源页面，才能写它的 localStorage
   await page.goto(base.replace(/\/$/, '') + '/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.evaluate((t) => { try { localStorage.setItem('reminders.token', t); } catch {} }, token);
