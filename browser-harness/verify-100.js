@@ -321,7 +321,8 @@ const overflowFinder = () => {
     } else if (unreadBefore > 0) {
       console.log(`  · 跳过提醒弹窗实测：环境里还有 ${unreadBefore} 条未读提醒在排队（会先弹它，抢不到自检那条）`);
     } else {
-      // 造**两条**已经到点的提醒：投递任务每分钟跑一次，所以最多等 90 秒。
+      // 造**两条**已经到点的提醒，再各「稍后提醒」到十几秒后（新建后 10 分钟内不弹，
+      // 见下）：投递任务每分钟跑一次，所以最多等 90 秒。
       // 两条一起造，是因为要测两件事，而等待只花一次：
       //   ① 「知道了」= 顺延到第二天、不等于完成（第一条弹窗）
       //   ② 提醒已经被删掉时点「知道了」不能把弹窗卡死（第二条弹窗；
@@ -336,8 +337,23 @@ const overflowFinder = () => {
         reminderId = reminderId || (made.body?.data?.id ?? null);
       }
       check('能造出两条到点的提醒', madeIDs.every(Boolean), JSON.stringify(madeIDs));
+      // 新建后**至少 10 分钟**才第一次提醒（用户 2026-10-13：「新建提醒，10分钟以后开始
+      // 第一次提醒」）。口径在 server/reminder/notify_window.go 的 firstRemindSchedule
+      // （floor = CreatedAt + firstRemindDelay = 10min；结束时间已过去的条目也按这条走），
+      // Go 用例 server/reminder/first_remind_test.go:61 钉着。所以刚建完**不该**弹 ——
+      // 这本身就是产品要求，先把它钉住（旧写法直接等弹窗，2026-10-15 起必然假红）。
+      await sleep(8000);
+      const poppedEarly = await page.evaluate(() => !!document.querySelector('[role="alertdialog"]'));
+      check('刚建完且已过期的提醒 10 分钟内不弹（新建后先给 10 分钟）', poppedEarly === false);
+      // 再把两条「稍后提醒」到十几秒后：snooze 的投递时刻由 run_at(=snoozed_until) 负责，
+      // **不参与**上面那个 10 分钟口径（见 firstRemindSchedule 上方注释）。这样这条用例
+      // 仍然端到端走真实投递链路（调度 → delivery_jobs → 弹窗），而不是绕过产品逻辑。
+      if (madeIDs.every(Boolean)) {
+        const soon = new Date(Date.now() + 15_000).toISOString();
+        for (const id of madeIDs) await api(page, `/api/reminder/items/${id}/snooze`, 'POST', { until: soon });
+      }
       const popped = await waitSel(page, '[role="alertdialog"]', 95000);
-      check('到点后弹出站内提醒弹窗', popped === true);
+      check('稍后提醒到点后弹出站内提醒弹窗（真实投递链路）', popped === true);
       if (popped) {
         const buttons = await page.evaluate(() => [...document.querySelectorAll('[role="alertdialog"] button')]
           .map((b) => b.innerText.trim()).filter(Boolean));

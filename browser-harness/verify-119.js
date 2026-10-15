@@ -296,10 +296,24 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     await api(page, '/api/configs', 'PUT', { key: 'reminder_all_day_time', value: String(bootClock) });
     const afterId = await makeItem(`${ADVANCE_TITLE}-还原`, inDays(10, 23));
     const afterJob = afterId ? await advanceJobFor(afterId) : null;
-    // 还原后：开始提醒时间回到 00:00（= 不提前，就是到期时刻本身），提前天数 0
-    check('把「提前天数」改回 0 后立刻生效（新提醒回到正常流程 = 到期时刻）',
-      !!afterJob && Math.abs(new Date(afterJob.scheduled_for) - new Date(inDays(10, 23))) < 90_000,
-      `排到 ${afterJob?.scheduled_for}`);
+    // 还原后：**按实际还原到的提前天数**算期望，不能写死成「提前 0 天」——迭代/沙箱
+    // 实例进来的偏好就是 reminder_advance_days=3（8906/8908/8918 实测），还原之后仍然
+    // 提前 3 天，旧写法（拿到期时刻当期望）必然假红。口径与上面「离到期超过 3 天」那条一致。
+    const restoredAdvance = (() => { const n = Number(originalAdvance); return Number.isFinite(n) && n > 0 ? n : 0; })();
+    const wantAfter = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 10 - restoredAdvance);
+      if (restoredAdvance > 0) {
+        const [h, m] = String(bootClock).split(':').map(Number);
+        d.setHours(h || 0, m || 0, 0, 0);
+      } else {
+        d.setHours(23, 59, 0, 0);   // 提前 0 天：就是到期时刻本身（= 旧期望）
+      }
+      return d;
+    })();
+    check('把「提前天数」还原后立刻生效（按还原到的天数重排首次提醒）',
+      !!afterJob && Math.abs(new Date(afterJob.scheduled_for) - wantAfter) < 90_000,
+      `排到 ${afterJob?.scheduled_for}，期望约 ${wantAfter.toISOString()}（还原到提前 ${restoredAdvance} 天、开始提醒时间 ${bootClock}）`);
 
     const bootAfter = await api(page, '/api/bootstrap');
     check('清理前：提前天数已还原',
