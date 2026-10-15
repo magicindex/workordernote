@@ -7,6 +7,8 @@
  *   3) 管理员在「偏好设置」上传/下架安装包：上传后卡片立即更新；下载链接（不带登录态）
  *      拿到的是同一个文件（比对 sha256）。
  *   4) 「系统配置 → 安卓客户端」分组里能改版本号 / 更新说明 / 内外网地址。
+ *   5) 版本弹窗置顶块里的**原项目信息**（2026-10-15：原来单列在页尾，现在并进首屏）——
+ *      上游项目 / 许可 / 衍生开发说明都在，页尾不再单列那一节。
  *
  * 用法：APP_URL=http://192.168.3.201:8906 node verify-095.js
  * 数据：会改两处服务端配置（外网地址、更新说明）——读原值→改→验→改回并回读确认；
@@ -205,6 +207,25 @@ function findApk() {
       check('地址有内网 / 外网两档，默认内网', card.addrButtons.length === 2
         && card.addrButtons.find((b) => b.key === 'lan')?.active === true
         && !card.addrButtons.find((b) => b.key === 'lan')?.disabled, JSON.stringify(card.addrButtons));
+
+      // ---------- 3.5 置顶块里的原项目信息（0.29.0 起从页尾并进首屏） ----------
+      const about = await page.evaluate(() => {
+        const el = document.querySelector('[data-about-pinned]');
+        const headings = [...document.querySelectorAll('h3, h4')].map((h) => h.textContent.trim());
+        return {
+          text: el ? el.innerText.replace(/\s+/g, ' ') : '',
+          upstreamHref: el?.querySelector('a')?.getAttribute('href') || '',
+          standalone: headings.filter((t) => t.includes('原项目信息')),
+        };
+      });
+      check('置顶块里有上游项目与许可（衍生开发的出处没丢）',
+        about.text.includes('上游项目') && about.text.includes('TechFunWay/reminders') && about.text.includes('MIT'),
+        about.text.slice(0, 120));
+      check('置顶块里写明基于该项目衍生开发、著作权与出处保留',
+        about.text.includes('衍生开发') && about.text.includes('著作权'),
+        about.text.slice(-120));
+      check('上游链接指向原项目', about.upstreamHref.includes('github.com/TechFunWay/reminders'), about.upstreamHref);
+      check('页尾不再单列「原项目信息」一小节', about.standalone.length === 0, JSON.stringify(about.standalone));
 
       // ---------- 4. 配一条外网地址 → 可切换、会记住 ----------
       const wan = 'https://note.example.com/api/reminder/android/apk';

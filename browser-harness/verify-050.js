@@ -255,8 +255,11 @@ async function openEditor(page, listName) {
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
     await page.goto(BASE.replace(/\/$/, '') + '/admin/all', { waitUntil: 'domcontentloaded' });
     await sleep(1800);
-    const mobile = await page.evaluate(() => {
-      const row = document.querySelector('aside.sidebar .group\\/list');
+    const mobile = await page.evaluate((name) => {
+      // 侧栏的行现在统一包在 .group/list 里（「全部」「提醒@他」「系统栏目」也都有这个类），
+      // 所以这里按**清单名**找要右键的那一条，不能拿第一条（改造前第一条恰好是清单行）。
+      const row = [...document.querySelectorAll('aside.sidebar .group\\/list')]
+        .find((el) => el.textContent.includes(name));
       if (row) {
         const r = row.getBoundingClientRect();
         row.dispatchEvent(new MouseEvent('contextmenu', {
@@ -270,7 +273,7 @@ async function openEditor(page, listName) {
         doc: document.documentElement.scrollWidth,
         win: window.innerWidth,
       };
-    });
+    }, original.name);
     await sleep(400);
     const mobileMenu = await page.evaluate(() => {
       const items = [...document.querySelectorAll('[role="menuitem"]')];

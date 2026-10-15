@@ -78,147 +78,175 @@
 
           <div class="mt-7 flex items-center justify-between px-3">
             <p class="nav-caption !px-0 !pb-0">我的清单</p>
-            <button class="tiny-add" aria-label="新建清单" @click="creatingList = true">
-              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2" stroke-linecap="round"/></svg>
-            </button>
+            <span class="rail-hide flex items-center gap-0.5">
+              <!-- 排序模式开关（用户 2026-10-15）：进去后这一段每一行都能用 ↑↓ 挪位置，
+                   顺序存进用户配置 sidebar_order。排序中图标变成 ✓。 -->
+              <button
+                type="button"
+                class="tiny-add"
+                :data-my-order-toggle="sortingMyLists ? 'on' : 'off'"
+                :aria-label="sortingMyLists ? '完成排序' : '调整「我的清单」顺序'"
+                :title="sortingMyLists ? '完成排序' : '调整顺序：全部、系统栏目与普通清单一起排'"
+                @click="sortingMyLists = !sortingMyLists"
+              >
+                <svg v-if="sortingMyLists" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m5 12.5 4.5 4.5L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <svg v-else viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M8 5h9M8 10h9M8 15h5" stroke-width="1.8" stroke-linecap="round"/><path d="M17.5 12.5v7m0 0 2.5-2.5M17.5 19.5 15 17" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button class="tiny-add" aria-label="新建清单" @click="creatingList = true">
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
+            </span>
           </div>
 
 
-          <RouterLink
-            to="/admin/all"
-            class="nav-row"
-            :class="{ 'nav-row-active': isActive('/admin/all') }"
-            @click="mobileOpen = false"
-          >
-            <span class="h-2.5 w-2.5 rounded-full bg-violet-500 ring-4 ring-violet-500/10"></span>
-            <span class="flex-1">全部</span>
-            <span v-if="summary.all" class="nav-count">{{ summary.all }}</span>
-          </RouterLink>
-
-          <!-- 提醒@他（用户 2026-10-13）：多人之间互相推提醒的页面。开关是**后台
-               系统偏好** nudge_enabled（一个实例一份），关掉后这一行与页面一起隐藏。
-               角标 = 别人提醒我、我还没做完的条数（/summary 的 nudge_pending）。 -->
-          <RouterLink
-            v-if="authStore.nudgeEnabled"
-            to="/admin/nudges"
-            class="nav-row"
-            :class="{ 'nav-row-active': isActive('/admin/nudges') }"
-            :title="railActive ? '提醒@他' : '提醒@他：给别的用户推提醒，也看别人提醒我什么'"
-            data-nav-nudges
-            @click="mobileOpen = false"
-          >
-            <span class="nav-symbol h-5 w-5 bg-sky-500/12 text-sky-500">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15.5 8.5a3.5 3.5 0 1 0-7 0c0 4-2 4-2 5.5h11c0-1.5-2-1.5-2-5.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 17a1.6 1.6 0 0 0 3 0" stroke-width="1.7" stroke-linecap="round"/><circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/></svg>
-            </span>
-            <span class="flex-1">提醒@他</span>
-            <span v-if="summary.nudge_pending" class="nav-count">{{ summary.nudge_pending }}</span>
-          </RouterLink>
-
-          <!-- 信用卡账单：固定栏目（不是普通清单）。由后台偏好控制显示，
-               启用后卡片一律归到这一栏，用户不用（也不能）自己建这个清单。 -->
-          <RouterLink
-            v-if="authStore.creditCardEnabled && cardBucket"
-            :to="`/admin/list/${cardBucket.id}`"
-            class="nav-row"
-            :class="{ 'nav-row-active': route.path === `/admin/list/${cardBucket.id}` }"
-            :title="railActive ? '信用卡账单' : '信用卡账单：卡片、账单日与还款提醒都在这里'"
-            data-nav-cards
-            @click="mobileOpen = false"
-          >
-            <span class="nav-symbol h-5 w-5 bg-brand-500/12 text-brand-500">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="6" width="18" height="12" rx="2.5" stroke-width="1.7"/><path d="M3 10h18M6.5 14h4" stroke-width="1.7" stroke-linecap="round"/></svg>
-            </span>
-            <span class="flex-1">信用卡账单</span>
-            <span v-if="cardBucket.card_count" class="nav-count">{{ cardBucket.card_count }}</span>
-          </RouterLink>
-
-          <!-- 随手记事本：与「信用卡账单」并列的固定栏目，由个人偏好 notebook_enabled 控制显示。
-               记事一律收在这一栏里，不需要（也不能）自己建这个清单。 -->
-          <RouterLink
-            v-if="authStore.notebookEnabled && noteBucket"
-            :to="`/admin/list/${noteBucket.id}`"
-            class="nav-row"
-            :class="{ 'nav-row-active': route.path === `/admin/list/${noteBucket.id}` }"
-            :title="railActive ? '随手记事本' : '随手记事本：新建的记事都收在这里'"
-            data-nav-notebook
-            @click="mobileOpen = false"
-          >
-            <span class="nav-symbol h-5 w-5 bg-emerald-500/12 text-emerald-500">
-              <!-- 图标取图标库里那个「笔记本」（notebook）：以前这里写死的是一本书，
-                   与清单数据里的 icon 不是同一份来源，导致「改了图标库里那份、侧栏还是旧的」。
-                   现在与日历/清单筛选共用 utils/list-icons.ts 一份定义。 -->
-              <ListIcon name="notebook" :size="20" />
-            </span>
-            <span class="flex-1">随手记事本</span>
-          </RouterLink>
-
-          <!-- 人生要有仪式感：与「记事本」并列的固定栏目，由个人偏好 ceremony_enabled 控制显示。
-               里面的条目在栏目页上用**倒计时卡片**展示（生日/纪念日/节日/考试…）。 -->
-          <RouterLink
-            v-if="authStore.ceremonyEnabled && ceremonyBucket"
-            :to="`/admin/list/${ceremonyBucket.id}`"
-            class="nav-row"
-            :class="{ 'nav-row-active': route.path === `/admin/list/${ceremonyBucket.id}` }"
-            :title="railActive ? '人生要有仪式感' : '人生要有仪式感：生日、纪念日、节日、考试的倒计时'"
-            data-nav-ceremony
-            @click="mobileOpen = false"
-          >
-            <span class="nav-symbol h-5 w-5 bg-rose-500/10 text-rose-500">
-              <ListIcon name="ceremony" :size="20" />
-            </span>
-            <span class="flex-1">人生要有仪式感</span>
-          </RouterLink>
-
-          <!-- 清单行不再挂「笔」图标：右键（桌面）或长按（触屏）弹出菜单，里面有重命名 / 修改 / 删除。
-               右键菜单藏起来的入口，所以这里不摆任何常驻按钮，侧栏更干净。 -->
+          <!-- 排序模式提示（用户 2026-10-15）：「我的清单」这一段整段可排 -->
           <div
-            v-for="list in navLists"
-            :key="list.id"
+            v-if="sortingMyLists"
+            class="rail-hide mx-3 mb-1 rounded-xl bg-brand-500/10 px-2.5 py-1.5 text-[11px] font-semibold leading-snug text-brand-700 dark:text-brand-200"
+          >
+            排序中：用 ↑ ↓ 挪位置，点标题旁的 ✓ 完成
+          </div>
+
+          <!-- 「我的清单」这一段：全部 / 提醒@他 / 信用卡账单 / 随手记事本 / 人生要有仪式感 /
+               自建清单统一由 myListRows 决定先后（顺序存用户配置 sidebar_order，清单行同时写回
+               position）。改造前这几行是写死的、只有自建清单能排，用户 2026-10-15 要求整段可排。 -->
+          <div
+            v-for="row in myListRows"
+            :key="row.key"
             class="group/list flex items-center"
-            @contextmenu.prevent.stop="openListMenu(list, $event)"
-            @touchstart.passive="onListTouchStart(list, $event)"
+            :data-my-row="row.key"
+            @contextmenu.prevent.stop="onMyRowMenu(row, $event)"
+            @touchstart.passive="onMyRowTouchStart(row, $event)"
             @touchmove.passive="cancelListLongPress"
             @touchend="cancelListLongPress"
             @touchcancel="cancelListLongPress"
             @click.capture="onListRowClick"
           >
             <RouterLink
-              :to="`/admin/list/${list.id}`"
-              :title="railActive ? list.name : `右键（手机上长按）可重命名、改颜色或删除「${list.name}」`"
+              v-if="row.kind === 'all'"
+              to="/admin/all"
               class="nav-row min-w-0 flex-1"
-              :class="{ 'nav-row-active': route.path === `/admin/list/${list.id}` }"
+              :class="{ 'nav-row-active': isActive('/admin/all') }"
               @click="mobileOpen = false"
             >
-              <!-- 图标（形状识别清单）+ 清单色着色；原来是同色圆点，颜色一多就分不清 -->
-              <span
-                class="nav-list-icon"
-                :style="{ color: listColor(list.color), background: listColor(list.color) + '1f' }"
-                :data-list-icon="list.icon || 'list'"
-              >
-                <ListIcon :name="list.icon" :size="14" />
+              <span class="h-2.5 w-2.5 rounded-full bg-violet-500 ring-4 ring-violet-500/10"></span>
+              <span class="flex-1">全部</span>
+              <span v-if="summary.all" class="nav-count">{{ summary.all }}</span>
+            </RouterLink>
+
+            <!-- 提醒@他（用户 2026-10-13）：多人之间互相推提醒的页面。开关是**后台
+                 系统偏好** nudge_enabled（一个实例一份），关掉后这一行与页面一起隐藏。
+                 角标 = 别人提醒我、我还没做完的条数（/summary 的 nudge_pending）。 -->
+            <RouterLink
+              v-else-if="row.kind === 'nudge'"
+              to="/admin/nudges"
+              class="nav-row min-w-0 flex-1"
+              :class="{ 'nav-row-active': isActive('/admin/nudges') }"
+              :title="railActive ? '提醒@他' : '提醒@他：给别的用户推提醒，也看别人提醒我什么'"
+              data-nav-nudges
+              @click="mobileOpen = false"
+            >
+              <span class="nav-symbol h-5 w-5 bg-sky-500/12 text-sky-500">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15.5 8.5a3.5 3.5 0 1 0-7 0c0 4-2 4-2 5.5h11c0-1.5-2-1.5-2-5.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 17a1.6 1.6 0 0 0 3 0" stroke-width="1.7" stroke-linecap="round"/><circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/></svg>
               </span>
-              <!-- 重命名就地改：回车保存、Esc 取消，不弹窗 -->
+              <span class="flex-1">提醒@他</span>
+              <span v-if="summary.nudge_pending" class="nav-count">{{ summary.nudge_pending }}</span>
+            </RouterLink>
+
+            <!-- 清单行：信用卡账单 / 随手记事本 / 人生要有仪式感三个固定栏目与自建清单走同一套渲染。
+                 三个栏目由偏好控制显示、图标与文案固定；自建清单可右键（桌面）或长按（触屏）重命名/
+                 改色/删除，入口全收在菜单里，所以这里不摆常驻按钮，侧栏更干净。
+                 信用卡账单：卡片一律归到这一栏，用户不用（也不能）自己建。
+                 随手记事本 / 人生要有仪式感：与前者并列，记事与倒计时条目分别收在其中。 -->
+            <RouterLink
+              v-else
+              :to="`/admin/list/${row.list.id}`"
+              class="nav-row min-w-0 flex-1"
+              :class="{ 'nav-row-active': route.path === `/admin/list/${row.list.id}` }"
+              :title="listRowTitle(row.list)"
+              :data-nav-cards="row.list.template === 'credit_card' ? '' : undefined"
+              :data-nav-notebook="row.list.template === 'notebook' ? '' : undefined"
+              :data-nav-ceremony="row.list.template === 'ceremony' ? '' : undefined"
+              @click="mobileOpen = false"
+            >
+              <!-- 图标：固定栏目沿用原来的卡片/笔记本/仪式感图标；自建清单用「形状 + 清单色」
+                   （原来是同色圆点，颜色一多就分不清）。记事本的图标取图标库里那份（notebook），
+                   与日历/清单筛选共用 utils/list-icons.ts 一份定义。 -->
+              <span
+                v-if="row.list.template === 'credit_card'"
+                class="nav-symbol h-5 w-5 bg-brand-500/12 text-brand-500"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="6" width="18" height="12" rx="2.5" stroke-width="1.7"/><path d="M3 10h18M6.5 14h4" stroke-width="1.7" stroke-linecap="round"/></svg>
+              </span>
+              <span
+                v-else-if="row.list.template === 'notebook'"
+                class="nav-symbol h-5 w-5 bg-emerald-500/12 text-emerald-500"
+              >
+                <ListIcon name="notebook" :size="20" />
+              </span>
+              <span
+                v-else-if="row.list.template === 'ceremony'"
+                class="nav-symbol h-5 w-5 bg-rose-500/10 text-rose-500"
+              >
+                <ListIcon name="ceremony" :size="20" />
+              </span>
+              <span
+                v-else
+                class="nav-list-icon"
+                :style="{ color: listColor(row.list.color), background: listColor(row.list.color) + '1f' }"
+                :data-list-icon="row.list.icon || 'list'"
+              >
+                <ListIcon :name="row.list.icon" :size="14" />
+              </span>
+              <!-- 重命名就地改：回车保存、Esc 取消，不弹窗（只有自建清单能改名） -->
               <input
-                v-if="renamingListId === list.id"
+                v-if="renamingListId === row.list.id"
                 ref="renameInput"
                 v-model="renameDraft"
                 class="min-w-0 flex-1 rounded-lg border border-brand-500/40 bg-surface px-2 py-1 text-sm font-semibold outline-none"
                 maxlength="40"
-                :aria-label="`重命名清单「${list.name}」`"
+                :aria-label="`重命名清单「${row.list.name}」`"
                 @click.stop.prevent
-                @keydown.enter.prevent="commitRename(list)"
+                @keydown.enter.prevent="commitRename(row.list)"
                 @keydown.esc.prevent="cancelRename"
-                @blur="commitRename(list)"
+                @blur="commitRename(row.list)"
               />
               <span v-else class="flex min-w-0 flex-1 items-center gap-1">
-                <span class="truncate">{{ list.name }}</span>
+                <span class="truncate">{{ listRowLabel(row.list) }}</span>
               </span>
-              <!-- 默认清单标识；改默认清单在「偏好设置」里操作 -->
-              <span v-if="list.is_default" class="rail-hide shrink-0 text-amber-400" title="默认清单" aria-label="默认清单">
+              <!-- 默认清单标识；改默认清单在「偏好设置」里操作（固定在自建清单上） -->
+              <span v-if="row.list.is_default" class="rail-hide shrink-0 text-amber-400" title="默认清单" aria-label="默认清单">
                 <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor"><path d="m12 3.6 2.6 5.27 5.82.85-4.21 4.1.99 5.8L12 16.87l-5.2 2.75.99-5.8-4.21-4.1 5.82-.85L12 3.6Z"/></svg>
               </span>
-              <span v-if="list.open_count" class="nav-count">{{ list.open_count }}</span>
+              <span
+                v-if="row.list.template === 'credit_card' && cardBucket && cardBucket.card_count"
+                class="nav-count"
+              >{{ cardBucket.card_count }}</span>
+              <span v-else-if="row.list.template !== 'credit_card' && row.list.open_count" class="nav-count">{{ row.list.open_count }}</span>
             </RouterLink>
+
+            <!-- 排序模式的 ↑ ↓：顺序存在服务端（sidebar_order），视觉顺序也是按它算的，
+                 所以这里只报「把这一行往上/下挪一格」，不动 DOM。 -->
+            <span v-if="sortingMyLists" class="rail-hide ml-1 flex shrink-0 items-center gap-0.5" :data-my-move="row.key">
+              <button
+                type="button"
+                class="tiny-add !h-6 !w-6 disabled:opacity-30"
+                :disabled="isMyRowEdge(row.key, -1)"
+                :aria-label="`把「${myRowLabel(row)}」上移`"
+                @click.stop.prevent="moveMyRow(row.key, -1)"
+              >
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 14.5 6-6 6 6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button
+                type="button"
+                class="tiny-add !h-6 !w-6 disabled:opacity-30"
+                :disabled="isMyRowEdge(row.key, 1)"
+                :aria-label="`把「${myRowLabel(row)}」下移`"
+                @click.stop.prevent="moveMyRow(row.key, 1)"
+              >
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 9.5 6 6 6-6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </span>
           </div>
         </nav>
 
@@ -531,11 +559,12 @@ import {
   getSummary,
   markNotificationRead,
   deleteList,
+  reorderLists,
   snoozeReminder,
   updateList,
   type ReminderList,
 } from '../api/reminder'
-import { getAllConfigs, getVersion } from '../api/config'
+import { getAllConfigs, getVersion, updateConfig } from '../api/config'
 import { connectReminderEvents, type RealtimeNotification, type ReminderRealtimeEvent } from '../services/reminderRealtime'
 import { ackMinutesLabel } from '../utils/reminder-options'
 import { LIST_COLOR_NAMES, listColorHex, listColorLabel } from '../utils/list-colors'
@@ -574,6 +603,123 @@ const navLists = computed(() => lists.value.filter(
 const cardBucket = computed(() => lists.value.find((l) => l.template === 'credit_card') || null)
 const noteBucket = computed(() => lists.value.find((l) => l.template === 'notebook') || null)
 const ceremonyBucket = computed(() => lists.value.find((l) => l.template === 'ceremony') || null)
+
+// ---- 侧栏「我的清单」整段排序（用户 2026-10-15）----
+// 原来「全部 / 提醒@他 / 信用卡账单 / 随手记事本 / 人生要有仪式感」是写死的几行，
+// 只有普通清单能排，而且得进「偏好设置 → 清单顺序」里排。现在这一段整段可排：
+// 点标题旁那个小按钮进排序模式，用 ↑ ↓ 把**任意一行**（含系统内置的 4 个栏目）挪位置，
+// 点 ✓ 退出。顺序存在用户配置 sidebar_order（JSON 数组，token：all / nudge / list:<id>），
+// 同时把清单行的先后写回各清单的 position —— 偏好设置里的清单顺序、清单筛选下拉
+// 拿到的顺序才跟侧栏一致。
+type MyListRow =
+  | { key: 'all'; kind: 'all' }
+  | { key: 'nudge'; kind: 'nudge' }
+  | { key: string; kind: 'list'; list: ReminderList }
+
+const MY_ALL_KEY = 'all'
+const MY_NUDGE_KEY = 'nudge'
+const myListKey = (id: number) => `list:${id}`
+// 三个系统栏目的**默认**先后：沿用改造前侧栏的视觉顺序（信用卡 → 记事本 → 仪式感），
+// 它们各自的 position 是建栏目时按当时的最大值 +1 写的，不能拿来定这一段的老样子。
+const MY_SYSTEM_ORDER = ['credit_card', 'notebook', 'ceremony']
+const sidebarOrder = ref<string[]>([])
+const sortingMyLists = ref(false)
+
+// 可见性判断必须与模板里的 v-if 完全一致，否则「隐藏的行」会被当成可排的行插进顺序里
+function myRowVisible(l: ReminderList): boolean {
+  if (l.template === 'credit_card') return authStore.creditCardEnabled
+  if (l.template === 'notebook') return authStore.notebookEnabled
+  if (l.template === 'ceremony') return authStore.ceremonyEnabled
+  return true
+}
+// 没保存过顺序（或新清单还没进顺序）时的默认排列
+const defaultMyRows = computed<MyListRow[]>(() => {
+  const rows: MyListRow[] = [{ key: MY_ALL_KEY, kind: 'all' }]
+  if (authStore.nudgeEnabled) rows.push({ key: MY_NUDGE_KEY, kind: 'nudge' })
+  const buckets: ReminderList[] = []
+  for (const t of MY_SYSTEM_ORDER) {
+    const found = lists.value.find((l) => String(l.template || 'general') === t)
+    if (found) buckets.push(found)
+  }
+  const normal = lists.value.filter((l) => !MY_SYSTEM_ORDER.includes(String(l.template || 'general')))
+  for (const l of [...buckets, ...normal]) {
+    if (myRowVisible(l)) rows.push({ key: myListKey(l.id), kind: 'list', list: l })
+  }
+  return rows
+})
+// 真正渲染的顺序：保存过的 token 按其下标排；没进过顺序的行（新清单）按默认先后接在后面
+const myListRows = computed<MyListRow[]>(() => {
+  const rows = defaultMyRows.value
+  if (!sidebarOrder.value.length) return rows
+  const idx = new Map(sidebarOrder.value.map((k, i) => [k, i]))
+  return rows
+    .map((row, i) => ({ row, rank: idx.has(row.key) ? idx.get(row.key)! : 1000 + i }))
+    .sort((a, b) => a.rank - b.rank)
+    .map((x) => x.row)
+})
+function myRowLabel(row: MyListRow): string {
+  if (row.kind === 'all') return '全部'
+  if (row.kind === 'nudge') return '提醒@他'
+  return row.list.name
+}
+// 已经是这段的第一/最后一行时，↑（或 ↓）按钮置灰
+function isMyRowEdge(key: string, delta: number): boolean {
+  const rows = myListRows.value
+  const i = rows.findIndex((r) => r.key === key)
+  return i < 0 || i + delta < 0 || i + delta >= rows.length
+}
+function moveMyRow(key: string, delta: number) {
+  const rows = myListRows.value
+  const i = rows.findIndex((r) => r.key === key)
+  const j = i + delta
+  if (i < 0 || j < 0 || j >= rows.length) return
+  const keys = rows.map((r) => r.key)
+  const [moved] = keys.splice(i, 1)
+  keys.splice(j, 0, moved)
+  void saveMyOrder(keys)
+}
+/**
+ * 保存这一段的新顺序。只传「当前看得见」的行：被偏好关掉的栏目此刻不显示，
+ * 把它们按原来的槽位留在顺序里（重新打开时还回到老位置）。
+ */
+async function saveMyOrder(visibleKeys: string[]) {
+  const prev = sidebarOrder.value.length ? sidebarOrder.value.slice() : defaultMyRows.value.map((r) => r.key)
+  const visible = new Set(visibleKeys)
+  let cursor = 0
+  const next = prev.map((k) => (visible.has(k) ? visibleKeys[cursor++] : k))
+  for (const k of visibleKeys) if (!next.includes(k)) next.push(k)
+  sidebarOrder.value = next
+  const listIds = next
+    .filter((k) => k.startsWith('list:'))
+    .map((k) => Number(k.slice(5)))
+    .filter((id) => Number.isFinite(id) && id > 0)
+  try {
+    await updateConfig('sidebar_order', JSON.stringify(next))
+    // 清单行顺带写回 position：别的界面（偏好设置里的清单顺序、清单筛选）才对得上
+    if (listIds.length) await reorderLists(listIds)
+  } catch (err) {
+    // 保存失败不回滚本地顺序（界面已经按新顺序画好了），下次刷新回到服务端的顺序
+    console.warn('保存侧栏「我的清单」顺序失败', err)
+  }
+}
+async function loadSidebarOrder() {
+  try {
+    const res = await getAllConfigs()
+    const raw = String(res.data?.data?.sidebar_order ?? '')
+    const parsed = raw ? JSON.parse(raw) : []
+    sidebarOrder.value = Array.isArray(parsed) ? parsed.filter((k) => typeof k === 'string') : []
+  } catch {
+    sidebarOrder.value = []
+  }
+}
+function onMyRowMenu(row: MyListRow, event: MouseEvent) {
+  if (sortingMyLists.value) return
+  if (row.kind === 'list') openListMenu(row.list, event)
+}
+function onMyRowTouchStart(row: MyListRow, event: TouchEvent) {
+  if (sortingMyLists.value) return
+  if (row.kind === 'list') onListTouchStart(row.list, event)
+}
 const summary = ref<Record<string, number>>({})
 const creatingList = ref(false)
 const realtimeToast = ref('')
@@ -764,10 +910,34 @@ function cancelListLongPress() {
 }
 
 function onListRowClick(e: MouseEvent) {
+  // 排序模式：这一段只用来点 ↑ ↓，别让整行的链接把人带走
+  if (sortingMyLists.value) {
+    const el = e.target as HTMLElement | null
+    if (!el?.closest('[data-my-move]')) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    return
+  }
   if (!suppressListClick) return
   suppressListClick = false
   e.preventDefault()
   e.stopPropagation()
+}
+// 行标题与显示名：三个系统栏目沿用改造前写死的文案，自建清单用清单名
+function listRowTitle(list: ReminderList): string {
+  const t = String(list.template || 'general')
+  if (t === 'credit_card') return railActive.value ? '信用卡账单' : '信用卡账单：卡片、账单日与还款提醒都在这里'
+  if (t === 'notebook') return railActive.value ? '随手记事本' : '随手记事本：新建的记事都收在这里'
+  if (t === 'ceremony') return railActive.value ? '人生要有仪式感' : '人生要有仪式感：生日、纪念日、节日、考试的倒计时'
+  return railActive.value ? list.name : `右键（手机上长按）可重命名、改颜色或删除「${list.name}」`
+}
+function listRowLabel(list: ReminderList): string {
+  const t = String(list.template || 'general')
+  if (t === 'credit_card') return '信用卡账单'
+  if (t === 'notebook') return '随手记事本'
+  if (t === 'ceremony') return '人生要有仪式感'
+  return list.name
 }
 
 // ---- 重命名（就地改，不弹窗）----
@@ -1325,6 +1495,8 @@ function onUserActivity() {
 onMounted(() => {
   void applyDefaultViewOnce()
   refreshNavigation()
+  // 侧栏「我的清单」的先后顺序（用户配置 sidebar_order，没配过就用默认先后）
+  void loadSidebarOrder()
   loadVersion()
   window.visualViewport?.addEventListener('resize', syncKeyboardState)
   window.addEventListener('reminder-data-changed', refreshNavigation)

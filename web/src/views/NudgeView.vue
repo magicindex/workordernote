@@ -53,7 +53,8 @@
           <li
             v-for="item in box.sent"
             :key="item.id"
-            class="rounded-2xl border border-border/70 bg-surface/70 p-3.5"
+            class="rounded-2xl border p-3.5"
+            :class="isOverdue(item) ? 'border-rose-500/60 bg-rose-500/[.07] ring-1 ring-rose-500/30' : 'border-border/70 bg-surface/70'"
             data-nudge-item
           >
             <div class="flex items-start justify-between gap-3">
@@ -63,12 +64,21 @@
                 <p class="mt-1.5 text-[11px] font-medium text-muted-foreground/80">
                   发给 <b class="text-foreground/80">{{ item.to_username || '对方' }}</b>
                   · {{ formatTime(item.created_at) }}
-                  <template v-if="item.due_at"> · 期望 {{ formatDue(item.due_at) }}</template>
+                  <template v-if="item.due_at">
+                    · <span :class="isOverdue(item) ? 'font-bold text-rose-500' : ''">期望 {{ formatDue(item.due_at) }}</span>
+                  </template>
                 </p>
               </div>
-              <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold" :class="statusClass(item)">
-                {{ statusText(item) }}
-              </span>
+              <div class="flex shrink-0 flex-col items-end gap-1">
+                <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold" :class="statusClass(item)">
+                  {{ statusText(item) }}
+                </span>
+                <span
+                  v-if="isOverdue(item)"
+                  class="shrink-0 rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-extrabold leading-none text-white shadow-sm"
+                  data-nudge-overdue
+                >已逾期{{ overdueDays(item) ? ` ${overdueDays(item)} 天` : '' }}</span>
+              </div>
             </div>
             <div class="mt-2.5 flex items-center gap-2">
               <!-- 「提醒一下」（用户 2026-10-13）：再即时推一次，对方那边立刻弹窗 -->
@@ -103,15 +113,17 @@
             待处理 {{ box.counts.received_pending }}
           </span>
         </header>
-        <p v-if="!box.received.length" class="rounded-2xl border border-dashed border-border bg-surface/40 px-4 py-10 text-center text-xs text-muted-foreground">
+        <p v-if="!receivedRows.length" class="rounded-2xl border border-dashed border-border bg-surface/40 px-4 py-10 text-center text-xs text-muted-foreground">
           现在没有别人提醒你的事情。
         </p>
         <ul v-else class="space-y-2">
           <li
-            v-for="item in box.received"
+            v-for="item in receivedRows"
             :key="item.id"
-            class="rounded-2xl border border-border/70 bg-surface/70 p-3.5"
-            :class="{ 'border-sky-500/30 bg-sky-500/[.04]': !item.read_at && !item.done_at }"
+            class="rounded-2xl border p-3.5"
+            :class="isOverdue(item)
+              ? 'border-rose-500/60 bg-rose-500/[.07] ring-1 ring-rose-500/30'
+              : { 'border-border/70 bg-surface/70': true, 'border-sky-500/30 bg-sky-500/[.04]': !item.read_at && !item.done_at }"
             data-nudge-item
           >
             <div class="flex items-start justify-between gap-3">
@@ -121,12 +133,22 @@
                 <p class="mt-1.5 text-[11px] font-medium text-muted-foreground/80">
                   来自 <b class="text-foreground/80">{{ item.from_username || '对方' }}</b>
                   · {{ formatTime(item.created_at) }}
-                  <template v-if="item.due_at"> · 期望 {{ formatDue(item.due_at) }}</template>
+                  <template v-if="item.due_at">
+                    · <span :class="isOverdue(item) ? 'font-bold text-rose-500' : ''">期望 {{ formatDue(item.due_at) }}</span>
+                  </template>
                 </p>
               </div>
-              <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold" :class="statusClass(item)">
-                {{ statusText(item) }}
-              </span>
+              <div class="flex shrink-0 flex-col items-end gap-1">
+                <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold" :class="statusClass(item)">
+                  {{ statusText(item) }}
+                </span>
+                <!-- 「已逾期」（用户 2026-10-15）：期望时间过了还没完成就醒目标出来 -->
+                <span
+                  v-if="isOverdue(item)"
+                  class="shrink-0 rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-extrabold leading-none text-white shadow-sm"
+                  data-nudge-overdue
+                >已逾期{{ overdueDays(item) ? ` ${overdueDays(item)} 天` : '' }}</span>
+              </div>
             </div>
             <div class="mt-2.5 flex flex-wrap items-center gap-2">
               <template v-if="!item.done_at && !item.saved_done">
@@ -159,7 +181,9 @@
                 >已存到「{{ item.list_name || '清单' }}」{{ item.saved_done ? '（已完成）' : '' }}</span>
               </template>
               <!-- 完成之后（不管是本页点的「已完成」，还是在清单里勾完同步过来的 done_at）
-                   这一行只剩「删除」，状态由右上角那个「已完成」标出来。 -->
+                   这一行只剩「删除」，状态由右上角那个「已完成」标出来。
+                   没保存到清单的那种连卡片一起消失（receivedRows 过滤掉），
+                   只在通知中心留一条回执 —— 用户 2026-10-15 的口径。 -->
               <button
                 type="button"
                 class="rounded-xl border border-border bg-surface px-3 py-1.5 text-[11px] font-bold text-muted-foreground transition hover:bg-muted"
@@ -237,7 +261,7 @@
             <input v-model="form.dueDate" type="date" class="modal-field" />
             <input v-model="form.dueTime" type="time" class="modal-field max-w-[140px]" />
           </div>
-          <p class="mt-1.5 text-[11px] text-muted-foreground">只作为提示显示给对方，不会自动弹窗，也不算逾期。</p>
+          <p class="mt-1.5 text-[11px] text-muted-foreground">只作为提示显示给对方，不会自动弹窗；过了这个时间还没完成，双方的卡片上都会醒目标出「已逾期」。</p>
         </div>
         <p v-if="formError" class="rounded-2xl bg-rose-500/[.07] px-4 py-2.5 text-xs font-bold text-rose-500" data-nudge-form-error>{{ formError }}</p>
         <div class="flex justify-end gap-3 pt-1">
@@ -255,7 +279,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Modal from '../components/Modal.vue'
 import { useAuthStore } from '../stores/auth'
@@ -285,10 +309,37 @@ const savingNudge = ref(false)
 // 「提醒一下」：正在发送的那条（按 id 显示「发送中…」）
 const busyId = ref(0)
 const toast = ref('')
+// 每分钟对一次表：页面一直开着时，「已逾期」标记到点自己就出来（与首页看板同一做法）
+const clockNow = ref(Date.now())
+let clockTimer: number | undefined
 
 function describe(error: unknown, fallback: string) {
   const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
   return message || fallback
+}
+
+/**
+ * 「别人提醒我」这一列实际渲染的行（用户 2026-10-15）：
+ * 点完「已完成」、又**没保存到自己的清单**的那条就从这里消失 —— 它只是别人发来的一条
+ * 消息，做完就完了，本地不留任务、也不进任何本地统计（通知中心里那条回执还在）。
+ * 保存过的（reminder_id 有值）继续留着：它已经变成自己清单里的一条待办，
+ * 完成状态显示在这儿是有用的（「已存到『X』（已完成）」）。
+ */
+const receivedRows = computed(() => box.value.received.filter((i) => !(i.done_at && !i.reminder_id)))
+
+/** 「已逾期」：期望完成时间过了、又还没点「已完成」。两列都标，发起人也能一眼看到对方超时了。 */
+function isOverdue(item: Nudge): boolean {
+  if (item.done_at || !item.due_at) return false
+  const stamp = new Date(item.due_at).getTime()
+  return !Number.isNaN(stamp) && stamp < clockNow.value
+}
+
+/** 逾期天数（不满一天算 0，只写「已逾期」三个字）。 */
+function overdueDays(item: Nudge): number {
+  if (!item.due_at) return 0
+  const stamp = new Date(item.due_at).getTime()
+  if (Number.isNaN(stamp)) return 0
+  return Math.max(0, Math.floor((clockNow.value - stamp) / 86_400_000))
 }
 
 async function load() {
@@ -471,9 +522,11 @@ onMounted(() => {
     return
   }
   void load()
+  clockTimer = window.setInterval(() => { clockNow.value = Date.now() }, 60_000)
   window.addEventListener('reminder-data-changed', onDataChanged)
 })
 onBeforeUnmount(() => {
+  if (clockTimer) window.clearInterval(clockTimer)
   window.removeEventListener('reminder-data-changed', onDataChanged)
 })
 </script>

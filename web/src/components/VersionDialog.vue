@@ -1,7 +1,7 @@
 <template>
   <Modal :model-value="modelValue" size="lg" title="版本信息与迭代说明" @update:model-value="emit('update:modelValue', $event)">
     <!-- 当前版本 -->
-    <div class="flex flex-wrap items-center gap-3 rounded-2xl bg-muted/60 p-4">
+    <div class="flex flex-wrap items-center gap-3 rounded-2xl bg-muted/60 p-4" data-about-pinned>
       <span class="logo-mark shrink-0">
         <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor">
           <path d="m7 12 3 3 7-7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -15,6 +15,14 @@
         <p class="mt-0.5 text-xs font-medium text-muted-foreground">
           项目名 {{ PROJECT.name }}<span v-if="buildTime"> · 构建于 {{ formatBuildTime(buildTime) }}</span>
         </p>
+        <!-- 原项目信息（用户 2026-10-15：原来单独一块放在最下面，现在并进这个置顶块，
+             跟着版本号一起第一眼就看到；衍生开发必须保留的出处与许可仍然完整保留）。 -->
+        <p class="mt-1.5 text-[11px] leading-5 text-muted-foreground">
+          上游项目
+          <a class="font-semibold text-brand-600 hover:underline dark:text-brand-300" :href="UPSTREAM.url" target="_blank" rel="noreferrer">{{ UPSTREAM.project }}</a>
+          ，许可 <span class="font-semibold text-foreground">{{ UPSTREAM.license }}</span>
+        </p>
+        <p class="mt-1 text-[11px] leading-5 text-muted-foreground/90">{{ UPSTREAM.note }}</p>
       </div>
     </div>
 
@@ -41,17 +49,6 @@
         </ul>
       </li>
     </ol>
-
-    <!-- 原项目信息：衍生开发必须保留的出处与许可 -->
-    <h4 class="mt-5 text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground">原项目信息</h4>
-    <div class="mt-2 rounded-2xl border border-border/70 bg-muted/40 p-3.5">
-      <p class="text-[13px] leading-5 text-muted-foreground">
-        上游项目
-        <a class="font-semibold text-brand-600 hover:underline dark:text-brand-300" :href="UPSTREAM.url" target="_blank" rel="noreferrer">{{ UPSTREAM.project }}</a>
-        ，许可 <span class="font-semibold text-foreground">{{ UPSTREAM.license }}</span>。
-      </p>
-      <p class="mt-1.5 text-[13px] leading-5 text-muted-foreground">{{ UPSTREAM.note }}</p>
-    </div>
   </Modal>
 </template>
 

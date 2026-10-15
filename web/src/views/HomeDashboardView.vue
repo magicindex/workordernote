@@ -63,16 +63,17 @@
             <span class="mt-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-[11px] font-black" :class="row.tone" data-home-level>{{ row.level }}</span>
             <div class="min-w-0 flex-1">
               <p class="whitespace-pre-wrap break-words text-sm font-bold text-foreground">{{ row.item.title }}</p>
-              <p class="mt-0.5 text-[11px] font-medium text-muted-foreground/80">
-                {{ formatDue(row.item) }}<template v-if="row.item.list_name"> · {{ row.item.list_name }}</template>
+              <!-- 时间信息（用户 2026-10-15：「首页，提醒下面的时间信息改为橘黄色醒目显示创建时间，
+                   结束时间，清单，剩余时间」）：四项统一收在标题下这一行、橘黄色加粗。
+                   剩余时间的口径与 2026-10-14 那个行尾倒计时完全一样（每分钟刷新，逾期的写
+                   「已逾期 N 天」），所以行尾不再重复显示。 -->
+              <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-bold text-orange-500 dark:text-orange-400" data-home-meta>
+                <span data-home-created>创建 {{ formatCreated(row.item) }}</span>
+                <span data-home-due>结束 {{ formatDue(row.item) }}</span>
+                <span v-if="row.item.list_name" data-home-list>清单 {{ row.item.list_name }}</span>
+                <span data-home-remaining>{{ remainingOf(row) }}</span>
               </p>
             </div>
-            <!-- 倒计时（用户 2026-10-14：「首页每条信息后边增加倒计时，剩余x时间」）：
-                 与快速新建的「剩余 时:分」同一份口径，每分钟刷新。
-                 逾期的那一列不再写「剩余」，直接标「已逾期 N」 -->
-            <span class="mt-0.5 shrink-0 text-[11px] font-bold" :class="row.level === '急' ? 'text-rose-500' : 'text-muted-foreground'" data-home-remaining>
-              {{ remainingOf(row) }}
-            </span>
           </li>
         </ul>
         </div>
@@ -109,11 +110,14 @@
             <span class="mt-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-[11px] font-black" :class="row.tone" data-home-level>{{ row.level }}</span>
             <div class="min-w-0 flex-1">
               <p class="whitespace-pre-wrap break-words text-sm font-bold text-foreground">{{ row.item.title }}</p>
-              <p class="mt-0.5 text-[11px] font-medium text-muted-foreground/80">
-                {{ formatDue(row.item) }}<template v-if="row.item.list_name"> · {{ row.item.list_name }}</template>
+              <!-- 时间信息同「未来 14 天待办」那一列：橘黄色加粗一行写完创建/结束/清单/剩余 -->
+              <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-bold text-orange-500 dark:text-orange-400" data-home-meta>
+                <span data-home-created>创建 {{ formatCreated(row.item) }}</span>
+                <span data-home-due>结束 {{ formatDue(row.item) }}</span>
+                <span v-if="row.item.list_name" data-home-list>清单 {{ row.item.list_name }}</span>
+                <span data-home-remaining>{{ remainingOf(row) }}</span>
               </p>
             </div>
-            <span class="mt-0.5 shrink-0 text-[11px] font-bold text-rose-500" data-home-remaining>{{ remainingOf(row) }}</span>
           </li>
         </ul>
         </div>
@@ -239,6 +243,17 @@ function remainingOf(row: Row) {
     return late > 0 ? `已逾期 ${late} 天` : '已逾期'
   }
   return remainingText(row.item.due_at, clockNow.value)
+}
+
+/** 创建时间（用户 2026-10-15 要求这一行里显示）：今天 / 昨天用相对说法，更早写 M月D日 时:分 */
+function formatCreated(item: ReminderItem) {
+  if (!item.created_at) return '未知'
+  const d = new Date(item.created_at)
+  const days = dayDiff(item.created_at)
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  if (days === 0) return `今天 ${time}`
+  if (days === -1) return `昨天 ${time}`
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${time}`
 }
 
 function formatDue(item: ReminderItem) {

@@ -109,7 +109,7 @@
 import { computed, onMounted, ref } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfigGroupList from '../components/ConfigGroupList.vue'
-import { getUserConfigMeta, updateConfig } from '../api/config'
+import { getAllConfigs, getUserConfigMeta, updateConfig } from '../api/config'
 import type { ConfigMeta } from '../api/config'
 import { getLists, reorderLists, updateList, type ReminderList } from '../api/reminder'
 import { listColorHex } from '../utils/list-colors'
@@ -157,6 +157,7 @@ async function moveList(index: number, delta: number) {
   errorMsg.value = ''
   try {
     await reorderLists(nextAll.map((l) => l.id))
+    await syncSidebarOrder(nextAll)
     await loadLists()
     orderSaved.value = true
     setTimeout(() => { orderSaved.value = false }, 2500)
@@ -165,6 +166,28 @@ async function moveList(index: number, delta: number) {
     errorMsg.value = err.response?.data?.message || '保存清单顺序失败'
   } finally {
     savingOrder.value = false
+  }
+}
+
+/**
+ * 侧栏如果已经存过自己的顺序（用户配置 sidebar_order，见 MainLayout 的「我的清单」排序模式），
+ * 就把它里面的清单 token 按这次的新顺序重排 —— 否则会出现「在偏好设置里排完、侧栏还是老样子」。
+ * 「全部 / 提醒@他」这类非清单行留在原来的槽位不动。没存过 sidebar_order 就不用管：
+ * 那种情况下侧栏按 position 排，本来就跟着这里一起变。
+ */
+async function syncSidebarOrder(nextAll: ReminderList[]) {
+  try {
+    const res = await getAllConfigs()
+    const raw = String(res.data?.data?.sidebar_order ?? '')
+    if (!raw) return
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return
+    const keys = nextAll.map((l) => `list:${l.id}`)
+    let cursor = 0
+    const merged = parsed.map((k: string) => (k.startsWith('list:') && cursor < keys.length ? keys[cursor++] : k))
+    await updateConfig('sidebar_order', JSON.stringify(merged))
+  } catch {
+    /* 同步侧栏顺序失败不该挡住清单顺序本身，静默即可 */
   }
 }
 

@@ -326,9 +326,14 @@ const readPage = (page) => page.evaluate((content) => {
     check('对方的「已完成」按钮点得到', r2 === 'ok', r2);
     await sleep(2000);
     const page4 = await readPage(page);
-    check('点完「已完成」状态变「已完成」', page4.receivedRows.some((t) => t.includes(CONTENT) && t.includes('已完成')),
-      JSON.stringify(page4.receivedRows));
+    // 新口径（用户 2026-10-15）：**没保存到清单**的提醒做完之后不再留在这一列，
+    // 只在通知中心留一条回执；发起人那一侧照旧看得到。所以这里断「卡片消失」。
+    check('点完「已完成」后卡片从「别人提醒我」里消失（未保存到清单的那种）',
+      !page4.receivedRows.some((t) => t.includes(CONTENT)), JSON.stringify(page4.receivedRows));
     check('做完之后侧栏角标清零', Number(page4.badge) === 0 || page4.badge === '', `角标=${page4.badge}`);
+    const keptRow = await api(page, '/api/reminder/nudges');
+    const kept = [...(keptRow.body?.data?.received || [])].find((n) => n.content === CONTENT);
+    check('接口侧这条还在（只是不在这列显示了）且已带完成时间', !!kept && !!kept.done_at, JSON.stringify(kept));
 
     // ---------------- 6. 发起人：状态同步 + 消息面板两条回执 ----------------
     await loginAs(page, process.env.APP_USER || '王耀辉', process.env.APP_PASS || 'Wyh!1984yelq.');
@@ -513,6 +518,84 @@ const readPage = (page) => page.evaluate((content) => {
     for (const id of createdTaskIds) {
       await api(page, `/api/reminder/items/${id}`, 'DELETE');
     }
+
+    // ---------------- 9. 「已逾期」醒目标注（用户 2026-10-15） ----------------
+    // 期望完成时间过了、又还没做完：发起人那一列与「别人提醒我」那一列都要标，
+    // 整张卡片也要带危险色。再造一条「期望时间还没到」的做反例。
+    await loginAs(page, process.env.APP_USER || '王耀辉', process.env.APP_PASS || 'Wyh!1984yelq.');
+    const pastDue = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    const futureDue = new Date(Date.now() + 2 * 86_400_000).toISOString();
+    const overdueNudge = await api(page, '/api/reminder/nudges', 'POST', {
+      to_user_id: probeId, content: `${CONTENT}-逾期`, note: '期望时间早就过了', due_at: pastDue,
+    });
+    const overdueId = overdueNudge.body?.data?.id ?? null;
+    if (overdueId) nudgeIds.push(overdueId);
+    const futureNudge = await api(page, '/api/reminder/nudges', 'POST', {
+      to_user_id: probeId, content: `${CONTENT}-未逾期`, due_at: futureDue,
+    });
+    const futureId = futureNudge.body?.data?.id ?? null;
+    if (futureId) nudgeIds.push(futureId);
+    check('造出「期望时间已过」与「期望时间未到」两条提醒', !!overdueId && !!futureId,
+      `${overdueNudge.status}/${futureNudge.status}`);
+
+    /** 取某张卡片的逾期标记与配色（返回值全为字符串，方便直接塞进断言输出）。 */
+    const peekCard = (text, scope) => page.evaluate(({ content, column }) => {
+      const rows = [...document.querySelectorAll(column ? `[data-nudge-column="${column}"] [data-nudge-item], [data-nudge-column="${column}"] li[data-nudge-item]` : '[data-nudge-item]')];
+      const row = rows.find((li) => (li.innerText || '').includes(content)) ||
+        [...document.querySelectorAll('[data-nudge-item]')].find((li) => (li.innerText || '').includes(content));
+      if (!row) return null;
+      const chip = row.querySelector('[data-nudge-overdue]');
+      const chipStyle = chip ? getComputedStyle(chip) : null;
+      const expect = [...row.querySelectorAll('span')].find((s) => (s.innerText || '').trim().startsWith('期望'));
+      const rowStyle = getComputedStyle(row);
+      return {
+        text: (row.innerText || '').replace(/\s+/g, ' ').trim(),
+        chipText: chip ? (chip.innerText || '').replace(/\s+/g, ' ').trim() : '',
+        chipBg: chipStyle ? chipStyle.backgroundColor : '',
+        chipColor: chipStyle ? chipStyle.color : '',
+        chipWeight: chipStyle ? chipStyle.fontWeight : '',
+        border: rowStyle.borderTopColor,
+        bg: rowStyle.backgroundColor,
+        expectColor: expect ? getComputedStyle(expect).color : '',
+        expectWeight: expect ? getComputedStyle(expect).fontWeight : '',
+      };
+    }, { content: text, column: scope || '' });
+
+    const roseish = (c) => {
+      const m = String(c).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (!m) return false;
+      return Number(m[1]) > 200 && Number(m[2]) < 120 && Number(m[3]) < 150;
+    };
+    const boldEnough = (w) => Number(String(w).replace(/[^\d]/g, '')) >= 700;
+
+    await gotoRetry(page, BASE + '/admin/nudges');
+    await sleep(2200);
+    const sentOverdue = await peekCard(`${CONTENT}-逾期`, 'sent');
+    const sentFuture = await peekCard(`${CONTENT}-未逾期`, 'sent');
+    check('发起人这列：逾期的那条标出「已逾期」并带天数',
+      !!sentOverdue && /^已逾期/.test(sentOverdue.chipText) && /2\s*天/.test(sentOverdue.chipText),
+      JSON.stringify(sentOverdue));
+    check('发起人这列：逾期标记是危险色（红底白字加粗）',
+      !!sentOverdue && roseish(sentOverdue.chipBg) && /255,\s*255,\s*255/.test(sentOverdue.chipColor || '') && boldEnough(sentOverdue.chipWeight),
+      JSON.stringify(sentOverdue));
+    check('发起人这列：整张卡片也是危险色描边/底色',
+      !!sentOverdue && roseish(sentOverdue.border) && roseish(sentOverdue.bg),
+      JSON.stringify(sentOverdue));
+    check('发起人这列：「期望 …」那截也变醒目（红色加粗）',
+      !!sentOverdue && roseish(sentOverdue.expectColor) && boldEnough(sentOverdue.expectWeight),
+      JSON.stringify(sentOverdue));
+    check('发起人这列：期望时间还没到的那条不标「已逾期」',
+      !!sentFuture && sentFuture.chipText === '' && !roseish(sentFuture.border),
+      JSON.stringify(sentFuture));
+
+    // 接收人（「别人提醒我」）那一列同样要标
+    await loginAs(page, PROBE_USER, PROBE_PASS);
+    await gotoRetry(page, BASE + '/admin/nudges');
+    await sleep(2400);
+    const gotOverdue = await peekCard(`${CONTENT}-逾期`, 'received');
+    check('「别人提醒我」这列：逾期的那条也标「已逾期」',
+      !!gotOverdue && /^已逾期/.test(gotOverdue.chipText) && /2\s*天/.test(gotOverdue.chipText) && roseish(gotOverdue.border),
+      JSON.stringify(gotOverdue));
 
     // ---------------- 清理 ----------------
     for (const id of nudgeIds) {

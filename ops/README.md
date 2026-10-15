@@ -46,6 +46,47 @@ APP_URL=http://127.0.0.1:8908 bash browser-harness/run-all.sh
 docker run --rm -v /vol1/1000/Docker/reminders/data:/data alpine:latest sh /dev/stdin < ops/verify-data.sh
 ```
 
+## 临时迭代容器（跑回归用）
+
+回归要一个能随便毁数据的实例，做法是拷一份生产库、起一个独立容器。**关键：拷过来的库带着生产的同步配置，
+必须清掉** —— 否则临时实例会顶着生产账号把「自检…」数据同步进 201/200（2026-10-15 真踩到过：回归跑到一半，
+生产的清单/提醒里被同步进自检条目，删掉之后还会留下成片墓碑；临时实例和沙箱 8908 拷贝自同一份数据时，
+连 `sync_instance_id` 都一样，等于两个实例抢一个身份）。
+
+```bash
+# ① 用 sqlite backup API 做一致性拷贝（正在写的库不要直接 cp），并删掉同步配置
+docker run --rm -v "$PWD/tmp:/t" -v /vol1/1000/Docker/reminders/data:/src:ro python:3.12-alpine python -c "
+import sqlite3, glob, os, shutil
+src = glob.glob('/src/db/*.db')[0]
+os.makedirs('/t/feature-data/db', exist_ok=True)
+for sub in ('logs','uploads'):
+    if os.path.isdir('/src/'+sub): shutil.copytree('/src/'+sub, '/t/feature-data/'+sub, dirs_exist_ok=True)
+dst = '/t/feature-data/db/'+os.path.basename(src)
+c = sqlite3.connect('file:%s?mode=ro' % src, uri=True); d = sqlite3.connect(dst)
+c.backup(d)
+d.execute(\"delete from system_configs where key like 'sync_%'\"); d.commit()
+c.close(); d.close()"
+docker run --rm -v "$PWD/tmp:/t" alpine sh -c 'chown -R 1000:1000 /t/feature-data'
+
+# ② 起容器（--user 1000:1000；只测前端改动时把宿主 web/dist 挂进去就不用重建镜像）
+docker run -d --name wsn-feature -p 8920:8906 --user 1000:1000 \
+  -v "$PWD/web/dist:/app/static/dist:ro" -v "$PWD/tmp/feature-data:/app/data" \
+  -v /etc/localtime:/etc/localtime:ro -e TZ=Asia/Shanghai -e ENV=release -e DATA_DIR=/app/data \
+  workordernote:0.29.0 -data-dir /app/data -web-dir ./static/dist -log-console
+
+# ③ 确认同步是关的：sync_direction 应是 off、sync_peer_url 与 sync_last_at 应为空
+docker run --rm --user root -v "$PWD/tmp/feature-data:/d:ro" python:3.12-alpine python -c "
+import sqlite3,glob
+con=sqlite3.connect('file:%s?mode=ro'%glob.glob('/d/db/*.db')[0],uri=True)
+print(list(con.execute(\"select key,value from system_configs where key like 'sync_%'\")))"
+
+# ④ 跑全量回归（默认打 8908，这里显式指定临时实例）
+APP_URL=http://127.0.0.1:8920 bash browser-harness/run-all.sh
+```
+
+应用启动时会用默认值重建 `sync_*` 键（`sync_direction=off`、peer 为空），所以**只要拷库时清过就不会再连生产**；
+如果没清，启动后 `sync_direction` 会是 `both`/`pull`、`sync_peer_url` 指向生产，看到就说明这份数据不能用来跑回归。
+
 ## 发版时把构件也放进仓库（Gitea）
 
 代码推到 Gitea（`origin` = <http://192.168.3.200:3000/cyberzero/WorkOrderNote>），构件走**两条路**：
