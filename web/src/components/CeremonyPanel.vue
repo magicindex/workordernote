@@ -309,13 +309,19 @@ const dateOpen = ref(false)
 const dateAnchor = ref<HTMLElement | null>(null)
 const editingId = ref<number | null>(null)
 const removeTarget = ref<ReminderItem | null>(null)
+/**
+ * 当前表单来自哪个「婚庆里程碑」模板（0 = 不是里程碑）。
+ * 用户填的是**结婚日期**，保存时换算成「结婚 + N 年」那一天再落库（银婚 25 / 金婚 50 / 钻石婚 60、75）。
+ */
+const milestoneYears = ref(0)
 
 const form = reactive({
   title: '', dueAt: '' as string, repeat: 'yearly', calendar: 'solar', accent: '', background: '',
   bgBlur: 0, bgMask: 45, // 背景蒙板：虚化像素 / 透明度百分比（见 server/reminder/models.go）
-  // 日期这一栏的标题：生日模板写「出生年月日」、纪念日写「结婚年月日」，
-  // 其余（含「新建事项」）还是「日期」——用户 2026-10-13：「选择生日模板日期模板
-  // 改成 出生年月日会不会更好理解」。
+  // 日期这一栏的标题：生日模板写「第一次生日时间」、结婚纪念日/金婚写「结婚日期」、
+  // 情人节/七夕写「第一次情人节 / 第一次七夕」，其余（含「新建事项」）还是「日期」
+  // ——用户 2026-10-13：「选择生日模板日期模板改成 出生年月日会不会更好理解」，
+  // 2026-10-15 又把这几个标题统一成「第一次…」/「结婚日期」。
   dateField: '日期',
 })
 const uploadingBackground = ref(false)
@@ -478,6 +484,18 @@ async function loadLunarAnnual() {
   lunarAnnual.value = out
 }
 
+/**
+ * 年度循环事项的「第几次 / 已过几次」文案（用户 2026-10-15 要求各模板都按「第一次」的日期来数）。
+ *   - 生日：已过 37 次生日 / 第 38 次生日
+ *   - 节日（情人节、七夕、中秋…）：已过 10 次情人节 / 第 11 次情人节
+ *   - 婚龄（结婚纪念日、银婚、金婚、钻石婚）：已过 12 年 / 第 13 周年
+ */
+function anniversaryLabel(title: string, passed: number, isToday: boolean) {
+  if (/银婚|金婚|钻石婚|纪念日|结婚/.test(title)) return isToday ? `第 ${passed + 1} 周年` : `已过 ${passed} 年`
+  const noun = /生日/.test(title) ? '生日' : title
+  return isToday ? `第 ${passed + 1} 次${noun}` : `已过 ${passed} 次${noun}`
+}
+
 const cards = computed(() => items.value
   .map((item) => {
     const lunar = item.calendar === 'lunar'
@@ -492,11 +510,10 @@ const cards = computed(() => items.value
         })())
       : null
     const days = progress ? progress.days : daysUntil(item.due_at)
-    // 「已过 N 次生日」/「第 N 次生日」（今天正是那一次）
-    const noun = /生日/.test(item.title) ? '生日' : ''
+    // 「已过 N 次生日」/「第 N 次生日」（今天正是那一次）；婚龄类写「已过 N 年」/「第 N 周年」
     const passLabel = !progress || progress.passed <= 0
       ? ''
-      : days === 0 ? `第 ${progress.passed + 1} 次${noun}` : `已过 ${progress.passed} 次${noun}`
+      : anniversaryLabel(item.title, progress.passed, days === 0)
     return {
       ...item,
       icon: item.kind === 'note' ? 'notebook' : (item.repeat_rule === 'yearly' && /生日|纪念/.test(item.title) ? 'cake' : 'ceremony'),
@@ -549,6 +566,7 @@ onMounted(() => { if (!items.value.length) void load() })
  * 背景图与蒙板（2026-10-13 实测踩到：三张模板卡片被写进了 preset: 背景）。
  */
 function resetForm(overrides: Partial<typeof form> = {}) {
+  milestoneYears.value = 0
   Object.assign(form, {
     title: '', dueAt: '', repeat: 'yearly', calendar: 'solar',
     accent: '', background: '', bgBlur: 0, bgMask: 45, dateField: '日期',
@@ -564,8 +582,18 @@ function openCreate() {
   createOpen.value = true
 }
 
+/** 日期这一栏的标题：按卡片名字猜（模板创建与编辑已有卡片走同一套口径）。 */
+function dateFieldForTitle(title: string) {
+  if (/生日/.test(title)) return '第一次生日时间'
+  if (/情人节/.test(title)) return '第一次情人节'
+  if (/七夕/.test(title)) return '第一次七夕'
+  if (/银婚|金婚|钻石婚|结婚|纪念日/.test(title)) return '结婚日期'
+  return '日期'
+}
+
 function edit(entry: ReminderItem) {
   editingId.value = entry.id
+  milestoneYears.value = 0
   Object.assign(form, {
     title: entry.title,
     dueAt: entry.due_at || '',
@@ -575,7 +603,7 @@ function edit(entry: ReminderItem) {
     background: entry.background || '',
     bgBlur: entry.bg_blur ?? 0,
     bgMask: entry.bg_mask ?? 45,
-    dateField: /生日/.test(entry.title) ? '出生年月日' : /纪念|金婚/.test(entry.title) ? '结婚年月日' : '日期',
+    dateField: dateFieldForTitle(entry.title),
   })
   createOpen.value = true
 }
@@ -621,6 +649,19 @@ async function save() {
       bg_mask: form.bgMask,
       channels: ['inapp'],
     }
+    // 婚庆里程碑模板（银婚 25 / 金婚 50 / 钻石婚 60、75）：用户填的是**结婚日期**，
+    // 卡片要倒计时到「结婚 + N 年」那一天，所以在这里换算 due_at（不每年重复，用户要的是
+    // 「离金婚还差多少天」）。原始结婚日期写进备注，免得以后看不出这张卡是怎么算出来的。
+    if (milestoneYears.value > 0 && payload.due_at) {
+      const wedding = new Date(payload.due_at)
+      if (!Number.isNaN(wedding.getTime())) {
+        const day = new Date(wedding.getFullYear() + milestoneYears.value, wedding.getMonth(), wedding.getDate(), wedding.getHours(), wedding.getMinutes(), 0, 0)
+        // 2 月 29 日结婚、周年落在平年时：退回那个月的最后一天（2 月 28 日）
+        if (day.getMonth() !== wedding.getMonth()) day.setDate(0)
+        payload.notes = `结婚日期：${wedding.getFullYear()}年${wedding.getMonth() + 1}月${wedding.getDate()}日（${milestoneYears.value} 周年倒计时）`
+        payload.due_at = toLocalIso(day)
+      }
+    }
     if (editingId.value) await updateReminder(editingId.value, { ...payload, version: items.value.find((i) => i.id === editingId.value)?.version })
     else await createReminder(payload)
     createOpen.value = false
@@ -652,17 +693,27 @@ async function confirmRemove() {
 
 /**
  * 常用事项模板。
- * needsDate = 需要用户填日期（生日/纪念日/考试），其余是固定日期的节日（自动算下一次）。
+ * needsDate = 需要用户填日期（生日/纪念日/节日/考试），其余是固定日期的节日（自动算下一次）。
+ * milestone = 婚庆里程碑的周年数（银婚 25 / 金婚 50 / 钻石婚 60、75）：用户填的是结婚日期，
+ *   保存时换算成「结婚 + N 年」那一天再落库（不每年重复）。
  * lunar = 按农历月日（七夕/中秋/春节…），创建时用服务端的农历换算接口算下一次的公历日期，
  * 并把农历锚点一起存进去（这样每年都能按农历重复）。
  */
-const PRESETS: { key: string; label: string; hint: string; icon: string; title: string; needsDate?: boolean; lunar?: boolean; month?: number; day?: number; dateField?: string }[] = [
-  { key: 'birthday-solar', label: '生日（公历）', hint: '填出生日期，每年重复', icon: 'cake', title: '生日', needsDate: true, dateField: '出生年月日' },
-  { key: 'birthday-lunar', label: '生日（农历）', hint: '填农历生日，每年按农历重复', icon: 'cake', title: '生日', needsDate: true, lunar: true, dateField: '出生年月日' },
-  { key: 'anniversary', label: '结婚纪念日', hint: '填结婚日期，每年重复', icon: 'ceremony', title: '结婚纪念日', needsDate: true, dateField: '结婚年月日' },
-  { key: 'golden-wedding', label: '金婚纪念', hint: '结婚 50 周年（填结婚日期）', icon: 'ceremony', title: '金婚纪念', needsDate: true, dateField: '结婚年月日' },
-  { key: 'valentine', label: '情人节', hint: '2 月 14 日', icon: 'ceremony', title: '情人节', month: 2, day: 14 },
-  { key: 'qixi', label: '七夕', hint: '农历七月初七', icon: 'ceremony', title: '七夕', lunar: true, month: 7, day: 7 },
+const PRESETS: { key: string; label: string; hint: string; icon: string; title: string; needsDate?: boolean; lunar?: boolean; month?: number; day?: number; dateField?: string; milestone?: number }[] = [
+  { key: 'birthday-solar', label: '生日（公历）', hint: '填第一次过生日的时间，每年重复', icon: 'cake', title: '生日', needsDate: true, dateField: '第一次生日时间' },
+  { key: 'birthday-lunar', label: '生日（农历）', hint: '填第一次过生日的农历日期，每年按农历重复', icon: 'cake', title: '生日', needsDate: true, lunar: true, dateField: '第一次生日时间' },
+  { key: 'anniversary', label: '结婚纪念日', hint: '填结婚日期，每年重复', icon: 'ceremony', title: '结婚纪念日', needsDate: true, dateField: '结婚日期' },
+  // 婚庆里程碑（用户 2026-10-15：「25 年是银婚，50 年是金婚，60 年或 75 年是钻石婚，补充进模板」）：
+  // 填的是**结婚日期**，卡片直接倒计时到「结婚 + N 年」那一天，不每年重复 —— 离金婚还差多少天一眼看清。
+  { key: 'silver-wedding', label: '银婚纪念', hint: '结婚 25 周年（填结婚日期，倒计时到那天）', icon: 'ceremony', title: '银婚纪念', needsDate: true, milestone: 25, dateField: '结婚日期' },
+  { key: 'golden-wedding', label: '金婚纪念', hint: '结婚 50 周年（填结婚日期，倒计时到那天）', icon: 'ceremony', title: '金婚纪念', needsDate: true, milestone: 50, dateField: '结婚日期' },
+  { key: 'diamond-wedding-60', label: '钻石婚纪念（60 周年）', hint: '结婚 60 周年（填结婚日期，倒计时到那天）', icon: 'ceremony', title: '钻石婚纪念', needsDate: true, milestone: 60, dateField: '结婚日期' },
+  { key: 'diamond-wedding-75', label: '钻石婚纪念（75 周年）', hint: '结婚 75 周年（填结婚日期，倒计时到那天）', icon: 'ceremony', title: '钻石婚纪念', needsDate: true, milestone: 75, dateField: '结婚日期' },
+  // 情人节 / 七夕：以前是「固定日期，自动算下一次」，现在改成**填第一次**
+  // （用户 2026-10-15：「情人节：第一次情人节，七夕：第一次七夕」）——
+  // 有了第一次，卡片才算得出「已过 N 次情人节」「第 N 次七夕」。
+  { key: 'valentine', label: '情人节', hint: '填第一次情人节，每年重复', icon: 'ceremony', title: '情人节', needsDate: true, dateField: '第一次情人节' },
+  { key: 'qixi', label: '七夕', hint: '填第一次七夕（农历七月初七），每年按农历重复', icon: 'ceremony', title: '七夕', needsDate: true, lunar: true, dateField: '第一次七夕' },
   { key: 'mid-autumn', label: '中秋', hint: '农历八月十五', icon: 'ceremony', title: '中秋节', lunar: true, month: 8, day: 15 },
   { key: 'spring-festival', label: '春节', hint: '农历正月初一', icon: 'ceremony', title: '春节', lunar: true, month: 1, day: 1 },
   { key: 'dragon-boat', label: '端午', hint: '农历五月初五', icon: 'ceremony', title: '端午节', lunar: true, month: 5, day: 5 },
@@ -707,11 +758,13 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
     resetForm({
       title: preset.title,
       dueAt: toLocalIso(d),
-      repeat: 'yearly',
+      // 婚庆里程碑（银婚/金婚/钻石婚）是**一次性**倒计时（结婚 + N 年那天），不是每年重复
+      repeat: preset.milestone ? 'none' : 'yearly',
       calendar: preset.lunar ? 'lunar' : 'solar',
-      // 「出生年月日」/「结婚年月日」比干巴巴一个「日期」好懂
+      // 「第一次生日时间」/「结婚日期」/「第一次情人节」比干巴巴一个「日期」好懂
       dateField: preset.dateField || '日期',
     })
+    milestoneYears.value = preset.milestone || 0
     presetOpen.value = false
     createOpen.value = true
     return

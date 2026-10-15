@@ -130,7 +130,7 @@ const madeIds = [];
       await sleep(1800);
       return clicked;
     };
-    check('能打开「常用事项模板」并点到情人节', await createByPreset('valentine'));
+    check('能打开「常用事项模板」并点到国庆节', await createByPreset('national-day'));
     check('能一键创建中秋节（农历八月十五）', await createByPreset('mid-autumn'));
 
     const cardOf = async (titlePart) => page.evaluate((t) => {
@@ -145,10 +145,31 @@ const madeIds = [];
         cycle: card.querySelector('[data-ceremony-cycle]')?.textContent.trim() || '',
       };
     }, titlePart);
+    const national = await cardOf('国庆');
+    check('国庆节卡片出现，倒计时是天数、日期落在 10 月 1 日',
+      !!national && /还有 \d+ 天|今天|明天/.test(national.countdown) && /10月1日/.test(national.meta),
+      JSON.stringify(national));
+    // 情人节改成「填第一次」（用户 2026-10-15：情人节：第一次情人节；七夕：第一次七夕）：
+    // 点模板先出表单（日期栏写「第一次情人节」、默认每年重复），填完保存才见卡片。
+    // valentine 还要留给下面第 5 段查「第 1 次」角标。
+    await page.evaluate(() => document.querySelector('[data-ceremony-presets]').click());
+    await sleep(500);
+    await page.evaluate(() => document.querySelector('[data-ceremony-preset="valentine"]')?.click());
+    await sleep(900);
+    const valentineForm = await page.evaluate(() => ({
+      open: !!document.querySelector('[data-ceremony-form-date]'),
+      label: (document.querySelector('[data-ceremony-form-date]')?.closest('.field-label')?.textContent || '').replace(/\s+/g, ' ').trim(),
+      repeat: document.querySelector('[data-ceremony-form-repeat]')?.value || '',
+      title: document.querySelector('[data-ceremony-form-title]')?.value || '',
+    }));
+    check('点「情人节」模板先打开表单，日期栏写「第一次情人节」',
+      valentineForm.open && /第一次情人节/.test(valentineForm.label), JSON.stringify(valentineForm));
+    check('情人节模板默认按「每年」重复', valentineForm.repeat === 'yearly', JSON.stringify(valentineForm.repeat));
+    await page.evaluate(() => document.querySelector('[data-ceremony-form-save]')?.click());
+    await sleep(2200);
     const valentine = await cardOf('情人节');
-    check('情人节卡片出现，倒计时是天数、日期落在 2 月 14 日',
-      !!valentine && /还有 \d+ 天|今天|明天/.test(valentine.countdown) && /2月14日/.test(valentine.meta),
-      JSON.stringify(valentine));
+    check('保存后情人节卡片出现，标了「每年」',
+      !!valentine && valentine.meta.includes('每年'), JSON.stringify(valentine));
     const midAutumn = await cardOf('中秋');
     check('中秋卡片出现，标了「农历」并且每年重复',
       !!midAutumn && midAutumn.meta.includes('农历') && midAutumn.meta.includes('每年'),

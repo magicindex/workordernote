@@ -27,6 +27,7 @@ server/static/dist/
 dev/
 build/
 release/
+pkg/
 dist/
 *.tar.gz
 

@@ -182,7 +182,7 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       !!lunarCard && !/已过\s*\d{4,}/.test(lunarCard.countdown) && Number(lunarCard.days) >= 0,
       JSON.stringify(lunarCard));
 
-    // 生日模板 → 日期栏标题应该是「出生年月日」
+    // 生日模板 → 日期栏标题应该写「第一次生日时间」（用户 2026-10-15 定的口径）
     await gotoRetry(page, BASE + `/admin/list/${ceremonyListId}`);
     await sleep(2500);
     await page.evaluate(() => document.querySelector('[data-ceremony-presets]')?.click());
@@ -200,7 +200,7 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       const wrap = form?.closest('.field-label');
       return wrap ? (wrap.textContent || '').replace(/\s+/g, ' ').trim() : '';
     });
-    check('生日模板里日期栏写的是「出生年月日」', /出生年月日/.test(label), JSON.stringify(label));
+    check('生日模板里日期栏写的是「第一次生日时间」', /第一次生日时间/.test(label), JSON.stringify(label));
     await page.evaluate(() => {
       const btn = [...document.querySelectorAll('button')].find((b) => (b.innerText || '').trim() === '取消');
       if (btn) btn.click();
