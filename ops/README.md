@@ -77,6 +77,22 @@ docker run --rm -v "$PWD/pkg/WorkOrderNote-$VERSION-offline/image":/src:ro alpin
 镜像仓库是 **HTTP**，本机已把 `192.168.3.200:3000` 写进 docker 的 `insecure-registries`，
 可以直接 `docker pull 192.168.3.200:3000/cyberzero/workordernote:<版本>`。
 
+> **推送路径补充（2026-10-15 实测）**：本仓库的 `origin` 现在是 CIFS 路径
+> `/vol02/1000-0-aea4b1f9/gitea/data/git/repositories/cyberzero/workordernote.git`；
+> **直接推这个路径会被 Gitea 钩子拒**（`pre-receive.d/gitea: /usr/local/bin/gitea: No such file
+> or directory`，因为钩子在 201 本机跑、本机没有 gitea 二进制）。改推 HTTP 端点即可：
+>
+> ```bash
+> printf 'http://cyberzero:<密码或令牌>@192.168.3.200:3000\n' > /tmp/.gcr && chmod 600 /tmp/.gcr
+> git -c credential.helper="store --file=/tmp/.gcr" push \
+>   http://192.168.3.200:3000/cyberzero/WorkOrderNote.git main
+> rm -f /tmp/.gcr
+> ```
+>
+> 凭据与容器仓库同一账号，可从 `~/.docker/config.json` 的
+> `auths["192.168.3.200:3000"].auth`（base64 `用户名:密码/令牌`）解出；令牌就是
+> Gitea「设置 → 应用」里的 `workordernote-push`。
+
 推完可以回读校验：`skopeo inspect --tls-verify=false --creds ... docker://192.168.3.200:3000/cyberzero/workordernote:$VERSION`。
 本机要直接 `docker pull` 这个仓库，得先把 `192.168.3.200:3000` 加进 daemon 的 `insecure-registries`（HTTP）。
 
