@@ -69,7 +69,16 @@ cp fnpack/manifest fnpack/manifest.bak
 for ARCH in "amd64" "arm64"; do
   echo "Building fnOS package for ${ARCH}..."
 
+  # arm64 要能在本机跑 linux/arm64 容器（binfmt 里的 qemu-aarch64）。没有就直接跳过，
+  # 别拿一个必然失败（或卡在 apk 下载上）的架构拖住整轮发布。
+  if [ "${ARCH}" = "arm64" ] && [ ! -e /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
+    echo "  跳过 arm64：本机没有 qemu-aarch64，Docker 跑不了 linux/arm64 容器"
+    continue
+  fi
+
   echo "  Compiling Go binary via Docker (CGO_ENABLED=1, linux/${ARCH})..."
+  # apk 源换成国内镜像：dl-cdn.alpinelinux.org 在 NAS 上不可达，直接用官方源会挂在
+  # 「Installing gcc」上不动（2026-10-16 实测 27 分钟零进度）。与 Dockerfile.custom 同一套源。
   docker run --rm \
     -v "${ROOT_DIR}/server:/src" \
     -v "go-build-cache:/root/.cache/go-build" \
@@ -79,7 +88,7 @@ for ARCH in "amd64" "arm64"; do
     -e "LDFLAGS=${LDFLAGS}" \
     -e "ARCH=${ARCH}" \
     golang:1.26-alpine \
-    sh -c 'for i in 1 2 3; do apk add --no-cache gcc musl-dev && break; echo "apk retry $i"; sleep 5; done && CGO_ENABLED=1 go build -ldflags "$LDFLAGS -extldflags -static" -o "reminder-linux-${ARCH}" .'
+    sh -c 'sed -i "s|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g" /etc/apk/repositories; for i in 1 2 3; do apk add --no-cache gcc musl-dev && break; echo "apk retry $i"; sleep 5; done && CGO_ENABLED=1 go build -ldflags "$LDFLAGS -extldflags -static" -o "reminder-linux-${ARCH}" .'
 
   # Prepare build directory
   BUILD_PACK="${BUILD_DIR}/${APP_NAME}_${ARCH}"
