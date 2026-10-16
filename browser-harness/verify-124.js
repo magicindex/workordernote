@@ -4,7 +4,8 @@
  *   「继续 ai 接口开发，相关 key、模型什么的做成通用样式，通过后台填写实现。」
  *
  * 这一套钉住四件事：
- *   1) 侧栏「呼叫小秘」能开能关：未接模型时状态行如实说明，回答仍是本地占位文案；
+ *   1) 侧栏「呼叫小秘」能开能关：未接模型时状态行如实说明；点「写这周的周报」这类问法会带上
+ *      工作数据，未接模型时给的是按记录整理的**数据草稿**（2026-10-16 起，见 verify-130）；
  *   2) 模型参数（服务商 / 接口地址 / API Key / 模型名 / 提示词 / 超时）都在
  *      「系统配置 → AI 助手」里填，服务商只是**预设**，换厂家不用改代码；
  *   3) API Key 只存服务端：面板不回显明文，通用配置接口（/api/configs/meta）也读不到（ai_* 全是 Internal）；
@@ -95,13 +96,16 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
 
     const chips = await page.evaluate(() => [...document.querySelectorAll('[data-assistant-chip]')]
       .map((b) => (b.textContent || '').trim()));
-    check('空状态给了 3 个快捷问法', chips.length === 3, JSON.stringify(chips));
+    check('空状态给了 5 个快捷问法（周报/月报/年报/没做完/工作清单）',
+      chips.length === 5 && chips.some((c) => c.includes('周报')) && chips.some((c) => c.includes('月报'))
+        && chips.some((c) => c.includes('年报')) && chips.some((c) => c.includes('没做完')),
+      JSON.stringify(chips));
 
     await page.evaluate(() => {
       const chip = [...document.querySelectorAll('[data-assistant-chip]')].find((b) => (b.textContent || '').includes('周报'));
       if (chip) chip.click();
     });
-    await sleep(preLive ? 12000 : 1800);
+    await sleep(preLive ? 12000 : 2500);
     const afterChip = await bubblesOf(page);
     check('点快捷问法后一问一答', afterChip.length === 2 && afterChip[0].role === 'user' && afterChip[1].role === 'assistant',
       JSON.stringify(afterChip.map((b) => b.role)));
@@ -110,7 +114,13 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
         (afterChip[1]?.text || '').length > 0 && !/占位/.test(afterChip[1]?.text || ''),
         (afterChip[1]?.text || '').slice(0, 30));
     } else {
-      check('未接模型时回答的是本地占位文案', /占位/.test(afterChip[1]?.text || ''), (afterChip[1]?.text || '').slice(0, 30));
+      // 2026-10-16 起：点「写这周的周报」这类问法会带上工作数据，没接模型时也给**数据草稿**
+      // （用户要求「不接模型也要出草稿」），所以这里不再断言本地占位文案。
+      check('未接模型时点周报问法给的是按记录整理的草稿（不是一句空话）',
+        /工作草稿/.test(afterChip[1]?.text || '') && /合计：完成/.test(afterChip[1]?.text || ''),
+        (afterChip[1]?.text || '').slice(0, 60));
+      check('草稿里写明了这是草稿、接上模型才润色',
+        /没有经过模型润色/.test(afterChip[1]?.text || ''), (afterChip[1]?.text || '').slice(0, 80));
     }
 
     await fill(page, '[data-assistant-input]', '今天还剩什么没做');

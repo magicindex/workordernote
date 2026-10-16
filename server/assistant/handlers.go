@@ -49,32 +49,64 @@ func handleStatus(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// handleChat 是「呼叫小秘」唯一的对话入口：前端把整段对话发过来，这里加上
-// 后台配置的系统提示词，转发给模型，再把这一轮的回复返回。
+// handleChat 是「呼叫小秘」唯一的对话入口：前端把整段对话发过来，这里按需
+// 附上真实工作数据、加上后台配置的系统提示词，转发给模型，再把回复返回。
+//
+// 两种模式：
+//
+//   - mode "model"：模型可用，数据随系统消息一起下发，模型据此作答；
+//   - mode "draft"：模型还没接上（未启用/参数没填完），但用户要的是周报这类
+//     数据问题——直接按真实数据回一份草稿。这样「周报」按钮任何时候点下去
+//     都有内容，而不是一句「请先配置模型」。
 //
 // 密钥只在服务端：前端从头到尾拿不到 API Key，也就不存在「浏览器直连模型、
 // 把密钥写进前端」的漏洞面。
 func handleChat(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body struct {
-			Messages []Message `json:"messages"`
+			Messages []Message    `json:"messages"`
+			Digest   *digestInput `json:"digest,omitempty"`
 		}
 		if err := c.ShouldBindJSON(&body); err != nil {
 			response.ErrorBadRequest(c, "请求格式不对：需要 { messages: [{ role, content }] }")
 			return
 		}
-		settings := loadSettings(db)
-		if !settings.Enabled {
-			response.ErrorBadRequest(c, "AI 助手未启用：请在「系统配置 → AI 助手」里开启并填好模型参数")
-			return
-		}
-		if reason := settings.blockedReason(false); reason != "" {
-			response.ErrorBadRequest(c, "AI 助手配置还没填完："+reason+"（系统配置 → AI 助手）")
-			return
-		}
 		messages, err := normalizeMessages(body.Messages)
 		if err != nil {
 			response.ErrorBadRequest(c, err.Error())
+			return
+		}
+		started := time.Now()
+		settings := loadSettings(db)
+		active := settings.active()
+
+		// 取数据不依赖模型：即使模型没接上，也要能据此出草稿。
+		digest, found, err := resolveDigest(db, c.GetUint("userID"), body.Digest, messages)
+		if err != nil {
+			response.ErrorBadRequest(c, err.Error())
+			return
+		}
+
+		if found && !active {
+			logger.Info("assistant: 未接入模型，直接按工作数据出草稿（%s，完成 %d / 未完成 %d）",
+				digest.Label, digest.Completed, digest.Open)
+			response.Success(c, gin.H{
+				"reply":       digest.Draft,
+				"mode":        "draft",
+				"model":       "",
+				"reason":      settings.blockedReason(true),
+				"usage":       gin.H{"prompt_tokens": 0, "completion_tokens": 0},
+				"duration_ms": time.Since(started).Milliseconds(),
+				"digest":      viewOfDigest(digest),
+			})
+			return
+		}
+		if !active {
+			if !settings.Enabled {
+				response.ErrorBadRequest(c, "AI 助手未启用：请在「系统配置 → AI 助手」里开启并填好模型参数")
+				return
+			}
+			response.ErrorBadRequest(c, "AI 助手配置还没填完："+settings.blockedReason(false)+"（系统配置 → AI 助手）")
 			return
 		}
 		select {
@@ -86,10 +118,12 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		payload := messages
-		if settings.SystemPrompt != "" {
+		switch {
+		case found:
+			payload = append([]Message{{Role: "system", Content: digestSystemPrompt(settings.SystemPrompt, digest)}}, messages...)
+		case settings.SystemPrompt != "":
 			payload = append([]Message{{Role: "system", Content: settings.SystemPrompt}}, messages...)
 		}
-		started := time.Now()
 		result, err := newClient(settings).Chat(c.Request.Context(), payload)
 		if err != nil {
 			// 日志里**不写密钥**：apiError 的文案里本来就没有密钥，上游原文可能
@@ -100,14 +134,20 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 		}
 		logger.Info("assistant: 对话完成（model=%s，耗时 %dms，提示 %d / 回复 %d tokens）",
 			result.Model, time.Since(started).Milliseconds(), result.PromptTokens, result.CompletionTokens)
+		var digestPayload *digestView
+		if found {
+			digestPayload = viewOfDigest(digest)
+		}
 		response.Success(c, gin.H{
 			"reply": result.Reply,
+			"mode":  "model",
 			"model": result.Model,
 			"usage": gin.H{
 				"prompt_tokens":     result.PromptTokens,
 				"completion_tokens": result.CompletionTokens,
 			},
 			"duration_ms": time.Since(started).Milliseconds(),
+			"digest":      digestPayload,
 		})
 	}
 }

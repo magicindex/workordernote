@@ -117,6 +117,30 @@ async function main() {
       check('服务端自己加了 system 提示词', msgs[0]?.role === 'system' && /小秘/.test(String(msgs[0]?.content || '')), JSON.stringify(msgs[0]));
       check('用户那句原样带上', msgs[1]?.role === 'user' && msgs[1]?.content === '你好，帮我看看链路通不通', JSON.stringify(msgs[1]));
 
+      // 4.5) 带上工作数据再问一次：模型收到的 system 里要能看到【工作数据】
+      const stamp = `AIMG${Date.now().toString(36)}`;
+      const made = await api(page, '/api/reminder/items', 'POST', {
+        title: `${stamp}桩实测完成`, due_at: new Date().toISOString(), repeat_rule: 'none', channels: ['inapp'],
+      });
+      const madeId = made.body?.data?.id ?? null;
+      if (madeId) await api(page, `/api/reminder/items/${madeId}/complete`, 'POST', {});
+      const seenBefore = seen.length;
+      const digestChat = await api(page, '/api/assistant/chat', 'POST', {
+        messages: [{ role: 'user', content: '帮我写这周的周报' }],
+        digest: { option: 'week' },
+      });
+      const ddata = digestChat.body?.data || {};
+      check('带工作数据提问仍然走模型（mode=model）', digestChat.body?.code === 0 && ddata.mode === 'model', JSON.stringify(digestChat.body).slice(0, 240));
+      const digestReq = seen.slice(seenBefore).find((r) => r.method === 'POST' && r.url.includes('/chat/completions'));
+      const dmsgs = (digestReq && digestReq.body && digestReq.body.messages) || [];
+      const dsystem = String(dmsgs[0]?.content || '');
+      check('模型收到的 system 里有【工作数据】段', /【工作数据】/.test(dsystem), dsystem.slice(0, 200));
+      check('自检那条已完成任务进了给模型的资料', dsystem.includes(`${stamp}桩实测完成`), dsystem.slice(0, 400));
+      check('回复带数据摘要回执（前端据此写「已附上数据」）',
+        !!ddata.digest && ddata.digest.option === 'week' && (ddata.digest.completed || 0) >= 1 && (ddata.digest.lists || 0) >= 1,
+        JSON.stringify(ddata.digest).slice(0, 240));
+      if (madeId) await api(page, `/api/reminder/items/${madeId}`, 'DELETE');
+
       // 5) 面板：状态行与真回复
       await page.goto(`${BASE}/admin/home`, { waitUntil: 'networkidle2' });
       await sleep(500);

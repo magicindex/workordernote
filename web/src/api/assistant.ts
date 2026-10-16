@@ -45,23 +45,77 @@ export async function getAssistantStatus(): Promise<AssistantStatus | null> {
 }
 
 /**
- * 把整段对话发给后端模型，取回这一轮的回复。
+ * 面板上选定的「要附上的工作数据」口径。
+ *
+ * 不传（或 option/keyword 都空）时，后端会看一眼用户这句话里有没有「上周」
+ * 「近 7 天」这类时间词，认得出来就自动附数据、认不出来就按普通聊天走。
+ * option 与「已完成」页的筛选同名，另有 `open` 表示「当前还没做完」。
+ */
+export interface AssistantDigestInput {
+  option: string
+  from?: string
+  to?: string
+  keyword?: string
+}
+
+/** 后端回报的「这一轮附上了什么数据」，面板据此显示一行摘要。 */
+export interface AssistantDigestView {
+  option: string
+  label: string
+  start?: string
+  end?: string
+  keyword?: string
+  completed: number
+  open: number
+  overdue: number
+  notes: number
+  lists: number
+  truncated: boolean
+}
+
+/** 一轮回复：`mode='draft'` 表示后台还没接模型，内容是服务端按记录生成的草稿。 */
+export interface AssistantReply {
+  reply: string
+  mode: 'model' | 'draft'
+  model: string
+  reason: string
+  digest: AssistantDigestView | null
+}
+
+/**
+ * 把整段对话发给后端模型，取回这一轮的回复；`digest` 非空时会把工作数据一起
+ * 附上（周报 / 月报 / 工作清单这些问法必须带数据，否则模型只能凭空编）。
  *
  * 超时单独放宽：模型回答常常要十几秒到一分钟，全局那 30 秒会把它掐断，
  * 而用户看到的是「网络错误」——排查方向完全被带偏。默认 180 秒只是兜底，
  * 面板会按后端配置（系统配置 → AI 助手 → 请求超时）传更合适的值：
  * 本地模型（Ollama）首次说话要等模型加载，可能好几分钟。
  */
-export async function chatWithAssistant(messages: AssistantMessage[], timeoutMs = 180000): Promise<string> {
-  const res = await request.post('/api/assistant/chat', { messages }, { timeout: timeoutMs })
+export async function chatWithAssistant(
+  messages: AssistantMessage[],
+  digest?: AssistantDigestInput | null,
+  timeoutMs = 180000,
+): Promise<AssistantReply> {
+  const res = await request.post(
+    '/api/assistant/chat',
+    digest ? { messages, digest } : { messages },
+    { timeout: timeoutMs },
+  )
   if (res.data?.code !== 0) {
     throw new Error(res.data?.message || '对话失败')
   }
-  const reply = String(res.data?.data?.reply || '').trim()
+  const data = res.data?.data || {}
+  const reply = String(data.reply || '').trim()
   if (!reply) {
     throw new Error('模型没有返回内容')
   }
-  return reply
+  return {
+    reply,
+    mode: data.mode === 'draft' ? 'draft' : 'model',
+    model: String(data.model || ''),
+    reason: String(data.reason || ''),
+    digest: (data.digest as AssistantDigestView | null) ?? null,
+  }
 }
 
 /** 一个服务商预设：只给默认地址、常见模型名与密钥申请入口，控件本身是通用的。 */
