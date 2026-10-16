@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"smallgo/server/apps"
+	"smallgo/server/assistant"
 	"smallgo/server/audit"
 	"smallgo/server/config"
 	"smallgo/server/database"
@@ -450,6 +451,10 @@ func NewRouter(cfg config.Config, db *gorm.DB, jwtSecret string) *gin.Engine {
 
 	// Admin operation log (browse + CSV export).
 	audit.RegisterRoutes(adminGroup, db)
+
+	// AI 助手（「呼叫小秘」）：对话给登录用户，模型参数（服务商/地址/密钥/模型名）
+	// 只给管理员，密钥读接口只回掩码。见 server/assistant 包注释。
+	assistant.RegisterRoutes(authGroup, adminGroup, db)
 
 	// Register apps from the registry (includes the qrcode example app).
 	apps.SetupAll(publicGroup, db)

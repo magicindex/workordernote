@@ -343,12 +343,29 @@ export const doneNudge = (id: number) => request.post(`/api/reminder/nudges/${id
 export const deleteNudge = (id: number) => request.delete(`/api/reminder/nudges/${id}`)
 
 export const getNotifications = () => request.get('/api/reminder/notifications')
-export const getUnreadCount = () => request.get('/api/reminder/notifications/unread-count')
 export const markNotificationRead = (id: number) => request.post(`/api/reminder/notifications/${id}/read`)
 export const markAllNotificationsRead = () => request.post('/api/reminder/notifications/read-all')
 // 跨设备同步的轻量探针：只回一个单调递增的修订号。SSE 万一被中间代理缓冲，前端
 // 靠定时比对它也能发现「另一台设备改过数据」并刷新（见 MainLayout 的 pollRevision）。
 export const getRevision = () => request.get('/api/reminder/revision')
+
+/**
+ * 免打扰（用户 2026-10-16）：首行铃铛旁边那个喇叭/静音按钮。
+ * 状态的权威在服务端 —— manual 是用户自己点出来的开关（dnd_manual），
+ * window_* 是后台「系统配置 → 免打扰」的时间段，active = 两者任一成立。
+ */
+export interface DNDState {
+  manual: boolean
+  window_enabled: boolean
+  window_start: string
+  window_end: string
+  in_window: boolean
+  active: boolean
+  reason: string
+}
+
+export const getDNDState = () => request.get('/api/reminder/dnd')
+export const setDNDManual = (manual: boolean) => request.put('/api/reminder/dnd', { manual })
 
 export const getChannelStatuses = () => request.get('/api/reminder/channels')
 export const bindChannel = (channel: ReminderChannel, target: string) =>
@@ -527,7 +544,6 @@ export const getCards = (listId?: number) =>
 export const createCard = (data: CardInput) => request.post('/api/reminder/cards', data)
 export const updateCard = (id: number, data: CardInput) => request.patch(`/api/reminder/cards/${id}`, data)
 export const deleteCard = (id: number) => request.delete(`/api/reminder/cards/${id}`)
-export const regenerateCardPlan = (id: number) => request.post(`/api/reminder/cards/${id}/plan`)
 
 // 「账单已出、当期未还」的卡：信用卡页头部那条时间卡片右半边用的数据。
 // 口径见后端 card_billing.go：账单日过了且这一期没还的卡才进来，逾期与「还款日前 3 天」

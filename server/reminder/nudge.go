@@ -39,11 +39,11 @@ const (
 )
 
 type Nudge struct {
-	ID         uint           `gorm:"primarykey" json:"id"`
-	FromUserID uint           `gorm:"not null;index:idx_nudges_from" json:"from_user_id"`
-	ToUserID   uint           `gorm:"not null;index:idx_nudges_to" json:"to_user_id"`
-	Content    string         `gorm:"size:200;not null" json:"content"`
-	Note       string         `gorm:"size:500" json:"note"`
+	ID         uint   `gorm:"primarykey" json:"id"`
+	FromUserID uint   `gorm:"not null;index:idx_nudges_from" json:"from_user_id"`
+	ToUserID   uint   `gorm:"not null;index:idx_nudges_to" json:"to_user_id"`
+	Content    string `gorm:"size:200;not null" json:"content"`
+	Note       string `gorm:"size:500" json:"note"`
 	// DueAt 是发起人希望对方什么时候做完（可选，前端按日期+时间填）。
 	// 它**不参与调度**：到点不会自动弹窗、也不算逾期 —— 提醒本身由对方那一侧的
 	// 站内通知承担。留着它是让接收人一眼看到「他说的是什么时候」。
@@ -329,9 +329,10 @@ func handleDoneNudge(db *gorm.DB) gin.HandlerFunc {
 //
 // 只有**接收人**能存（发起人自己那条本来就在自己的清单里）；已经存过的不再重复建，
 // 直接把现有的那条返回（幂等）。存下来的任务：
-//   · 标题 = 提醒内容，备注 = 备注 +「来自 X 的提醒」；
-//   · 结束时间 = 提醒里写的期望时间（有就用），否则**今天 23:59**（与新建提醒一致）；
-//   · 只上站内通知（和别处一样，其它渠道要用户自己绑定）。
+//
+//	· 标题 = 提醒内容，备注 = 备注 +「来自 X 的提醒」；
+//	· 结束时间 = 提醒里写的期望时间（有就用），否则**今天 23:59**（与新建提醒一致）；
+//	· 只上站内通知（和别处一样，其它渠道要用户自己绑定）。
 func handleSaveNudgeToReminder(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		me := currentUserID(c)
@@ -485,12 +486,19 @@ func loadNudgeFor(db *gorm.DB, c *gin.Context, me uint, requireRecipient bool) (
 
 // notifyNudge 写一条站内通知并实时推给那个人（在线时立刻出现在消息面板）。
 // 通知失败不影响主流程：提醒本身已经落库了，不该因为一条通知回滚。
+//
+// 免打扰（用户 2026-10-16，见 dnd.go）：免打扰期间**照样写通知**（通知中心里留着，
+// 未读角标照常累积），只是不实时推给前端 —— 前端弹窗与提示音都从实时事件来，
+// 不推就等于不打扰；等用户自己关了免打扰，进来还能在通知中心看到。
 func notifyNudge(db *gorm.DB, userID uint, kind, title, body string) {
 	if userID == 0 {
 		return
 	}
 	notification := Notification{UserID: userID, Type: kind, Title: truncateRunes(title, 100), Body: truncateRunes(body, 200)}
 	if err := db.Create(&notification).Error; err != nil {
+		return
+	}
+	if dndBlocked(db, userID, time.Now()) {
 		return
 	}
 	publishNotification(notification)

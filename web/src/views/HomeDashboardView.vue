@@ -12,9 +12,15 @@
           <b class="text-sky-500">后</b>=后天，再往后写周几、日期。
         </p>
       </div>
-      <span class="shrink-0 text-[11px] font-semibold text-muted-foreground" data-home-counts>
-        待办 {{ upcoming.length }} · 逾期 {{ overdue.length }}
-      </span>
+      <!-- 「新建提醒」原来是侧栏最上面那个按钮，用户 2026-10-16 要求挪到这一页、
+           与「接下来 14 天」同行靠右。它派发 MainLayout 的 open-quick-add 事件，
+           由那边的 openQuickAdd() 把用户送到列表页再展开新建卡片。
+           按钮左边原来还有一个「待办 N · 逾期 N」计数，用户 2026-10-16 下午要求删掉
+           （两列标题条上各自就有「N 条」，这一处是重复的）。 -->
+      <button type="button" class="dashboard-new-button" data-dashboard-new-reminder title="新建提醒" @click="openQuickAdd">
+        <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2.2" stroke-linecap="round"/></svg>
+        新建提醒
+      </button>
     </div>
 
     <div v-if="errorMsg" class="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-rose-500/25 bg-rose-500/[.06] px-4 py-3 text-xs font-bold text-rose-500">
@@ -64,13 +70,18 @@
             <div class="min-w-0 flex-1">
               <p class="whitespace-pre-wrap break-words text-sm font-bold text-foreground">{{ row.item.title }}</p>
               <!-- 时间信息（用户 2026-10-15：「首页，提醒下面的时间信息改为橘黄色醒目显示创建时间，
-                   结束时间，清单，剩余时间」）：四项统一收在标题下这一行、橘黄色加粗。
+                   结束时间，清单，剩余时间」；2026-10-16 定下这一行的读法：
+                   「创建 昨天 16:46—结束 今天 23:59；工作安排；剩余 22:37」——创建与结束用「—」连成一段、
+                   清单名去掉「清单」二字、各段用「；」隔开，首页两列的所有条目都按这个格式）。
                    剩余时间的口径与 2026-10-14 那个行尾倒计时完全一样（每分钟刷新，逾期的写
                    「已逾期 N 天」），所以行尾不再重复显示。 -->
-              <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-bold text-orange-500 dark:text-orange-400" data-home-meta>
+              <p class="mt-1 text-[11px] font-bold leading-5 text-orange-500 dark:text-orange-400" data-home-meta>
                 <span data-home-created>创建 {{ formatCreated(row.item) }}</span>
+                <span>—</span>
                 <span data-home-due>结束 {{ formatDue(row.item) }}</span>
-                <span v-if="row.item.list_name" data-home-list>清单 {{ row.item.list_name }}</span>
+                <span v-if="row.item.list_name">；</span>
+                <span v-if="row.item.list_name" data-home-list>{{ row.item.list_name }}</span>
+                <span>；</span>
                 <span data-home-remaining>{{ remainingOf(row) }}</span>
               </p>
             </div>
@@ -110,11 +121,14 @@
             <span class="mt-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-[11px] font-black" :class="row.tone" data-home-level>{{ row.level }}</span>
             <div class="min-w-0 flex-1">
               <p class="whitespace-pre-wrap break-words text-sm font-bold text-foreground">{{ row.item.title }}</p>
-              <!-- 时间信息同「未来 14 天待办」那一列：橘黄色加粗一行写完创建/结束/清单/剩余 -->
-              <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-bold text-orange-500 dark:text-orange-400" data-home-meta>
+              <!-- 时间信息同「未来 14 天待办」那一列：创建—结束 用「—」连起来，清单名与剩余用「；」隔开 -->
+              <p class="mt-1 text-[11px] font-bold leading-5 text-orange-500 dark:text-orange-400" data-home-meta>
                 <span data-home-created>创建 {{ formatCreated(row.item) }}</span>
+                <span>—</span>
                 <span data-home-due>结束 {{ formatDue(row.item) }}</span>
-                <span v-if="row.item.list_name" data-home-list>清单 {{ row.item.list_name }}</span>
+                <span v-if="row.item.list_name">；</span>
+                <span v-if="row.item.list_name" data-home-list>{{ row.item.list_name }}</span>
+                <span>；</span>
                 <span data-home-remaining>{{ remainingOf(row) }}</span>
               </p>
             </div>
@@ -139,6 +153,13 @@ import { remainingText } from '../utils/remaining'
 // （见 MainLayout 的空闲跳转）。左边 14 天内待办、右边所有逾期，标题前一个字标级别。
 const authStore = useAuthStore()
 const router = useRouter()
+
+/** 标题行右侧的「新建提醒」：这一页没有新建面板，交给 MainLayout 的同名流程
+ *  （它会把用户送到「待办」页并展开新建卡片，和以前侧栏那个按钮行为一致）。 */
+function openQuickAdd() {
+  window.dispatchEvent(new CustomEvent('open-quick-add'))
+}
+
 // 清单 id → 图标 key（列表接口不返回 list_icon，这里自己查一份）
 const listIcons = ref<Record<number, string>>({})
 const items = ref<ReminderItem[]>([])
@@ -285,6 +306,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 标题行右侧的「新建提醒」：沿用原来侧栏那个按钮的蓝紫渐变观感，缩小到行内高度 */
+.dashboard-new-button { @apply inline-flex h-10 shrink-0 items-center gap-1.5 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-500 px-3.5 text-sm font-bold text-white shadow-[0_14px_30px_-14px_rgba(59,130,246,.8)] transition hover:brightness-105 active:scale-[0.99]; }
 /* 栏目卡片：与「今天」页的按天卡片同一套观感（标题条带底色 + 卡片圆角/边框/阴影） */
 .home-col { @apply overflow-hidden rounded-[22px] border border-border/70 bg-surface/85 shadow-card backdrop-blur-xl; }
 .home-col-head { @apply flex items-center gap-2 border-b border-border/60 bg-brand-500/10 px-4 py-2.5 sm:px-5; }

@@ -15,7 +15,6 @@ type Config struct {
 	WebDir             string
 	UploadDir          string
 	LogMode            string
-	JWTSecret          string
 	DBPath             string
 	ShowVersion        bool
 	ShowHelp           bool

@@ -57,7 +57,3 @@ const ICON_MAP = new Map(LIST_ICONS.map((icon) => [icon.key, icon]))
 export function listIcon(key: string): ListIcon {
   return ICON_MAP.get(String(key || '').trim()) || LIST_ICONS[0]
 }
-
-export function listIconKeys(): string[] {
-  return LIST_ICONS.map((icon) => icon.key)
-}

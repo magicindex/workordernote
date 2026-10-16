@@ -217,13 +217,17 @@ const createdIds = [];
       const n = new Date();
       return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
     })();
-    // 今天页的口径是「今天 + 逾期」：逾期条目现在统一收在 key=overdue 的卡片里，
-    // 其余分组只能是今天或更早；关键是**不能出现未来的日期**（跨偏移比较修好之前，
-    // 明天那条会漏进来）。
-    check('「今天」页不出未来的日期分组（明天的不漏进来）',
-      !todayKeys.keys.some((k) => k !== 'overdue' && k > todayLocalKey)
-        && !todayKeys.titles.some((t) => t.includes(titles.dayC)),
-      JSON.stringify({ keys: todayKeys.keys, todayLocalKey }));
+    // 待办页口径 2026-10-16 起是「近 7 天」（原来只放「今天 + 逾期」）：明天那条**现在应该在**
+    // 自己的日期分组里。这一条继续守着跨时区偏移的老毛病 —— 不能出现「今天 + 7 天」以外的分组
+    // （左闭右开：今天到第 7 天，所以最远的合法分组 key 是今天 + 6 天）。
+    const limitKey = (() => {
+      const d = new Date(); d.setDate(d.getDate() + 6);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    check('「待办」页按新口径收近 7 天（明天那条在自己的分组里，且没有超出今天 +7 天的分组）',
+      todayKeys.titles.some((t) => t.includes(titles.dayC))
+        && !todayKeys.keys.some((k) => k !== 'overdue' && k > limitKey),
+      JSON.stringify({ keys: todayKeys.keys, todayLocalKey, limitKey }));
 
     // 逾期条目：单独一张卡片、排在最前面（用户 2026-10-09 追加要求）
     const overdueInfo = await page.evaluate(() => {

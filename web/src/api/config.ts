@@ -17,10 +17,6 @@ export function getPublicConfigs() {
   return request.get('/api/configs/public')
 }
 
-export function getSystemConfigs() {
-  return request.get('/api/configs/system')
-}
-
 export function getAllConfigs() {
   return request.get('/api/configs')
 }

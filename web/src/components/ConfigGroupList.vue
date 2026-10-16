@@ -148,6 +148,8 @@ const groupTitleMap: Record<string, string> = {
   access: '访问控制',
   features: '功能开关',
   reminder: '提醒',
+  // 免打扰时间段（用户 2026-10-16）：dnd_enabled / dnd_start_time / dnd_end_time
+  dnd: '免打扰',
   appearance: '外观',
   system: '系统维护',
   android: '安卓客户端',

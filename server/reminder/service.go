@@ -57,7 +57,7 @@ type SaveReminderInput struct {
 	// Accent 是条目自己挑的过渡色（仪式感卡片用，见 card_accents.go）。
 	// **用指针**：编辑时旧客户端/通用编辑器不带这个字段，缺省表示「不改」，
 	// 传空字符串才表示「清掉、用默认色」。
-	Accent  *string `json:"accent"`
+	Accent *string `json:"accent"`
 	// Background 是仪式感卡片的背景图（"preset:<key>" 或 "/uploads/..."，见 background.go）。
 	// 同样用指针：缺省 = 不改，传空字符串 = 清掉背景。
 	Background *string `json:"background"`
@@ -292,9 +292,9 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 			Background: background,
 			BgBlur:     bgBlur,
 			BgMask:     bgMask,
-			CardRole: in.CardRole,
-			Kind:     in.Kind,
-			Priority: in.Priority, DueAt: in.DueAt, AllDay: in.AllDay,
+			CardRole:   in.CardRole,
+			Kind:       in.Kind,
+			Priority:   in.Priority, DueAt: in.DueAt, AllDay: in.AllDay,
 			StartAt: in.StartAt, EndAt: in.EndAt,
 			RepeatRule: in.RepeatRule, Calendar: in.Calendar, LunarAnchor: in.LunarAnchor,
 			RepeatNotifyMinutes: in.RepeatNotifyMinutes, Version: 1,
@@ -657,17 +657,20 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 	preset := "(repeat_rule <> 'none' OR start_at IS NOT NULL OR (due_at IS NOT NULL AND " + tsUTC(effectiveDue) + " >= datetime(?)))"
 	switch view {
 	case "today":
-		// 今天页：生效时间在今天的 + **已经逾期的**。逾期靠排序（due_at 升序）自然置顶，
-		// 前端再打个「逾期」标记（用户要求：今天页只显示今天的信息，逾期的置顶）。
+		// 待办页（用户 2026-10-16：这一页由「今天」改名「待办」，内容改成近期待办）：
+		// 生效时间落在**今天起 7 天内**的 + **已经逾期的**。逾期靠排序（due_at 升序）
+		// 自然置顶，前端再打个「逾期」标记，并按天分成 已逾期 / 今天 / 明天 / 后天 / … 的卡片。
+		// 窗口左闭右开：startToday+7 天 = 第 7 天的 24 点（今天到第 7 天，共 7 天）。
 		//
 		// 逾期的这一支**不看稍后提醒**（用户 2026-10-13：「逾期项目点击知道了，提醒依然
 		// 保留在逾期栏目，只是按后台设定时间进行下一次提示」）：点「知道了」会把它稍后提醒
-		// 到设定时间，但那条任务**本来就逾期**，不能因此从今天页的「已逾期」里消失。
-		// 普通（还没逾期）的条目仍然按生效时间算 —— 「稍后到明天」的就不在今天页了。
+		// 到设定时间，但那条任务**本来就逾期**，不能因此从待办页的「已逾期」里消失。
+		// 普通（还没逾期）的条目仍然按排期时间算 —— 稍后提醒改的是提醒时间，
+		// 不会把一条任务挪进/挪出这 7 天。
 		_, cutoff := overduePolicy(db, userID)
 		overdueExpr := overdueDeadlineExpr("COALESCE(end_at, start_at, due_at)", cutoff) + " < datetime(?)"
 		q = q.Where(openOnly+"due_at IS NOT NULL AND ("+tsUTC(effectiveDue)+" < datetime(?) OR "+overdueExpr+")",
-			sqlTimeArg(endToday), sqlTimeArg(now))
+			sqlTimeArg(startToday.AddDate(0, 0, 7)), sqlTimeArg(now))
 	case "planned":
 		// 计划页＝「预设信息」：有循环规则的、有时间段（计划页建的就是这种）、
 		// 或者排在明天及以后的任务。今天页里那些「就今天办」的普通任务不会在这里

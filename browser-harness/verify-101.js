@@ -100,13 +100,16 @@ async function waitSel(page, sel, timeout = 15000) {
     check('计划页有「时间段」的任务', planned.includes(`自检时间段-${STAMP}`), JSON.stringify(planned));
     check('计划页没有「只有今天」的普通任务', !planned.includes(`自检今天-${STAMP}`), JSON.stringify(planned));
 
-    // ---------- 2. 今天页：今天 + 逾期，逾期的排最前 ----------
+    // ---------- 2. 待办页：近 7 天 + 逾期，逾期的排最前 ----------
     const todayRows = (await api(page, '/api/reminder/items?view=today&status=open')).body?.data;
     const todayList = Array.isArray(todayRows) ? todayRows : todayRows?.items || [];
     const mine = todayList.filter((r) => String(r.title).includes(`-${STAMP}`)).map((r) => r.title);
-    check('今天页有今天到期的任务', mine.includes(`自检今天-${STAMP}`), JSON.stringify(mine));
-    check('今天页有逾期未完成的任务', mine.includes(`自检逾期-${STAMP}`), JSON.stringify(mine));
-    check('今天页没有「未来」的普通任务（那是计划页的）', !mine.includes(`自检未来-${STAMP}`), JSON.stringify(mine));
+    check('待办页有今天到期的任务', mine.includes(`自检今天-${STAMP}`), JSON.stringify(mine));
+    check('待办页有逾期未完成的任务', mine.includes(`自检逾期-${STAMP}`), JSON.stringify(mine));
+    // 口径 2026-10-16 改成「近 7 天要办的」（用户：「今天 改成 近 7 天」）：+3 天那条未来任务
+    // 现在**就在这一页**；挑 7 天以外的边界由 verify-105 的日期分组守着。
+    check('待办页按新口径收「近 7 天」的普通任务（+3 天那条也在）',
+      mine.includes(`自检未来-${STAMP}`), JSON.stringify(mine));
     const overdueIdx = todayList.findIndex((r) => r.title === `自检逾期-${STAMP}`);
     const todayIdx = todayList.findIndex((r) => r.title === `自检今天-${STAMP}`);
     check('逾期未完成的排在今天到期之前（置顶）', overdueIdx >= 0 && todayIdx >= 0 && overdueIdx < todayIdx,

@@ -8,7 +8,8 @@
  *      拿到的是同一个文件（比对 sha256）。
  *   4) 「系统配置 → 安卓客户端」分组里能改版本号 / 更新说明 / 内外网地址。
  *   5) 版本弹窗置顶块里的**原项目信息**（2026-10-15：原来单列在页尾，现在并进首屏）——
- *      上游项目 / 许可 / 衍生开发说明都在，页尾不再单列那一节。
+ *      上游项目 / 许可 / 衍生开发说明都在，页尾不再单列那一节；
+ *      构建信息里写明「由 CyberZero 构建于 …」（2026-10-16，用户要求写上构建者）。
  *
  * 用法：APP_URL=http://192.168.3.201:8906 node verify-095.js
  * 数据：会改两处服务端配置（外网地址、更新说明）——读原值→改→验→改回并回读确认；
@@ -224,6 +225,8 @@ function findApk() {
       check('置顶块里写明基于该项目衍生开发、著作权与出处保留',
         about.text.includes('衍生开发') && about.text.includes('著作权'),
         about.text.slice(-120));
+      check('构建信息写明「由 CyberZero 构建于 …」（用户 2026-10-16 要求）',
+        /由 CyberZero 构建于/.test(about.text), about.text.slice(0, 90));
       check('上游链接指向原项目', about.upstreamHref.includes('github.com/TechFunWay/reminders'), about.upstreamHref);
       check('页尾不再单列「原项目信息」一小节', about.standalone.length === 0, JSON.stringify(about.standalone));
 

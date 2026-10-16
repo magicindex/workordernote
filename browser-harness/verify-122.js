@@ -7,7 +7,10 @@
  *   1. 每条 [data-home-item] 里都有时间信息行 [data-home-meta]；
  *   2. 这一行是**橘黄色加粗**（浅色主题 = orange-500，深色主题 = orange-400）；
  *   3. 四项都在：[data-home-created]（创建）/ [data-home-due]（结束）/
- *      [data-home-list]（清单，有清单名时）/ [data-home-remaining]（剩余）；
+ *      [data-home-list]（清单名，有清单名时、不带「清单」二字）/ [data-home-remaining]（剩余）；
+ *   3.5 这一行的读法（用户 2026-10-16 改版）：
+ *      「创建 昨天 16:46—结束 今天 23:59；工作安排；剩余 22:37」
+ *      ——创建与结束用「—」连成一段、清单名夹在两个「；」之间；
  *   4. 创建时间与结束时间都带 时:分；结束时间沿用「今天 / 明天 / 后天 / M月D日」口径；
  *   5. 剩余时间沿用倒计时口径（剩余…／已逾期…），且**每条只写一次**（原来行尾那个
  *      和这一行是同一个值，不该重复显示）；
@@ -71,6 +74,7 @@ const readMeta = (page) => page.evaluate(() => {
     };
     return {
       text: (li.innerText || '').replace(/\s+/g, ' ').trim(),
+      metaText: meta ? (meta.innerText || '').replace(/\s+/g, ' ').trim() : null,
       color: cd ? cd.color : null,
       weight: cd ? Number(cd.fontWeight) || 0 : 0,
       created: pick('[data-home-created]'),
@@ -160,8 +164,11 @@ function isOrange(css) {
           && (/\d{2}:\d{2}/.test(s) || /（已过 \d+ 天）/.test(s) || s === '结束 未设日期');
       }),
       JSON.stringify(rows.map((r) => r.due)));
-    check('至少有一项写了「清单 …」（条目挂在清单上时）',
-      rows.some((r) => /^清单 \S/.test(r.list || '')),
+    check('至少有一项写了清单名（条目挂在清单上时；2026-10-16 起不再写「清单」二字）',
+      rows.some((r) => r.list && !/^清单/.test(r.list)),
+      JSON.stringify(rows.map((r) => r.list).slice(0, 4)));
+    check('清单名只写名字本身，不带「清单」前缀',
+      rows.filter((r) => r.list).every((r) => !/^清单/.test(r.list || '')),
       JSON.stringify(rows.map((r) => r.list).slice(0, 4)));
     check('每一项都写了「剩余 …」或「已逾期 …」',
       rows.length > 0 && rows.every((r) => /^(剩余|已逾期)/.test(r.remaining || '')),
@@ -169,6 +176,24 @@ function isOrange(css) {
     check('剩余时间就在这一行里（不是行尾另起一个）',
       rows.length > 0 && rows.every((r) => r.countdownInMeta === true),
       JSON.stringify(rows.map((r) => r.countdownInMeta)));
+
+    // ---------------- 3.5 整行的读法（用户 2026-10-16：「创建 昨天 16:46—结束 今天 23:59；
+    //                 工作安排；剩余 22:37」，首页所有条目按这个格式） ----------------
+    check('创建与结束用「—」连成一段（「创建 …—结束 …」）',
+      rows.length > 0 && rows.every((r) => /创建 \S.*—结束 /.test(r.metaText || '')),
+      JSON.stringify(rows.map((r) => r.metaText).slice(0, 3)));
+    check('有清单的条目：清单名夹在两个「；」之间（…；清单名；剩余…）',
+      rows.filter((r) => r.list).length > 0
+        && rows.filter((r) => r.list).every((r) => /；[^；]+；(剩余|已逾期)/.test(r.metaText || '')),
+      JSON.stringify(rows.filter((r) => r.list).map((r) => r.metaText).slice(0, 3)));
+    check('整行按「创建 …—结束 …；清单；剩余 …」的顺序读（没清单就只有两个分号段）',
+      rows.length > 0 && rows.every((r) => {
+        const seg = String(r.metaText || '').split('；');
+        if (seg.length < 2) return false;
+        if (!/创建 \S.*—结束 /.test(seg[0])) return false;
+        return /^(剩余|已逾期)/.test(seg[seg.length - 1] || '');
+      }),
+      JSON.stringify(rows.map((r) => r.metaText).slice(0, 3)));
 
     // ---------------- 4. 剩余时间每条只写一次 ----------------
     check('剩余 / 已逾期 每条只出现一次（不再重复显示）',
@@ -203,7 +228,8 @@ function isOrange(css) {
       !!fresh && fresh.created === `创建 今天 ${hhmm}`, JSON.stringify({ fresh, hhmm }));
     check('刚建的那条「结束」是今天 23:59',
       !!fresh && /^结束 今天 23:59$/.test(fresh.due), JSON.stringify(fresh));
-    check('刚建的那条也带「清单 …」', !!fresh && /^清单 \S/.test(fresh.list || ''), JSON.stringify(fresh));
+    check('刚建的那条也带清单名（不带「清单」二字）',
+      !!fresh && (!fresh.list || !/^清单/.test(fresh.list)), JSON.stringify(fresh));
     check('刚建的那条「剩余」带 时:分',
       !!fresh && /^剩余/.test(fresh.remaining || '') && /\d{2}:\d{2}/.test(fresh.remaining || ''),
       JSON.stringify(fresh));

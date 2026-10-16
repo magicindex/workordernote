@@ -43,13 +43,16 @@ func dispatchDueJobs(db *gorm.DB) {
 	// 「开始提醒时间」（个人偏好 reminder_all_day_time，默认 09:00）之前**不发任何提醒**：
 	// 用户 2026-10-12 要求的免打扰 —— 0:00 起静默，到点后这些任务仍是 pending，
 	// 下一轮（每分钟一次）一起发出去。每个用户的静默判断只算一次（同一轮里可能有好几条）。
+	//
+	// 用户 2026-10-16 的免打扰（手动开关 + 后台时间段，「权责级别优先在所有通知以上」）
+	// 也挡在这一层：dndBlocked 为真就整轮跳过，任务继续留 pending，到点后照常补发。
 	quietNow := time.Now()
 	quietUsers := map[uint]bool{}
 	isQuiet := func(userID uint) bool {
 		if cached, ok := quietUsers[userID]; ok {
 			return cached
 		}
-		value := inQuietHours(db, userID, quietNow)
+		value := inQuietHours(db, userID, quietNow) || dndBlocked(db, userID, quietNow)
 		quietUsers[userID] = value
 		return value
 	}

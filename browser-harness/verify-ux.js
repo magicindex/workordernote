@@ -106,10 +106,12 @@ withTab(async (page) => {
   const calCreateButton = await page.evaluate(() =>
     !![...document.querySelectorAll('aside button')].find((b) => b.textContent.includes('＋ 新建')));
   check('日历视图右侧有「＋ 新建」按钮（0.1.3 起）', calCreateButton);
-  await goto(page, '/admin/all');
-  const listNewVisible = await page.evaluate(() =>
-    !![...document.querySelectorAll('button')].find((b) => b.textContent.includes('新建提醒')));
-  check('列表视图下「新建提醒」仍在', listNewVisible);
+  // 用户 2026-10-16：「新建提醒」从侧栏搬到了首页看板标题行右侧（那条口径在 verify-125）。
+  // 这里只看列表页自己的「新建」入口还在 —— 「全部」页 0.18.3 起本来就不给新建入口，
+  // 所以拿「计划」页看。
+  await goto(page, '/admin/planned');
+  const listNewVisible = await page.evaluate(() => !!document.querySelector('[data-quick-new]'));
+  check('列表视图下仍有新建入口（「新建」按钮）', listNewVisible);
 
   // ---------- 3) 新建提醒默认今天 ----------
   // 用**具体清单页**（不受「默认首页」设置影响）；「全部」页 0.18.3 起不再有新建入口。
@@ -199,7 +201,7 @@ withTab(async (page) => {
   // ---------- 6) 手机适配 ----------
   console.log('\n[6] 手机适配');
   await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
-  for (const [name, path] of [['日历', '/admin/calendar'], ['今天', '/admin'], ['设置', '/admin/settings']]) {
+  for (const [name, path] of [['日历', '/admin/calendar'], ['待办', '/admin'], ['设置', '/admin/settings']]) {
     await goto(page, path, 2000);
     const m = await page.evaluate(() => ({
       overflowX: document.documentElement.scrollWidth > window.innerWidth + 1,

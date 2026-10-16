@@ -345,7 +345,10 @@ func notifyOverdueAt(db *gorm.DB, now time.Time) {
 			return p
 		}
 		grace, cutoff := overduePolicy(db, userID)
-		p := userPolicy{grace: grace, cutoff: cutoff, quiet: inQuietHours(db, userID, now)}
+		// quiet 一并算上用户 2026-10-16 的免打扰（手动开关 + 后台时间段，见 dnd.go）：
+		// 免打扰期间逾期提醒整轮跳过，到点后按原来的「当天最多一条」口径补发。
+		quiet := inQuietHours(db, userID, now) || dndBlocked(db, userID, now)
+		p := userPolicy{grace: grace, cutoff: cutoff, quiet: quiet}
 		policies[userID] = p
 		return p
 	}

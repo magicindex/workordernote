@@ -1,0 +1,209 @@
+/**
+ * 「呼叫小秘」的接线层。
+ *
+ * 后端在 server/assistant：模型参数（服务商 / 接口地址 / API Key / 模型名）由
+ * 管理员在「系统配置 → AI 助手」里填，浏览器只拿得到掩码——对话请求由后端
+ * 转发，前端从头到尾接触不到 API Key。
+ *
+ * 「通用样式」：服务端一律按 OpenAI 兼容协议说话（POST {地址}/chat/completions），
+ * 所以换服务商、换模型、接自建网关都只是后台改几个输入框的事，这个文件不用动。
+ */
+import request from './request'
+
+/** 小秘对话里的一条消息（role 口径与 OpenAI 兼容接口一致，可直接转发给后端）。 */
+export interface AssistantMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+/**
+ * 后端给出的接入状态（不含接口地址与密钥：这个接口人人可读）。
+ * - `enabled`：管理员开了开关；
+ * - `ready`：地址/模型/密钥齐了；
+ * - `active`：两者都成立，说话时真的会走模型；
+ * - `reason`：还不能用的一句话原因，直接显示给用户。
+ */
+export interface AssistantStatus {
+  enabled: boolean
+  ready: boolean
+  active: boolean
+  provider: string
+  provider_label: string
+  model: string
+  reason: string
+  /** 后端等模型回答的超时（秒）。前端按它放宽自己的请求超时。 */
+  timeout_seconds?: number
+}
+
+/** 读一次接入状态；后端异常时返回 null（面板按「未接入」处理）。 */
+export async function getAssistantStatus(): Promise<AssistantStatus | null> {
+  const res = await request.get('/api/assistant/status')
+  if (res.data?.code === 0 && res.data.data) {
+    return res.data.data as AssistantStatus
+  }
+  return null
+}
+
+/**
+ * 把整段对话发给后端模型，取回这一轮的回复。
+ *
+ * 超时单独放宽：模型回答常常要十几秒到一分钟，全局那 30 秒会把它掐断，
+ * 而用户看到的是「网络错误」——排查方向完全被带偏。默认 180 秒只是兜底，
+ * 面板会按后端配置（系统配置 → AI 助手 → 请求超时）传更合适的值：
+ * 本地模型（Ollama）首次说话要等模型加载，可能好几分钟。
+ */
+export async function chatWithAssistant(messages: AssistantMessage[], timeoutMs = 180000): Promise<string> {
+  const res = await request.post('/api/assistant/chat', { messages }, { timeout: timeoutMs })
+  if (res.data?.code !== 0) {
+    throw new Error(res.data?.message || '对话失败')
+  }
+  const reply = String(res.data?.data?.reply || '').trim()
+  if (!reply) {
+    throw new Error('模型没有返回内容')
+  }
+  return reply
+}
+
+/** 一个服务商预设：只给默认地址、常见模型名与密钥申请入口，控件本身是通用的。 */
+export interface AssistantProviderPreset {
+  id: string
+  label: string
+  base_url: string
+  models: string[]
+  key_required?: boolean
+  key_url?: string
+  note?: string
+}
+
+/** 「系统配置 → AI 助手」面板的数据。`api_key` 是掩码（例如 `sk-a…3456`）。 */
+export interface AssistantSettings {
+  enabled: boolean
+  provider: string
+  base_url: string
+  api_key: string
+  api_key_set: boolean
+  model: string
+  system_prompt: string
+  timeout_seconds: number
+  effective_base_url: string
+  ready: boolean
+  active: boolean
+  reason: string
+  default_system_prompt: string
+  providers: AssistantProviderPreset[]
+}
+
+/** 保存入参（不传 api_key 表示「不改密钥」，要清空用 clear_api_key）。 */
+export interface AssistantSettingsInput {
+  enabled: boolean
+  provider: string
+  base_url: string
+  api_key?: string
+  clear_api_key?: boolean
+  model: string
+  system_prompt: string
+  timeout_seconds: number
+}
+
+/** 连通性测试结果：`ok` 表达成败（HTTP 仍是 200，失败原因在 `detail` 里）。 */
+export interface AssistantTestResult {
+  ok: boolean
+  detail: string
+  models?: string[]
+  endpoint?: string
+  latency_ms?: number
+  via?: 'models' | 'chat'
+}
+
+/**
+ * 把 axios 的报错变成一句人话。
+ *
+ * 先看服务端 envelope（`{ code, message }`）里的 message——那才是「为什么失败」
+ * （例如「启用 AI 助手前请先补全：还没有填写模型名称」）；其次是 Error 自带
+ * 的消息；最后才用兜底文案。不能反过来判断 `err instanceof Error`：axios 的
+ * 「Request failed with status code 400」同样是 Error，会把服务端说明盖掉。
+ */
+function unwrapError(err: any, fallback: string): never {
+  throw new Error(err?.response?.data?.message || err?.message || fallback)
+}
+
+/** 管理面板：读完整设置（密钥是掩码）。 */
+export async function getAssistantSettings(): Promise<AssistantSettings> {
+  try {
+    const res = await request.get('/api/assistant/admin/settings')
+    if (res.data?.code !== 0) {
+      throw new Error(res.data?.message || '加载 AI 配置失败')
+    }
+    return res.data.data as AssistantSettings
+  } catch (err: any) {
+    unwrapError(err, '加载 AI 配置失败')
+  }
+}
+
+/** 管理面板：保存（任何一项不合法都会被整体拒绝，不会留下半套配置）。 */
+export async function saveAssistantSettings(input: AssistantSettingsInput): Promise<AssistantSettings> {
+  try {
+    const res = await request.put('/api/assistant/admin/settings', input)
+    if (res.data?.code !== 0) {
+      throw new Error(res.data?.message || '保存失败')
+    }
+    return res.data.data as AssistantSettings
+  } catch (err: any) {
+    unwrapError(err, '保存失败')
+  }
+}
+
+/** 「检测本机 Ollama」里单条候选地址的探测结果。 */
+export interface AssistantOllamaAttempt {
+  base_url: string
+  label: string
+  ok: boolean
+  detail?: string
+  models?: string[]
+}
+
+/** 「检测本机 Ollama」的结果：`found` 为真时 `base_url` / `models` 可以直接填进表单。 */
+export interface AssistantOllamaDetection {
+  found: boolean
+  base_url?: string
+  label?: string
+  models?: string[]
+  attempts: AssistantOllamaAttempt[]
+}
+
+/**
+ * 管理面板：检测本机 Ollama。
+ *
+ * 为什么需要它：服务端跑在容器里时 127.0.0.1 指的是容器自己，Ollama 却装在
+ * 宿主上；这个接口拿「管理员访问本服务的地址」等几条候选挨个试一遍，把真能用
+ * 的那条带回来，顺带返回它上面的模型列表（可当模型输入框的候选）。
+ */
+export async function detectLocalOllama(): Promise<AssistantOllamaDetection> {
+  try {
+    const res = await request.post('/api/assistant/admin/detect-ollama', {}, { timeout: 60000 })
+    if (res.data?.code !== 0) {
+      throw new Error(res.data?.message || '检测本机 Ollama 失败')
+    }
+    return res.data.data as AssistantOllamaDetection
+  } catch (err: any) {
+    unwrapError(err, '检测本机 Ollama 失败')
+  }
+}
+
+/**
+ * 管理面板：测试连接。传 `input` 可以测**还没保存**的草稿（密钥留空即沿用
+ * 已保存的那个）；不传则测当前已保存的设置。
+ *
+ * 会真的打一次上游：先拉模型列表，服务商没有这个接口时退一步发一次最小对话。
+ */
+export async function testAssistantSettings(input?: AssistantSettingsInput): Promise<AssistantTestResult> {
+  try {
+    const res = await request.post('/api/assistant/admin/test', input ?? {}, { timeout: 180000 })
+    if (res.data?.code !== 0) {
+      throw new Error(res.data?.message || '测试连接失败')
+    }
+    return res.data.data as AssistantTestResult
+  } catch (err: any) {
+    unwrapError(err, '测试连接失败')
+  }
+}

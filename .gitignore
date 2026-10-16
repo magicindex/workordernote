@@ -59,6 +59,10 @@ Thumbs.db
 # Logs
 *.log
 
+# Python 工具（web/scripts/*.py）跑出来的字节码缓存
+__pycache__/
+*.pyc
+
 # Packaging artifacts
 app.tgz
 

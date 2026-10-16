@@ -133,8 +133,9 @@ const measure = (page) => page.evaluate(() => {
     const withTitles = (cal?.titledIcons || []).filter((r) => r.title);
     check('图标栏里的图标带 hover 提示（title）', withTitles.length >= 5,
       `${withTitles.length} 个：${withTitles.slice(0, 5).map((r) => r.title).join(' / ')}`);
-    check('提示文字就是菜单名（如「今天」「我的清单」）',
-      withTitles.some((r) => r.title === '今天') && withTitles.some((r) => r.title === '已完成'),
+    // 「今天」这一栏 2026-10-16 改名「待办」（用户要求），提示文字跟着走。
+    check('提示文字就是菜单名（如「待办」「我的清单」）',
+      withTitles.some((r) => r.title === '待办') && withTitles.some((r) => r.title === '已完成'),
       withTitles.slice(0, 6).map((r) => r.title).join(','));
     await page.screenshot({ path: path.join(SHOTS, 'rail-calendar.png') });
 

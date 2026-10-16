@@ -1,7 +1,7 @@
 /**
  * 这一批（用户 2026-10-10 第三次反馈）的三件事：
  *
- *   1) **新建控件收成一个「新建」按钮**：默认收起，点一下才展开；
+ *   1) **新建控件收成一个「新建提醒」按钮**（2026-10-16 改名，原来叫「新建」）：默认收起，点一下才展开；
  *      **刷新、切换页面都回到收起**；快捷键 N 能展开；Esc（没写标题时）能收起。
  *   2) **「全部」页取消新建提醒**：那一页没有新建入口（连空状态的「添加第一条提醒」也没有）；
  *      在这一页按 N 会先去「今天」页再展开。
@@ -57,21 +57,21 @@ const quickShape = (page) => page.evaluate(() => ({
     await gotoRetry(page, BASE + '/admin');
     await sleep(2200);
     let st = await quickShape(page);
-    check('今天页：新建控件默认**收成一个「新建」按钮**（没有整块表单、没有输入框）',
-      st.addBlock === true && st.newButton === true && st.newButtonText === '新建' && st.card === false && st.input === false,
+    check('今天页：新建控件默认**收成一个「新建提醒」按钮**（没有整块表单、没有输入框）',
+      st.addBlock === true && st.newButton === true && st.newButtonText === '新建提醒' && st.card === false && st.input === false,
       JSON.stringify(st));
 
     await page.evaluate(() => document.querySelector('[data-quick-new]')?.click());
     await sleep(600);
     st = await quickShape(page);
-    check('点「新建」后展开：出现输入框与芯片行，「新建」按钮消失',
+    check('点「新建提醒」后展开：出现输入框与芯片行，按钮消失',
       st.card === true && st.input === true && st.chips >= 9 && st.newButton === false, JSON.stringify(st));
     check('展开后光标在标题输入框里', /提醒|记一笔/.test(st.focusedPlaceholder), st.focusedPlaceholder);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await sleep(2200);
     st = await quickShape(page);
-    check('**刷新**后回到收起状态（还是那个「新建」按钮）',
+    check('**刷新**后回到收起状态（还是那个「新建提醒」按钮）',
       st.newButton === true && st.card === false, JSON.stringify(st));
 
     await page.evaluate(() => document.querySelector('[data-quick-new]')?.click());

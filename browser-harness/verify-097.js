@@ -3,6 +3,7 @@
  *
  * 覆盖：
  *   1) 侧栏有固定栏目「信用卡账单」（受后台偏好 credit_card_enabled 控制），点进去是它自己的页
+ *      （手机端的入口在底部「清单」标签弹出的清单列表里，见 verify-128）
  *   2) 这一页只有卡片：没有快速新建、没有提醒列表行
  *   3) 「新建清单」里不再有信用卡模板（只建普通清单）
  *   4) 新建卡片 → 自动归到栏目里 + 生成账单日/还款日/提前提醒三条
@@ -835,12 +836,24 @@ const setSelect = (page, sel, value) => page.evaluate(({ sel, value }) => {
       const backPanel = await page.evaluate(() => document.querySelectorAll('[data-card-face]').length);
       check('重新打开后栏目页照旧显示卡片', backPanel === beforeCards + 1, `${backPanel} vs ${beforeCards + 1}`);
       // ---------- 13. 手机端入口 ----------
+      // 2026-10-16 口径变了（用户：「手机页面 中间 信用卡 改成 清单，点击清单弹出 所有清单列表」）：
+      // 中间那个标签现在是「清单」，点它弹出全部清单，信用卡账单在那一份列表里 —— 所以下面
+      // 走「标签 → 弹层 → 选信用卡账单 → 进卡片页」，断言的落点（进卡片页、不横向溢出）不变。
       await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
       await page.goto(ROOT + '/admin', { waitUntil: 'domcontentloaded' });
       await sleep(1500);
       const mobileTabs = await page.evaluate(() => [...document.querySelectorAll('.mobile-tab')].map((a) => a.innerText.trim()));
-      check('手机底部标签栏有「信用卡」入口', mobileTabs.includes('信用卡'), JSON.stringify(mobileTabs));
-      await page.evaluate(() => document.querySelector('[data-tab-cards]')?.click());
+      check('手机底部标签栏有「清单」入口（原来的「信用卡」）',
+        mobileTabs.includes('清单') && !mobileTabs.includes('信用卡'), JSON.stringify(mobileTabs));
+      await page.evaluate(() => document.querySelector('[data-tab-lists]')?.click());
+      await sleep(900);
+      const sheetHasCards = await page.evaluate(() => Array.from(document.querySelectorAll('[data-lists-sheet-row]'))
+        .some((el) => (el.getAttribute('data-list-name') || '') === '信用卡账单'));
+      check('点「清单」弹出的清单列表里有「信用卡账单」', sheetHasCards === true);
+      await page.evaluate(() => {
+        Array.from(document.querySelectorAll('[data-lists-sheet-row]'))
+          .find((el) => (el.getAttribute('data-list-name') || '') === '信用卡账单')?.click();
+      });
       await sleep(1800);
       const mobilePage = await page.evaluate(() => ({
         url: location.pathname,
@@ -848,17 +861,24 @@ const setSelect = (page, sel, value) => page.evaluate(({ sel, value }) => {
         faces: document.querySelectorAll('[data-card-face]').length,
         overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
       }));
-      check('手机点「信用卡」能进卡片页且没有横向溢出',
+      check('手机从「清单」里选「信用卡账单」能进卡片页且没有横向溢出',
         mobilePage.panel && mobilePage.faces >= 1 && mobilePage.overflow === false,
         JSON.stringify(mobilePage));
 
-      // ---------- 14. 后台关掉栏目后：底部标签入口也要消失 ----------
+      // ---------- 14. 后台关掉栏目后：标签还在（它现在是清单总入口），清单列表里不再有「信用卡账单」 ----------
       await api(page, '/api/configs', 'PUT', { key: 'credit_card_enabled', value: 'false' });
       await sleep(2600);
       await page.goto(ROOT + '/admin', { waitUntil: 'domcontentloaded' });
       await sleep(1500);
+      await page.evaluate(() => document.querySelector('[data-tab-lists]')?.click());
+      await sleep(900);
       const tabsAfter = await page.evaluate(() => [...document.querySelectorAll('.mobile-tab')].map((a) => a.innerText.trim()));
-      check('关掉栏目后手机底部不再有「信用卡」', !tabsAfter.includes('信用卡'), JSON.stringify(tabsAfter));
+      const sheetAfter = await page.evaluate(() => Array.from(document.querySelectorAll('[data-lists-sheet-row]'))
+        .map((el) => el.getAttribute('data-list-name')));
+      check('关掉栏目后清单列表里不再有「信用卡账单」',
+        !sheetAfter.includes('信用卡账单'), JSON.stringify(sheetAfter));
+      check('「清单」标签本身还在（它现在是清单总入口，不再跟着信用卡开关）',
+        tabsAfter.includes('清单'), JSON.stringify(tabsAfter));
       await api(page, '/api/configs', 'PUT', { key: 'credit_card_enabled', value: 'true' });
       await sleep(2600);
       await page.setViewport({ width: 1440, height: 900 });

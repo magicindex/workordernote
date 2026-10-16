@@ -18,6 +18,11 @@
            不是「一个键一个值」能表达的（见 components/SyncPanel.vue）。 -->
       <SyncPanel ref="syncPanelRef" />
 
+      <!-- AI 助手同理不走 ConfigGroupList：它有服务商预设、密钥掩码、连通性测试
+           与结果明细，「一个键一个值」表达不了（见 components/AiAssistantPanel.vue）。
+           模型参数在这里填完即生效，前端不用跟着改版本。 -->
+      <AiAssistantPanel />
+
       <ConfigGroupList
         ref="listRef"
         :items="items"
@@ -36,6 +41,7 @@ import { onMounted, ref } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfigGroupList from '../components/ConfigGroupList.vue'
 import SyncPanel from '../components/SyncPanel.vue'
+import AiAssistantPanel from '../components/AiAssistantPanel.vue'
 import SyncImportWizard from '../components/SyncImportWizard.vue'
 import AndroidApkUploader from '../components/AndroidApkUploader.vue'
 import { getSystemConfigMeta, updateConfig } from '../api/config'

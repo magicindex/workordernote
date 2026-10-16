@@ -52,13 +52,25 @@
           </button>
         </div>
 
-        <button v-if="canCreate" class="new-reminder-button mx-4" :title="railActive ? '新建提醒（快捷键 N）' : undefined" @click="openQuickAdd">
-          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20">
-            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2.2" stroke-linecap="round"/></svg>
-          </span>
-          <span class="rail-hide">新建提醒</span>
-          <kbd class="rail-hide ml-auto hidden rounded-md bg-black/10 px-1.5 py-0.5 text-[10px] sm:inline">N</kbd>
-        </button>
+        <!-- 左上角入口：「呼叫小秘」（AI 助手）。
+             「新建提醒」按钮已按用户 2026-10-16 的要求挪到首页看板「接下来 14 天」标题行右侧
+             （见 HomeDashboardView），列表页自己的「+ 新建提醒」、手机悬浮 +、快捷键 N 都不变。
+             窄栏（56px 图标栏）时收成 44px 圆按钮、居中（见 .rail-actions）。 -->
+        <div class="rail-actions mx-4 flex flex-col gap-2">
+          <button
+            type="button"
+            class="assistant-button"
+            :title="railActive ? '呼叫小秘（AI 助手）' : '呼叫小秘：写周报、一句话建任务'"
+            data-assistant-trigger
+            @click="openAssistant"
+          >
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-600 dark:text-brand-300">
+              <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m12 3.6 1.9 4.4 4.4 1.9-4.4 1.9L12 16.2l-1.9-4.4-4.4-1.9 4.4-1.9L12 3.6Z" stroke-width="1.7" stroke-linejoin="round"/><path d="M18.6 15.4l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8.8-1.9Z" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            </span>
+            <span class="rail-hide">呼叫小秘</span>
+            <span class="rail-hide ml-auto rounded-md bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-bold text-brand-600 dark:text-brand-300">AI</span>
+          </button>
+        </div>
 
         <nav class="mt-6 flex-1 overflow-y-auto px-3 pb-5">
           <p class="nav-caption">智能清单</p>
@@ -326,6 +338,24 @@
             <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span v-if="summary.unread" class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-red-500"></span>
           </RouterLink>
+          <!-- 免打扰（用户 2026-10-16）：「首行消息（铃铛图标）旁边放一个喇叭标志，点击进入静音标志，
+               退出显示喇叭，点击进入免打扰模式。后台增加免打扰时间段。权责级别优先在 所有通知以上。」
+               喇叭 = 正常；静音 = 免打扰中。后台时间段生效时按钮也变成静音，右上角再加一个小黄点
+               （免得用户以为是自己开的、到处找怎么关）。点一下就是手动开关（服务端 dnd_manual）。 -->
+          <button
+            type="button"
+            class="icon-button relative"
+            :class="dndActive ? 'text-amber-500 dark:text-amber-400' : ''"
+            :aria-label="dndActive ? '免打扰已开启，点击关闭' : '开启免打扰'"
+            :title="dndTooltip"
+            :data-dnd-active="dndActive ? 'true' : 'false'"
+            data-dnd-toggle
+            @click="toggleDND"
+          >
+            <svg v-if="dndActive" viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="m16 9 5 6M21 9l-5 6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg v-else viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 8.5a5 5 0 0 1 0 7" stroke-width="1.8" stroke-linecap="round"/><path d="M18.5 5.5a9 9 0 0 1 0 13" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <span v-if="dndInWindow" class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-amber-400" data-dnd-window-dot></span>
+          </button>
           <!-- 列表 / 日历 切换。放在主题按钮旁边，与它同为「换个看法」类操作。 -->
           <div
             v-if="showViewSwitch && !isNarrow"
@@ -374,23 +404,81 @@
     </div>
 
     <nav class="mobile-tabbar" :class="{ 'mobile-tabbar-hidden': keyboardOpen }">
-      <RouterLink to="/admin" class="mobile-tab" :class="{ active: route.path === '/admin' }"><span v-html="smartNav[1].icon"></span><small>今天</small></RouterLink>
+      <RouterLink to="/admin" class="mobile-tab" :class="{ active: route.path === '/admin' }"><span v-html="smartNav[1].icon"></span><small>待办</small></RouterLink>
       <RouterLink to="/admin/planned" class="mobile-tab" :class="{ active: route.path === '/admin/planned' }"><span v-html="smartNav[2].icon"></span><small>计划</small></RouterLink>
-      <!-- 信用卡账单：手机端也要有直接入口（抽屉里也有，但底部标签是主要导航）。
-           只有个人偏好打开、且确实有这一栏时才出现。 -->
-      <RouterLink
-        v-if="authStore.creditCardEnabled && cardBucket"
-        :to="`/admin/list/${cardBucket.id}`"
+      <!-- 手机端中间那个标签：原来是「信用卡账单」的直接入口（只在开了信用卡、且确实有那一栏
+           时出现）。用户 2026-10-16 要求改成「清单」——点它弹出**所有清单**的列表，选一个就切
+           过去（信用卡账单 / 随手记事本 / 人生要有仪式感 / 自建清单都在里面，顺序与侧栏
+           「我的清单」那一段一致，见 listsSheetOpen）。 -->
+      <button
+        type="button"
         class="mobile-tab"
-        :class="{ active: route.path === `/admin/list/${cardBucket.id}` }"
-        data-tab-cards
+        :class="{ active: isListTabActive }"
+        data-tab-lists
+        aria-label="清单"
+        @click="openListsSheet"
       >
-        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5" stroke-width="1.8"/><path d="M2.5 10h19M6 13.5h4" stroke-width="1.8" stroke-linecap="round"/></svg></span>
-        <small>信用卡</small>
-      </RouterLink>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8.5 6h11m-11 6h11m-11 6h11M4 6h.01M4 12h.01M4 18h.01" stroke-width="1.9" stroke-linecap="round"/></svg></span>
+        <small>清单</small>
+      </button>
       <RouterLink to="/admin/notifications" class="mobile-tab" :class="{ active: route.path === '/admin/notifications' }"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke-width="1.8" stroke-linecap="round"/></svg></span><small>通知</small></RouterLink>
       <RouterLink to="/admin/channels" class="mobile-tab" :class="{ active: route.path === '/admin/channels' }"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 12h8m-8 4h5m6-11H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4l3 3 3-3h4a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z" stroke-width="1.8"/></svg></span><small>方式</small></RouterLink>
     </nav>
+
+    <!-- 「清单」标签弹出的清单列表（用户 2026-10-16）：手机底部弹层，列的就是侧栏「我的清单」
+         那一段（全部 / 提醒@他 / 信用卡账单 / 随手记事本 / 人生要有仪式感 / 自建清单，
+         顺序与显示条件完全一致），点一行切过去、弹层关闭。 -->
+    <Transition name="sheet">
+      <div v-if="listsSheetOpen" class="lg:hidden">
+        <div class="sheet-backdrop" data-lists-sheet-backdrop @click="closeListsSheet"></div>
+        <div class="lists-sheet" role="dialog" aria-label="全部清单" data-lists-sheet>
+          <div class="lists-sheet-head">
+            <p class="text-sm font-bold text-foreground">全部清单</p>
+            <button type="button" class="icon-button !h-8 !w-8" aria-label="关闭" data-lists-sheet-close @click="closeListsSheet">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <div class="lists-sheet-body">
+            <button
+              v-for="row in myListRows"
+              :key="row.key"
+              type="button"
+              class="lists-sheet-row"
+              :class="{ 'lists-sheet-row-active': isMyRowCurrent(row) }"
+              :data-lists-sheet-row="row.key"
+              :data-list-name="myRowLabel(row)"
+              @click="pickMyRow(row)"
+            >
+              <span v-if="row.kind === 'all'" class="h-2.5 w-2.5 shrink-0 rounded-full bg-violet-500 ring-4 ring-violet-500/10"></span>
+              <span v-else-if="row.kind === 'nudge'" class="nav-symbol h-5 w-5 bg-sky-500/12 text-sky-500">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15.5 8.5a3.5 3.5 0 1 0-7 0c0 4-2 4-2 5.5h11c0-1.5-2-1.5-2-5.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 17a1.6 1.6 0 0 0 3 0" stroke-width="1.7" stroke-linecap="round"/><circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/></svg>
+              </span>
+              <span v-else-if="row.list.template === 'credit_card'" class="nav-symbol h-5 w-5 bg-brand-500/12 text-brand-500">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="6" width="18" height="12" rx="2.5" stroke-width="1.7"/><path d="M3 10h18M6.5 14h4" stroke-width="1.7" stroke-linecap="round"/></svg>
+              </span>
+              <span v-else-if="row.list.template === 'notebook'" class="nav-symbol h-5 w-5 bg-emerald-500/12 text-emerald-500">
+                <ListIcon name="notebook" :size="20" />
+              </span>
+              <span v-else-if="row.list.template === 'ceremony'" class="nav-symbol h-5 w-5 bg-rose-500/12 text-rose-500">
+                <ListIcon name="ceremony" :size="20" />
+              </span>
+              <span
+                v-else
+                class="nav-list-icon"
+                :style="{ color: listColor(row.list.color), background: listColor(row.list.color) + '1f' }"
+              >
+                <ListIcon :name="row.list.icon" :size="14" />
+              </span>
+              <span class="min-w-0 flex-1 truncate">{{ myRowLabel(row) }}</span>
+              <span v-if="myRowCount(row)" class="nav-count">{{ myRowCount(row) }}</span>
+              <span v-if="isMyRowCurrent(row)" class="shrink-0 text-brand-500" data-lists-sheet-current aria-label="当前清单">
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m5 12.5 4.5 4.5L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <!-- 手机端「新建」改成**悬浮按钮**：脱离底部标签栏，右下角悬浮，键盘弹起/滚动时收起 -->
     <button
@@ -426,6 +514,9 @@
 
     <!-- 版本信息与迭代说明 -->
     <VersionDialog v-model="versionOpen" :version="appVersion" :build-time="appBuildTime" />
+
+    <!-- 呼叫小秘：AI 助手抽屉。接上模型后走真回复，没接上时用本地兜底文案 -->
+    <AssistantPanel v-model="assistantOpen" />
 
     <!-- 新建清单：先选模板（通用 / 信用卡），信用卡填完卡片信息自动生成还款计划 -->
     <ListCreateDialog
@@ -540,6 +631,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import VersionDialog from '../components/VersionDialog.vue'
+import AssistantPanel from '../components/AssistantPanel.vue'
 import Modal from '../components/Modal.vue'
 import ListCreateDialog from '../components/ListCreateDialog.vue'
 import ListIcon from '../components/ListIcon.vue'
@@ -553,6 +645,7 @@ import ReminderAlert from '../components/ReminderAlert.vue'
 import { useAuthStore } from '../stores/auth'
 import {
   completeReminder,
+  getDNDState,
   getLists,
   getNotifications,
   getRevision,
@@ -560,8 +653,10 @@ import {
   markNotificationRead,
   deleteList,
   reorderLists,
+  setDNDManual,
   snoozeReminder,
   updateList,
+  type DNDState,
   type ReminderList,
 } from '../api/reminder'
 import { getAllConfigs, getVersion, updateConfig } from '../api/config'
@@ -601,8 +696,6 @@ const navLists = computed(() => lists.value.filter(
   (l) => l.template !== 'credit_card' && l.template !== 'notebook' && l.template !== 'ceremony',
 ))
 const cardBucket = computed(() => lists.value.find((l) => l.template === 'credit_card') || null)
-const noteBucket = computed(() => lists.value.find((l) => l.template === 'notebook') || null)
-const ceremonyBucket = computed(() => lists.value.find((l) => l.template === 'ceremony') || null)
 
 // ---- 侧栏「我的清单」整段排序（用户 2026-10-15）----
 // 原来「全部 / 提醒@他 / 信用卡账单 / 随手记事本 / 人生要有仪式感」是写死的几行，
@@ -661,6 +754,36 @@ function myRowLabel(row: MyListRow): string {
   if (row.kind === 'all') return '全部'
   if (row.kind === 'nudge') return '提醒@他'
   return row.list.name
+}
+
+// 「清单」标签（手机端中间那个，用户 2026-10-16）：
+//   「手机页面 中间 信用卡 改成 清单，点击清单弹出 所有清单列表，根据选择切换清单列表」
+// 弹出的这一份列的就是侧栏「我的清单」那一段（同一份 myListRows、同一套显示条件与顺序），
+// 选一行 → 切到那一页并收起弹层。原来那个标签是信用卡账单的直达入口，现在也还在弹层里
+// （点一下就进去）——只是多了「所有清单」这一层。
+const listsSheetOpen = ref(false)
+const isListTabActive = computed(() => route.path.startsWith('/admin/list/'))
+function openListsSheet() { listsSheetOpen.value = true }
+function closeListsSheet() { listsSheetOpen.value = false }
+/** 这一行是不是当前所在页面（弹层里打勾用） */
+function isMyRowCurrent(row: MyListRow): boolean {
+  if (row.kind === 'all') return isActive('/admin/all')
+  if (row.kind === 'nudge') return isActive('/admin/nudges')
+  return route.path === `/admin/list/${row.list.id}`
+}
+/** 弹层右边的条数，与侧栏同一口径 */
+function myRowCount(row: MyListRow): number {
+  if (row.kind === 'all') return summary.value.all || 0
+  if (row.kind === 'nudge') return summary.value.nudge_pending || 0
+  if (row.list.template === 'credit_card') return cardBucket.value?.card_count || 0
+  return row.list.open_count || 0
+}
+function pickMyRow(row: MyListRow) {
+  const to = row.kind === 'all'
+    ? '/admin/all'
+    : row.kind === 'nudge' ? '/admin/nudges' : `/admin/list/${row.list.id}`
+  listsSheetOpen.value = false
+  if (route.path !== to) void router.push(to)
 }
 // 已经是这段的第一/最后一行时，↑（或 ↓）按钮置灰
 function isMyRowEdge(key: string, delta: number): boolean {
@@ -742,7 +865,7 @@ const icons = {
 const smartNav = [
   // 「首页」排在最上面（用户 2026-10-13：「智能清单：今天上方增加首页」）
   { to: '/admin/home', label: '首页', key: 'home', tone: 'bg-brand-500/12 text-brand-500', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-5.5h-5V21H5a1 1 0 0 1-1-1v-9.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
-  { to: '/admin', label: '今天', key: 'today', tone: 'bg-blue-500/12 text-blue-500', icon: icons.today },
+  { to: '/admin', label: '待办', key: 'today', tone: 'bg-blue-500/12 text-blue-500', icon: icons.today },
   { to: '/admin/planned', label: '计划', key: 'planned', tone: 'bg-amber-500/12 text-amber-500', icon: icons.planned },
   { to: '/admin/all', label: '全部', key: 'all', tone: 'bg-violet-500/12 text-violet-500', icon: icons.all },
   { to: '/admin/completed', label: '已完成', key: 'completed', tone: 'bg-emerald-500/12 text-emerald-500', icon: icons.completed },
@@ -771,7 +894,7 @@ const viewSwitchRoutes = ['Home', 'Planned', 'AllReminders', 'Completed', 'Remin
 const isNarrow = useIsNarrow()
 const showViewSwitch = computed(() => !isNarrow.value && viewSwitchRoutes.includes(String(route.name || '')))
 const isCalendar = computed(() => route.name === 'Calendar')
-// 从日历切回列表时回到「今天」，而不是记住上次那个智能清单：日历不区分清单，
+// 从日历切回列表时回到「待办」，而不是记住上次那个智能清单：日历不区分清单，
 // 回来落在固定的入口更符合直觉。
 const listRoute = computed(() => (route.name === 'ReminderList' ? route.path : '/admin'))
 // 左上角这块在手机上只承担「回到列表」：不再出现任何日历相关的提示文字
@@ -823,10 +946,38 @@ watch(() => route.path, (path) => {
 }, { immediate: true })
 // 清单色表已抽到 utils/list-colors.ts（侧栏/筛选/列表标题/日历共用一份）。
 const listColor = listColorHex
-function openQuickAdd() {
-  if (!route.path.startsWith('/admin') || ['notifications', 'channels', 'settings', 'profile'].some(x => route.path.includes(x))) router.push('/admin')
+// 「新建提醒」按钮派发的 open-quick-reminder 只有 HomeView 一族（列表视图）在监听，
+// 所以按钮要先把用户送到**带快速新建面板的页面**再派发事件：
+//   · 首页看板 / 通知中心 / 通知方式 / 偏好设置 / 个人资料 / 后台各页都没有那个面板，
+//     以前只在「非 /admin」和那四个页面路径上做了跳转，首页看板（/admin/home）落进
+//     空档 —— 事件派发了没人接，表现就是「点了没反应」（用户 2026-10-15 报的）。
+//   · 用**路由名白名单**判断而不是路径片段，新增页面时不写名字就自动走跳转这条路，
+//     不会再出现「某页按钮静默失效」。
+// 顺序：先 await 导航，再等一帧让 HomeView 挂上，最后派发。
+// 现在叫它的有三处：手机悬浮 +、这里挂的 window 事件 open-quick-add（首页看板标题行右侧
+// 那个「新建提醒」派发的），以及 HomeView 自己的快捷键 N。
+const QUICK_ADD_HOSTS = ['Home', 'Planned', 'AllReminders', 'Completed', 'ReminderList']
+async function openQuickAdd() {
   mobileOpen.value = false
-  setTimeout(() => window.dispatchEvent(new CustomEvent('open-quick-reminder')), 80)
+  if (!QUICK_ADD_HOSTS.includes(String(route.name || ''))) await router.push(listRoute.value)
+  await nextTick()
+  // HomeView 是懒加载路由：它的 open-quick-reminder 监听要等 `onMounted` 才挂上，
+  // 只派发一次的话，从首页看板/通知中心跳过来时事件比监听早到、卡片根本不展开
+  // （实测就是这么丢的）。事件本身幂等（重复派发＝再展开一次并聚焦），
+  // 所以短窗内多派发几次，后挂上的监听也能接住。
+  for (let i = 0; i < 5; i += 1) {
+    window.dispatchEvent(new CustomEvent('open-quick-reminder'))
+    await new Promise((resolve) => setTimeout(resolve, 70))
+  }
+}
+
+// ---- 「呼叫小秘」：AI 助手面板（模型参数在「系统配置 → AI 助手」里填，见 api/assistant.ts）----
+// 面板在任何页面都能叫出来，所以这里不做跳转；以后别的页面（空状态、看板卡片等）
+// 想叫它，派发 window 事件 open-assistant 即可，和 open-quick-reminder 一个路子。
+const assistantOpen = ref(false)
+function openAssistant() {
+  mobileOpen.value = false
+  assistantOpen.value = true
 }
 // ---- 左上角 logo：列表 / 日历 一键切换 ----
 // 顶栏右侧那个「列表 / 日历」开关仍然保留（只在提醒相关页面出现），这里是从 logo 直接切。
@@ -1197,6 +1348,53 @@ const ackHint = computed(() => (ackMinutes.value > 0
 const ALERT_NOTIFICATION_TYPES = ['reminder_due', 'reminder_overdue', 'nudge_received', 'nudge_reminded']
 const NUDGE_NOTIFICATION_TYPES = ['nudge_received', 'nudge_reminded']
 
+// 免打扰（用户 2026-10-16）：首行铃铛旁边那个喇叭/静音按钮。状态以服务端为准
+// （手动开关 dnd_manual + 后台「免打扰时间段」），这里只负责显示、切换，
+// 以及「免打扰期间不弹窗、不响铃」。服务端那一侧也会拦（投递任务继续留 pending、
+// 逾期提醒跳过、提醒@他只记通知不实时推），前端这层是兜底：免打扰打开之前就已经
+// 排进队列的通知，也不该继续打扰。
+const dnd = ref<DNDState | null>(null)
+const dndActive = computed(() => dnd.value?.active === true)
+const dndInWindow = computed(() => dnd.value?.in_window === true)
+const dndTooltip = computed(() => {
+  const state = dnd.value
+  if (!state) return '免打扰'
+  if (state.active) return `${state.reason || '免打扰'}：这段安静时间不弹提醒、不响铃\n点击关闭免打扰`
+  if (state.window_enabled) return `开启免打扰\n后台免打扰时间段 ${state.window_start}–${state.window_end}`
+  return '开启免打扰'
+})
+
+async function refreshDND() {
+  try {
+    const res = await getDNDState()
+    if (res.data?.code === 0) dnd.value = res.data.data as DNDState
+  } catch {
+    // 拿不到就保持现状：不能因为一个状态接口失败把免打扰按钮弄坏。
+  }
+}
+
+// 点一下 = 切换手动开关。打开时把已经排队的弹窗清掉（用户点它就是要马上安静）；
+// 关掉时补一次「错过的提醒」，免得免打扰期间到点的提醒再也不弹。
+async function toggleDND() {
+  const next = dnd.value?.manual !== true
+  try {
+    const res = await setDNDManual(next)
+    if (res.data?.code !== 0) {
+      realtimeToast.value = res.data?.message || '免打扰设置失败'
+      return
+    }
+    dnd.value = res.data.data as DNDState
+    if (dnd.value.active) {
+      alertQueue.value = []
+      realtimeToast.value = ''
+    } else {
+      void recoverMissedAlerts()
+    }
+  } catch (error: any) {
+    realtimeToast.value = error?.response?.data?.message || '免打扰设置失败'
+  }
+}
+
 function enqueueDueAlert(notification: ReminderRealtimeEvent['notification']) {
   if (!notification || !ALERT_NOTIFICATION_TYPES.includes(notification.type)) return
   if (alertQueue.value.some(item => item.notificationID === notification.id)) return
@@ -1339,6 +1537,9 @@ function handleRealtimeEvent(event: ReminderRealtimeEvent) {
   if (event.revision) lastRevision = event.revision
   window.dispatchEvent(new CustomEvent('reminder-realtime', { detail: event }))
   window.dispatchEvent(new CustomEvent('reminder-data-changed'))
+  // 免打扰（用户 2026-10-16）：通知照旧进通知中心（未读角标照常），但一个弹窗、
+  // 一声提示都不给 —— 这是「权责级别优先在所有通知以上」的前端那一半。
+  if (dndActive.value) return
   // 站内提醒：手机端也能看到的弹窗（toast 在小屏上太容易被忽略，也容易被底部
   // 标签栏挡住）。其它类型（例如渠道投递失败）继续保持轻量的 toast。
   if (ALERT_NOTIFICATION_TYPES.includes(event.notification.type)) {
@@ -1365,6 +1566,9 @@ const ALERT_RECOVERY_WINDOW_MS = 60 * 60 * 1000
 const alertRecoverySince = new Date(Date.now() - ALERT_RECOVERY_WINDOW_MS)
 
 async function recoverMissedAlerts() {
+  // 免打扰期间不补弹（用户 2026-10-16）：通知中心的未读角标照常累积，
+  // 等用户自己关了免打扰，或者点开通知中心，再看到它们。
+  if (dndActive.value) return
   try {
     const res = await getNotifications()
     const items = (res.data?.data || []) as RealtimeNotification[]
@@ -1391,6 +1595,9 @@ let revisionTimer: number | undefined
 
 async function pollRevision() {
   if (document.visibilityState !== 'visible' || !authStore.isAuthenticated) return
+  // 免打扰状态跟着一起刷：时间段是按钟点生效的（到点自动进入/退出），
+  // 另一台设备上点的开关、后台改的时间段，也要在这个按钮上跟上。
+  void refreshDND()
   try {
     const res = await getRevision()
     if (res.data?.code !== 0) return
@@ -1413,6 +1620,8 @@ async function pollRevision() {
 function refreshWhenVisible() {
   if (document.visibilityState === 'visible') {
     refreshNavigation()
+    // 免打扰状态（手动开关 / 后台时间段）也是「回到前台就该是最新的」那类状态。
+    void refreshDND()
     window.dispatchEvent(new CustomEvent('reminder-realtime-resume'))
     // 回到前台时立刻核一次：手机端常见路径是切到飞牛 App 退出登录再切回来，
     // 等下一次轮询太慢，回来这一下就该已经回登录页了。
@@ -1448,9 +1657,9 @@ function syncKeyboardState() {
   keyboardOpen.value = !!vv && window.innerHeight - vv.height > 120
 }
 
-// 只在本次会话的第一次进入时套用「默认首页」，之后用户点「今天」不该被再拽去日历。
+// 只在本次会话的第一次进入时套用「默认首页」，之后用户点「待办」不该被再拽去日历。
 let defaultViewApplied = false
-// 「默认首页」偏好（default_view）：home=首页看板 / list=列表（今天）/ calendar=日历。
+// 「默认首页」偏好（default_view）：home=首页看板 / list=列表（待办）/ calendar=日历。
 // 用户 2026-10-13 加了首页看板并要求「打开默认显示页」，所以默认值是 home；
 // 手机上没有日历视图，设成日历也按列表进。
 const defaultView = ref<'home' | 'list' | 'calendar'>('home')
@@ -1500,6 +1709,8 @@ onMounted(() => {
   loadVersion()
   window.visualViewport?.addEventListener('resize', syncKeyboardState)
   window.addEventListener('reminder-data-changed', refreshNavigation)
+  window.addEventListener('open-assistant', openAssistant)
+  window.addEventListener('open-quick-add', openQuickAdd)
   document.addEventListener('pointerdown', unlockReminderSound, { once: true })
   document.addEventListener('keydown', unlockReminderSound, { once: true })
   document.addEventListener('visibilitychange', refreshWhenVisible)
@@ -1513,6 +1724,8 @@ onMounted(() => {
   fnosSessionTimer = window.setInterval(() => { void checkFnOSSession() }, FNOS_SESSION_POLL_MS)
   // 先问一次当前修订号作为基准，之后只处理「变了」的情况（见 pollRevision）。
   void pollRevision()
+  // 免打扰按钮的初始状态（喇叭 / 静音 + 后台时间段是否生效中）
+  void refreshDND()
   // 进门先补一遍：应用没开着的时候到点且还没处理的提醒，打开就该看到。
   void recoverMissedAlerts()
   revisionTimer = window.setInterval(() => { void pollRevision() }, REVISION_POLL_MS)
@@ -1526,6 +1739,8 @@ onBeforeUnmount(() => {
   audioContext?.close()
   window.visualViewport?.removeEventListener('resize', syncKeyboardState)
   window.removeEventListener('reminder-data-changed', refreshNavigation)
+  window.removeEventListener('open-assistant', openAssistant)
+  window.removeEventListener('open-quick-add', openQuickAdd)
   document.removeEventListener('pointerdown', unlockReminderSound)
   document.removeEventListener('keydown', unlockReminderSound)
   document.removeEventListener('visibilitychange', refreshWhenVisible)
@@ -1563,7 +1778,10 @@ onBeforeUnmount(() => {
 .sidebar-rail .version-badge { @apply lg:hidden; }
 .sidebar-rail .nav-row,
 .sidebar-rail .nav-settings-toggle { @apply lg:justify-center lg:gap-0 lg:px-0; }
-.sidebar-rail .new-reminder-button { @apply lg:mx-auto lg:h-11 lg:w-11 lg:justify-center lg:gap-0 lg:px-0; }
+/* 窄栏里「呼叫小秘」收成 44px 圆按钮、居中。外层容器先把左右外边距让开：
+   56px 的图标栏减去 mx-4 只剩 24px，44px 的圆按钮会偏到左边去。 */
+.sidebar-rail .rail-actions { @apply lg:mx-0 lg:items-center lg:gap-2; }
+.sidebar-rail .assistant-button { @apply lg:h-11 lg:w-11 lg:justify-center lg:gap-0 lg:px-0; }
 .sidebar-rail nav { @apply lg:px-2; }
 /* 56px 的图标栏里再挤一条滚动条，图标会被推得偏左（实测差 5px），而且视觉上很脏。
    仍然可以滚（滚轮/触摸），只是不显示滚动条。 */
@@ -1574,7 +1792,9 @@ onBeforeUnmount(() => {
 .sidebar-rail .mt-7 { @apply lg:mt-3; }
 .logo-mark { @apply flex h-11 w-11 items-center justify-center rounded-[15px] bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_10px_30px_-10px_rgba(59,130,246,.75)]; }
 .version-badge { @apply rounded-full border border-brand-500/25 bg-brand-500/10 px-2 py-0.5 text-[11px] font-bold leading-none text-brand-600 dark:text-brand-300; }
-.new-reminder-button { @apply flex h-12 items-center gap-3 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-500 px-3.5 text-sm font-bold text-white shadow-[0_14px_30px_-14px_rgba(59,130,246,.8)] transition hover:-translate-y-0.5 hover:brightness-105 active:translate-y-0; }
+/* 「呼叫小秘」：侧栏顶部的入口（「新建提醒」已挪到首页看板，见 HomeDashboardView）。
+   用品牌色低透明度底 + 描边，浅深主题都不刺眼。 */
+.assistant-button { @apply flex h-12 items-center gap-3 rounded-2xl border border-brand-500/25 bg-brand-500/10 px-3.5 text-sm font-bold text-brand-700 transition hover:bg-brand-500/15 active:scale-[0.99] dark:text-brand-200; }
 /* 折叠「设置」入口：浅蓝底 + 齿轮图标凸显。底色用品牌色低透明度叠加，
    在浅色与深色主题下都是「浅蓝」；展开时加深一点，表示这一组正在展开。 */
 .nav-settings-toggle {
@@ -1592,7 +1812,6 @@ onBeforeUnmount(() => {
 .nav-symbol :deep(svg), .mobile-tab :deep(svg) { width: 18px; height: 18px; }
 .nav-count { @apply min-w-6 rounded-full bg-muted px-1.5 py-0.5 text-center text-[10px] font-bold text-muted-foreground; }
 .tiny-add { @apply flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground; }
-.sub-link { @apply ml-11 block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground; }
 .topbar { @apply sticky top-0 z-30 flex h-12 items-center border-b border-border/70 bg-background/75 px-3.5 backdrop-blur-xl sm:h-16 sm:px-6 lg:h-[76px] lg:px-8 xl:px-10; }
 .avatar { @apply flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-extrabold text-white shadow-sm sm:h-9 sm:w-9; }
 /* 悬浮「新建」：右下角，浮在底部标签栏之上；手机端才有 */
@@ -1604,7 +1823,17 @@ onBeforeUnmount(() => {
 .mobile-tab span { @apply flex h-6 w-6 items-center justify-center; }
 .mobile-tab small { @apply text-[10px] font-semibold; }
 .mobile-tab.active { @apply text-brand-500; }
-.mobile-add { @apply -mt-6 flex h-12 w-12 items-center justify-center rounded-full border-4 border-background bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_12px_28px_-8px_rgba(59,130,246,.8)]; }
+
+/* 「清单」标签弹出的清单列表（手机底部弹层） */
+.sheet-backdrop { @apply fixed inset-0 z-[70] bg-slate-950/45 backdrop-blur-[2px]; }
+.lists-sheet { @apply fixed inset-x-0 bottom-0 z-[71] max-h-[72vh] rounded-t-[26px] border-t border-border bg-surface pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-18px_50px_-12px_rgba(15,23,42,.4)]; }
+.lists-sheet-head { @apply sticky top-0 flex items-center justify-between gap-3 border-b border-border bg-surface/95 px-5 py-3 backdrop-blur; }
+.lists-sheet-body { @apply max-h-[calc(72vh-3.25rem)] overflow-y-auto overscroll-contain; }
+.lists-sheet-row { @apply flex w-full items-center gap-3 border-b border-border/60 px-5 py-3.5 text-left text-sm font-semibold text-foreground transition active:bg-muted; }
+.lists-sheet-row-active { @apply text-brand-600 dark:text-brand-300; }
+.sheet-enter-active, .sheet-leave-active { @apply transition duration-200 ease-out; }
+.sheet-enter-from, .sheet-leave-to { @apply opacity-0; }
+.sheet-enter-from .lists-sheet, .sheet-leave-to .lists-sheet { @apply translate-y-8; }
 .page-enter-active, .page-leave-active { transition: opacity .18s ease, transform .18s ease; }
 .page-enter-from { opacity: 0; transform: translateY(5px); }
 .page-leave-to { opacity: 0; transform: translateY(-3px); }

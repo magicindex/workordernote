@@ -539,8 +539,6 @@ function setTimeParts(h: string, m: string) {
   onTimeChange()
 }
 
-const anchor = computed(() => props.modelValue ?? new Date())
-
 // 以锚点元素计算 fixed 位置：默认在按钮下方左对齐；底部放不下时
 // 上翻到按钮上方；左右贴边时向内收。挂载与视口变化时都重新计算。
 function place() {

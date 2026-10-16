@@ -61,17 +61,6 @@ export function defaultAccentFor(id?: number | string): LightAccent {
   return LIGHT_ACCENTS[hash % LIGHT_ACCENTS.length]
 }
 
-/** 卡片**整卡底色**：选了颜色就用该色的浅淡版（同色系），没选就用上面那档浅色。
-    透明度压得很低（12% → 6%），浅色/深色主题下都只是「有点颜色」，不抢内容。 */
-export function cardTint(accentKey?: string | null, id?: number | string): string {
-  if (!accentKey) {
-    const a = defaultAccentFor(id)
-    return `linear-gradient(135deg, ${a.from} 0%, ${a.to} 100%)`
-  }
-  const a = cardAccent(accentKey)
-  return `linear-gradient(135deg, ${a.from}29 0%, ${a.to}14 100%)`
-}
-
 /**
  * 卡面文字色：
  *   · 默认档的浅色卡面是**不透明**的浅底 —— 必须强制深字，否则深色主题下白字糊在浅底上

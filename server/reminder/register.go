@@ -188,6 +188,37 @@ func init() {
 		Description: "到期日前几天开始提醒（0 = 不提前）。只在离到期日超过这个天数时生效；创建时已经在几天内的按正常流程（到期日当天的开始提醒时间）。窗口内每天只在开始提醒时间提醒一次",
 	})
 
+	// 免打扰（用户 2026-10-16）：「首行铃铛（消息）旁边放一个喇叭标志，点击进入静音标志，
+	// 退出显示喇叭，点击进入免打扰模式。后台增加免打扰时间段。」
+	//
+	// 这里登记的是**时间段**那半边（系统级：管理员在「系统配置 → 免打扰」里改），
+	// 跨天写法（22:00–07:00）按跨天解释；起止写一样＝不启用时间段。
+	// 总开关**默认关**：打开后夜里到清晨的提醒会整段不发（改变现有行为），由用户自己决定。
+	// 手动开关那半边是个人级 dnd_manual（下面那条，Internal），只走 /reminder/dnd 接口。
+	// 「权责级别优先在所有通知以上」的四个口子见 dnd.go 的文件头注释。
+	sysconfig.RegisterConfig(sysconfig.ConfigDef{
+		Key: "dnd_enabled", Scope: sysconfig.ScopeSystem, Type: sysconfig.TypeBool,
+		Default: "false", Group: "dnd", Label: "免打扰时间段",
+		Description: "打开后这段时间内不发任何提醒（含逾期提醒、提醒@他、投递队列里的提醒），通知只记进通知中心，到点后照常发",
+	})
+	sysconfig.RegisterConfig(sysconfig.ConfigDef{
+		Key: "dnd_start_time", Scope: sysconfig.ScopeSystem, Type: sysconfig.TypeTime,
+		Default: "22:00", Group: "dnd", Label: "免打扰开始时间",
+		Description: "从这个时间开始安静；允许晚于结束时间表示跨天，例如 22:00 到第二天 07:00",
+	})
+	sysconfig.RegisterConfig(sysconfig.ConfigDef{
+		Key: "dnd_end_time", Scope: sysconfig.ScopeSystem, Type: sysconfig.TypeTime,
+		Default: "07:00", Group: "dnd", Label: "免打扰结束时间",
+		Description: "到这个时间结束；与开始时间填成一样表示不用这个时间段",
+	})
+	// 个人级手动开关：Internal（不出现在任何配置列表里，也不能经通用配置接口读写），
+	// 只由 /api/reminder/dnd 读写 —— 与双机同步那批设置项同一个范式。
+	sysconfig.RegisterConfig(sysconfig.ConfigDef{
+		Key: keyDNDManual, Scope: sysconfig.ScopeUser, Type: sysconfig.TypeBool,
+		Default: "false", Internal: true, Group: "dnd", Label: "手动免打扰",
+		Description: "首行那个喇叭/静音按钮的状态（在页面上点按钮切换）",
+	})
+
 	apps.Register(apps.App{
 		Name:        "reminder",
 		DisplayName: "工作序记",

@@ -4,10 +4,6 @@ export function getUsers(page: number, pageSize: number, search?: string) {
   return request.get('/api/users', { params: { page, pageSize, search } })
 }
 
-export function updateUser(id: number, data: Record<string, any>) {
-  return request.put(`/api/users/${id}`, data)
-}
-
 export function deleteUser(id: number) {
   return request.delete(`/api/users/${id}`)
 }

@@ -314,9 +314,9 @@ const clickMenuItem = (page, label) => page.evaluate((label) => {
     });
     check('「换浏览器」（本地无记录）时回到默认「未完成」', freshBrowser.join(',') === '未完成', JSON.stringify(freshBrowser));
 
-    // 今天 / 计划两个视图**取消**了「未完成 / 全部」开关（用户要求：只显示未完成），
+    // 待办 / 计划两个视图**取消**了「未完成 / 全部」开关（用户要求：只显示未完成），
     // 所以这里断言它们没有这个开关，且即使本地留着「全部」也看不到已完成的行。
-    for (const [path, label] of [['/admin', '今天'], ['/admin/planned', '计划']]) {
+    for (const [path, label] of [['/admin', '待办'], ['/admin/planned', '计划']]) {
       await page.evaluate(() => { try { localStorage.setItem('ui_list_status', 'all'); } catch { /* 忽略 */ } });
       await page.goto(ROOT + path, { waitUntil: 'domcontentloaded' });
       await sleep(1500);

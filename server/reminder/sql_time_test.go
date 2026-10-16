@@ -16,7 +16,7 @@ import (
 //
 // 成立，明天的条目就漏进了今天页 —— 0.15.4 上线后实测到「今天页多出一张
 // 『明天 · 10月10日』的卡片」。这里把「同一时刻、不同偏移」的条目都建出来，
-// 钉住今天页与计划页的口径（修法见 sql_time.go 的 tsUTC / sqlTimeArg）。
+// 钉住待办页与计划页的口径（修法见 sql_time.go 的 tsUTC / sqlTimeArg）。
 func TestTodayViewIsOffsetAware(t *testing.T) {
 	withShanghaiLocal(t)
 	cleanup := testDB(t)
@@ -47,6 +47,8 @@ func TestTodayViewIsOffsetAware(t *testing.T) {
 	mk("今天20点本机偏移", todayEvening)
 	mk("明天8点UTC偏移", tomorrowMorningUTC)
 	mk("昨天20点UTC偏移", yesterdayEveningUTC)
+	// 窗口之外的对照组：待办页从 2026-10-16 起是「今天到第 7 天」，第 9 天必须看不见。
+	mk("第九天8点UTC偏移", midnight.AddDate(0, 0, 8).Add(8*time.Hour).UTC())
 
 	// 前提：偏移确实按传入的位置存下来了（不然这条用例就白测了）。
 	var stored []Reminder
@@ -71,8 +73,11 @@ func TestTodayViewIsOffsetAware(t *testing.T) {
 	for _, r := range today {
 		got[r.Title] = true
 	}
-	if got["明天8点UTC偏移"] {
-		t.Errorf("今天页不该出现明天 08:00（本地）的条目（存的是 +00:00 偏移）：%v", titlesOf(today))
+	if got["第九天8点UTC偏移"] {
+		t.Errorf("待办页只到第 7 天，不该出现第 9 天 08:00（本地）的条目（存的是 +00:00 偏移）：%v", titlesOf(today))
+	}
+	if !got["明天8点UTC偏移"] {
+		t.Errorf("待办页现在是近 7 天，明天 08:00（存的是 +00:00 偏移）应该在：%v", titlesOf(today))
 	}
 	for _, want := range []string{"今天20点本机偏移", "昨天20点UTC偏移"} {
 		if !got[want] {

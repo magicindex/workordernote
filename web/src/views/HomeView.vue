@@ -73,7 +73,7 @@
             @click="expandQuickAdd"
           >
             <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2.2" stroke-linecap="round"/></svg>
-            新建
+            新建提醒
           </button>
           <label class="search-box">
             <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" stroke-width="1.8"/><path d="m16.5 16.5 4 4" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -112,7 +112,7 @@
               maxlength="200"
               @keydown.enter.prevent="submitQuick"
             />
-            <p v-if="quick.notes" class="mt-1 truncate text-xs text-muted-foreground">{{ quick.notes }}</p>
+            <p v-if="quick.notes" class="mt-1 break-words text-xs leading-4 text-muted-foreground sm:truncate">{{ quick.notes }}</p>
           </div>
           <button v-if="quick.title" class="btn-primary !h-9 !px-4" :disabled="saving" @click="submitQuick">{{ saving ? '保存中' : quick.kind === 'note' ? '记下' : '添加' }}</button>
         </div>
@@ -271,7 +271,7 @@
             class="mt-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[11px] font-semibold leading-4 text-amber-600 dark:text-amber-400"
             data-quick-undated-hint
           >
-            这条没有日期：不会出现在「今天 / 计划」里，只在「全部」里显示为「无日期」。
+            这条没有日期：不会出现在「待办 / 计划」里，只在「全部」里显示为「无日期」。
             <button type="button" class="underline underline-offset-2" @click="setPreset('today')">设为今天</button>
           </p>
 
@@ -467,7 +467,7 @@
           </button>
           <button class="min-w-0 flex-1 text-left" :disabled="!entry.reminder_exists" @click="openCompletedEntry(entry)">
             <div class="flex items-center gap-2">
-              <h3 class="truncate text-sm font-bold sm:text-[15px]">{{ entry.title }}</h3>
+              <h3 class="min-w-0 break-words text-sm font-bold leading-5 sm:truncate sm:text-[15px]">{{ entry.title }}</h3>
               <span v-if="entry.kind === 'note'" class="tiny-badge">记事</span>
               <span v-else-if="entry.repeat_rule && entry.repeat_rule !== 'none'" class="tiny-badge">{{ ruleLabel(entry.repeat_rule) }}</span>
             </div>
@@ -531,7 +531,7 @@
                 <div class="flex items-center gap-2">
                   <!-- 任务标题用所属清单的颜色：侧栏圆点、这里的标题、日历色块三处同色。
                        颜色在侧栏「编辑清单」里改，改完会广播数据变更，本页与日历立即刷新。 -->
-                  <h3 class="truncate text-sm font-bold sm:text-[15px]" :style="{ color: listColor(item.list_color) }">{{ item.title }}</h3>
+                  <h3 class="min-w-0 break-words text-sm font-bold leading-5 sm:truncate sm:text-[15px]" :style="{ color: listColor(item.list_color) }">{{ item.title }}</h3>
                   <span v-if="item.kind === 'note'" class="tiny-badge">记事</span>
                   <span v-if="item.priority" class="priority-mark" :class="`priority-${item.priority}`">{{ '!'.repeat(item.priority) }}</span>
                   <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ item.calendar === 'lunar' ? `农历${ruleLabel(item.repeat_rule)}` : ruleLabel(item.repeat_rule) }}</span>
@@ -541,7 +541,7 @@
                     第 {{ item.cycle_index }} 次
                   </span>
                 </div>
-                <p v-if="item.notes" class="mt-0.5 truncate text-xs text-muted-foreground sm:mt-1">{{ item.notes }}</p>
+                <p v-if="item.notes" class="mt-0.5 break-words text-xs leading-4 text-muted-foreground sm:mt-1 sm:truncate">{{ item.notes }}</p>
                 <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground sm:mt-2">
                   <span class="inline-flex items-center gap-1" :class="{ 'text-rose-500': isOverdue(item) }">
                     <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7v5l3 2" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -630,7 +630,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import Toast from '../components/Toast.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -647,7 +647,6 @@ import { listColorHex } from '../utils/list-colors'
 import { remainingText } from '../utils/remaining'
 import {
   overdueStamp as overdueStampShared,
-  overdueDeadlineAt as overdueDeadlineShared,
   isOverdueAt as isOverdueShared,
 } from '../utils/overdue'
 import { getPublicConfigs } from '../api/config'
@@ -965,36 +964,6 @@ function applyPlanPeriod() {
   const end = periodEnd(quick.start_at, planPeriod.value, planDays.value)
   quick.end_at = toLocalIso(end)
 }
-/** 已有结束时间时反推周期（编辑旧数据用）：能对上就选中对应档，否则算自定义。 */
-/**
- * 从已有的「开始—结束」反推周期档位与数量（编辑一条计划任务时用）。
- * 各档位的匹配按「先特殊后一般」：年终 → N 年 → N 月 → N 周 → N 天。
- */
-function inferPlanPeriod() {
-  if (!quick.end_at || !quick.start_at) { planPeriod.value = 'none'; return }
-  const start = new Date(quick.start_at)
-  const end = new Date(quick.end_at)
-  const same = (d: Date) => Math.abs(end.getTime() - d.getTime()) < 60_000
-  const startBase = new Date(start.getFullYear(), start.getMonth(), start.getDate())
-  const endBase = new Date(end.getFullYear(), end.getMonth(), end.getDate())
-  const diff = Math.round((endBase.getTime() - startBase.getTime()) / 86400_000) + 1 // 含首尾的天数
-  if (diff >= 1 && diff <= 3650 && Math.abs(end.getHours()) === 23) {
-    if (same(periodEnd(quick.start_at, 'yearend', 1))) { planPeriod.value = 'yearend'; return }
-    for (let n = 1; n <= 60; n += 1) {
-      if (diff % 7 === 0 && n === diff / 7 && same(periodEnd(quick.start_at, 'week', n))) {
-        planPeriod.value = 'week'; planDays.value = n; return
-      }
-    }
-    for (let n = 1; n <= 60; n += 1) {
-      if (same(periodEnd(quick.start_at, 'month', n))) { planPeriod.value = 'month'; planDays.value = n; return }
-    }
-    for (let n = 1; n <= 30; n += 1) {
-      if (same(periodEnd(quick.start_at, 'year', n))) { planPeriod.value = 'year'; planDays.value = n; return }
-    }
-    if (diff <= 3650) { planPeriod.value = 'days'; planDays.value = diff; return }
-  }
-  planPeriod.value = 'custom'
-}
 
 /** 当前周期档位对应的数量输入框可访问名（读屏用；不影响界面）。 */
 const planCountLabel = computed(() => ({
@@ -1030,13 +999,20 @@ const isNoteBucketPage = computed(() => selectedList.value?.template === 'notebo
 const isCeremonyBucketPage = computed(() => selectedList.value?.template === 'ceremony' && authStore.ceremonyEnabled)
 // 下拉/筛选里能选的只有普通清单（信用卡/记事本栏目不是「清单」，不该出现在这些地方）
 const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card' && l.template !== 'notebook' && l.template !== 'ceremony'))
-const pageTitle = computed(() => selectedList.value?.name || String(route.meta.title || '今天'))
-const eyebrow = computed(() => selectedList.value ? '我的清单' : view.value === 'today' ? '此刻最重要' : '工作序记')
+const pageTitle = computed(() => selectedList.value?.name || String(route.meta.title || '待办'))
+const eyebrow = computed(() => selectedList.value ? '我的清单' : view.value === 'today' ? '近 7 天要办的' : '工作序记')
 const accentColor = computed(() => selectedList.value ? listColor(selectedList.value.color) : view.value === 'completed' ? '#10b981' : '#3182f6')
 const subtitle = computed(() => {
   if (isNoteBucketPage.value) return `${items.value.length} 条记事，按记录时间倒序`
   if (selectedList.value) return `${selectedList.value.open_count || 0} 件事情正在等你`
-  if (view.value === 'today') return new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
+  if (view.value === 'today') {
+    // 待办页＝今天到第 7 天（用户 2026-10-16），副标题把区间写出来，免得以为只看今天。
+    const start = new Date()
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6)
+    const head = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(start)
+    const tail = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric' }).format(end)
+    return `${head} – ${tail}`
+  }
   if (view.value === 'planned') return '按时间整理好接下来的安排'
   if (view.value === 'completed') return '每一个勾选，都是向前一步'
   return '所有未完成的提醒都在这里'
@@ -1044,7 +1020,7 @@ const subtitle = computed(() => {
 const overdueCount = computed(() => items.value.filter(isOverdue).length)
 const emptyTitle = computed(() => view.value === 'completed'
   ? (completedRange.value === 'all' ? '还没有完成记录' : '这个时间段没有记录')
-  : view.value === 'today' ? '今天轻松了' : '这里还没有提醒')
+  : view.value === 'today' ? '近 7 天都清空了' : '这里还没有提醒')
 const emptyText = computed(() => view.value === 'completed'
   ? (completedRange.value === 'all' ? '完成的提醒会安静地收在这里。' : '换一个时间段看看，或者选「全部」。')
   : '把脑海里惦记的事情记下来，剩下的交给 Reminder。')
@@ -1488,12 +1464,6 @@ function collapseQuickAdd() {
 function overdueStamp(item: ReminderItem): number | null {
   return overdueStampShared(item)
 }
-/** 逾期判定的**截止时刻**：到期时刻与「当天过期时间」取晚的那个。
-    （用户 2026-10-10：当天到这个点才算过期；若到期时刻本来就晚于它，就按到期时刻。） */
-function overdueDeadline(item: ReminderItem): number | null {
-  const t = overdueStamp(item)
-  return overdueDeadlineShared(item, overdueTimeParts.value)
-}
 function isOverdue(item: ReminderItem) {
   // 过了「宽限时间」才算逾期：默认时间就是当前时刻，不留余量的话新建即逾期
   return isOverdueShared(item, {
@@ -1561,7 +1531,8 @@ function dayLabelOf(key: string): { label: string; weekday: string } {
   const now = new Date()
   const midnight = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
   const diffDays = Math.round((midnight(date) - midnight(now)) / 86400000)
-  const relative = diffDays === 0 ? '今天' : diffDays === 1 ? '明天' : diffDays === -1 ? '昨天' : ''
+  // 待办页是「今天到第 7 天」这一段（用户 2026-10-16），所以近三天用口语词标出来。
+  const relative = diffDays === 0 ? '今天' : diffDays === 1 ? '明天' : diffDays === 2 ? '后天' : diffDays === -1 ? '昨天' : ''
   const base = y === now.getFullYear() ? `${m}月${d}日` : `${y}年${m}月${d}日`
   return { label: relative ? `${relative} · ${base}` : base, weekday: WEEKDAY_CN[date.getDay()] }
 }
@@ -1697,7 +1668,7 @@ function onShortcut(e: KeyboardEvent) {
 </script>
 
 <style scoped>
-.search-box { @apply flex h-10 w-full items-center gap-2 rounded-2xl border border-border/80 bg-surface/80 px-3 text-muted-foreground shadow-sm backdrop-blur transition focus-within:border-brand-500/40 focus-within:ring-4 focus-within:ring-brand-500/10 sm:h-11 sm:w-64; }
+.search-box { @apply flex h-10 min-w-0 flex-1 items-center gap-2 rounded-2xl border border-border/80 bg-surface/80 px-3 text-muted-foreground shadow-sm backdrop-blur transition focus-within:border-brand-500/40 focus-within:ring-4 focus-within:ring-brand-500/10 sm:h-11 sm:w-64 sm:flex-none; }
 .search-box input { @apply min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/65; }
 .quick-card { @apply relative overflow-hidden rounded-[24px] border border-border/70 bg-surface/90 p-3 shadow-[0_20px_50px_-30px_rgba(15,23,42,.35)] backdrop-blur-xl transition-all sm:p-5; }
 /* 收起态的「新建」按钮（用户要求：新建提醒控件折叠成一个按钮、放到搜索框左边）：
@@ -1761,7 +1732,6 @@ function onShortcut(e: KeyboardEvent) {
 .empty-ring { @apply absolute inset-2 rounded-full border border-brand-500/20 bg-brand-500/5; }
 .empty-check { @apply absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_16px_35px_-12px_rgba(59,130,246,.65)]; }
 .empty-dot { @apply absolute h-2.5 w-2.5 rounded-full; }.dot-one { @apply left-0 top-5 bg-amber-400; }.dot-two { @apply right-1 top-1 bg-violet-400; }.dot-three { @apply bottom-0 right-6 bg-emerald-400; }
-.channel-check { @apply flex h-5 w-5 items-center justify-center rounded-full border border-current; }
 /* 「过期提醒频率」是子组件，scoped 样式穿不进去；快速新建这排字段用的是
    .compact-input（h-9 + text-xs），所以把它对齐成同一套，避免这一格比
    旁边的「清单 / 重复 / 按农历循环」高一截。 */

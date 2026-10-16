@@ -54,10 +54,6 @@ export function logout() {
   })
 }
 
-export function getCurrentUser() {
-  return request.get('/api/auth/me')
-}
-
 export function checkSetupRequired() {
   return request.get('/api/auth/setup-required')
 }

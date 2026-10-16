@@ -34,7 +34,7 @@ const router = createRouter({
         // 「首页」看板（用户 2026-10-13）：14 天待办 + 已逾期两列。**打开应用的默认页**，
         // 10 分钟不操作也回到这里（见 MainLayout 的空闲跳转）。
         { path: 'home', name: 'Dashboard', component: () => import('../views/HomeDashboardView.vue'), meta: { title: '首页' } },
-        { path: '', name: 'Home', component: () => import('../views/HomeView.vue'), meta: { reminderView: 'today', title: '今天' } },
+        { path: '', name: 'Home', component: () => import('../views/HomeView.vue'), meta: { reminderView: 'today', title: '待办' } },
         { path: 'planned', name: 'Planned', component: () => import('../views/HomeView.vue'), meta: { reminderView: 'planned', title: '计划' } },
         { path: 'all', name: 'AllReminders', component: () => import('../views/HomeView.vue'), meta: { reminderView: 'all', title: '全部' } },
         { path: 'completed', name: 'Completed', component: () => import('../views/HomeView.vue'), meta: { reminderView: 'completed', title: '已完成' } },

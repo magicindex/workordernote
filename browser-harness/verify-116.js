@@ -86,6 +86,13 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       /23:59$/.test(chipTimes.weekend), JSON.stringify(chipTimes));
 
     // ---------------- 2. 剩余时间（实时，时:分） ----------------
+    // 先把日期点回「今天」再读：上面那圈芯片最后停的是「本周末」，而**周五**的「本周末」就是
+    // 「明天」，直接读会让下面「明天 > 今天」永远相等（2026-10-16 踩到过）。
+    await page.evaluate(() => {
+      const btns = [...document.querySelectorAll('.quick-chip')];
+      btns.find((b) => (b.textContent || '').trim() === '今天')?.click();
+    });
+    await sleep(500);
     const remain1 = await page.evaluate(() => document.querySelector('[data-quick-remaining]')?.textContent.trim() || '');
     check('芯片行显示「剩余时间」（时:分）',
       /^剩余 (\d+ 天 )?\d{2}:\d{2}$/.test(remain1), remain1);

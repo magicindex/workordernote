@@ -92,7 +92,3 @@ export function bankLogoOf(bank: string): string | null {
   }
   return null
 }
-
-export function bankNameOf(code: string): string {
-  return BANK_PRESETS.find((b) => b.code === code)?.name || ''
-}

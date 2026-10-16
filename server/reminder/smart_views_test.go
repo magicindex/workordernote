@@ -6,7 +6,7 @@ import (
 )
 
 // 计划页口径：只放「预设信息」——有循环规则的、有时间段的、或排在明天及以后的任务；
-// 今天页那些「就今天办」的普通任务不进计划页，记事也永远不进（它没有排期）。
+// 待办页那些「就今天办」的普通任务不进计划页，记事也永远不进（它没有排期）。
 func TestPlannedViewOnlyPresets(t *testing.T) {
 	withShanghaiLocal(t)
 	cleanup := testDB(t)
@@ -42,6 +42,9 @@ func TestPlannedViewOnlyPresets(t *testing.T) {
 	mk("每天的例行", SaveReminderInput{DueAt: &yesterday, RepeatRule: "daily"})
 	mk("跨两小时的时间段", SaveReminderInput{StartAt: &rangeStart, EndAt: &rangeEnd})
 	mk("记事", SaveReminderInput{Kind: KindNote})
+	// 待办页只看到第 7 天（今天 + 7 天 20:00 已经在窗口之外）
+	day8 := todayNoon.AddDate(0, 0, 7)
+	mk("第八天的事", SaveReminderInput{DueAt: &day8})
 
 	planned, err := listReminders(appDB, userID, "planned", "", nil, false, "", "", "")
 	if err != nil {
@@ -66,12 +69,25 @@ func TestPlannedViewOnlyPresets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 今天页：今天到期的 + 逾期未完成的，且逾期的排在最前
-	if len(today) != 2 {
-		t.Fatalf("今天页应有 2 条（今天的 + 逾期的），实际 %d：%v", len(today), titlesOf(today))
+	// 待办页（2026-10-16 起由「今天」改名）：排期落在今天起 7 天内的 + 逾期未完成的，
+	// 且逾期的排在最前。
+	if len(today) != 4 {
+		t.Fatalf("待办页应有 4 条（近 7 天的 3 条 + 逾期的 1 条），实际 %d：%v", len(today), titlesOf(today))
 	}
 	if today[0].Title != "每天的例行" {
 		t.Errorf("逾期未完成的应置顶，实际第一条是 %q", today[0].Title)
+	}
+	inToday := map[string]bool{}
+	for _, r := range today {
+		inToday[r.Title] = true
+	}
+	for _, want := range []string{"只有今天", "明天的事", "跨两小时的时间段"} {
+		if !inToday[want] {
+			t.Errorf("待办页少了 %q（现有：%v）", want, keysOf(inToday))
+		}
+	}
+	if inToday["第八天的事"] {
+		t.Errorf("待办页只显示到第 7 天，不该出现「第八天的事」：%v", titlesOf(today))
 	}
 }
 

@@ -13,7 +13,7 @@
           <span class="rounded-full border border-brand-500/25 bg-brand-500/10 px-2 py-0.5 text-[11px] font-bold leading-none text-brand-600 dark:text-brand-300">{{ version || '—' }}</span>
         </p>
         <p class="mt-0.5 text-xs font-medium text-muted-foreground">
-          项目名 {{ PROJECT.name }}<span v-if="buildTime"> · 构建于 {{ formatBuildTime(buildTime) }}</span>
+          项目名 {{ PROJECT.name }}<span v-if="buildTime"> · 由 {{ PROJECT.builder }} 构建于 {{ formatBuildTime(buildTime) }}</span>
         </p>
         <!-- 原项目信息（用户 2026-10-15：原来单独一块放在最下面，现在并进这个置顶块，
              跟着版本号一起第一眼就看到；衍生开发必须保留的出处与许可仍然完整保留）。 -->

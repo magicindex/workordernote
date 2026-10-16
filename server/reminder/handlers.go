@@ -66,6 +66,11 @@ func setupAuthRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	group.POST("/notifications/:id/read", handleReadNotification(db))
 	group.POST("/notifications/read-all", handleReadAllNotifications(db))
 
+	// 免打扰（用户 2026-10-16）：首行铃铛旁边那个喇叭/静音按钮的状态与开关；
+	// 时间段那半边在「系统配置 → 免打扰」，判断与拦截见 dnd.go。
+	group.GET("/dnd", handleDNDState(db))
+	group.PUT("/dnd", handleSetDND(db))
+
 	group.GET("/channels", handleChannelStatuses(db))
 	group.GET("/lunar", handleLunarCalendar(db))
 	group.GET("/lunar/convert", handleLunarConvert(db))
@@ -972,10 +977,12 @@ func overdueDeadlineExpr(effectiveDue, cutoff string) string {
 func handleSummary(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := currentUserID(c)
-		loc, _ := time.LoadLocation("Asia/Shanghai")
+		loc := shanghai()
 		now := time.Now()
 		local := now.In(loc)
-		endToday := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, 1)
+		// 待办角标与「待办」页同一口径（用户 2026-10-16：这一页显示近 7 天）：
+		// 生效时间落在今天起 7 天内的、或已经逾期的。左闭右开：+7 天 = 第 7 天 24 点。
+		endTodoWindow := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, 7)
 		var counts struct {
 			Today        int64
 			Planned      int64
@@ -992,14 +999,14 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		completedExpr := `COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
 					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND deleted_at IS NULL)`
 		// 参数顺序必须与 SQL 里的占位符顺序一致：today → completed 子查询 → overdue。
-		// 口径与改动前一致：今天 = due_at < 今天 24 点（含逾期），逾期 = due_at < 现在。
+		// 口径：待办 = 排期时间 < 今天起第 7 天 24 点（含逾期），逾期 = 排期时间 < 现在。
 		// 时间比较一律走 tsUTC() 归一化（SQLite 里时间是带偏移的文本，直接比会按
 		// 字符串序错位，见 sql_time.go）。
 		// 逾期看的是**过了宽限时间之后**（与前端 isOverdue 同一口径），
 		// 而且「到期日当天过了个人偏好里的逾期提醒时间就算逾期」（task_overdue_time，默认 23:59）。
 		grace, cutoff := overduePolicy(db, userID)
 		overdueBefore := now.Add(-grace)
-		selectArgs := []interface{}{sqlTimeArg(endToday), sqlTimeArg(now), userID}
+		selectArgs := []interface{}{sqlTimeArg(endTodoWindow), sqlTimeArg(now), userID}
 		if len(hiddenCards) > 0 {
 			// 栏目关掉时，它那些卡片提醒的完成记录也不该再计入角标。
 			completedExpr = `COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
@@ -1018,9 +1025,9 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		// 稍后提醒只决定「什么时候再提醒」，不该把一条已经逾期的任务从「已逾期」里摘出去。
 		// 与 Go 侧 deadlineStamp 同一口径。
 		deadlineDue := "COALESCE(end_at, start_at, due_at)"
-		// 「今天」角标与今天页同一口径：生效时间在今天之内的 **或已经逾期的**
-		// （逾期那一支不看 snoozed_until，见 deadlineDue 的说明 —— 点「知道了」不该
-		// 让一条逾期的任务从今天页/角标里消失）。
+		// 「待办」角标与待办页同一口径（2026-10-16 起这一页是近 7 天）：
+		// 生效时间在这 7 天之内的 **或已经逾期的**（逾期那一支不看 snoozed_until，
+		// 见 deadlineDue 的说明 —— 点「知道了」不该让一条逾期的任务从待办页/角标里消失）。
 		todayExpr := "COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND (" +
 			tsUTC(effectiveDue) + " < datetime(?) OR " + overdueDeadlineExpr(deadlineDue, cutoff) + " < datetime(?)) THEN 1 ELSE 0 END), 0) AS today"
 		overdueExpr := "COALESCE(SUM(CASE WHEN completed_at IS NULL AND due_at IS NOT NULL AND " +
