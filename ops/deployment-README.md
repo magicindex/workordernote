@@ -273,6 +273,21 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   201 `data.bak-pre0330-20261016-221854.tgz`（compose 同名前缀 `.bak-pre0330-20261016-221854`）。
 > - 上线顺序：沙箱 8908 21:33:02 → 201 生产 22:19:05（停容器 → 备份 → 改 compose 标签 →
 >   `docker compose up -d --force-recreate`）→ 200 生产（见下）。
+> - 上线顺序续：**200 生产 22:34:37**（从 201 拷三个构件到 200 的 `images/`+`pkg/`，三份 **md5 与 201 逐字节一致**
+>   —— 镜像 `c331d6887e8cde70c3d0210baff52884`、离线包 `b3858124125fb8a55b43e0ff8977dd4d`、
+>   fpk `fb963c1be29fecad8b5aeead8a661548`；停容器 → 备份 → `docker load` → 改 compose 标签 →
+>   `docker compose up -d --force-recreate`，全程按「先 load 再改标签」）。备份
+>   `data.bak-pre0330-20261016-223357.tgz`（819 858 B）与 `docker-compose.yml.bak-pre0330-20261016-223357`；
+>   升级完 `/api/version` = 0.33.0（gitCommit `4dce7eb`，startedAt 2026-10-16T22:34:37+08:00）。
+> - **三台健康检查与指纹（2026-10-16 22:36，`browser-harness/fingerprint-instances.py`）**：
+>   三台 `/api/health` 均 ok、版本均 0.33.0；清单 `edffe23d32`、卡片 `50c58560da`、提醒 `a902dd9b4a`、
+>   完成记录 `e9397a50eb` **三台一致**；条数 清单 5 / 卡片 9 / 提醒 60 / 完成 40 / 记事 8 三台相同
+>   （完成记录从 0.32.0 时的 36 涨到 40，是当天用户自己完成的任务，非同步差异）。
+> - 推送：`git push` main（`4dce7eb`、`1c620c3`、`2d3cdd2`）与 tag `v0.33.0`；Gitea **Release id 19**
+>   （`http://192.168.3.200:3000/cyberzero/WorkOrderNote/releases/tag/v0.33.0`）挂三个附件
+>   （45 701 189 / 45 616 967 / 21 484 349 B）；镜像 `docker tag` + `docker push` 到
+>   `192.168.3.200:3000/cyberzero/workordernote:0.33.0`，digest `sha256:1fb337c4116d…`，
+>   仓库 `tags/list` 回读已含 0.33.0。
 > - 构件：`images/workordernote-0.33.0-amd64.tar.gz`（45 701 189 B）md5 `c331d6887e8cde70c3d0210baff52884`；
 >   离线包 `WorkOrderNote-0.33.0-offline-amd64.tar.gz`（45 616 967 B）sha256
 >   `ffbdc6f5e43fa5e946e7c419234cef5eb435425d6538d9c76550c9d6abd60ea7`，自检 30 项全过；
