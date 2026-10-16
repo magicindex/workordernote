@@ -224,7 +224,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
-### 2026-10-16：0.32.0（201 生产 / 沙箱 8908 已上线，200 待跟进）—— AI 助手接上后台可配置的模型（含本机 Ollama 一键检测）+ 免打扰 + 「今天」改名「待办」并放宽到近 7 天 + 手机端若干体验修正
+### 2026-10-16：0.32.0（201 生产 / 200 生产 / 沙箱 8908 上线）—— AI 助手接上后台可配置的模型（含本机 Ollama 一键检测）+ 免打扰 + 「今天」改名「待办」并放宽到近 7 天 + 手机端若干体验修正
 
 > **发版记录**（VERSION `0.32.0`，源码提交 `5db1ae8`，镜像 `workordernote:0.32.0` =
 > `sha256:2db6ab036574…`，90.8 MB）
@@ -288,13 +288,21 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   201 `data.bak-pre0320-20261016-151504.tgz`（22 342 613 B，compose 同名前缀
 >   `.bak-pre0320-20261016-151504`）。
 > - 上线顺序：沙箱 8908 15:12:44 → 201 生产 15:47:50（改 compose 标签 + `docker compose up -d
->   --force-recreate`）→ 200 生产按下方「200 侧」记录跟进（该机 SSH 只开密码登录，需用户执行）。
+>   --force-recreate`）→ 200 生产 **17:23:30**（复制构件 → 停容器 → 备份 → `docker load` → 改 compose 标签
+>   → `up -d --force-recreate`，全程按「先 load 再改标签」）。
+> - 200 侧：构件从 201 的 `pkg/` 拷到 200 的 `images/`+`pkg/`，三份 **md5 与 201 逐字节一致**
+>   （镜像 `0a6ecd72…`、离线包 `f67292bb…`、fpk `d94cd48d…`）；备份 `data.bak-pre0320-20261016-172327.tgz`
+>   （800 472 B）与 `docker-compose.yml.bak-pre0320-20261016-172327`；升级完 `/api/version` = 0.32.0
+>   （gitCommit `5db1ae8`，startedAt 2026-10-16T17:23:30+08:00）。
+> - **三台健康检查与指纹（2026-10-16 17:23，`browser-harness/fingerprint-instances.py`）**：
+>   三台 `/api/health` 均 ok、版本均 0.32.0；清单 `edffe23d32`、卡片 `50c58560da`、提醒 `8e0d3a7b26`、
+>   完成记录 `8a82d2a4cb` **三台一致**；条数 清单 5 / 卡片 9 / 提醒 60 / 完成 36 / 记事 8 三台相同。
 > - 构件：`images/workordernote-0.32.0-amd64.tar.gz`（45 620 810 B）md5 `0a6ecd722e09aea77afdf7696393953b`；
 >   离线包 `WorkOrderNote-0.32.0-offline-amd64.tar.gz`（45 531 875 B）md5 `f67292bb6fe12ba9b129ef0680ee902a` /
 >   sha256 `2b9ed692b6e1dd34bfccaeca68b4f8a8961300962e147a9514111bfdaa260b2e`，自检 **30 项全过 0 失败**；
 >   fnOS 包 `WorkOrderNote-0.32.0-fnos-amd64.fpk`（21 444 863 B，`fnpack` 1.2.4）md5 `d94cd48d3cc3ebb9448a9c508d33e92f` /
 >   sha256 `7660b29d0a9b0c64c9fcf629b510f825420c883d1865245bdbee024afc7c5299`（arm64 因本机没有
->   `qemu-aarch64` 未出包）。三个构件都放了 201 的 `images/`/`pkg/`，200 侧随后照 0.31.0 的做法同步。
+>   `qemu-aarch64` 未出包）。三个构件都放了 201 与 200 的 `images/`/`pkg/`（md5 与 201 逐字节一致）。
 > - **构建备注（下次发版会再遇到）**：`scripts/build-fnpack.sh` 里给 `golang:1.26-alpine` 装编译依赖那步
 >   原来直接用官方 apk 源，本机 `dl-cdn.alpinelinux.org` 不可达，会**卡在「Installing gcc」不动**
 >   （2026-10-16 实测 27 分钟零进度、只耗 3 秒 CPU）；本版给该脚本补了「先把 apk 源换成
