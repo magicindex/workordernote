@@ -30,7 +30,24 @@ export const UPSTREAM = {
   note: '本应用基于该项目衍生开发，遵循 MIT 许可；原项目的著作权与出处均予保留。',
 } as const
 
-export const releaseNotes: ReleaseNote[] = [
+const versionHistory: ReleaseNote[] = [
+  {
+    version: '0.34.0',
+    date: '2026-10-17',
+    title: '小秘能拉取选模型、三档思考、把回答存进记事本；记事行换成清单图标；每个栏目一份 AI 提示词；迭代说明合并精简',
+    items: [
+      '**记事行前面换成清单图标**：随手记事本（以及「全部」里的记事）行首不再画圆勾选框，改画所属清单的图标、用清单色上色；任务行不动。',
+      '**模型能拉取、能点选**：系统配置 → AI 助手新增「拉取模型列表」，只列服务器上真有的模型，选中即用；面板最上面新增「当前模型」独立一块，写着模型名、服务商与是否已接入。',
+      '**对话里能看思考过程，三档可选**：只有对话 / 简洁思考 / 详细思考过程；后台偏好定默认，用户也能在面板上换。',
+      '**没接模型时**：对话窗口最上边常驻一条醒目提示，不再是回一句「请先配置模型」才发现。',
+      '**AI 的回答一键存进记事本**：每条回答底下多一个「保存到记事本」，自动生成标签。',
+      '**AI 数据源支持 `@清单名`**：输入框打 @ 弹出清单选择器，问答只看指定清单。',
+      '**非银行平台的卡面写上名字**：支付宝 / 微信 / 京东金融这类卡，卡面不再只显示「银行卡」，能看清是哪张。',
+      '**每个栏目一份 AI 提示词**：后台「各栏目的 AI 提示词」可为每个清单写分析要求，小秘分析到那一栏时按它作答；新建清单能带一份，也能「引用其他栏目」复制过来。',
+      '**删掉偏好设置里重复的「清单顺序」**：排序只留侧栏「我的清单」那一处，接口与排序口径不变。',
+      '**迭代说明合并精简**：相近的修正版并成一张卡（69 条并成 33 张），顶部先给 5 段迭代主线，版本卡默认只展开最新几张、可逐张展开；条目里的重点改成真加粗。',
+    ],
+  },
   {
     version: '0.33.0',
     date: '2026-10-16',
@@ -888,3 +905,63 @@ export const releaseNotes: ReleaseNote[] = [
     ],
   },
 ]
+
+/**
+ * 迭代主线：版本很多（近 30 张卡片），先给一条主线，再往下才是逐版明细。
+ * 用户 2026-10-17：「优化精简迭代说明，把相近内容的迭代信息合并，并精简优化，使其让人更加易懂、顺畅。」
+ */
+export interface IterationTheme {
+  title: string
+  text: string
+}
+
+export const iterationThemes: IterationTheme[] = [
+  { title: '起步', text: '10-04 ~ 10-05 · 从上游 reminders 衍生，改名「工作序记」：记事类型、已完成按时间段看、全屏日历、默认清单，以及按清单筛选。' },
+  { title: '搭骨架', text: '10-05 ~ 10-06 · 双机同步、清单颜色与右键菜单、图标栏侧栏、日历新建与打印、安卓客户端，网页可以装到桌面。' },
+  { title: '成为日常工具', text: '10-06 ~ 10-10 · 手机端适配、智能清单分工、随手记事本、信用卡账单、计划任务的周期，以及「人生要有仪式感」栏目。' },
+  { title: '打磨细节', text: '10-10 ~ 10-13 · 一天一张卡片、逾期置顶；提醒的开始/逾期时间与免打扰；生日按年循环；仪式感卡片与卡面无障阅读。' },
+  { title: '首页与 AI', text: '10-13 ~ 10-16 · 首页看板、侧栏排序；呼叫小秘接上模型，能看工作数据、给思考过程、存进记事本，并按栏目要求作答。' },
+]
+
+/** 一张卡片可能合并了同一小版本号下的几个修正版，versions 记着它们。 */
+export interface ReleaseNoteEntry extends ReleaseNote {
+  versions: string[]
+}
+
+/**
+ * 把「同一个 minor、只差修正号」的相邻版本并成一张卡片。
+ *
+ * 为什么合并：用户看的是「这一版改了什么」，不是流水账。0.16.1–0.16.5 这种一天内
+ * 连发的修正，各占一张卡片会让迭代说明变成几十屏；并成一张后，主功能用那一小版
+ * （修正号为 0 的那条）的标题与条目，后面的修正各自缩成一行「0.16.4：标题」。
+ * 修正版的细则条目不再逐条列出——它们本来就是这一行的补充；界面再按「展开全部」折叠。
+ */
+function groupPatchReleases(notes: ReleaseNote[]): ReleaseNoteEntry[] {
+  const groups: ReleaseNote[][] = []
+  for (const note of notes) {
+    const key = note.version.split('.').slice(0, 2).join('.')
+    const last = groups[groups.length - 1]
+    const lastKey = last?.[0]?.version.split('.').slice(0, 2).join('.')
+    if (last && lastKey === key) last.push(note)
+    else groups.push([note])
+  }
+  return groups.map((group) => {
+    const newest = group[0]
+    const base = group.find((n) => Number(n.version.split('.')[2] || 0) === 0) ?? newest
+    const patches = group.filter((n) => n !== base)
+    const items = [...base.items]
+    // 修正版按时间从旧到新列，一行一条，标题本身就是摘要
+    for (const patch of patches.slice().reverse()) items.push(`**${patch.version}**：${patch.title}`)
+    return {
+      version: group.length > 1
+        ? `${group[group.length - 1].version} – ${newest.version}`
+        : newest.version,
+      date: newest.date,
+      title: base.title,
+      items,
+      versions: group.map((n) => n.version),
+    }
+  })
+}
+
+export const releaseNotes: ReleaseNoteEntry[] = groupPatchReleases(versionHistory)

@@ -10,27 +10,47 @@
       <div class="h-10 rounded-xl bg-muted animate-pulse"></div>
     </div>
 
-    <div v-else class="space-y-5 p-4 sm:p-6">
+    <div v-else class="space-y-4 p-4 sm:p-6">
       <p class="text-xs leading-5 text-muted-foreground">
-        侧栏「呼叫小秘」用的模型在这里填。<strong class="text-foreground">服务商只是预设</strong>：
-        底层一律按 <strong class="text-foreground">OpenAI 兼容协议</strong>
-        （<code class="font-mono">POST {地址}/chat/completions</code>）调用，所以任何兼容服务都能接进来——
-        换模型、换厂家、接内网网关都只是改这里的几个输入框，不用更新版本。
+        <strong class="text-foreground">服务商只是预设</strong>：底层一律按 OpenAI 兼容协议调用
+        （<code class="font-mono">POST {地址}/chat/completions</code>），所以换模型、换厂家、接内网网关都只改这里的几个输入框，不用更新版本。
         API Key <strong class="text-foreground">只存在服务端</strong>：保存后这里只显示掩码，浏览器与前端代码都拿不到明文。
       </p>
 
-      <div class="grid gap-4 sm:grid-cols-2">
-        <label class="flex items-center gap-2 sm:col-span-2">
-          <input v-model="form.enabled" type="checkbox" class="h-4 w-4 rounded border-border" data-ai-enabled />
-          <span class="text-xs font-bold text-foreground">启用 AI 助手</span>
-          <span class="text-[11px] text-muted-foreground">关闭时「呼叫小秘」面板走本地占位回复，不产生任何调用费用</span>
-        </label>
+      <!-- 当前模型：一行看完「现在用的是哪个」（用户 2026-10-16 要求） -->
+      <div
+        class="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-xl border border-border bg-surface/60 px-3 py-2.5"
+        data-ai-current-model
+      >
+        <span class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">当前模型</span>
+        <span class="break-all font-mono text-sm font-bold text-foreground" data-ai-current-model-name>
+          {{ settings?.model || '还没选模型' }}
+        </span>
+        <span class="text-xs text-muted-foreground">
+          {{ providerLabel(settings?.provider) }} ·
+          {{ settings?.active ? '已接入，面板会真的调用它' : settings?.reason || '未接入' }}
+        </span>
+        <span
+          v-if="pendingModelChange"
+          class="w-full text-[11px] font-semibold text-amber-600 dark:text-amber-300"
+          data-ai-model-pending
+        >
+          未保存：点「保存设置」后会换成 {{ form.model || '（留空＝用服务商默认）' }}
+        </span>
+      </div>
 
+      <label class="flex flex-wrap items-center gap-2">
+        <input v-model="form.enabled" type="checkbox" class="h-4 w-4 rounded border-border" data-ai-enabled />
+        <span class="text-xs font-bold text-foreground">启用 AI 助手</span>
+        <span class="text-[11px] text-muted-foreground">关闭时「呼叫小秘」面板走本地占位回复，不产生任何调用费用</span>
+      </label>
+
+      <div class="grid gap-3 sm:grid-cols-2">
         <label class="block">
           <span class="text-xs font-bold text-foreground">模型服务商</span>
           <select
             v-model="form.provider"
-            class="input-field !py-2 mt-1.5"
+            class="input-field !py-0 h-10 mt-1.5 text-[13px]"
             :disabled="busy"
             data-ai-provider
             @change="applyPreset"
@@ -42,32 +62,73 @@
           </span>
         </label>
 
-        <label class="block">
-          <span class="text-xs font-bold text-foreground">模型名称</span>
+        <div class="block">
+          <div class="flex items-center justify-between gap-2">
+            <label for="ai-model-input" class="text-xs font-bold text-foreground">模型名称</label>
+            <!-- 拉列表挪到模型名这一行：跟它要填的东西挨着，少占一行按钮（用户 2026-10-17 要求精简） -->
+            <button
+              type="button"
+              class="shrink-0 text-[11px] font-semibold text-brand-600 underline hover:text-brand-700 disabled:opacity-40 dark:text-brand-300"
+              :disabled="busy || !canTest"
+              data-ai-pull-models
+              @click="pullModels"
+            >
+              {{ pulling ? '拉取中…' : '拉取服务器列表' }}
+            </button>
+          </div>
           <input
+            id="ai-model-input"
             v-model.trim="form.model"
             type="text"
-            list="ai-model-options"
-            class="input-field !py-2 mt-1.5 font-mono text-xs"
+            class="input-field !py-0 h-10 mt-1.5 font-mono text-[13px]"
             placeholder="deepseek-chat"
             :disabled="busy"
             data-ai-model
           />
-          <datalist id="ai-model-options">
-            <option v-for="name in modelOptions" :key="name" :value="name" />
-          </datalist>
-          <span class="mt-1 block text-[11px] leading-4 text-muted-foreground">
-            服务商上线新模型时直接填名字即可，不用改代码。
+          <!-- 拉回来的模型**横着排**（用户 2026-10-17：「重起一行横向显示模型列表，以减少空间占用」）：
+               原来是竖着一列带滚动条的清单，十几个模型就顶掉半屏。点一条即填入上面的输入框，仍可手填。 -->
+          <div v-if="modelChoices.length" class="mt-2 rounded-xl border border-border bg-surface/60 px-2.5 py-2" data-ai-model-list>
+            <p class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">
+              {{ modelListTitle }}
+            </p>
+            <div class="mt-1.5 flex flex-wrap gap-1">
+              <button
+                v-for="name in modelChoices"
+                :key="name"
+                type="button"
+                class="max-w-full break-all rounded-full border px-2 py-0.5 text-left font-mono text-[11px] leading-4 transition-colors disabled:opacity-60"
+                :class="name === form.model
+                  ? 'border-brand-400 bg-brand-50 font-bold text-brand-700 dark:border-brand-500/40 dark:bg-brand-500/15 dark:text-brand-200'
+                  : 'border-border bg-surface text-foreground hover:border-brand-300 hover:bg-muted'"
+                :title="name"
+                :data-ai-model-option="name"
+                :disabled="busy"
+                @click="pickModel(name)"
+              >
+                {{ name }}<span v-if="name === form.model"> · 已选</span><span v-else-if="name === settings?.model"> · 在用</span>
+              </button>
+            </div>
+            <p
+              v-if="presetOnlyNames.length"
+              class="mt-1.5 border-t border-border pt-1.5 text-[10px] leading-4 text-muted-foreground"
+              data-ai-model-preset-hint
+            >
+              预设常见名字（服务器上没拉到，填了不一定能用，可以直接手填）：
+              {{ presetOnlyNames.slice(0, 8).join('、') }}{{ presetOnlyNames.length > 8 ? ' …' : '' }}
+            </p>
+          </div>
+          <span v-else class="mt-1 block text-[11px] leading-4 text-muted-foreground">
+            还没拉到模型列表：点上面「拉取服务器列表」按当前服务商列一遍再选；也可以直接填名字（服务商上线新模型时不用改代码）。
           </span>
-        </label>
+        </div>
 
-        <label class="block sm:col-span-2">
+        <label class="block">
           <span class="text-xs font-bold text-foreground">接口地址</span>
           <input
             v-model.trim="form.base_url"
             type="text"
             inputmode="url"
-            class="input-field !py-2 mt-1.5 font-mono text-xs"
+            class="input-field !py-0 h-10 mt-1.5 font-mono text-[13px]"
             :placeholder="presetBaseURL || 'https://api.deepseek.com/v1'"
             :disabled="busy"
             data-ai-base-url
@@ -83,7 +144,7 @@
             v-model.trim="form.api_key"
             type="password"
             autocomplete="off"
-            class="input-field !py-2 mt-1.5 font-mono text-xs"
+            class="input-field !py-0 h-10 mt-1.5 font-mono text-[13px]"
             :placeholder="apiKeyPlaceholder"
             :disabled="busy"
             data-ai-api-key
@@ -113,13 +174,30 @@
         </label>
 
         <label class="block">
+          <span class="text-xs font-bold text-foreground">对话里显示思考过程</span>
+          <select
+            v-model="form.thinking_mode"
+            class="input-field !py-0 h-10 mt-1.5 text-[13px]"
+            :disabled="busy"
+            data-ai-thinking-mode
+          >
+            <option v-for="mode in thinkingChoices" :key="mode.value" :value="mode.value">
+              {{ mode.label }}
+            </option>
+          </select>
+          <span class="mt-1 block text-[11px] leading-4 text-muted-foreground">
+            {{ thinkingNote }}
+          </span>
+        </label>
+
+        <label class="block">
           <span class="text-xs font-bold text-foreground">请求超时（秒）</span>
           <input
             v-model.number="form.timeout_seconds"
             type="number"
             min="5"
             max="600"
-            class="input-field !py-2 mt-1.5"
+            class="input-field !py-0 h-10 mt-1.5 text-[13px]"
             :disabled="busy"
             data-ai-timeout
           />
@@ -132,8 +210,8 @@
           <span class="text-xs font-bold text-foreground">系统提示词</span>
           <textarea
             v-model="form.system_prompt"
-            rows="4"
-            class="input-field !py-2 mt-1.5 text-xs leading-5"
+            rows="3"
+            class="input-field !py-2 mt-1.5 text-[13px] leading-5"
             :disabled="busy"
             data-ai-prompt
           ></textarea>
@@ -149,15 +227,78 @@
             </button>
           </span>
         </label>
+
+        <!-- 各栏目的 AI 提示词（用户 2026-10-17：「为每个不同栏目增加 ai 提示词以更好完成相关
+             ai 分析」）：存在清单上而不是这里保存的一份全局配置——新建清单天然能带，多个清单
+             填同一段文字就是「共用」。这里只是给已存在的清单一个统一的编辑入口。 -->
+        <div class="sm:col-span-2" data-ai-list-prompts>
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-bold text-foreground">各栏目的 AI 提示词</span>
+            <span v-if="promptSavedId" class="text-[11px] font-semibold text-emerald-500" data-ai-list-prompt-saved>已保存</span>
+          </div>
+          <p class="mt-1 text-[11px] leading-4 text-muted-foreground">
+            小秘分析到某一栏的数据时，把这里的要求一起交给模型（只作用于那一栏，不影响别的）。
+            「引用其他栏目」会把那段文字复制过来，之后各改各的。
+          </p>
+          <div class="mt-2 space-y-2">
+            <div
+              v-for="list in promptLists"
+              :key="list.id"
+              class="rounded-xl border border-border p-2"
+              :data-ai-list-prompt-row="list.name"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="truncate text-xs font-semibold text-foreground" :title="list.name">{{ list.name }}</span>
+                <span class="shrink-0 text-[10px] text-muted-foreground">{{ promptDirty(list) ? '未保存' : (list.ai_prompt ? '已设置' : '没设置') }}</span>
+              </div>
+              <textarea
+                v-model="promptDraft[list.id]"
+                rows="2"
+                maxlength="600"
+                class="input-field mt-1.5 !py-1.5 text-[12px] leading-5"
+                :disabled="busy || promptSavingId === list.id"
+                :placeholder="`这一栏的分析要求（可选），例如：按基站/线路分组，多说进度`"
+                :data-ai-list-prompt="list.name"
+              ></textarea>
+              <div class="mt-1 flex items-center justify-between gap-2">
+                <select
+                  v-model="promptRef[list.id]"
+                  class="input-field !h-7 !w-32 !py-0 text-[11px]"
+                  :disabled="busy || promptSavingId === list.id"
+                  :aria-label="`引用其他栏目的提示词（${list.name}）`"
+                  :data-ai-list-prompt-ref="list.name"
+                  @change="copyPromptRef(list.id)"
+                >
+                  <option value="">引用其他栏目…</option>
+                  <option
+                    v-for="other in promptSources(list)"
+                    :key="other.id"
+                    :value="String(other.id)"
+                  >{{ other.name }}</option>
+                </select>
+                <button
+                  type="button"
+                  class="btn-secondary !h-7 !rounded-lg !px-2 text-[11px]"
+                  :disabled="!promptDirty(list) || busy || promptSavingId === list.id"
+                  :data-ai-list-prompt-save="list.name"
+                  @click="saveListPrompt(list)"
+                >
+                  {{ promptSavingId === list.id ? '保存中…' : '保存' }}
+                </button>
+              </div>
+            </div>
+            <p v-if="!promptLists.length" class="text-[11px] text-muted-foreground">还没有清单。</p>
+          </div>
+        </div>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
-        <button type="button" class="btn-brand" :disabled="!dirty || busy" data-ai-save @click="save">
+        <button type="button" class="btn-brand !h-10" :disabled="!dirty || busy" data-ai-save @click="save">
           {{ saving ? '保存中…' : '保存设置' }}
         </button>
         <button
           type="button"
-          class="btn-secondary !h-10"
+          class="btn-secondary !h-10 !rounded-xl"
           :disabled="busy || !canTest"
           data-ai-test
           @click="testConnection"
@@ -167,7 +308,7 @@
         <button
           v-if="form.provider === 'ollama'"
           type="button"
-          class="btn-secondary !h-10"
+          class="btn-secondary !h-10 !rounded-xl"
           :disabled="busy"
           data-ai-detect
           @click="detectOllama"
@@ -181,24 +322,11 @@
       <p v-if="notice" class="rounded-xl bg-emerald-500/10 px-3 py-2 text-xs leading-5 text-emerald-600 dark:text-emerald-300" data-ai-notice>{{ notice }}</p>
       <p v-if="dirty" class="text-[11px] font-semibold text-amber-600 dark:text-amber-300">有未保存的改动</p>
 
-      <div class="grid gap-3 sm:grid-cols-2">
-        <div class="rounded-xl border border-border bg-surface/60 p-3">
-          <p class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">当前状态</p>
-          <p class="mt-1.5 text-xs text-foreground">
-            {{ settings?.active ? '已接入：面板会真的调用模型' : '未接入：面板走本地占位回复' }}
-          </p>
-          <p class="mt-1 break-all text-xs text-muted-foreground">
-            实际请求地址：<code class="font-mono">{{ settings?.effective_base_url || '—' }}</code>
-          </p>
-        </div>
-        <div class="rounded-xl border border-border bg-surface/60 p-3">
-          <p class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">密钥与模型</p>
-          <p class="mt-1.5 text-xs text-foreground">{{ settings?.api_key_set ? settings.api_key : '未设置密钥' }}</p>
-          <p class="mt-1 text-xs text-muted-foreground">
-            {{ settings?.active ? `当前模型：${settings.model}` : settings?.reason || '—' }}
-          </p>
-        </div>
-      </div>
+      <p class="text-[11px] leading-4 text-muted-foreground">
+        当前状态：<span class="font-semibold text-foreground">{{ settings?.active ? '已接入，面板会真的调用模型' : '未接入，面板走本地占位回复' }}</span>
+        · 实际请求地址 <code class="font-mono">{{ settings?.effective_base_url || '—' }}</code>
+        · 密钥 <span class="font-semibold text-foreground">{{ settings?.api_key_set ? settings.api_key : '未设置' }}</span>（只进不出）
+      </p>
 
       <!-- 检测本机 Ollama 结果：找到了是哪条候选，找不到就逐条说明为什么 -->
       <div v-if="detection" class="rounded-xl border border-border bg-surface/60 p-3" data-ai-detect-result>
@@ -251,22 +379,27 @@
  * ——不是一维的键值能表达的。
  */
 import { computed, onMounted, reactive, ref } from 'vue'
+import { getLists, updateList, type ReminderList } from '../api/reminder'
 import {
   detectLocalOllama,
   getAssistantSettings,
+  normalizeThinkingMode,
   saveAssistantSettings,
   testAssistantSettings,
+  THINKING_MODES,
   type AssistantOllamaDetection,
   type AssistantProviderPreset,
   type AssistantSettings,
   type AssistantSettingsInput,
   type AssistantTestResult,
+  type AssistantThinkingMode,
 } from '../api/assistant'
 
 const settings = ref<AssistantSettings | null>(null)
 const loading = ref(true)
 const saving = ref(false)
 const testing = ref(false)
+const pulling = ref(false)
 const detecting = ref(false)
 const errorMsg = ref('')
 const notice = ref('')
@@ -275,6 +408,18 @@ const testResult = ref<AssistantTestResult | null>(null)
 const detection = ref<AssistantOllamaDetection | null>(null)
 /** 「检测本机 Ollama」带回来的模型列表：它比预设里的名字更贴近这台机器。 */
 const detectedModels = ref<string[]>([])
+
+/**
+ * 各栏目的 AI 提示词：编辑的是**清单自己的** ai_prompt（不是这一屏的全局配置），
+ * 所以保存走 PATCH /api/reminder/lists/:id，和「保存设置」是两条独立的路径。
+ * 草稿按清单 id 存，用户改到一半时列表刷新也不会丢。
+ */
+const promptLists = ref<ReminderList[]>([])
+const promptDraft = reactive<Record<number, string>>({})
+const promptRef = reactive<Record<number, string>>({})
+const promptSavingId = ref(0)
+const promptSavedId = ref(0)
+let promptSavedTimer: ReturnType<typeof setTimeout> | undefined
 
 /** 上一次选中的服务商：切换预设时用它判断「地址/模型是不是还是上一个预设的值」。 */
 const lastProviderId = ref('')
@@ -288,7 +433,11 @@ const form = reactive({
   model: '',
   system_prompt: '',
   timeout_seconds: 60,
+  thinking_mode: 'brief' as AssistantThinkingMode,
 })
+
+/** 三个档位的中文名（与对话面板共用一份，见 api/assistant.ts）。 */
+const thinkingChoices = THINKING_MODES
 
 /** 保存时的表单快照（序列化比较），用来判断「有未保存的改动」。 */
 const snapshot = ref('')
@@ -296,12 +445,41 @@ const snapshot = ref('')
 const presets = computed<AssistantProviderPreset[]>(() => settings.value?.providers || [])
 const preset = computed(() => presets.value.find((item) => item.id === form.provider) || null)
 const presetBaseURL = computed(() => preset.value?.base_url || '')
-/** 模型候选 = 预设常见模型 + 上次「测试连接」拉回来的真实模型列表 + 本机 Ollama 检测到的。 */
-const modelOptions = computed(() => {
-  const names = [...(preset.value?.models || []), ...(testResult.value?.models || []), ...detectedModels.value]
-  return [...new Set(names)].slice(0, 200)
+/** 服务商 id → 界面上的名字（「当前模型」块里显示用）。 */
+function providerLabel(id?: string): string {
+  if (!id) return '未选服务商'
+  return presets.value.find((item) => item.id === id)?.label || id
+}
+/**
+ * 真从服务器拉到的模型（「测试连接」/「拉取模型列表」返回的 + 本机 Ollama 检测到的）。
+ * 和「预设常见名字」必须分开：预设只是各家文档里的常见名字，服务器上不一定有——
+ * 混在一起会让人以为「列表里有就一定能用」，选完却是 404 model not found。
+ */
+const pulledModels = computed(() => [...new Set([...(testResult.value?.models || []), ...detectedModels.value])])
+/** 所选服务商的预设常见名字。 */
+const presetModels = computed(() => [...new Set(preset.value?.models || [])])
+/**
+ * 预设里那些**没**在实到列表中的名字。本机 Ollama（provider=ollama）以实到列表为准，
+ * 预设名字全收起来，免得多出一堆装都没装的模型名。
+ */
+const presetOnlyNames = computed(() =>
+  form.provider === 'ollama' ? [] : presetModels.value.filter((name) => !pulledModels.value.includes(name)))
+/**
+ * 模型候选 = 实到的排在前面 + 预设里剩下的；只渲染成可点的清单，
+ * 不再用 input 的 datalist —— datalist 在手机上弹不出来，就成了「列表看得见、名字选不上」。
+ */
+const modelChoices = computed(() => [...pulledModels.value, ...presetOnlyNames.value].slice(0, 200))
+const modelListTitle = computed(() => (pulledModels.value.length
+  ? `服务器上可用（${pulledModels.value.length}）· 点一个选用`
+  : `预设常见名字（${modelChoices.value.length}）· 还没从服务器拉到列表`))
+/** 保存后才会生效的模型：和已保存的不一样时在「当前模型」块里提醒一句。 */
+const pendingModelChange = computed(() => !!settings.value && (form.model || '') !== (settings.value.model || ''))
+/** 选中的档位说明：写清「它只影响显示、模型仍然会想」，免得被理解成省钱的开关。 */
+const thinkingNote = computed(() => {
+  const mode = thinkingChoices.find((item) => item.value === form.thinking_mode)
+  return `${mode?.note || ''}。这是每个人的默认值：用户也可以在「呼叫小秘」面板里当场换（他自己的选择只影响他）；模型本身仍然会先想，这一项不改变上游用量。`
 })
-const busy = computed(() => loading.value || saving.value || testing.value || detecting.value)
+const busy = computed(() => loading.value || saving.value || testing.value || pulling.value || detecting.value)
 const canTest = computed(() => !!(form.base_url || presetBaseURL.value))
 
 /**
@@ -358,6 +536,7 @@ function payload(): AssistantSettingsInput {
     model: form.model,
     system_prompt: form.system_prompt,
     timeout_seconds: Number(form.timeout_seconds) || 60,
+    thinking_mode: form.thinking_mode,
   }
   if (form.api_key) out.api_key = form.api_key
   if (form.clear_api_key) out.clear_api_key = true
@@ -374,6 +553,7 @@ function applySettings(data: AssistantSettings) {
   form.model = data.model
   form.system_prompt = data.system_prompt
   form.timeout_seconds = data.timeout_seconds
+  form.thinking_mode = normalizeThinkingMode(data.thinking_mode)
   lastProviderId.value = data.provider
   snapshot.value = JSON.stringify(payload())
 }
@@ -387,6 +567,56 @@ async function load() {
     errorMsg.value = err?.message || '加载 AI 配置失败'
   } finally {
     loading.value = false
+  }
+  // 栏目提示词是清单上的字段（另走一条接口），和上面那屏配置互不阻塞。
+  void loadListPrompts()
+}
+
+/** 当前草稿与已保存的值不同 → 显示「未保存」并允许点保存。 */
+function promptDirty(list: ReminderList) {
+  return (promptDraft[list.id] ?? '').trim() !== (list.ai_prompt || '').trim()
+}
+
+/** 「引用」下拉里列出别的、已经写了提示词的栏目（自己的不列）。 */
+function promptSources(current: ReminderList) {
+  return promptLists.value.filter((item) => item.id !== current.id && (item.ai_prompt || '').trim() !== '')
+}
+
+/** 选一个栏目 = 把那段文字复制进草稿（一次性；之后各改各的，不是引用同一份）。 */
+function copyPromptRef(id: number) {
+  const picked = promptLists.value.find((item) => String(item.id) === String(promptRef[id]))
+  if (picked) promptDraft[id] = picked.ai_prompt || ''
+  promptRef[id] = ''
+}
+
+async function loadListPrompts() {
+  try {
+    const res = await getLists()
+    const rows: ReminderList[] = res.data?.data || []
+    promptLists.value = rows
+    for (const list of rows) {
+      promptDraft[list.id] = list.ai_prompt || ''
+      promptRef[list.id] = ''
+    }
+  } catch {
+    // 清单取不到不该把整屏弄成错误态：配置本身还能读写，这里留空即可。
+  }
+}
+
+async function saveListPrompt(list: ReminderList) {
+  promptSavingId.value = list.id
+  try {
+    const text = (promptDraft[list.id] || '').trim()
+    await updateList(list.id, { ai_prompt: text })
+    list.ai_prompt = text
+    promptDraft[list.id] = text
+    promptSavedId.value = list.id
+    if (promptSavedTimer) clearTimeout(promptSavedTimer)
+    promptSavedTimer = setTimeout(() => { promptSavedId.value = 0 }, 2400)
+  } catch (err: any) {
+    errorMsg.value = err?.response?.data?.message || err?.message || '保存栏目提示词失败'
+  } finally {
+    promptSavingId.value = 0
   }
 }
 
@@ -433,6 +663,48 @@ async function save() {
 }
 
 /** 测的是**当前表单**（可以先试再存）：密钥留空时后端会沿用已保存的那一个。 */
+/** 点列表里的一条 = 填进输入框（仍要「保存设置」才生效）。 */
+function pickModel(name: string) {
+  form.model = name
+  notice.value = `已选用 ${name}，点「保存设置」后生效。`
+}
+
+/**
+ * 只拉模型列表：复用「测试连接」的接口（它会 GET /models，服务端没实现列表时
+ * 退一步用一次最小对话），拿到名字后渲染成可点的清单。
+ */
+async function pullModels() {
+  pulling.value = true
+  errorMsg.value = ''
+  notice.value = ''
+  statusText.value = ''
+  try {
+    const result = await testAssistantSettings(payload())
+    testResult.value = result
+    if (result.ok) {
+      const names = result.models || []
+      if (!names.length) {
+        notice.value = '连接正常，但这个服务没有返回模型列表，直接填模型名即可'
+      } else {
+        // 当前填的名字不在服务器上时，顺手回填一个真能用的，省得选完还报 404
+        const stale = !form.model || !names.includes(form.model)
+        if (stale) {
+          const suggested = form.provider === 'ollama' ? suggestLocalModel(names) : names[0]
+          if (suggested) form.model = suggested
+        }
+        notice.value = stale && form.model
+          ? `已拉取 ${names.length} 个模型，并回填了「${form.model}」（点列表里任意一条可换，保存后生效）`
+          : `已拉取 ${names.length} 个模型，点列表里的一条选用`
+      }
+    }
+  } catch (err: any) {
+    testResult.value = null
+    errorMsg.value = err?.message || '拉取模型列表失败'
+  } finally {
+    pulling.value = false
+  }
+}
+
 async function testConnection() {
   testing.value = true
   errorMsg.value = ''

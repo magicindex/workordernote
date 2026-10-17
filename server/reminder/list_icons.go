@@ -1,6 +1,9 @@
 package reminder
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
 
 // 清单图标白名单：必须与 web/src/utils/list-icons.ts 里的 LIST_ICONS 一一对应。
 //
@@ -59,4 +62,21 @@ func normalizeListIcon(key string) string {
 		return "list"
 	}
 	return key
+}
+
+// 清单 AI 提示词的长度上限（与前端 textarea 的 maxlength 对齐）。
+// 它是给模型看的要求，太长会挤掉真正的工作数据，600 字足够写清「怎么分析这一栏」。
+const listAIPromptMaxRunes = 600
+
+// normalizeListAIPrompt 清洗用户填的清单 AI 提示词：
+// 统一换行（表单里是 \n，老浏览器/剪贴板可能带 \r\n）、去掉首尾空白；
+// 超长直接拒绝而不是静默截断——用户写的要求被砍掉一半，比报错更难发现。
+func normalizeListAIPrompt(raw string) (string, error) {
+	s := strings.ReplaceAll(raw, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	s = strings.TrimSpace(s)
+	if len([]rune(s)) > listAIPromptMaxRunes {
+		return "", errors.New("清单的 AI 提示词最多 600 个字符")
+	}
+	return s, nil
 }

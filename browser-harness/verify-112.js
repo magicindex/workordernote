@@ -7,7 +7,8 @@
  *   3) **后台「任务过期时间」**（默认 23:59）：新建提醒默认预填当天这个时间；
  *      逾期口径 = **当天到这个点才算过期**，再叠加「过期多久算逾期」的宽限分钟数。
  *   4) **后台「周起始日」显示中文**（周一 / 周日，原来直接显示 monday/sunday）。
- *   5) **偏好设置 →「清单顺序」**：↑/↓ 调整，立刻落库（API position 1..N）。
+ *   5) **偏好设置里已删掉「清单顺序」**（用户 2026-10-16：与侧栏重复），侧栏那一套见 verify-121；
+ *      同页的「默认清单」还在。
  *   6) **人生要有仪式感卡片**：倒计时放最上面、字号放大，卡片加高。
  *
  * 用法：APP_URL=http://127.0.0.1:8918 node verify-112.js
@@ -278,45 +279,19 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
         && !weekRow.options.some((t) => /monday|sunday/i.test(t)),
       JSON.stringify(weekRow));
 
-    // =============== 5. 偏好设置 → 清单顺序 ===============
+    // =============== 5. 偏好设置里**不再**有「清单顺序」 ===============
+    // 用户 2026-10-16：「前台可以调整 清单顺序，与后台偏好中 清单顺序 重复，删除后台清单顺序模块」。
+    // 侧栏「我的清单」那一套（点标题旁的排序开关，含系统内置 4 个栏目）是唯一入口，由 verify-121 盯着。
     await gotoRetry(page, BASE + '/admin/settings');
     await sleep(2600);
-    const orderPre = await page.evaluate(() => [...document.querySelectorAll('[data-list-order-row]')]
-      .map((r) => Number(r.getAttribute('data-list-order-row'))));
-    check('偏好设置里有「清单顺序」，且列出了普通清单（≥2 条）', orderPre.length >= 2, JSON.stringify(orderPre));
-    if (orderPre.length >= 2) {
-      const moved = orderPre[1];
-      await page.evaluate((id) => document.querySelector(`[data-list-order-up="${id}"]`)?.click(), moved);
-      await sleep(1600);
-      const after = await page.evaluate(async (base) => {
-        const t = localStorage.getItem('reminders.token') || sessionStorage.getItem('reminders.token');
-        const lists = await (await fetch(base + '/api/reminder/lists', { headers: { Authorization: 'Bearer ' + t } })).json();
-        const normal = (lists.data || []).filter((l) => !['credit_card', 'notebook', 'ceremony'].includes(String(l.template || '')));
-        return {
-          dom: [...document.querySelectorAll('[data-list-order-row]')].map((r) => Number(r.getAttribute('data-list-order-row'))),
-          apiOrder: normal.sort((a, b) => a.position - b.position).map((l) => l.id),
-          saved: !!document.querySelector('[data-list-order-saved]'),
-        };
-      }, BASE);
-      check('点「↑」后顺序真的变了（DOM 与接口一致）',
-        after.dom[0] === moved && JSON.stringify(after.dom) === JSON.stringify(after.apiOrder),
-        JSON.stringify({ before: orderPre, after }));
-      check('顺序落到服务端（position 1..N）并提示已保存', after.saved === true, JSON.stringify(after));
-      // 还原成原来的顺序
-      await page.evaluate((ids) => {
-        const t = localStorage.getItem('reminders.token') || sessionStorage.getItem('reminders.token');
-        return fetch('/api/reminder/lists/order', {
-          method: 'PUT',
-          headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids }),
-        });
-      }, orderPre).catch(() => {});
-      // 还原是直接打的接口，界面要重新进一次才会反映出来
-      await gotoRetry(page, BASE + '/admin/settings');
-      await sleep(2200);
-      const restored = await page.evaluate(() => [...document.querySelectorAll('[data-list-order-row]')].map((r) => Number(r.getAttribute('data-list-order-row'))));
-      check('收尾：清单顺序已还原', JSON.stringify(restored) === JSON.stringify(orderPre), JSON.stringify({ before: orderPre, restored }));
-    }
+    const orderGone = await page.evaluate(() => ({
+      block: !!document.querySelector('[data-list-order]'),
+      rows: document.querySelectorAll('[data-list-order-row]').length,
+      defaultCard: !!document.querySelector('[aria-label="默认清单"]'),
+    }));
+    check('偏好设置里已删掉「清单顺序」模块（排序只留侧栏那一处）',
+      orderGone.block === false && orderGone.rows === 0, JSON.stringify(orderGone));
+    check('同一页的「默认清单」还在（只删了顺序那一块）', orderGone.defaultCard === true, JSON.stringify(orderGone));
 
     // =============== 6. 仪式感卡片：倒计时在上面、放大 ===============
     const ceremonyList = await page.evaluate(async (base) => {

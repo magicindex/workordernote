@@ -42,6 +42,8 @@ func handleStatus(db *gorm.DB) gin.HandlerFunc {
 			"provider_label": settings.preset().Label,
 			"model":          settings.Model,
 			"reason":         settings.blockedReason(true),
+			// 后台偏好里的默认档位：面板刚打开时按它初始化，用户临时换的只影响自己。
+			"thinking_mode": settings.ThinkingMode,
 			// 面板要按这个值放宽自己的请求超时：本地小模型（Ollama）首答要等模型
 			// 加载，前端那 30 秒的默认超时会把还在跑的请求掐成「网络错误」。
 			"timeout_seconds": settings.TimeoutSeconds,
@@ -66,6 +68,8 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 		var body struct {
 			Messages []Message    `json:"messages"`
 			Digest   *digestInput `json:"digest,omitempty"`
+			// Thinking 是面板上的临时选择（off/brief/full）；留空即用后台偏好。
+			Thinking string `json:"thinking,omitempty"`
 		}
 		if err := c.ShouldBindJSON(&body); err != nil {
 			response.ErrorBadRequest(c, "请求格式不对：需要 { messages: [{ role, content }] }")
@@ -79,6 +83,10 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 		started := time.Now()
 		settings := loadSettings(db)
 		active := settings.active()
+		thinkingMode := settings.ThinkingMode
+		if strings.TrimSpace(body.Thinking) != "" {
+			thinkingMode = normalizeThinkingMode(body.Thinking)
+		}
 
 		// 取数据不依赖模型：即使模型没接上，也要能据此出草稿。
 		digest, found, err := resolveDigest(db, c.GetUint("userID"), body.Digest, messages)
@@ -98,6 +106,9 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 				"usage":       gin.H{"prompt_tokens": 0, "completion_tokens": 0},
 				"duration_ms": time.Since(started).Milliseconds(),
 				"digest":      viewOfDigest(digest),
+				// 草稿不是模型写的，没有思维链可给。
+				"thinking":      "",
+				"thinking_mode": thinkingMode,
 			})
 			return
 		}
@@ -138,6 +149,12 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 		if found {
 			digestPayload = viewOfDigest(digest)
 		}
+		thinking, thinkingTruncated := thinkingPayload(thinkingMode, result.Reasoning)
+		if thinkingMode == ThinkingOff {
+			// 明确记一笔：面板看不到，但排查「怎么慢」时要能分辨是模型在想、
+			// 还是上游在排队。
+			logger.Info("assistant: 本轮思维链 %d 字（思考过程显示：只有对话，不返回给面板）", len([]rune(result.Reasoning)))
+		}
 		response.Success(c, gin.H{
 			"reply": result.Reply,
 			"mode":  "model",
@@ -146,8 +163,11 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 				"prompt_tokens":     result.PromptTokens,
 				"completion_tokens": result.CompletionTokens,
 			},
-			"duration_ms": time.Since(started).Milliseconds(),
-			"digest":      digestPayload,
+			"duration_ms":        time.Since(started).Milliseconds(),
+			"digest":             digestPayload,
+			"thinking":           thinking,
+			"thinking_truncated": thinkingTruncated,
+			"thinking_mode":      thinkingMode,
 		})
 	}
 }
@@ -208,6 +228,8 @@ type settingsView struct {
 	Model            string           `json:"model"`
 	SystemPrompt     string           `json:"system_prompt"`
 	TimeoutSeconds   int              `json:"timeout_seconds"`
+	ThinkingMode     string           `json:"thinking_mode"`
+	ThinkingOptions  []string         `json:"thinking_options"`
 	EffectiveBaseURL string           `json:"effective_base_url"`
 	Ready            bool             `json:"ready"`
 	Active           bool             `json:"active"`
@@ -226,6 +248,8 @@ func buildSettingsView(s Settings) settingsView {
 		Model:            s.Model,
 		SystemPrompt:     s.SystemPrompt,
 		TimeoutSeconds:   s.TimeoutSeconds,
+		ThinkingMode:     s.ThinkingMode,
+		ThinkingOptions:  thinkingModeOptions,
 		EffectiveBaseURL: s.effectiveBaseURL(),
 		Ready:            s.ready(),
 		Active:           s.active(),
@@ -254,8 +278,8 @@ func handleSaveSettings(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		// 写日志但**不写密钥**：改了哪个服务商/模型是运维要看的信息。
-		logger.Info("assistant: 设置已更新（enabled=%t provider=%s model=%s timeout=%ds key=%s）",
-			next.Enabled, next.Provider, next.Model, next.TimeoutSeconds, maskSecret(next.APIKey))
+		logger.Info("assistant: 设置已更新（enabled=%t provider=%s model=%s timeout=%ds thinking=%s key=%s）",
+			next.Enabled, next.Provider, next.Model, next.TimeoutSeconds, next.ThinkingMode, maskSecret(next.APIKey))
 		// 直接回新视图：面板保存后不用再拉一次，也顺手拿到重新计算的 ready/reason。
 		response.Success(c, buildSettingsView(next))
 	}

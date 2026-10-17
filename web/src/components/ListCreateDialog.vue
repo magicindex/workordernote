@@ -58,6 +58,36 @@
           </button>
         </div>
       </div>
+
+      <!-- AI 提示词（用户 2026-10-17：「后期新建清单也能自定义提示词，或者多个栏目共用一个」）：
+           写在清单上，小秘分析到这一栏的数据时一起交给模型；「引用」是复制一份，之后各改各的。 -->
+      <div>
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-bold text-foreground">AI 提示词（可选）</span>
+          <select
+            v-if="promptSources.length"
+            v-model="referenceId"
+            class="input-field !h-7 !w-32 !py-0 text-[11px]"
+            aria-label="引用其他栏目的提示词"
+            data-list-ai-prompt-ref
+            @change="applyReference"
+          >
+            <option value="">引用其他栏目…</option>
+            <option v-for="item in promptSources" :key="item.id" :value="String(item.id)">{{ item.name }}</option>
+          </select>
+        </div>
+        <textarea
+          v-model="aiPrompt"
+          rows="2"
+          maxlength="600"
+          class="input-field mt-1.5 !py-2 text-[13px] leading-5"
+          placeholder="例如：按基站/线路分组，多说进度与遗留问题"
+          data-list-ai-prompt
+        ></textarea>
+        <p class="mt-1 text-[11px] leading-4 text-muted-foreground">
+          小秘分析这一栏的数据时会把这句要求一起给模型，只作用于这一栏；留空就不加要求。
+        </p>
+      </div>
     </div>
 
     <p v-if="error" class="mt-3 text-xs font-semibold text-rose-500" data-create-error>{{ error }}</p>
@@ -74,7 +104,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import Modal from './Modal.vue'
-import { createList } from '../api/reminder'
+import { createList, getLists, type ReminderList } from '../api/reminder'
 import ListIcon from './ListIcon.vue'
 import { LIST_COLOR_NAMES, listColorHex, listColorLabel, type ListColorName } from '../utils/list-colors'
 import { LIST_ICONS } from '../utils/list-icons'
@@ -93,6 +123,10 @@ const emit = defineEmits<{
 const name = ref('')
 const pickedColor = ref<ListColorName>(LIST_COLOR_NAMES[0])
 const pickedIcon = ref('list')
+const aiPrompt = ref('')
+/** 引用其他栏目的提示词：选一个就把那段文字复制进 textarea（一次性，之后各改各的）。 */
+const referenceId = ref('')
+const promptSources = ref<ReminderList[]>([])
 const saving = ref(false)
 const error = ref('')
 
@@ -102,8 +136,28 @@ watch(() => props.modelValue, (open) => {
   const fallback = LIST_COLOR_NAMES.find((c) => c === props.defaultColor) || LIST_COLOR_NAMES[0]
   pickedColor.value = fallback
   pickedIcon.value = 'list' 
+  aiPrompt.value = ''
+  referenceId.value = ''
   error.value = ''
+  void loadPromptSources()
 })
+
+/** 只有已经写了提示词的清单才值得出现在「引用」里。 */
+async function loadPromptSources() {
+  try {
+    const res = await getLists()
+    const rows: ReminderList[] = res.data?.data || []
+    promptSources.value = rows.filter((item) => (item.ai_prompt || '').trim() !== '')
+  } catch {
+    promptSources.value = []
+  }
+}
+
+function applyReference() {
+  const picked = promptSources.value.find((item) => String(item.id) === referenceId.value)
+  if (picked) aiPrompt.value = picked.ai_prompt || ''
+  referenceId.value = ''
+}
 
 async function submit() {
   error.value = ''
@@ -114,7 +168,12 @@ async function submit() {
   }
   saving.value = true
   try {
-    const res = await createList({ name: listName, color: pickedColor.value, icon: pickedIcon.value })
+    const res = await createList({
+      name: listName,
+      color: pickedColor.value,
+      icon: pickedIcon.value,
+      ai_prompt: aiPrompt.value.trim(),
+    })
     emit('created', res.data?.data)
     emit('update:modelValue', false)
   } catch (err: any) {

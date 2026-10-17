@@ -425,6 +425,46 @@ const createdIds = [];
         check('长名字临时卡片已清理', cleaned.status === 200, String(cleaned.status));
         await page.setViewport({ width: 1280, height: 900 });
       }
+      // 非银行的消费/信用付平台（支付宝 / 微信 / 京东金融）：标志本身认不出名字，
+      // 图标右边要写出名字；银行仍然只有标志（用户 2026-10-17 报
+      // 「京东金融只有京东图标、没有京东金融文字」）。
+      const faceLabelOf = (cardId) => page.evaluate((id) => {
+        const art = document.querySelector(`[data-card-item="${id}"]`);
+        const logo = art?.querySelector('[data-card-face-logo]');
+        const label = art?.querySelector('[data-card-face-label]');
+        const img = logo?.querySelector('img');
+        return {
+          found: !!art,
+          label: label ? label.textContent.trim() : '',
+          besideIcon: !!(label && img && label.getBoundingClientRect().left >= img.getBoundingClientRect().right - 1),
+        };
+      }, cardId);
+      const madeJd = await api(page, '/api/reminder/cards', 'POST', {
+        list_id: cardLists.id, name: `自检京东卡-${STAMP}`, bank: '京东金融',
+        no: '6225888877776666', statement_day: 6, due_day: 24,
+      });
+      const jdId = madeJd.body?.data?.id;
+      const madeBank = await api(page, '/api/reminder/cards', 'POST', {
+        list_id: cardLists.id, name: `自检银行卡-${STAMP}`, bank: '工商银行',
+        no: '6222023456789123', statement_day: 7, due_day: 25,
+      });
+      const bankId = madeBank.body?.data?.id;
+      check('能造「京东金融 + 银行」两张临时卡来验名字标签', !!jdId && !!bankId,
+        JSON.stringify({ jdId, bankId }));
+      if (jdId && bankId) {
+        await gotoRetry(page, BASE + `/admin/list/${cardLists.id}`);
+        await waitSel(page, '[data-card-face]', 20000);
+        await sleep(1200);
+        const jd = await faceLabelOf(jdId);
+        const bank = await faceLabelOf(bankId);
+        check('京东金融卡：图标右边写着「京东金融」',
+          jd.found && jd.label === '京东金融' && jd.besideIcon, JSON.stringify(jd));
+        check('银行卡面仍然只有标志、不写名字', bank.found && bank.label === '', JSON.stringify(bank));
+        const c1 = await api(page, `/api/reminder/cards/${jdId}`, 'DELETE');
+        const c2 = await api(page, `/api/reminder/cards/${bankId}`, 'DELETE');
+        check('名字标签的临时卡片已清理', c1.status === 200 && c2.status === 200,
+          JSON.stringify({ jd: c1.status, bank: c2.status }));
+      }
     } else {
       check('信用卡栏目存在（跳过卡面断言）', false, '没找到 credit_card 清单');
     }

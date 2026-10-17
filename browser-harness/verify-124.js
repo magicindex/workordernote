@@ -94,6 +94,36 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       check('状态行不谎报「模型已接入」', !statusLine.includes('模型已接入'), statusLine);
     }
 
+    // 顶部醒目横幅（用户 2026-10-17：「如果没有模型被加载给出提示，可以在聊天窗口最上边
+    // 用醒目颜色文字说明」）：没接模型时必须在对话区**之前**、用警示色说清楚；已接的不许冒出来。
+    const banner = await page.evaluate(() => {
+      const box = document.querySelector('[data-assistant-offline]');
+      const scroll = document.querySelector('[data-assistant-scroll]');
+      const cs = box ? getComputedStyle(box) : null;
+      return {
+        text: (box?.textContent || '').replace(/\s+/g, ' ').trim(),
+        color: cs?.color || '',
+        bg: cs?.backgroundColor || '',
+        weight: Number(cs?.fontWeight || 0),
+        above: !!(box && scroll && (box.compareDocumentPosition(scroll) & Node.DOCUMENT_POSITION_FOLLOWING)),
+      };
+    });
+    if (preLive) {
+      check('已接模型时顶部不出现「没有可用模型」横幅', !banner.text, banner.text);
+    } else {
+      check('没接模型时提示挂在对话窗口最上边（对话区之前）', banner.above, JSON.stringify(banner));
+      check('提示直说「没有可用模型」并点明后果（本地草稿、不调用模型）',
+        banner.text.includes('没有可用模型') && banner.text.includes('不调用任何模型'), banner.text);
+      check('提示指出到哪儿接上（设置 → 系统配置 → AI 助手）',
+        banner.text.includes('系统配置') && banner.text.includes('AI 助手'), banner.text);
+      const rgb = (banner.color.match(/(\d+),\s*(\d+),\s*(\d+)/) || []).slice(1).map(Number);
+      const [r, g, b] = rgb.length === 3 ? rgb : [0, 0, 0];
+      const warm = r > 180 && r - b > 60;
+      const tinted = !/rgba?\(0, 0, 0, 0\)/.test(banner.bg);
+      check('提示是警示色（暖色文字 + 有底色）而不是普通灰字', warm && tinted && banner.weight >= 600,
+        `${banner.color} / ${banner.bg} / ${banner.weight}`);
+    }
+
     const chips = await page.evaluate(() => [...document.querySelectorAll('[data-assistant-chip]')]
       .map((b) => (b.textContent || '').trim()));
     check('空状态给了 5 个快捷问法（周报/月报/年报/没做完/工作清单）',
@@ -183,9 +213,46 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
     check(preLive ? '面板徽章显示已启用' : '面板徽章显示未启用',
       preLive ? /已启用|已接入/.test(stateText) : /未启用|未接入/.test(stateText), stateText);
 
+    // 控件高度一致性（用户 2026-10-17：「AI 助手（呼叫小秘）：统一 控件高度，保持一致性」）：
+    // 单行控件（输入框 / 下拉）与下面那排按钮一律 40px、圆角 12px。改之前是 34/39/40 三种高。
+    const metrics = await page.evaluate(() => {
+      const panel = document.querySelector('[data-ai-panel]');
+      const one = (sel) => {
+        const el = panel?.querySelector(sel);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { h: Math.round(r.height), radius: getComputedStyle(el).borderRadius };
+      };
+      return {
+        provider: one('[data-ai-provider]'), model: one('[data-ai-model]'), base: one('[data-ai-base-url]'),
+        key: one('[data-ai-api-key]'), thinking: one('[data-ai-thinking-mode]'), timeout: one('[data-ai-timeout]'),
+        save: one('[data-ai-save]'), test: one('[data-ai-test]'),
+      };
+    });
+    const singles = ['provider', 'model', 'base', 'key', 'thinking', 'timeout'].map((k) => metrics[k]);
+    check('AI 面板的单行控件高度一致（输入框与下拉都是 40px）',
+      singles.every((m) => m && m.h === 40), JSON.stringify(metrics));
+    check('按钮与输入框同高同圆角（40px / 12px，原来按钮是 16px 圆角）',
+      [metrics.save, metrics.test].every((m) => m && m.h === 40 && m.radius === '12px')
+      && singles.every((m) => m && m.radius === '12px'),
+      JSON.stringify({ save: metrics.save, test: metrics.test, provider: metrics.provider }));
+
     const providers = await page.evaluate(() => [...document.querySelectorAll('[data-ai-provider] option')].map((o) => o.value));
     check('服务商是下拉预设（含自定义）而不是写死一家',
       providers.includes('deepseek') && providers.includes('custom') && providers.length >= 6, JSON.stringify(providers));
+
+    // 思考过程显示口径：后台偏好可设（用户 2026-10-16：「通过后台偏好可以设定」）
+    const thinkingField = await page.evaluate(() => {
+      const el = document.querySelector('[data-ai-thinking-mode]');
+      return {
+        exists: !!el,
+        options: el ? Array.from(el.options).map((o) => o.value) : [],
+        value: el ? el.value : '',
+      };
+    });
+    check('后台有「对话里显示思考过程」下拉（三档）',
+      thinkingField.exists && thinkingField.options.join(',') === 'off,brief,full', JSON.stringify(thinkingField));
+    check('默认档位是简洁思考', thinkingField.value === 'brief', JSON.stringify({ value: thinkingField.value }));
 
     // ---------- 3b. 本机 Ollama：检测按钮、容器地址提醒、检测这条路能走通 ----------
     await fill(page, '[data-ai-provider]', 'ollama');
@@ -219,8 +286,39 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       check('没保存过密钥时提示「粘贴服务商给的密钥」', /粘贴/.test(keyField.placeholder), keyField.placeholder);
     }
 
-    const models = await page.evaluate(() => [...document.querySelectorAll('datalist option')].map((o) => o.value).filter(Boolean));
-    check('模型名有候选、也允许手填', models.length >= 2, JSON.stringify(models.slice(0, 4)));
+    // 模型候选从「datalist」改成可点的清单（datalist 在手机上弹不出来，用户报「加了模型选不了」）。
+    const models = await page.evaluate(() => [...document.querySelectorAll('[data-ai-model-option]')]
+      .map((el) => el.getAttribute('data-ai-model-option') || '').filter(Boolean));
+    check('模型名有候选清单（可点选）', models.length >= 2, JSON.stringify(models.slice(0, 4)));
+    const listTitle = await page.evaluate(() => (document.querySelector('[data-ai-model-list]')?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30));
+    check('清单标题写明了来源（预设常见名字 / 服务器上可用）',
+      /预设常见名字|服务器上可用/.test(listTitle), listTitle);
+
+    if (models.length) {
+      await clickEl(page, `[data-ai-model-option="${models[0]}"]`);
+      await sleep(400);
+      const picked = await page.evaluate(() => document.querySelector('[data-ai-model]')?.value || '');
+      check('点清单里的一条会填进模型名输入框', picked === models[0], JSON.stringify({ picked, want: models[0] }));
+      const marked = await page.evaluate(() => (document.querySelector('[data-ai-model-option]')?.textContent || '').trim());
+      check('被选中的那条标了「已选」', /已选/.test(marked), marked);
+    }
+
+    const currentModel = await page.evaluate(() => {
+      const box = document.querySelector('[data-ai-current-model]');
+      const name = document.querySelector('[data-ai-current-model-name]')?.textContent?.trim() || '';
+      return { box: !!box, name, text: (box?.textContent || '').replace(/\s+/g, ' ').trim() };
+    });
+    check('有专门的「当前模型」块并写出模型名', currentModel.box && currentModel.text.includes('当前模型') && !!currentModel.name,
+      JSON.stringify(currentModel));
+    // 填一个明显不是当前在用的名字，再确认那句「未保存」提醒会出现
+    await fill(page, '[data-ai-model]', 'verify124-pending-model');
+    await sleep(400);
+    const pending = await page.evaluate(() => ({
+      shown: !!document.querySelector('[data-ai-model-pending]'),
+      text: (document.querySelector('[data-ai-model-pending]')?.textContent || '').replace(/\s+/g, ' ').trim(),
+    }));
+    check('选的与当前在用的不一样时提示「未保存」', pending.shown && pending.text.includes('verify124-pending-model'),
+      JSON.stringify(pending));
 
     await fill(page, '[data-ai-model]', 'deepseek-chat');
     await sleep(500);
@@ -267,6 +365,13 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
     await sleep(2500);
     const savedText = await textOf(page, '[data-ai-notice]');
     check('参数填齐后保存成功', /已保存/.test(savedText), savedText || '(没有提示)');
+    // 顺手把档位改成「详细思考过程」再存一次，确认后台偏好真的落库了
+    await page.select('[data-ai-thinking-mode]', 'full');
+    await sleep(400);
+    await clickEl(page, '[data-ai-save]');
+    await sleep(2500);
+    const modeSaved = (await api(page, '/api/assistant/admin/settings')).body?.data?.thinking_mode || '';
+    check('后台偏好「详细思考过程」能保存并读回来', modeSaved === 'full', modeSaved);
     const saved = (await api(page, '/api/assistant/admin/settings')).body?.data || {};
     check('保存后服务端读回来的值一致',
       saved.model === 'deepseek-chat' && saved.enabled === false, JSON.stringify({ model: saved.model, enabled: saved.enabled }));
@@ -312,7 +417,150 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       cleared.api_key_set === false && /粘贴/.test(clearedUi.placeholder) && !/已保存/.test(clearedUi.hint),
       JSON.stringify({ set: cleared.api_key_set, ...clearedUi }));
 
-    // ---------- 5. 收尾：恢复原设置（密钥留空表示不动） ----------
+    // ---------- 5. 保存到记事本：一键存 + 标题标签自动生成（用户 2026-10-17）----------
+    //   「ai聊天输出内容增加 保存到记事本功能，自动生成标签。」
+    // 没接模型也能存（草稿那条路一样走），所以这一节在两种状态下都执行。
+    await page.goto(`${BASE}/admin/home`, { waitUntil: 'networkidle2' });
+    await sleep(900);
+    await clickEl(page, '[data-assistant-trigger]');
+    await sleep(900);
+    await clickEl(page, '[data-assistant-preset="本周周报"]');
+    await sleep(preLive ? 12000 : 2200);
+
+    const saveBtn = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('[data-assistant-save-note]'));
+      return { count: buttons.length, label: (buttons[buttons.length - 1]?.textContent || '').trim() };
+    });
+    check('回答下面有「保存到记事本」按钮', saveBtn.count >= 1 && /保存到记事本/.test(saveBtn.label), JSON.stringify(saveBtn));
+
+    await clickEl(page, '[data-assistant-save-note]');
+    for (let i = 0; i < 20; i += 1) {
+      await sleep(400);
+      const done = await page.evaluate(() => !!document.querySelector('[data-assistant-note-saved]'));
+      if (done) break;
+    }
+    const savedUi = await page.evaluate(() => {
+      const saved = document.querySelector('[data-assistant-note-saved]');
+      const open = document.querySelector('[data-assistant-open-note]');
+      const error = document.querySelector('[data-assistant-note-error]');
+      return {
+        saved: (saved?.textContent || '').trim(),
+        open: (open?.textContent || '').trim(),
+        error: (error?.textContent || '').trim(),
+        saveButtonsLeft: document.querySelectorAll('[data-assistant-save-note]').length,
+      };
+    });
+    check('点一下就存好了（按钮换成「已存进记事本」+「去看」）',
+      /已存进记事本/.test(savedUi.saved) && /去看/.test(savedUi.open) && savedUi.saveButtonsLeft === 0,
+      JSON.stringify(savedUi));
+    check('保存没报错', !savedUi.error, savedUi.error);
+
+    // 存下来的是一条真正的记事：标题前半是自动标签，落在「随手记事本」那一栏。
+    const notebookNotes = await page.evaluate(async (base) => {
+      const token = localStorage.getItem('reminders.token') || sessionStorage.getItem('reminders.token');
+      const auth = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
+      const lists = await (await fetch(base + '/api/reminder/lists', { headers: auth })).json();
+      const bucket = (lists?.data || []).find((row) => row.template === 'notebook');
+      if (!bucket) return { bucket: null, items: [] };
+      const res = await (await fetch(`${base}/api/reminder/items?list_id=${bucket.id}&status=all&view=all`, { headers: auth })).json();
+      const rows = Array.isArray(res?.data) ? res.data : (res?.data?.items || []);
+      return { bucket, items: rows.map((row) => ({ id: row.id, title: row.title, kind: row.kind, notes: row.notes || '' })) };
+    }, BASE);
+    const aiNotes = notebookNotes.items.filter((row) => row.title.startsWith('#AI小秘'));
+    check('记事本里多了一条自动标签的记事（#AI小秘 开头）', aiNotes.length >= 1,
+      JSON.stringify(notebookNotes.items.slice(0, 3)));
+    const freshNote = aiNotes[0] || null;
+    check('标题里带上了这一轮的主题标签（#周报）', !!freshNote && freshNote.title.includes('#周报'), freshNote?.title || '');
+    check('备注里留着回答原文与来源行',
+      !!freshNote && /来自 AI 小秘对话/.test(freshNote.notes) && freshNote.notes.length > 60,
+      freshNote ? freshNote.notes.slice(0, 80) : '');
+
+    // 「去看」跳到记事本那一栏，刚存的那条就在列表里。
+    await clickEl(page, '[data-assistant-open-note]');
+    await sleep(1500);
+    const looking = await page.evaluate(() => ({
+      path: location.pathname,
+      titles: Array.from(document.querySelectorAll('[data-reminder-row]')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim()),
+      bodyHas: /AI小秘/.test(document.body.innerText),
+    }));
+    check('「去看」跳到记事本那一栏', /\/admin\/list\/\d+/.test(looking.path), looking.path);
+    check('记事本页上看得见刚存的那条', looking.bodyHas, JSON.stringify(looking.titles.slice(0, 3)));
+
+    // 收走这一节造出来的那条记事（别把展示数据搞脏）。
+    if (freshNote) {
+      const del = await api(page, `/api/reminder/items/${freshNote.id}`, 'DELETE');
+      check('收尾把测试记事删掉了', del.status === 200 && del.body?.code === 0, JSON.stringify(del.body));
+    }
+
+    // ---------- 5b. 各栏目的 AI 提示词：存在清单上、可引用、清空即生效（用户 2026-10-17）----------
+    await page.goto(`${BASE}/admin/configs`, { waitUntil: 'networkidle2' });
+    await sleep(900);
+    const listRows = (await api(page, '/api/reminder/lists')).body?.data || [];
+    check('清单接口带 ai_prompt 字段（默认是空串）',
+      listRows.length > 0 && listRows.every((row) => typeof row.ai_prompt === 'string'),
+      JSON.stringify(listRows.slice(0, 2).map((row) => ({ name: row.name, ai_prompt: row.ai_prompt }))));
+
+    const generalLists = listRows.filter((row) => !row.template || row.template === 'general');
+    const target = generalLists[0] || null;
+    const other = generalLists[1] || null;
+    check('至少有两条普通清单可用来验「各栏一条 / 互相引用」', !!target && !!other,
+      JSON.stringify(generalLists.map((row) => row.name)));
+
+    const sectionShape = await page.evaluate(() => {
+      const rows = Array.from(document.querySelectorAll('[data-ai-list-prompt-row]'));
+      return {
+        hasSection: !!document.querySelector('[data-ai-list-prompts]'),
+        names: rows.map((el) => el.getAttribute('data-ai-list-prompt-row')),
+        rows: rows.length,
+      };
+    });
+    check('后台有「各栏目的 AI 提示词」一节', sectionShape.hasSection, JSON.stringify(sectionShape));
+    check('每个清单一行', sectionShape.rows === listRows.length
+      && listRows.every((row) => sectionShape.names.includes(row.name)),
+      JSON.stringify({ ui: sectionShape.names, api: listRows.map((row) => row.name) }));
+
+    if (target && other) {
+      // 先清到已知状态（展示实例上可能已经写过），再走一遍「填 → 未保存 → 保存 → 已设置」。
+      await api(page, `/api/reminder/lists/${target.id}`, 'PATCH', { ai_prompt: '' });
+      await page.reload({ waitUntil: 'networkidle2' });
+      await sleep(900);
+      const PROMPT = '按基站/线路分组，多说进度';
+      const targetSel = `[data-ai-list-prompt=${JSON.stringify(target.name)}]`;
+      await page.click(targetSel);
+      await page.keyboard.down('Control');
+      await page.keyboard.press('A');
+      await page.keyboard.up('Control');
+      await page.keyboard.type(PROMPT);
+      await sleep(250);
+      const dirtyRow = await page.evaluate((name) => (document.querySelector(`[data-ai-list-prompt-row=${JSON.stringify(name)}]`)?.textContent || '').replace(/\s+/g, ' '), target.name);
+      check('改过之后那一行标「未保存」', /未保存/.test(dirtyRow), dirtyRow.slice(0, 80));
+      await page.click(`[data-ai-list-prompt-save=${JSON.stringify(target.name)}]`);
+      await sleep(1000);
+      const savedState = await page.evaluate((name) => {
+        const row = document.querySelector(`[data-ai-list-prompt-row=${JSON.stringify(name)}]`);
+        return {
+          text: (row?.textContent || '').replace(/\s+/g, ' '),
+          flash: !!document.querySelector('[data-ai-list-prompt-saved]'),
+        };
+      }, target.name);
+      check('点保存后这一行标「已设置」并提示「已保存」', /已设置/.test(savedState.text) && savedState.flash, JSON.stringify(savedState));
+      const readBack = (await api(page, '/api/reminder/lists')).body?.data?.find((row) => row.id === target.id);
+      check('写进清单的提示词读回来一字不差', readBack?.ai_prompt === PROMPT, JSON.stringify(readBack?.ai_prompt));
+
+      // 引用：从别的栏目复制一段（一次性复制，不是共享引用）。
+      await page.select(`[data-ai-list-prompt-ref=${JSON.stringify(other.name)}]`, String(target.id));
+      await sleep(300);
+      const copied = await page.evaluate((name) => document.querySelector(`[data-ai-list-prompt=${JSON.stringify(name)}]`)?.value || '', other.name);
+      check('「引用其他栏目」把那段文字复制过来', copied === PROMPT, copied);
+
+      const tooLong = await api(page, `/api/reminder/lists/${target.id}`, 'PATCH', { ai_prompt: '字'.repeat(601) });
+      check('超长提示词被拒绝并说清上限',
+        tooLong.status === 400 && /600/.test(tooLong.body?.message || ''), JSON.stringify(tooLong.body).slice(0, 160));
+      const cleared = await api(page, `/api/reminder/lists/${target.id}`, 'PATCH', { ai_prompt: '' });
+      check('清空提示词接口正常', cleared.body?.code === 0, JSON.stringify(cleared.body).slice(0, 120));
+    }
+
+    // ---------- 6. 收尾：恢复原设置（密钥留空表示不动） ----------
     await api(page, '/api/assistant/admin/settings', 'PUT', {
       enabled: before.enabled === true,
       provider: before.provider || 'deepseek',
@@ -321,12 +569,14 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       model: before.model || '',
       system_prompt: before.system_prompt || before.default_system_prompt || '',
       timeout_seconds: before.timeout_seconds || 60,
+      thinking_mode: before.thinking_mode || 'brief',
     });
     await sleep(800);
     const after = (await api(page, '/api/assistant/admin/settings')).body?.data || {};
-    check('收尾已恢复原设置（未启用、模型名回到原值）',
-      after.enabled === (before.enabled === true) && after.model === (before.model || ''),
-      JSON.stringify({ enabled: after.enabled, model: after.model, before: before.model }));
+    check('收尾已恢复原设置（未启用、模型名与思考档位回到原值）',
+      after.enabled === (before.enabled === true) && after.model === (before.model || '')
+        && after.thinking_mode === (before.thinking_mode || 'brief'),
+      JSON.stringify({ enabled: after.enabled, model: after.model, thinking: after.thinking_mode, before: before.model }));
   });
 
   console.log(`\n结果：${passed} 项通过，${failed} 项失败`);

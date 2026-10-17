@@ -33,11 +33,23 @@ func main() {
 	config.LoadDotEnv(".env", "server/.env")
 	cfg := config.Parse()
 	reminder.SetUploadDir(cfg.UploadDir)
-	// 小秘要能按真实工作数据作答（周报/月报/工作清单/关键词查询）：数据装配在
-	// reminder 包，接给小秘。同样只能在这里注入 —— assistant 若 import reminder，
-	// reminder 的测试（import server）会形成 import cycle。
+	// 小秘要能按真实工作数据作答（周报/月报/工作清单/关键词查询），也要能把
+	// 一段回答存成记事：两件事的实现都在 reminder 包，这里注入进去，assistant
+	// 就不必直接依赖提醒库（reminder 的测试 import 根包 server，而根包 import
+	// assistant，直接依赖会绕成 import cycle）。
 	assistant.RegisterWorkDigestProvider(workDigestProvider)
+	assistant.RegisterNoteSaver(saveAssistantNote)
 	server.Start()
+}
+
+// saveAssistantNote 是「保存到记事本」的落库那一步：与小秘面板手动新建记事
+// 共用 reminder.CreateNote（创建即完成、并广播给别的端）。
+func saveAssistantNote(db *gorm.DB, userID uint, title, notes, originClientID string) (assistant.SavedNote, error) {
+	item, err := reminder.CreateNote(db, userID, title, notes, originClientID)
+	if err != nil {
+		return assistant.SavedNote{}, err
+	}
+	return assistant.SavedNote{ID: item.ID, Title: item.Title, ListID: item.ListID, ListName: item.ListName}, nil
 }
 
 // workDigestProvider 是「呼叫小秘」的数据来源：认时间段 → 取数据 → 交给模型
@@ -46,13 +58,21 @@ func main() {
 func workDigestProvider(db *gorm.DB, userID uint, req assistant.WorkDigestRequest) (assistant.WorkDigestResult, error) {
 	now := time.Now()
 	opts := reminder.WorkDigestOptions{Option: req.Option, From: req.From, To: req.To, Keyword: req.Keyword}
+	// 「@清单名」：用户点名了某一栏，这一轮的数据只看它（打 @ 弹出的选择器只是
+	// 把名字补进输入框，手打的 @名称 也认）。
+	mentionedID, mentionedName, mentioned := reminder.FindMentionedList(db, userID, req.Text)
+	opts.ListID, opts.ListName = mentionedID, mentionedName
 	if strings.TrimSpace(opts.Option) == "" && strings.TrimSpace(opts.Keyword) == "" {
 		// 面板没选时间段：看用户这句话里有没有「上周」「近 7 天」这类时间词。
 		detected, ok := reminder.DetectWorkOptions(req.Text, now)
 		if !ok {
-			return assistant.WorkDigestResult{}, nil // Found=false：这一轮不附数据
+			if !mentioned {
+				return assistant.WorkDigestResult{}, nil // Found=false：这一轮不附数据
+			}
+		} else {
+			detected.ListID, detected.ListName = opts.ListID, opts.ListName
+			opts = detected
 		}
-		opts = detected
 	}
 	if err := reminder.ValidateWorkOptions(opts); err != nil {
 		return assistant.WorkDigestResult{}, err
@@ -68,6 +88,8 @@ func workDigestProvider(db *gorm.DB, userID uint, req assistant.WorkDigestReques
 		Start:     digest.Start,
 		End:       digest.End,
 		Keyword:   digest.Keyword,
+		ListID:    digest.ListID,
+		ListName:  digest.ListName,
 		Completed: digest.Stats.Completed,
 		Open:      digest.Stats.Open,
 		Overdue:   digest.Stats.Overdue,
@@ -76,5 +98,19 @@ func workDigestProvider(db *gorm.DB, userID uint, req assistant.WorkDigestReques
 		Truncated: digest.Truncated,
 		Markdown:  digest.Markdown(),
 		Draft:     digest.DraftReport(),
+		// 各栏目的 AI 提示词：用户在清单上写的「这一栏该怎么分析」。
+		ListPrompts: listPromptsOf(digest.Prompts),
 	}, nil
+}
+
+// listPromptsOf 把 reminder 的提示词结构搬成 assistant 的（两个包互不 import）。
+func listPromptsOf(prompts []reminder.WorkDigestPrompt) []assistant.ListPrompt {
+	if len(prompts) == 0 {
+		return nil
+	}
+	out := make([]assistant.ListPrompt, 0, len(prompts))
+	for _, item := range prompts {
+		out = append(out, assistant.ListPrompt{Name: item.Name, Prompt: item.Prompt})
+	}
+	return out
 }

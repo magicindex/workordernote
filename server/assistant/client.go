@@ -30,6 +30,10 @@ type ChatResult struct {
 	Model            string
 	PromptTokens     int
 	CompletionTokens int
+	// Reasoning 是「思考模型」这一轮的思维链（qwen3、deepseek-r1 这类）。
+	// 不接模型的模式（off/brief/full）由调用方决定拿它做什么：off 直接丢掉，
+	// brief 取开头一小段，full 原样给面板。空串表示上游没给（普通模型）。
+	Reasoning string
 }
 
 // apiError 是「要展示给用户」的调用失败：一句中文说明 + 上游状态码（没有就 0）。
@@ -98,10 +102,12 @@ type chatResponse struct {
 	Choices []struct {
 		Message struct {
 			Content string `json:"content"`
-			// 「思考模型」（qwen3、deepseek-r1 这类）把思维链放在 reasoning 里，
-			// 正式回答才放 content。只在「content 空但 reasoning 有东西」时用它
-			// 判断原因——正常回答时这个字段要忽略。
-			Reasoning string `json:"reasoning"`
+			// 「思考模型」（qwen3、deepseek-r1 这类）把思维链单独放在一个字段里，
+			// 正式回答才放 content。字段名各家长得不一样：Ollama 与 DeepSeek 原生
+			// 用 reasoning、OpenAI 兼容网关那边常见 reasoning_content，两个都收
+			// （见 reasoningOf）。
+			Reasoning        string `json:"reasoning"`
+			ReasoningContent string `json:"reasoning_content"`
 		} `json:"message"`
 	} `json:"choices"`
 	Usage struct {
@@ -130,7 +136,7 @@ func (c *client) Chat(ctx context.Context, messages []Message) (ChatResult, erro
 	reasoning := ""
 	if len(parsed.Choices) > 0 {
 		reply = strings.TrimSpace(parsed.Choices[0].Message.Content)
-		reasoning = strings.TrimSpace(parsed.Choices[0].Message.Reasoning)
+		reasoning = reasoningOf(parsed.Choices[0].Message)
 	}
 	if reply == "" {
 		// 200 也可能什么都没返回。分开说：本地「思考模型」是这个场景里最常见的
@@ -153,7 +159,21 @@ func (c *client) Chat(ctx context.Context, messages []Message) (ChatResult, erro
 		Model:            model,
 		PromptTokens:     parsed.Usage.PromptTokens,
 		CompletionTokens: parsed.Usage.CompletionTokens,
+		Reasoning:        reasoning,
 	}, nil
+}
+
+// reasoningOf 取一条回复里的思维链：Ollama/DeepSeek 用 reasoning，
+// OpenAI 兼容网关常用 reasoning_content，哪个有内容用哪个。
+func reasoningOf(msg struct {
+	Content          string `json:"content"`
+	Reasoning        string `json:"reasoning"`
+	ReasoningContent string `json:"reasoning_content"`
+}) string {
+	if v := strings.TrimSpace(msg.Reasoning); v != "" {
+		return v
+	}
+	return strings.TrimSpace(msg.ReasoningContent)
 }
 
 type modelsResponse struct {

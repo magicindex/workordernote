@@ -298,3 +298,194 @@ func digestTitles(items []WorkDigestItem) string {
 	}
 	return strings.Join(out, " / ")
 }
+
+// 「@清单名」：这一轮只看点名的那一栏，别的清单的完成记录、记事、未完成
+// 都不许混进来（用户 2026-10-17：「使用@清单名称 来指定数据源」）。
+func TestWorkDigestListMentionFiltersToOneList(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	userID, now := workDigestFixture(t)
+
+	var work List
+	if err := appDB.Where("user_id = ? AND name = ?", userID, "工作安排").First(&work).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	digest, err := BuildWorkDigest(appDB, userID, WorkDigestOptions{Option: "all", ListID: work.ID}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digest.ListID != work.ID || digest.ListName != "工作安排" {
+		t.Fatalf("快照要写清点名了哪一栏：%+v", digest)
+	}
+	if got := digestTitles(digest.Completed); strings.Contains(got, "上周的巡检记录") {
+		t.Fatalf("别栏的完成记录不该出现：%s", got)
+	}
+	if got := digestTitles(digest.Completed); !strings.Contains(got, "黄河农场") {
+		t.Fatalf("本栏的完成记录要留着：%s", got)
+	}
+	if len(digest.Notes) != 0 || digest.Stats.Notes != 0 {
+		t.Fatalf("别栏的记事不该出现：%+v", digest.Notes)
+	}
+	if !strings.HasPrefix(digest.Label, "工作安排 · ") {
+		t.Fatalf("标题要写明只看哪一栏：%s", digest.Label)
+	}
+	if !strings.Contains(digest.Markdown(), "只看清单：工作安排") {
+		t.Fatalf("给模型的提示词要说清口径：%s", digest.Markdown())
+	}
+}
+
+// 未完成（「手上还有哪些没做完」）同样按 @ 的清单收窄。
+func TestWorkDigestOpenRespectsListMention(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	userID, now := workDigestFixture(t)
+
+	var card List
+	if err := appDB.Where("user_id = ? AND name = ?", userID, "信用卡账单").First(&card).Error; err != nil {
+		t.Fatal(err)
+	}
+	digest, err := BuildWorkDigest(appDB, userID, WorkDigestOptions{Option: WorkOptionOpen, ListID: card.ID}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := digestTitles(digest.Open); got != "下下周的割接" {
+		t.Fatalf("只看信用卡账单时应只剩它自己那一条：%s", got)
+	}
+	if digest.Stats.Open != 1 {
+		t.Fatalf("计数也要跟着收窄：%+v", digest.Stats)
+	}
+}
+
+// 认「@清单名」：名字长的先试，手打的也认，没点名/点了不存在的都不算。
+func TestFindMentionedList(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	userID, _ := workDigestFixture(t)
+	seedWorkList(t, userID, "工作", "blue")
+
+	cases := []struct {
+		name     string
+		text     string
+		wantName string
+		wantOK   bool
+	}{
+		{"点名一栏", "@工作安排 这周都干了什么", "工作安排", true},
+		{"名字长的优先", "@工作安排 和 @工作 都提到", "工作安排", true},
+		{"只有短名字时认短的", "@工作 有哪些没做完", "工作", true},
+		{"@ 后面没跟清单名", "帮我看看 @ 这个符号", "", false},
+		{"压根没 @", "上周都干了什么", "", false},
+		{"点了不存在的清单", "@不存在的清单 看看", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			id, name, ok := FindMentionedList(appDB, userID, tc.text)
+			if ok != tc.wantOK || name != tc.wantName {
+				t.Fatalf("FindMentionedList(%q) = (%d, %q, %v)，想要 (%q, %v)", tc.text, id, name, ok, tc.wantName, tc.wantOK)
+			}
+			if ok && id == 0 {
+				t.Fatalf("认出来了却没有清单 id：%q", tc.text)
+			}
+		})
+	}
+}
+
+// 栏目提示词：只带「这段时间真有数据、且写了提示词」的栏目；@点名时只看那一栏。
+func TestWorkDigestCarriesListPrompts(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	userID, now := workDigestFixture(t)
+
+	var work, other, card List
+	if err := appDB.Where("user_id = ? AND name = ?", userID, "工作安排").First(&work).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := appDB.Where("user_id = ? AND name = ?", userID, "个人事务").First(&other).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := appDB.Where("user_id = ? AND name = ?", userID, "信用卡账单").First(&card).Error; err != nil {
+		t.Fatal(err)
+	}
+	appDB.Model(&work).Update("ai_prompt", "按基站/线路分组，多说进度")
+	appDB.Model(&other).Update("ai_prompt", "私人事务不提细节")
+	// 这一栏写了提示词，但这段时间一条数据也没有：不该把要求带给模型。
+	idle := seedWorkList(t, userID, "人生要有仪式感", "rose")
+	appDB.Model(&idle).Update("ai_prompt", "只列日期，不要评价")
+
+	digest, err := BuildWorkDigest(appDB, userID, WorkDigestOptions{Option: "week"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := promptNames(digest.Prompts)
+	if !strings.Contains(got, "工作安排") || !strings.Contains(got, "个人事务") {
+		t.Fatalf("有数据的栏目要带上提示词：%s", got)
+	}
+	if strings.Contains(got, "人生要有仪式感") {
+		t.Fatalf("这段时间没数据的栏目不该带：%s", got)
+	}
+	if strings.Contains(got, "信用卡账单") {
+		t.Fatalf("没写提示词的栏目不该出现：%s", got)
+	}
+	for _, item := range digest.Prompts {
+		if item.ListID == 0 || item.Prompt == "" {
+			t.Fatalf("提示词要带清单 id 与内容：%+v", item)
+		}
+	}
+
+	// @点名：只带点名那一栏的提示词。
+	digest, err = BuildWorkDigest(appDB, userID, WorkDigestOptions{Option: "all", ListID: other.ID}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := promptNames(digest.Prompts); got != "个人事务" {
+		t.Fatalf("@点名时只带那一栏的提示词，得到：%q", got)
+	}
+}
+
+// 提示词条数有上限：带太多会把真正的工作数据挤走。
+func TestWorkDigestListPromptsCapAtFour(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	loc := shanghai()
+	now := time.Date(2026, 10, 16, 17, 30, 0, 0, loc)
+	const userID = 31
+	at := time.Date(2026, 10, 15, 9, 0, 0, 0, loc)
+	for i := 0; i < 6; i++ {
+		list := seedWorkList(t, userID, "栏目"+string(rune('A'+i)), "blue")
+		appDB.Model(&list).Update("ai_prompt", "这段是我的分析要求")
+		seedWorkReminder(t, userID, list.ID, "做完的事", KindTask, &at, &at)
+	}
+	digest, err := BuildWorkDigest(appDB, userID, WorkDigestOptions{Option: "all"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(digest.Prompts) != workDigestMaxListPrompts {
+		t.Fatalf("提示词最多 %d 条，实际 %d 条：%+v", workDigestMaxListPrompts, len(digest.Prompts), digest.Prompts)
+	}
+}
+
+// promptNames 把提示词的栏目名连成一串，方便断言。
+func promptNames(prompts []WorkDigestPrompt) string {
+	names := make([]string, 0, len(prompts))
+	for _, item := range prompts {
+		names = append(names, item.Name)
+	}
+	return strings.Join(names, ",")
+}
+
+func TestNormalizeListAIPrompt(t *testing.T) {
+	got, err := normalizeListAIPrompt("  第一行\r\n第二行  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "第一行\n第二行" {
+		t.Fatalf("要去首尾空白、把 CRLF 换成 LF：%q", got)
+	}
+	ok := strings.Repeat("字", listAIPromptMaxRunes)
+	if _, err := normalizeListAIPrompt(ok); err != nil {
+		t.Fatalf("%d 字应该放行：%v", listAIPromptMaxRunes, err)
+	}
+	if _, err := normalizeListAIPrompt(ok + "多"); err == nil {
+		t.Fatal("超长要拒绝，不能静默截断")
+	}
+}

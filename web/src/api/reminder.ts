@@ -36,6 +36,8 @@ export interface ReminderList {
   position: number
   is_default: boolean
   open_count: number
+  /** 这一栏的 AI 提示词：小秘分析这一栏的数据时一起交给模型（空串 = 不加要求） */
+  ai_prompt?: string
   template?: 'general' | 'credit_card' | 'notebook' | 'ceremony'
   /** 信用卡账单栏目才有：这一栏里有几张卡（侧栏角标用） */
   card_count?: number
@@ -209,7 +211,7 @@ export interface ChannelStatus {
 
 export const getSummary = () => request.get('/api/reminder/summary')
 export const getLists = () => request.get('/api/reminder/lists')
-export const createList = (data: { name: string; color?: string; icon?: string; template?: 'general' | 'credit_card' }) =>
+export const createList = (data: { name: string; color?: string; icon?: string; template?: 'general' | 'credit_card'; ai_prompt?: string }) =>
   request.post('/api/reminder/lists', data)
 export const updateList = (id: number, data: Partial<ReminderList>) =>
   request.patch(`/api/reminder/lists/${id}`, data)

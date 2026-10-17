@@ -518,14 +518,20 @@
               :class="{ 'reminder-completed': !!item.completed_at && item.kind !== 'note', 'reminder-overdue': isOverdue(item), 'reminder-highlight': highlightedId === item.id }"
               :data-reminder-row="item.id"
             >
+              <!-- 记事行前面那个位置放**它所属清单的图标**（记事本图标）并用清单颜色上色，
+                   不再画一个点了也没用的勾选框（用户 2026-10-17：「随手记事本 页面，
+                   项目列表前边的复选按钮改成 记事本图标，颜色与列表颜色一致」）。
+                   任务行仍然是勾选框，样式与行为一点没动。 -->
               <button
                 class="complete-button"
-                :class="{ 'cursor-default': item.kind === 'note' }"
+                :class="{ 'complete-button-note cursor-default': item.kind === 'note' }"
                 :disabled="item.kind === 'note'"
                 :aria-label="item.kind === 'note' ? '记事，无需完成' : item.completed_at ? '恢复提醒' : '完成提醒'"
+                :style="item.kind === 'note' ? { color: listColor(item.list_color) } : undefined"
                 @click.stop="toggleComplete(item)"
               >
-                <svg v-if="item.completed_at" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <ListIcon v-if="item.kind === 'note'" :name="iconOfItem(item)" :size="19" />
+                <svg v-else-if="item.completed_at" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </button>
               <button class="min-w-0 flex-1 text-left" @click="editItem(item)">
                 <div class="flex items-center gap-2">
@@ -1587,6 +1593,14 @@ function ruleLabel(rule: string) { return ({ daily: '每天', weekly: '每周', 
 // 清单色表在 utils/list-colors.ts（侧栏/筛选/标题/日历共用一份，改一处不会走样）。
 function listColor(color: string) { return listColorHex(color) }
 
+// 条目接口不带 list_icon（只有清单接口有），记事行前面那个图标就从已加载的清单里查一份。
+const listIcons = computed<Record<number, string>>(() => {
+  const map: Record<number, string> = {}
+  for (const l of lists.value) map[l.id] = l.icon || 'list'
+  return map
+})
+function iconOfItem(item: ReminderItem) { return listIcons.value[item.list_id] || 'list' }
+
 // 快速新建里那个清单下拉当前选中项的色名（色点跟清单同色）
 const quickListColor = computed(() => navLists.value.find((l) => l.id === quick.list_id)?.color || 'blue')
 function changed() { window.dispatchEvent(new CustomEvent('reminder-data-changed')) }
@@ -1711,6 +1725,10 @@ function onShortcut(e: KeyboardEvent) {
 .reminder-completed { @apply opacity-60; }
 .reminder-completed h3 { @apply line-through; }
 .complete-button { @apply flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-brand-500/35 text-white transition hover:scale-110 hover:border-brand-500 hover:bg-brand-500; }
+/* 记事行的那个位置放清单图标（用户 2026-10-17）：没有圈、没有底色、不跟着悬停放大，
+   颜色由行内样式按清单色给（浅色/深色主题都不用另外配色）。 */
+.complete-button-note { @apply border-0 bg-transparent; }
+.complete-button-note:hover { @apply scale-100 border-0 bg-transparent; }
 .reminder-completed .complete-button { @apply border-emerald-500 bg-emerald-500; }
 .priority-mark { @apply text-[11px] font-black tracking-[-.12em]; }
 .priority-1 { @apply text-blue-500; }.priority-2 { @apply text-amber-500; }.priority-3 { @apply text-rose-500; }

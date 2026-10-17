@@ -6,6 +6,7 @@
  *   4) 智能清单「全部」仍能看到这些记事
  *   5) 「全部」页范围条 chips 存在且默认「本月」；切「今年」能多出其它月份的条目
  *   6) 导出对话框：选清单与列，CSV 表头与所选列一致
+ *   7) 记事行前面是**清单图标 + 清单颜色**（用户 2026-10-17），任务行仍是勾选框
  *
  * 用法：APP_URL=http://127.0.0.1:8918 node verify-103.js
  */
@@ -206,6 +207,31 @@ function parseCsv(text) {
       notes.length > 0 && strays.length === 0,
       JSON.stringify(strays.map((i) => `${i.title}@${i.list_name}`).slice(0, 4)));
 
+    // ---------- 4d. 记事行前面是「清单图标 + 清单颜色」，不是勾选框 ----------
+    // 用户 2026-10-17：「随手记事本 页面，项目列表前边的复选按钮改成 记事本图标，颜色与列表颜色一致」。
+    const noteSlot = await page.evaluate(() => {
+      const row = [...document.querySelectorAll('.reminder-row')].find((r) => /记事/.test(r.textContent));
+      const btn = row?.querySelector('.complete-button');
+      const svg = btn?.querySelector('svg');
+      const h3 = row?.querySelector('h3');
+      if (!btn) return null;
+      return {
+        noteClass: btn.className.includes('complete-button-note'),
+        borderWidth: getComputedStyle(btn).borderTopWidth,
+        bg: getComputedStyle(btn).backgroundColor,
+        disabled: btn.disabled,
+        icon: !!svg,
+        iconColor: svg ? getComputedStyle(svg).color : '',
+        titleColor: h3 ? getComputedStyle(h3).color : '',
+      };
+    });
+    check('记事行前面画的是图标，不再是那个勾选框（无边框、无底色）',
+      !!noteSlot && noteSlot.noteClass === true && noteSlot.icon === true && noteSlot.borderWidth === '0px',
+      JSON.stringify(noteSlot));
+    check('图标用的是清单颜色（与同一行标题同色）',
+      !!noteSlot && !!noteSlot.iconColor && noteSlot.iconColor === noteSlot.titleColor,
+      JSON.stringify({ icon: noteSlot?.iconColor, title: noteSlot?.titleColor }));
+
     // ---------- 5. 智能清单「全部」仍能看到记事 ----------
     await gotoRetry(page, BASE + '/admin/all');
     await waitSel(page, '[data-range-bar]', 20000);
@@ -219,6 +245,26 @@ function parseCsv(text) {
       [...document.querySelectorAll('.reminder-row')].map((r) => r.textContent.replace(/\s+/g, ' ')));
     check('智能清单「全部」仍能看到这条记事',
       allRows.some((t) => t.includes(noteATitle)), JSON.stringify(allRows.slice(0, 6)));
+
+    // 「全部」页里记事同样用图标（同一支模板），而**任务行仍是勾选框** —— 这次改动不该带跑它。
+    const allSlots = await page.evaluate(() =>
+      [...document.querySelectorAll('.reminder-row')].map((r) => {
+        const btn = r.querySelector('.complete-button');
+        return {
+          note: /记事/.test(r.textContent),
+          noteClass: btn ? btn.className.includes('complete-button-note') : false,
+          borderWidth: btn ? getComputedStyle(btn).borderTopWidth : '',
+          width: btn ? getComputedStyle(btn).width : '',
+        };
+      }));
+    const noteSlots = allSlots.filter((x) => x.note);
+    const taskSlots = allSlots.filter((x) => !x.note);
+    check('「全部」页里记事行也是图标（无边框、不是勾选框）',
+      noteSlots.length > 0 && noteSlots.every((x) => x.noteClass && x.borderWidth === '0px'),
+      JSON.stringify(noteSlots.slice(0, 3)));
+    check('「全部」页里任务行仍是圆勾选框（2px 边框、24px 见方）',
+      taskSlots.length > 0 && taskSlots.every((x) => !x.noteClass && x.borderWidth === '2px' && x.width === '24px'),
+      JSON.stringify(taskSlots.slice(0, 3)));
 
     // ---------- 6. 范围条 chips + 默认本月 ----------
     const rangeBar = await page.evaluate(() => ({

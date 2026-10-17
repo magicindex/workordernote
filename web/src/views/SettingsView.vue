@@ -40,49 +40,6 @@
       <p v-else class="mt-3 text-xs text-muted-foreground">还没有清单。</p>
     </div>
 
-    <!-- 清单顺序（用户 2026-10-10 要求）：↑/↓ 调整，改完立刻按新顺序显示 -->
-    <div class="surface mt-4 rounded-2xl p-4 sm:p-6" data-list-order>
-      <h3 class="text-sm font-bold text-foreground">清单顺序</h3>
-      <p class="mt-1 text-sm leading-relaxed text-muted-foreground">
-        侧栏「我的清单」里的先后顺序。用 ↑ / ↓ 调，改完立刻生效并同步到另一台设备
-        （信用卡账单、随手记事本、人生要有仪式感是固定栏目，不在这里排）。
-      </p>
-      <ul v-if="sortableLists.length" class="mt-3 space-y-1.5">
-        <li
-          v-for="(list, index) in sortableLists"
-          :key="list.id"
-          class="flex items-center gap-2.5 rounded-xl border border-border/70 bg-surface/60 px-3 py-2"
-          :data-list-order-row="list.id"
-        >
-          <span class="w-5 shrink-0 text-center text-[11px] font-bold text-muted-foreground" data-list-order-index>{{ index + 1 }}</span>
-          <i class="h-2.5 w-2.5 shrink-0 rounded-full" :style="{ background: listInk(list.color) }"></i>
-          <span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ list.name }}</span>
-          <button
-            type="button"
-            class="row-action !opacity-100 disabled:!opacity-30"
-            :disabled="index === 0 || savingOrder"
-            :aria-label="`把「${list.name}」上移`"
-            :data-list-order-up="list.id"
-            @click="moveList(index, -1)"
-          >
-            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 14 6-6 6 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-          <button
-            type="button"
-            class="row-action !opacity-100 disabled:!opacity-30"
-            :disabled="index === sortableLists.length - 1 || savingOrder"
-            :aria-label="`把「${list.name}」下移`"
-            :data-list-order-down="list.id"
-            @click="moveList(index, 1)"
-          >
-            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 10 6 6 6-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-        </li>
-      </ul>
-      <p v-else class="mt-3 text-xs text-muted-foreground">还没有可排序的清单。</p>
-      <p v-if="orderSaved" class="mt-2 text-xs font-semibold text-emerald-500" data-list-order-saved>清单顺序已保存</p>
-    </div>
-
     <!-- 原项目信息：本应用是上游开源作品的衍生作品，按 MIT 许可保留出处与著作权 -->
     <div class="surface mt-4 rounded-2xl p-4 sm:p-6">
       <div class="flex items-start gap-3">
@@ -109,10 +66,9 @@
 import { computed, onMounted, ref } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfigGroupList from '../components/ConfigGroupList.vue'
-import { getAllConfigs, getUserConfigMeta, updateConfig } from '../api/config'
+import { getUserConfigMeta, updateConfig } from '../api/config'
 import type { ConfigMeta } from '../api/config'
-import { getLists, reorderLists, updateList, type ReminderList } from '../api/reminder'
-import { listColorHex } from '../utils/list-colors'
+import { getLists, updateList, type ReminderList } from '../api/reminder'
 import { useAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
 
@@ -127,69 +83,6 @@ const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit
 const defaultListId = ref(0)
 const savingDefault = ref(false)
 const defaultSaved = ref(false)
-
-// 清单顺序（用户 2026-10-10 要求）：只排**普通清单** —— 信用卡/随手记事本/人生要有仪式感
-// 在侧栏是固定那几行，顺序由代码定，不参与排序。
-const listInk = listColorHex
-// 系统固定栏目的 template 是 credit_card / notebook / ceremony；普通清单是 general
-// （老数据可能没有 template 字段，也当普通清单）。第一版写成 `!l.template` 把 general
-// 也排掉了，结果列表空着 —— 探针里一眼就看出来了。
-const SYSTEM_TEMPLATES = ['credit_card', 'notebook', 'ceremony']
-const sortableLists = computed(() => lists.value.filter((l) => !SYSTEM_TEMPLATES.includes(String(l.template || ''))))
-const savingOrder = ref(false)
-const orderSaved = ref(false)
-
-/** ↑/↓：先在本地换位（界面立刻响应），再整串 id 提交给服务端；失败就回滚。 */
-async function moveList(index: number, delta: number) {
-  const target = index + delta
-  if (savingOrder.value || target < 0 || target >= sortableLists.value.length) return
-  const before = lists.value.slice()
-  const normal = sortableLists.value.slice()
-  const [moved] = normal.splice(index, 1)
-  normal.splice(target, 0, moved)
-  // 系统栏目保持原位：只把普通清单按新顺序填回它们占的槽位，
-  // 然后**整串 id**（含系统栏目）提交 —— 这样服务端写出来的 1..N 与界面完全一致。
-  let cursor = 0
-  const nextAll = lists.value.map((l) => (SYSTEM_TEMPLATES.includes(String(l.template || '')) ? l : normal[cursor++]))
-  lists.value = nextAll
-  savingOrder.value = true
-  orderSaved.value = false
-  errorMsg.value = ''
-  try {
-    await reorderLists(nextAll.map((l) => l.id))
-    await syncSidebarOrder(nextAll)
-    await loadLists()
-    orderSaved.value = true
-    setTimeout(() => { orderSaved.value = false }, 2500)
-  } catch (err: any) {
-    lists.value = before
-    errorMsg.value = err.response?.data?.message || '保存清单顺序失败'
-  } finally {
-    savingOrder.value = false
-  }
-}
-
-/**
- * 侧栏如果已经存过自己的顺序（用户配置 sidebar_order，见 MainLayout 的「我的清单」排序模式），
- * 就把它里面的清单 token 按这次的新顺序重排 —— 否则会出现「在偏好设置里排完、侧栏还是老样子」。
- * 「全部 / 提醒@他」这类非清单行留在原来的槽位不动。没存过 sidebar_order 就不用管：
- * 那种情况下侧栏按 position 排，本来就跟着这里一起变。
- */
-async function syncSidebarOrder(nextAll: ReminderList[]) {
-  try {
-    const res = await getAllConfigs()
-    const raw = String(res.data?.data?.sidebar_order ?? '')
-    if (!raw) return
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return
-    const keys = nextAll.map((l) => `list:${l.id}`)
-    let cursor = 0
-    const merged = parsed.map((k: string) => (k.startsWith('list:') && cursor < keys.length ? keys[cursor++] : k))
-    await updateConfig('sidebar_order', JSON.stringify(merged))
-  } catch {
-    /* 同步侧栏顺序失败不该挡住清单顺序本身，静默即可 */
-  }
-}
 
 onMounted(() => {
   loadMeta()

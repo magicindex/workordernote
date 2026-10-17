@@ -699,11 +699,12 @@ const cardBucket = computed(() => lists.value.find((l) => l.template === 'credit
 
 // ---- 侧栏「我的清单」整段排序（用户 2026-10-15）----
 // 原来「全部 / 提醒@他 / 信用卡账单 / 随手记事本 / 人生要有仪式感」是写死的几行，
-// 只有普通清单能排，而且得进「偏好设置 → 清单顺序」里排。现在这一段整段可排：
-// 点标题旁那个小按钮进排序模式，用 ↑ ↓ 把**任意一行**（含系统内置的 4 个栏目）挪位置，
-// 点 ✓ 退出。顺序存在用户配置 sidebar_order（JSON 数组，token：all / nudge / list:<id>），
-// 同时把清单行的先后写回各清单的 position —— 偏好设置里的清单顺序、清单筛选下拉
-// 拿到的顺序才跟侧栏一致。
+// 只有普通清单能排，而且得进「偏好设置 → 清单顺序」里排（那块 2026-10-16 已删，见下）。
+// 现在这一段整段可排：点标题旁那个小按钮进排序模式，用 ↑ ↓ 把**任意一行**（含系统内置的
+// 4 个栏目）挪位置，点 ✓ 退出。顺序存在用户配置 sidebar_order（JSON 数组，
+// token：all / nudge / list:<id>），同时把清单行的先后写回各清单的 position ——
+// 清单筛选下拉拿到的顺序才跟侧栏一致。**这里现在是排序的唯一入口**
+// （用户 2026-10-16：「前台可以调整 清单顺序，与后台偏好中 清单顺序 重复，删除后台清单顺序模块」）。
 type MyListRow =
   | { key: 'all'; kind: 'all' }
   | { key: 'nudge'; kind: 'nudge' }
@@ -818,7 +819,7 @@ async function saveMyOrder(visibleKeys: string[]) {
     .filter((id) => Number.isFinite(id) && id > 0)
   try {
     await updateConfig('sidebar_order', JSON.stringify(next))
-    // 清单行顺带写回 position：别的界面（偏好设置里的清单顺序、清单筛选）才对得上
+    // 清单行顺带写回 position：别的界面（清单筛选下拉、清单列表）才对得上
     if (listIds.length) await reorderLists(listIds)
   } catch (err) {
     // 保存失败不回滚本地顺序（界面已经按新顺序画好了），下次刷新回到服务端的顺序

@@ -36,6 +36,7 @@ const (
 	keyModel        = "ai_model"
 	keySystemPrompt = "ai_system_prompt"
 	keyTimeout      = "ai_timeout_seconds"
+	keyThinkingMode = "ai_thinking_mode"
 )
 
 // 超时（秒）：太长会把一个卡住的上游拖成「转圈半分钟没反应」，太短会误杀
@@ -162,6 +163,9 @@ type Settings struct {
 	Model          string
 	SystemPrompt   string
 	TimeoutSeconds int
+	// ThinkingMode 是「对话里显示思考过程」的后台偏好（off/brief/full，见
+	// thinking.go）。用户可在面板上临时换，后台这份是默认值。
+	ThinkingMode string
 }
 
 // configValue 读一个 AI 配置项：库里有值就用库里的，否则退回注册表默认值。
@@ -194,6 +198,7 @@ func loadSettings(db *gorm.DB) Settings {
 		Model:          strings.TrimSpace(configValue(db, keyModel)),
 		SystemPrompt:   strings.TrimSpace(configValue(db, keySystemPrompt)),
 		TimeoutSeconds: timeout,
+		ThinkingMode:   normalizeThinkingMode(configValue(db, keyThinkingMode)),
 	}
 	if _, ok := presetByID(settings.Provider); !ok {
 		settings.Provider = defaultProviderID
@@ -311,6 +316,7 @@ type settingsInput struct {
 	Model          string `json:"model"`
 	SystemPrompt   string `json:"system_prompt"`
 	TimeoutSeconds int    `json:"timeout_seconds"`
+	ThinkingMode   string `json:"thinking_mode"`
 }
 
 // apply 在既有设置上套用入参，返回一份**未落库**的新设置（校验也在这里做）。
@@ -362,6 +368,17 @@ func (in settingsInput) apply(current Settings) (Settings, error) {
 		return current, fmt.Errorf("超时时间要在 %d–%d 秒之间", minTimeoutSeconds, maxTimeoutSeconds)
 	}
 
+	thinking := strings.TrimSpace(in.ThinkingMode)
+	if thinking == "" {
+		thinking = current.ThinkingMode
+	}
+	if thinking == "" {
+		thinking = defaultThinkingMode
+	}
+	if !validThinkingMode(thinking) {
+		return current, fmt.Errorf("思考过程显示口径不支持：%s", thinking)
+	}
+
 	next := Settings{
 		Enabled:        in.Enabled,
 		Provider:       provider,
@@ -370,6 +387,7 @@ func (in settingsInput) apply(current Settings) (Settings, error) {
 		Model:          model,
 		SystemPrompt:   prompt,
 		TimeoutSeconds: timeout,
+		ThinkingMode:   thinking,
 	}
 	// 开启时必须是「参数齐全」的状态：半套设置（比如开了但没模型名）会让用户
 	// 点开面板就收到报错，不如保存时直接说清差什么。
@@ -395,6 +413,7 @@ func saveSettings(db *gorm.DB, in settingsInput) (Settings, error) {
 		keyModel:        next.Model,
 		keySystemPrompt: next.SystemPrompt,
 		keyTimeout:      strconv.Itoa(next.TimeoutSeconds),
+		keyThinkingMode: next.ThinkingMode,
 	}
 	for key, value := range values {
 		if err := sysconfig.UpdateConfig(db, key, value, 0); err != nil {

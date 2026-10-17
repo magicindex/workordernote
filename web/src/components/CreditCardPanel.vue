@@ -72,6 +72,13 @@
                   <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" stroke-width="1.6" />
                   <path d="M2.5 10h19M6 13.5h4" stroke-width="1.6" stroke-linecap="round" />
                 </svg>
+                <!-- 非银行平台（支付宝 / 微信 / 京东金融）的标志认不出名字，
+                     在图标右边补上名字；银行仍只有标志（用户此前的要求）。 -->
+                <span
+                  v-if="faceLabelOf(card)"
+                  class="whitespace-nowrap text-[11px] font-extrabold leading-none tracking-wide opacity-95 sm:text-[12px]"
+                  data-card-face-label
+                >{{ faceLabelOf(card) }}</span>
               </div>
               <div class="shrink-0 whitespace-nowrap text-right text-[10px] leading-4 opacity-85 sm:text-[10.5px]" data-card-meta>
                 <p>账单日 每月 {{ card.statement_day }} 号</p>
@@ -250,7 +257,7 @@ import {
   deleteCard, getCards, payCardStatement, saveCardStatement, unpayCardStatement,
   type CreditCard, type ReminderList,
 } from '../api/reminder'
-import { bankLogoOf } from '../utils/banks'
+import { bankFaceLabelOf, bankLogoOf } from '../utils/banks'
 import { daysFromToday, urgencyOf } from '../utils/card-urgency'
 import { cardTail, daysUntil, formatCardDate, formatCents, graceDays, nextDayOccurrence, parseYuanToCents } from '../utils/card'
 
@@ -303,6 +310,10 @@ function maskNo(no: string) {
 }
 function logoOf(card: CreditCard): string {
   return bankLogoOf(card.bank) || ''
+}
+/** 卡片上标志旁边的名字：只有非银行平台（支付宝 / 微信 / 京东金融）才写。 */
+function faceLabelOf(card: CreditCard): string {
+  return bankFaceLabelOf(card.bank)
 }
 
 /** 倒计时按本地时间实时算（后端也给，前端这份是为了不依赖刷新）。 */
@@ -522,7 +533,8 @@ watch(isCardList, (v) => { if (v) void load() })
    标志单独一行在左上；下面一行「卡名 …… 持卡人」—— 卡名左端与标志左端齐（同一个
    竖列起点），持卡人在同一行、右对齐。layout 用 flex 而不是 grid：
    卡名可以换行，换下来的行仍从标志左端开始（与图标对齐），持卡人不被挤走。 */
-.card-face-logo { @apply inline-flex; }
+/* 标志 + 非银行平台的名字（名字只在非银行平台出现，见 utils/banks.ts 的 nonBank） */
+.card-face-logo { @apply inline-flex items-center gap-1.5; }
 .card-title { @apply min-w-0; }
 
 /* 卡名不按字断行：中文默认逐字换行，窄屏时「广发银行DIY卡」会被挤成一列一个字。

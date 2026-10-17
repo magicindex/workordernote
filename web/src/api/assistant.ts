@@ -33,7 +33,20 @@ export interface AssistantStatus {
   reason: string
   /** 后端等模型回答的超时（秒）。前端按它放宽自己的请求超时。 */
   timeout_seconds?: number
+  /** 后台偏好里的「思考过程」默认档位（off/brief/full），面板据此初始化选择器。 */
+  thinking_mode?: AssistantThinkingMode
 }
+
+/**
+ * 对话里「思考过程」的显示口径（与 server/assistant/thinking.go 一一对应）：
+ * - `off`   只有对话：思维链不返回给浏览器；
+ * - `brief` 简洁思考：一小行，附在回答下面；
+ * - `full`  详细思考过程：整段折叠展示。
+ *
+ * 三种档位只影响「显不显示模型先想的那一段」，模型本身仍然会想——面板上的
+ * 文案照实说，免得用户以为「只有对话」是让它别想。
+ */
+export type AssistantThinkingMode = 'off' | 'brief' | 'full'
 
 /** 读一次接入状态；后端异常时返回 null（面板按「未接入」处理）。 */
 export async function getAssistantStatus(): Promise<AssistantStatus | null> {
@@ -65,12 +78,54 @@ export interface AssistantDigestView {
   start?: string
   end?: string
   keyword?: string
+  /** 用户用 `@清单名` 点名了哪一栏（没点名时是空）。 */
+  list_name?: string
   completed: number
   open: number
   overdue: number
   notes: number
   lists: number
   truncated: boolean
+}
+
+/** 存进记事本后回给面板的东西：新记事的 id 与服务端自动生成的标题、标签。 */
+export interface AssistantSavedNote {
+  id: number
+  title: string
+  tags: string[]
+  list_id: number
+  list_name: string
+}
+
+/**
+ * 把小秘的一段回答存进记事本（用户 2026-10-17：「ai聊天输出内容增加 保存到
+ * 记事本功能，自动生成标签」）。
+ *
+ * 标题、标签、备注全由服务端按内容生成，前端只管把三样东西递过去：回答原文、
+ * 用户问的那句话（用来认「周报/账单」这类主题）、这一轮的数据口径。不需要模型，
+ * 后台没接模型的机器上照样能存。
+ */
+export async function saveAssistantNote(input: {
+  text: string
+  question?: string
+  hint?: string
+}): Promise<AssistantSavedNote> {
+  const res = await request.post('/api/assistant/notes', {
+    text: input.text,
+    question: input.question || '',
+    hint: input.hint || '',
+  })
+  if (res.data?.code !== 0) {
+    throw new Error(res.data?.message || '保存失败')
+  }
+  const data = res.data?.data || {}
+  return {
+    id: Number(data.id || 0),
+    title: String(data.title || ''),
+    tags: Array.isArray(data.tags) ? data.tags.map((tag: unknown) => String(tag)) : [],
+    list_id: Number(data.list_id || 0),
+    list_name: String(data.list_name || ''),
+  }
 }
 
 /** 一轮回复：`mode='draft'` 表示后台还没接模型，内容是服务端按记录生成的草稿。 */
@@ -80,6 +135,12 @@ export interface AssistantReply {
   model: string
   reason: string
   digest: AssistantDigestView | null
+  /** 这一轮的思维链（`thinking_mode='off'` 或上游没给时是空串）。 */
+  thinking: string
+  /** 思维链被后端截断过（简洁思考的口径），面板据此加省略号。 */
+  thinking_truncated: boolean
+  /** 后端实际用的档位（请求里没带时就是后台偏好）。 */
+  thinking_mode: AssistantThinkingMode
 }
 
 /**
@@ -95,10 +156,11 @@ export async function chatWithAssistant(
   messages: AssistantMessage[],
   digest?: AssistantDigestInput | null,
   timeoutMs = 180000,
+  thinking?: AssistantThinkingMode,
 ): Promise<AssistantReply> {
   const res = await request.post(
     '/api/assistant/chat',
-    digest ? { messages, digest } : { messages },
+    { messages, ...(digest ? { digest } : {}), ...(thinking ? { thinking } : {}) },
     { timeout: timeoutMs },
   )
   if (res.data?.code !== 0) {
@@ -115,8 +177,23 @@ export async function chatWithAssistant(
     model: String(data.model || ''),
     reason: String(data.reason || ''),
     digest: (data.digest as AssistantDigestView | null) ?? null,
+    thinking: String(data.thinking || '').trim(),
+    thinking_truncated: data.thinking_truncated === true,
+    thinking_mode: normalizeThinkingMode(data.thinking_mode),
   }
 }
+
+/** 认不出的档位一律按「简洁思考」：前端不该因为后端多给一个值就崩掉。 */
+export function normalizeThinkingMode(value: unknown): AssistantThinkingMode {
+  return value === 'off' || value === 'full' || value === 'brief' ? value : 'brief'
+}
+
+/** 三个档位的中文名与说明，后台下拉与对话面板共用一份，避免两处写法不一致。 */
+export const THINKING_MODES: { value: AssistantThinkingMode; label: string; note: string }[] = [
+  { value: 'off', label: '只有对话', note: '不显示思考过程（模型仍然会先想）' },
+  { value: 'brief', label: '简洁思考', note: '回答下面附一小行思考要点' },
+  { value: 'full', label: '详细思考过程', note: '整段思维链，折叠在「思考过程」里' },
+]
 
 /** 一个服务商预设：只给默认地址、常见模型名与密钥申请入口，控件本身是通用的。 */
 export interface AssistantProviderPreset {
@@ -139,6 +216,10 @@ export interface AssistantSettings {
   model: string
   system_prompt: string
   timeout_seconds: number
+  /** 「对话里显示思考过程」的后台偏好。 */
+  thinking_mode: AssistantThinkingMode
+  /** 后端给出的可选项（与 THINKING_MODES 同序），下拉直接用它。 */
+  thinking_options: string[]
   effective_base_url: string
   ready: boolean
   active: boolean
@@ -157,6 +238,7 @@ export interface AssistantSettingsInput {
   model: string
   system_prompt: string
   timeout_seconds: number
+  thinking_mode: AssistantThinkingMode
 }
 
 /** 连通性测试结果：`ok` 表达成败（HTTP 仍是 200，失败原因在 `detail` 里）。 */

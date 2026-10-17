@@ -52,6 +52,14 @@ func init() {
 		Default: "60", Internal: true, Group: "assistant", Label: "请求超时（秒）",
 		Description: "等模型回答的最长时间，5–600 秒",
 	})
+	// 思考过程显示口径：默认「简洁思考」。做成后台偏好是因为它关乎每个人的
+	// 阅读习惯与回答质量——有人只要结论，有人要把模型的推理看全。
+	sysconfig.RegisterConfig(sysconfig.ConfigDef{
+		Key: keyThinkingMode, Scope: sysconfig.ScopeSystem, Type: sysconfig.TypeSelect,
+		Default: defaultThinkingMode, Internal: true, Options: thinkingModeOptions,
+		Group: "assistant", Label: "对话里显示思考过程",
+		Description: "只影响面板显不显示模型先想的那一段：只有对话 / 简洁思考（默认）/ 详细思考过程；模型本身仍然会思考",
+	})
 }
 
 // RegisterRoutes 挂上 AI 助手的路由。
@@ -61,6 +69,9 @@ func init() {
 func RegisterRoutes(auth *gin.RouterGroup, admin *gin.RouterGroup, db *gorm.DB) {
 	auth.GET("/assistant/status", handleStatus(db))
 	auth.POST("/assistant/chat", handleChat(db))
+	// 把小秘的一段回答存进记事本（标题与标签由服务端自动生成）：
+	// 与对话一样是每个用户自己的数据，所以挂登录用户组。
+	auth.POST("/assistant/notes", handleSaveNote(db))
 
 	admin.GET("/assistant/admin/settings", handleGetSettings(db))
 	admin.PUT("/assistant/admin/settings", handleSaveSettings(db))

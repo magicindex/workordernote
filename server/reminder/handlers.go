@@ -258,6 +258,8 @@ func handleCreateList(db *gorm.DB) gin.HandlerFunc {
 			Name  string `json:"name"`
 			Color string `json:"color"`
 			Icon  string `json:"icon"`
+			// AI 提示词（可选）：这一栏的数据交给小秘分析时，额外告诉模型该怎么看。
+			AIPrompt string `json:"ai_prompt"`
 			// Template 仅为兼容旧客户端保留：现在信用卡是侧栏那个**固定栏目**
 			// （见 card_bucket.go），不在「新建清单」里选模板，所以这里一律建普通清单。
 			Template string `json:"template"`
@@ -279,11 +281,16 @@ func handleCreateList(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		in.Icon = normalizeListIcon(in.Icon)
+		aiPrompt, err := normalizeListAIPrompt(in.AIPrompt)
+		if err != nil {
+			response.ErrorBadRequest(c, err.Error())
+			return
+		}
 		var maxPosition int
 		_ = db.Model(&List{}).Where("user_id = ?", currentUserID(c)).Select("COALESCE(MAX(position), 0)").Scan(&maxPosition).Error
 		list := List{
 			UserID: currentUserID(c), Name: in.Name, Color: in.Color, Icon: in.Icon,
-			Position: maxPosition + 1, Template: listTemplateGeneral,
+			Position: maxPosition + 1, Template: listTemplateGeneral, AIPrompt: aiPrompt,
 		}
 		if err := db.Create(&list).Error; err != nil {
 			response.ErrorInternal(c, "创建清单失败")
@@ -369,6 +376,8 @@ func handleUpdateList(db *gorm.DB) gin.HandlerFunc {
 			Icon      string `json:"icon"`
 			Position  *int   `json:"position"`
 			IsDefault *bool  `json:"is_default"`
+			// AI 提示词：指针区分「没传」与「传了空串（清空提示词）」。
+			AIPrompt *string `json:"ai_prompt"`
 			// 信用卡字段：旧客户端才会传，现在一律忽略（卡片走 /cards 接口，模板不再是清单属性）
 			Template         *string `json:"template"`
 			CardName         *string `json:"card_name"`
@@ -422,6 +431,14 @@ func handleUpdateList(db *gorm.DB) gin.HandlerFunc {
 		}
 		if in.Position != nil {
 			updates["position"] = *in.Position
+		}
+		if in.AIPrompt != nil {
+			aiPrompt, err := normalizeListAIPrompt(*in.AIPrompt)
+			if err != nil {
+				response.ErrorBadRequest(c, err.Error())
+				return
+			}
+			updates["ai_prompt"] = aiPrompt
 		}
 
 		// Template 同样忽略：模板不再由客户端改（信用卡栏目由 ensureCardBucket 维护），

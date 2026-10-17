@@ -13,7 +13,9 @@
  *   5) 时间段：本周 / 上周 / 本月 / 今年 / 自定义 / 当前未完成 / 关键词，服务端都认；
  *      话里带「上周」这种时间词时，不选范围也认得出来；
  *      自定义缺日期会明确报错，不会静默按空区间算；
- *   6) 收尾：删掉自检数据、常用查询还原。
+ *   6) 「@清单名」：话里点名某一栏（打 @ 弹出的选择器只是把名字补进输入框），
+ *      服务端就只看那一栏的数据；不存在的清单名不报错、退回全部清单；
+ *   7) 收尾：删掉自检数据、常用查询还原。
  *
  * 只造两条自检任务（一条今天完成、一条逾期未完成），收尾删干净。
  *
@@ -99,6 +101,11 @@ async function waitSavedChip(page, name, timeout = 12000) {
     }
 
     const created = [];
+    const createdLists = [];
+
+    // 先把未读提醒清掉：「到点/逾期提醒」的未读会在屏幕正中弹一个全屏弹窗，
+    // 那是正常产品行为，但会挡住面板上的鼠标点击（用户自己也有逾期任务，弹窗照弹）。
+    await api(page, '/api/reminder/notifications/read-all', 'POST', {});
     const originalSaved = (await api(page, '/api/configs')).body?.data?.assistant_saved_queries ?? '';
 
     try {
@@ -119,8 +126,11 @@ async function waitSavedChip(page, name, timeout = 12000) {
       });
       const doneId = doneRes.body?.data?.id ?? null;
       if (doneId) created.push(doneId);
+      // 不带站内通道：这条「已逾期未完成」的自检数据只要在库里，跑的过程中就会
+      // 弹一次全屏提醒（那是正常产品行为，下面点鼠标时会绕开它）；不带通道是为了
+      // 别在「提醒@他」里留下通知垃圾。
       const openRes = await api(page, '/api/reminder/items', 'POST', {
-        title: openTitle, due_at: yesterdayIso(9), repeat_rule: 'none', channels: ['inapp'],
+        title: openTitle, due_at: yesterdayIso(9), repeat_rule: 'none', channels: [],
       });
       const openId = openRes.body?.data?.id ?? null;
       if (openId) created.push(openId);
@@ -357,10 +367,154 @@ async function waitSavedChip(page, name, timeout = 12000) {
       const storedAfter = (await api(page, '/api/configs')).body?.data?.assistant_saved_queries || '';
       check('「管理」里能删掉这条常用查询，配置里也不留',
         removed === false && !storedAfter.includes(queryName), JSON.stringify({ removed, storedAfter }).slice(0, 160));
+      // ---------------- 4.5 「@清单名」：把数据源收到某一栏 ----------------
+      // 用户 2026-10-17：「ai数据来源 增加 @ 功能，使用@清单名称 来指定数据源，
+      // 输入@自动显示列表通过选择补充到对话框中」。
+      const listName = `${STAMP}专项`;
+      const listRes = await api(page, '/api/reminder/lists', 'POST', { name: listName, color: 'emerald', icon: 'list' });
+      const listId = listRes.body?.data?.id ?? null;
+      if (listId) createdLists.push(listId);
+      let inListId = null;
+      if (listId) {
+        const inListRes = await api(page, '/api/reminder/items', 'POST', {
+          title: `${STAMP}专项里的活干完了`, list_id: listId, due_at: todayIso(11), repeat_rule: 'none', channels: ['inapp'],
+        });
+        inListId = inListRes.body?.data?.id ?? null;
+        if (inListId) {
+          created.push(inListId);
+          await api(page, `/api/reminder/items/${inListId}/complete`, 'POST', {});
+        }
+      }
+      check('造出一个自检清单，并在里面完成一条事项', !!listId && !!inListId, JSON.stringify({ listId, inListId }));
+
+      const askChat = async (text) => {
+        const res = await api(page, '/api/assistant/chat', 'POST', { messages: [{ role: 'user', content: text }] });
+        return res.body?.data || {};
+      };
+      const onlyList = await askChat(`@${listName} 这周都干了什么`);
+      check('@清单名：这一轮的数据只看点名的清单（回执里写明清单名）',
+        onlyList.digest?.list_name === listName && onlyList.digest?.lists === 1,
+        JSON.stringify(onlyList.digest || {}).slice(0, 200));
+      check('@清单名：只列本栏的记录，别栏那条已完成的自检任务不出现',
+        String(onlyList.reply || '').includes('专项里的活干完了') && !String(onlyList.reply || '').includes(doneTitle),
+        String(onlyList.reply || '').slice(0, 200));
+      const noMention = await askChat('这周都干了什么');
+      check('不带 @ 时照旧是全清单口径（两条自检任务都在）',
+        !noMention.digest?.list_name && String(noMention.reply || '').includes(doneTitle)
+          && String(noMention.reply || '').includes('专项里的活干完了'),
+        JSON.stringify(noMention.digest || {}).slice(0, 200));
+      const bogus = await askChat('@摸鱼清单 这周都干了什么');
+      check('@ 了一个不存在的清单：不报错，退回全部清单',
+        !bogus.digest?.list_name && (bogus.digest?.lists || 0) > 1,
+        JSON.stringify(bogus.digest || {}).slice(0, 200));
+
+      // 界面：打 @ 弹出清单，选一个补进输入框
+      await page.evaluate(() => document.querySelector('[data-assistant-close]')?.click());
+      await sleep(500);
+      await page.evaluate(() => {
+        const btn = [...document.querySelectorAll('button')].find((b) => /呼叫小秘/.test(b.textContent || ''));
+        if (btn) btn.click();
+      });
+      await sleep(900);
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-assistant-input]');
+        if (el) { el.focus(); el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); }
+      });
+      await page.type('[data-assistant-input]', '@');
+      let picker = await page.evaluate(() => {
+        const box = document.querySelector('[data-assistant-mention]');
+        const items = [...document.querySelectorAll('[data-assistant-mention-item]')].map((el) => el.getAttribute('data-assistant-mention-item'));
+        return { open: !!box, items };
+      });
+      if (!picker.open) {
+        await sleep(900);
+        picker = await page.evaluate(() => {
+          const box = document.querySelector('[data-assistant-mention]');
+          const items = [...document.querySelectorAll('[data-assistant-mention-item]')].map((el) => el.getAttribute('data-assistant-mention-item'));
+          return { open: !!box, items };
+        });
+      }
+      check('打一个 @ 就弹出清单选择器，里面列着用户的清单',
+        picker.open === true && picker.items.includes(listName), JSON.stringify(picker).slice(0, 240));
+      await page.screenshot({ path: path.join(SHOTS, 'assistant-mention-1440.png') });
+
+      // 接着打几个字：只留名字对得上的
+      await page.type('[data-assistant-input]', STAMP);
+      await sleep(400);
+      const filtered = await page.evaluate(() => [...document.querySelectorAll('[data-assistant-mention-item]')].map((el) => el.getAttribute('data-assistant-mention-item')));
+      check('继续打字就按名字过滤', filtered.length === 1 && filtered[0] === listName, JSON.stringify(filtered).slice(0, 200));
+
+      // 键盘：↓ 选中 + Enter 补进输入框（不发送）
+      await page.keyboard.press('ArrowDown');
+      await sleep(150);
+      await page.keyboard.press('Enter');
+      await sleep(500);
+      const completed = await page.evaluate(() => ({
+        value: document.querySelector('[data-assistant-input]')?.value || '',
+        open: !!document.querySelector('[data-assistant-mention]'),
+      }));
+      check('回车把「@清单名」补进输入框（没有直接发出去）',
+        completed.value.trim() === `@${listName}` && completed.open === false, JSON.stringify(completed).slice(0, 200));
+
+      // 补一句问话再发：回执行要写清「只看清单」
+      await page.type('[data-assistant-input]', '这周都干了什么');
+      await page.evaluate(() => document.querySelector('[data-assistant-send]')?.click());
+      let mentionMeta = '';
+      for (let i = 0; i < 40; i += 1) {
+        await sleep(300);
+        mentionMeta = await page.evaluate(() => {
+          const metas = [...document.querySelectorAll('[data-assistant-digest]')];
+          return metas.length ? metas[metas.length - 1].textContent.replace(/\s+/g, ' ').trim() : '';
+        });
+        if (mentionMeta.includes('只看清单')) break;
+      }
+      check('界面里问「@清单名」：回执行写明「只看清单「X」」',
+        mentionMeta.includes(`只看清单「${listName}」`), mentionMeta.slice(0, 200));
+
+      // 鼠标点选也能补进去
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-assistant-input]');
+        if (el) { el.focus(); el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); }
+      });
+      await page.type('[data-assistant-input]', '@' + STAMP);
+      await sleep(600);
+      const reachable = await page.evaluate((name) => {
+        const item = document.querySelector(`[data-assistant-mention-item="${name}"]`);
+        if (!item) return { item: false, alert: false, hit: null };
+        const r = item.getBoundingClientRect();
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return {
+          item: true,
+          alert: !!document.querySelector('[role="alertdialog"]'),
+          hit: top ? (item === top || item.contains(top)) : false,
+        };
+      }, listName);
+      if (reachable.alert) {
+        // 页面上有全屏提醒弹窗挡着（那是正常产品行为：用户自己的提醒在响），
+        // 这时鼠标点不到面板，改成脚本派发 mousedown —— 断言的东西一样。
+        console.log('  （页面上有提醒弹窗挡着，这一项改用脚本派发点击）');
+        await page.evaluate((name) => {
+          document.querySelector(`[data-assistant-mention-item="${name}"]`)
+            ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+        }, listName);
+      } else {
+        check('选择器浮在输入框上方、鼠标点得到（没被别的层挡住）', reachable.item && reachable.hit === true, JSON.stringify(reachable));
+        await page.click(`[data-assistant-mention-item="${listName}"]`).catch(() => {});
+      }
+      await sleep(500);
+      const clicked = await page.evaluate(() => document.querySelector('[data-assistant-input]')?.value || '');
+      check('用鼠标点一条清单也能补进输入框', clicked.includes(`@${listName}`), clicked.slice(0, 120));
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-assistant-input]');
+        if (el) { el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); }
+      });
     } finally {
       // 收尾：删自检任务 + 还原常用查询
       for (const id of created) {
         await api(page, `/api/reminder/items/${id}`, 'DELETE');
+      }
+      for (const id of createdLists) {
+        await api(page, `/api/reminder/lists/${id}`, 'DELETE');
       }
       if (String(originalSaved) !== '') {
         await api(page, '/api/configs', 'PUT', { key: 'assistant_saved_queries', value: String(originalSaved) });

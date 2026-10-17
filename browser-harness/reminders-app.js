@@ -42,13 +42,21 @@ async function loginViaApi(page, base = APP) {
   // 测试实例上把「默认首页」固定成列表视图：0.27.0 起默认是「首页」看板，而绝大多数套件
   // 都假设 `goto('/admin')` 落在**今天**页（快捷新建、日期芯片、按天卡片……）。改偏好比改
   // 几十个套件的导航靠谱；要看默认落地行为的套件（verify-ux / verify-120）自己改再还原。
-  try {
-    await fetch(base.replace(/\/$/, '') + '/api/configs', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ key: 'default_view', value: 'list' }),
-    });
-  } catch { /* 只是让回归稳定，失败不拦 */ }
+  //
+  // 只对**本机**的实例这么做（回归、沙箱都跑在这台机器上，127.0.0.1）。远程地址往往是
+  // 用户的真实机器：2026-10-17 用户报「打开默认页面应为首页」，查下来 200 那台的开屏页
+  // 就是被这里写成「列表」的，用户自己没改过。远程实例一律不碰，需要落地行为的套件
+  // 自己改、跑完还原（verify-094 / 119 / 120 / ux 都是这么做的）。
+  const localBase = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i.test(base.replace(/\/$/, ''));
+  if (localBase) {
+    try {
+      await fetch(base.replace(/\/$/, '') + '/api/configs', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ key: 'default_view', value: 'list' }),
+      });
+    } catch { /* 只是让回归稳定，失败不拦 */ }
+  }
   // 必须先落到同源页面，才能写它的 localStorage
   await page.goto(base.replace(/\/$/, '') + '/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.evaluate((t) => { try { localStorage.setItem('reminders.token', t); } catch {} }, token);

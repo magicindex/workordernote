@@ -54,6 +54,11 @@ type List struct {
 	IsDefault bool   `gorm:"not null;default:false" json:"is_default"`
 	// 模板：general（普通清单）或 credit_card（信用卡清单，里面放卡片实体）
 	Template string `gorm:"size:16;not null;default:general" json:"template"`
+	// AI 提示词：这一栏的数据交给「小秘」分析时，额外告诉模型该怎么看它
+	// （用户 2026-10-17：「为每个不同栏目增加 ai 提示词」）。空串表示不加要求。
+	// 存在清单上而不是系统配置里：新建清单天然就能带，多个清单填同一段文字即为
+	// 「共用一个提示词」（各自改，互不影响）。
+	AIPrompt string `gorm:"column:ai_prompt;size:600;not null;default:''" json:"ai_prompt"`
 
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
@@ -102,7 +107,7 @@ type Reminder struct {
 	LunarAnchor string `gorm:"size:8" json:"lunar_anchor,omitempty"`
 	// RepeatNotifyMinutes re-notifies an uncompleted reminder on a fixed
 	// interval after each due time; 0 disables the behaviour.
-	RepeatNotifyMinutes int               `gorm:"not null;default:0" json:"repeat_notify_minutes"`
+	RepeatNotifyMinutes int `gorm:"not null;default:0" json:"repeat_notify_minutes"`
 	// Accent 是**条目自己挑的过渡色**（用户 2026-10-11 要求：仪式感卡片支持多种过渡色、
 	// 新建/编辑时自己选）。存色名 key（见 card_accents.go 的白名单），空 = 用默认色。
 	// 只影响「人生要有仪式感」卡片的观感，不参与排序/提醒逻辑；新列同样由 AutoMigrate 自动加。
@@ -118,16 +123,16 @@ type Reminder struct {
 	//                 （0–100：越大越清透、背景越亮；越小蒙板越浓、字越清楚）
 	// 默认写在建表里：老卡片迁移过来就是 blur=0 / mask=45（透明度 45%，
 	// 也就是蒙板浓度 55%，与上一版写死在样式里的观感一致）。
-	BgBlur int `gorm:"not null;default:0" json:"bg_blur,omitempty"`
-	BgMask int `gorm:"not null;default:45" json:"bg_mask,omitempty"`
-	CompletedAt         *time.Time        `gorm:"index:idx_reminders_user_completed" json:"completed_at"`
-	SnoozedUntil        *time.Time        `json:"snoozed_until"`
-	Position            int               `gorm:"not null;default:0" json:"position"`
-	Version             uint              `gorm:"not null;default:1" json:"version"`
-	CreatedAt           time.Time         `json:"created_at"`
-	UpdatedAt           time.Time         `json:"updated_at"`
-	DeletedAt           *time.Time        `gorm:"index" json:"-"`
-	Channels            []ReminderChannel `gorm:"foreignKey:ReminderID" json:"-"`
+	BgBlur       int               `gorm:"not null;default:0" json:"bg_blur,omitempty"`
+	BgMask       int               `gorm:"not null;default:45" json:"bg_mask,omitempty"`
+	CompletedAt  *time.Time        `gorm:"index:idx_reminders_user_completed" json:"completed_at"`
+	SnoozedUntil *time.Time        `json:"snoozed_until"`
+	Position     int               `gorm:"not null;default:0" json:"position"`
+	Version      uint              `gorm:"not null;default:1" json:"version"`
+	CreatedAt    time.Time         `json:"created_at"`
+	UpdatedAt    time.Time         `json:"updated_at"`
+	DeletedAt    *time.Time        `gorm:"index" json:"-"`
+	Channels     []ReminderChannel `gorm:"foreignKey:ReminderID" json:"-"`
 }
 
 type ReminderChannel struct {

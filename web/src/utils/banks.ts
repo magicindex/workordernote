@@ -43,6 +43,13 @@ export interface BankPreset {
   /** 识别用的别名（简称 / 全称 / 拼音首字母常见写法） */
   aliases: string[]
   logo: string
+  /**
+   * 非银行的消费/信用付平台（支付宝 / 微信 / 京东金融）。
+   * 卡面上银行的标志本身能认出来，而这类平台的标志往往是「一只动物 / 一个符号」，
+   * 单看图标认不出是哪家（用户 2026-10-17：「京东金融只有京东图标没有文字」），
+   * 所以卡面在标志旁边**再写一篇名字**。
+   */
+  nonBank?: boolean
 }
 
 export const BANK_PRESETS: BankPreset[] = [
@@ -75,20 +82,34 @@ export const BANK_PRESETS: BankPreset[] = [
   // 用 Arcticons 的 `jd-finance`（CC BY-SA 4.0，作者 Donnnno / Arcticons Team）
   // 线性图标、按品牌红 #e1251b 描边 —— 若拿到官方 SVG，直接替换
   // `assets/banks/jdfinance.svg` 即可，代码不用动。
-  { code: 'alipay', name: '支付宝', aliases: ['支付宝', 'alipay', '花呗', '借呗'], logo: alipay },
-  { code: 'wechat', name: '微信', aliases: ['微信', 'wechat', 'weixin', '分付', '零钱通'], logo: wechat },
-  { code: 'jdfinance', name: '京东金融', aliases: ['京东金融', '京东', 'jdfinance', 'jd', '白条', '京东白条'], logo: jdfinance },
+  { code: 'alipay', name: '支付宝', aliases: ['支付宝', 'alipay', '花呗', '借呗'], logo: alipay, nonBank: true },
+  { code: 'wechat', name: '微信', aliases: ['微信', 'wechat', 'weixin', '分付', '零钱通'], logo: wechat, nonBank: true },
+  { code: 'jdfinance', name: '京东金融', aliases: ['京东金融', '京东', 'jdfinance', 'jd', '白条', '京东白条'], logo: jdfinance, nonBank: true },
 ]
 
-/** 按卡上存的名字找银行标志；找不到（老数据里的自由文本）返回 null。 */
-export function bankLogoOf(bank: string): string | null {
+/** 按卡上存的名字找银行预设；找不到（老数据里的自由文本）返回 null。 */
+export function bankPresetOf(bank: string): BankPreset | null {
   const name = String(bank || '').trim().toLowerCase()
   if (!name) return null
   for (const preset of BANK_PRESETS) {
-    if (name.includes(preset.name)) return preset.logo
+    if (name.includes(preset.name)) return preset
     for (const alias of preset.aliases) {
-      if (alias.length >= 2 && name.includes(alias.toLowerCase())) return preset.logo
+      if (alias.length >= 2 && name.includes(alias.toLowerCase())) return preset
     }
   }
   return null
+}
+
+/** 按卡上存的名字找银行标志；找不到（老数据里的自由文本）返回 null。 */
+export function bankLogoOf(bank: string): string | null {
+  return bankPresetOf(bank)?.logo || null
+}
+
+/**
+ * 卡面上标志旁边要写出来的名字：只有**非银行**的消费/信用付平台才返回名字，
+ * 银行仍然只靠标志识别（用户此前明确要求「图标后边不再加 XX银行字样」）。
+ */
+export function bankFaceLabelOf(bank: string): string {
+  const preset = bankPresetOf(bank)
+  return preset?.nonBank ? preset.name : ''
 }

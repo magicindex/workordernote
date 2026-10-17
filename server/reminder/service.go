@@ -321,6 +321,21 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 	return getReminder(db, userID, created.ID)
 }
 
+// CreateNote 把一段文字存成一条记事，并像普通「新建记事」那样广播数据变更。
+//
+// 给小秘的「保存到记事本」用（用户 2026-10-17：「ai聊天输出内容增加 保存到记事本
+// 功能，自动生成标签」）：标题、备注与标签都由上层按内容自动生成，这里只负责落库
+// —— 记事固定进「记事本」栏目、创建即完成，与界面里正常新建的记事没有任何区别。
+// originClientID 是发起这次请求的标签页标识，广播时跳过它自己（它已经知道结果）。
+func CreateNote(db *gorm.DB, userID uint, title, notes, originClientID string) (ReminderDTO, error) {
+	item, err := createReminder(db, userID, SaveReminderInput{Title: title, Notes: notes, Kind: KindNote})
+	if err != nil {
+		return ReminderDTO{}, err
+	}
+	publishDataChanged(item.UserID, "reminder", "created", item.ID, originClientID)
+	return item, nil
+}
+
 func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) (ReminderDTO, error) {
 	if err := validateReminderInput(&in); err != nil {
 		return ReminderDTO{}, err

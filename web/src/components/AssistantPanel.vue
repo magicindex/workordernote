@@ -40,6 +40,20 @@
             </button>
           </header>
 
+          <!-- 后台没接模型时，在对话窗口最上边用醒目颜色说明（用户 2026-10-17：
+               「如果没有模型被加载给出提示，可以在聊天窗口最上边用醒目颜色文字说明」）。
+               放在头部下面、对话区上面：不进滚动区，翻历史也一直看得见。 -->
+          <p v-if="!live && !statusLoading" class="assistant-offline" data-assistant-offline>
+            <svg viewBox="0 0 24 24" class="mt-[2px] h-4 w-4 shrink-0" fill="none" stroke="currentColor" aria-hidden="true">
+              <path d="M12 4.5 3.2 19.5h17.6L12 4.5Z" stroke-width="1.7" stroke-linejoin="round"/>
+              <path d="M12 10v4.2M12 17.2v.2" stroke-width="1.9" stroke-linecap="round"/>
+            </svg>
+            <span>
+              <strong>没有可用模型</strong>：现在这些回答是按你自己的记录现场拼的草稿，不调用任何模型。
+              <span class="assistant-offline-hint" data-assistant-offline-reason>{{ offlineReason }}</span>
+            </span>
+          </p>
+
           <!-- 对话区 -->
           <div ref="listEl" class="flex-1 space-y-3 overflow-y-auto px-4 py-4" data-assistant-scroll>
             <div v-if="!messages.length" class="assistant-empty">
@@ -82,11 +96,59 @@
               >
                 已附上数据：{{ msg.digest.label }} · 完成 {{ msg.digest.completed }} · 未完成
                 {{ msg.digest.open }}{{ msg.digest.overdue ? `（逾期 ${msg.digest.overdue}）` : '' }} · 记事
-                {{ msg.digest.notes }}{{ msg.digest.keyword ? ` · 关键词「${msg.digest.keyword}」` : '' }}
+                {{ msg.digest.notes }}{{ msg.digest.keyword ? ` · 关键词「${msg.digest.keyword}」` : '' }}{{
+                  msg.digest.list_name ? ` · 只看清单「${msg.digest.list_name}」` : ''
+                }}
               </p>
               <p v-if="msg.draft" class="assistant-meta" data-assistant-draft-note>
                 这是按你的记录直接生成的草稿（模型接入后同样的问题会由模型润色改写）。
               </p>
+              <!-- 简洁思考：一小行，像脚注；详细思考过程：折叠起来，不抢回答的位置 -->
+              <p
+                v-if="msg.thinking && msg.thinkingMode === 'brief'"
+                class="assistant-meta assistant-thinking-brief"
+                data-assistant-thinking-brief
+              >思考：{{ msg.thinking }}{{ msg.thinkingTruncated ? '…' : '' }}</p>
+              <details
+                v-else-if="msg.thinking && msg.thinkingMode === 'full'"
+                class="assistant-thinking-full"
+                data-assistant-thinking-full
+              >
+                <summary class="assistant-thinking-summary">思考过程</summary>
+                <p class="assistant-thinking-body">{{ msg.thinking }}</p>
+              </details>
+              <!-- 一键存进记事本：标题与标签由服务端按内容自动生成，用户不用手打。
+                   失败的回复不给存（那是错误提示，不是小秘的回答）。 -->
+              <div
+                v-if="msg.role === 'assistant' && !msg.failed && !msg.placeholder"
+                class="assistant-note-actions"
+                data-assistant-note-actions
+              >
+                <button
+                  v-if="!msg.savedNote"
+                  type="button"
+                  class="assistant-note-save"
+                  data-assistant-save-note
+                  :disabled="msg.saving"
+                  :title="msg.saving ? '正在保存…' : '把这条回答存成一条记事（标题和标签自动生成）'"
+                  @click="saveNote(i)"
+                >{{ msg.saving ? '正在存…' : '保存到记事本' }}</button>
+                <template v-else>
+                  <span class="assistant-note-done" data-assistant-note-saved>已存进记事本</span>
+                  <button
+                    type="button"
+                    class="assistant-note-link"
+                    data-assistant-open-note
+                    title="打开记事本看这一条"
+                    @click="openSavedNote(msg.savedNote)"
+                  >去看 ›</button>
+                </template>
+                <span
+                  v-if="msg.saveError"
+                  class="assistant-note-error"
+                  data-assistant-note-error
+                >{{ msg.saveError }}</span>
+              </div>
             </template>
 
             <div v-if="pending" class="flex justify-start">
@@ -183,18 +245,62 @@
           </section>
 
           <!-- 输入区 -->
-          <footer class="border-t border-border px-3 py-3">
+          <footer class="relative border-t border-border px-3 py-3">
+            <!-- 打 @ 弹出来的清单选择器：选一个就把「@清单名」补进输入框，
+                 服务端认这句话里的 @名称，数据就只看那一栏。 -->
+            <div
+              v-if="mention.open && mentionOptions.length"
+              class="assistant-mention"
+              data-assistant-mention
+            >
+              <p class="assistant-mention-title">把数据范围收到某一栏（@ 清单名）</p>
+              <button
+                v-for="(item, index) in mentionOptions"
+                :key="item.id"
+                type="button"
+                class="assistant-mention-item"
+                :class="index === mention.index ? 'assistant-mention-item-on' : ''"
+                :data-assistant-mention-item="item.name"
+                @mousedown.prevent="insertMention(item.name)"
+              >
+                <span class="assistant-mention-dot" :style="{ background: listColorHex(item.color) }"></span>
+                <span class="flex-1 truncate text-left">{{ item.name }}</span>
+                <span class="text-[10px] text-muted-foreground">{{ item.open_count }} 项未完成</span>
+              </button>
+              <p class="assistant-mention-hint">↑↓ 选，Enter 补进输入框，Esc 关掉</p>
+            </div>
             <textarea
               ref="inputEl"
               v-model="draft"
               rows="2"
               class="assistant-input"
-              placeholder="跟小秘说点什么…（Enter 发送，Shift + Enter 换行）"
+              placeholder="跟小秘说点什么…（打 @ 选清单，Enter 发送，Shift + Enter 换行）"
               data-assistant-input
-              @keydown.enter.exact.prevent="send()"
+              @input="syncMention"
+              @click="syncMention"
+              @keydown.enter.exact.prevent="onEnterKey"
+              @keydown.down.exact.prevent="moveMention(1)"
+              @keydown.up.exact.prevent="moveMention(-1)"
+              @keydown.esc="mention.open && closeMention()"
+              @blur="closeMention()"
             ></textarea>
+            <!-- 思考过程口径：后台偏好定默认值，这里可以临时换（换完记住，下次打开还是它） -->
+            <div v-if="live" class="mt-2 flex flex-wrap items-center gap-1.5" data-assistant-thinking>
+              <span class="text-[11px] font-bold text-muted-foreground">思考过程</span>
+              <button
+                v-for="mode in thinkingChoices"
+                :key="mode.value"
+                type="button"
+                class="assistant-chip"
+                :class="thinkingMode === mode.value ? 'assistant-chip-on' : ''"
+                :data-assistant-thinking-option="mode.value"
+                :data-assistant-thinking-active="thinkingMode === mode.value ? '1' : undefined"
+                :title="mode.note"
+                @click="pickThinkingMode(mode.value)"
+              >{{ mode.label }}</button>
+            </div>
             <div class="mt-2 flex items-center justify-between gap-2">
-              <span class="text-[11px] text-muted-foreground">{{ live ? '回答由后台配置的模型生成' : '没接模型：会按你的记录生成草稿' }}</span>
+              <span class="text-[11px] text-muted-foreground">{{ live ? (thinkingMode === 'off' ? '回答由后台配置的模型生成（不显示思考过程）' : '回答由后台配置的模型生成') : '没接模型：会按你的记录生成草稿' }}</span>
               <button
                 type="button"
                 class="assistant-send"
@@ -217,12 +323,19 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import {
   chatWithAssistant,
   getAssistantStatus,
+  normalizeThinkingMode,
+  saveAssistantNote,
+  THINKING_MODES,
   type AssistantDigestInput,
   type AssistantDigestView,
   type AssistantMessage,
   type AssistantStatus,
+  type AssistantThinkingMode,
 } from '../api/assistant'
 import { getAllConfigs, updateConfig } from '../api/config'
+import { getLists, type ReminderList } from '../api/reminder'
+import { listColorHex } from '../utils/list-colors'
+import { useRouter } from 'vue-router'
 
 /**
  * 气泡在 AssistantMessage 上多两个本地标记：
@@ -234,6 +347,19 @@ interface Bubble extends AssistantMessage {
   failed?: boolean
   digest?: AssistantDigestView | null
   draft?: boolean
+  /** 这一轮的思维链与当时的档位：档位跟着消息存，之后换档不会改写旧回复的展示。 */
+  thinking?: string
+  thinkingTruncated?: boolean
+  thinkingMode?: AssistantThinkingMode
+  /** 这一轮用户问的那句话与数据口径：存记事本时用来认「周报 / 账单」这类主题。 */
+  question?: string
+  hint?: string
+  /** 本地占位回复（后台没接模型时的兜底文案）：不是小秘的回答，不给存记事本。 */
+  placeholder?: boolean
+  /** 「保存到记事本」的三态：存过之后按钮换成「已存进记事本 + 去看」。 */
+  saving?: boolean
+  savedNote?: { id: number; listId: number; title: string }
+  saveError?: string
 }
 
 /** 一条常用查询（存用户配置 assistant_saved_queries）。 */
@@ -243,6 +369,8 @@ interface SavedQuery extends AssistantDigestInput {
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
+/** 「去看」要跳到记事本那一栏，需要路由器。 */
+const router = useRouter()
 
 /**
  * 预置问法。带 `option` 的会**先选好时间范围再发**——写周报这类问题必须附数据，
@@ -276,6 +404,10 @@ const rangeOptions = [
   { value: 'custom', label: '自定义…' },
 ]
 
+/** 思考过程：三个档位，默认跟后台偏好走，用户换了记在用户配置里。 */
+const thinkingChoices = THINKING_MODES
+const thinkingMode = ref<AssistantThinkingMode>('brief')
+
 const scope = ref({ option: '', from: '', to: '', keyword: '' })
 const scopeError = ref('')
 const savedQueries = ref<SavedQuery[]>([])
@@ -285,6 +417,83 @@ const savingName = ref<string | null>(null)
 /** 对话只存在内存里：关掉面板再打开还在，刷新页面就清空（要落库再说）。 */
 const messages = ref<Bubble[]>([])
 const draft = ref('')
+
+// 「@清单名」：打 @ 列出用户的清单，选一个补进输入框（用户 2026-10-17：
+// 「使用@清单名称 来指定数据源，输入@自动显示列表通过选择补充到对话框中」）。
+// 补进去的是**纯文本**，服务端在那句话里认 @名称，所以手打也一样管用。
+const lists = ref<{ id: number; name: string; color: string; open_count: number }[]>([])
+const mention = ref({ open: false, start: 0, end: 0, query: '', index: 0 })
+const mentionOptions = computed(() => {
+  const query = mention.value.query.trim()
+  return lists.value.filter((item) => (query ? item.name.includes(query) : true)).slice(0, 6)
+})
+
+async function loadLists() {
+  try {
+    const { data } = await getLists()
+    lists.value = (data?.data || []).map((item: ReminderList) => ({
+      id: item.id,
+      name: item.name,
+      color: item.color,
+      open_count: item.open_count || 0,
+    }))
+  } catch {
+    lists.value = [] // 拿不到清单只是少了 @ 选择器，不影响正常问话
+  }
+}
+
+// 光标前最后一个 @ 到光标之间没有空白，才算「正在打一个 @清单名」。
+function syncMention() {
+  const el = inputEl.value
+  if (!el) return
+  const caret = el.selectionStart ?? draft.value.length
+  const before = draft.value.slice(0, caret)
+  const at = before.lastIndexOf('@')
+  if (at < 0 || /\s/.test(before.slice(at + 1))) {
+    mention.value.open = false
+    return
+  }
+  mention.value = {
+    open: true,
+    start: at,
+    end: caret,
+    query: before.slice(at + 1),
+    index: 0,
+  }
+}
+
+function closeMention() {
+  mention.value = { ...mention.value, open: false }
+}
+
+function insertMention(name: string) {
+  const el = inputEl.value
+  if (!el) return
+  const { start, end } = mention.value
+  const rest = draft.value.slice(end)
+  draft.value = `${draft.value.slice(0, start)}@${name} ${rest}`
+  closeMention()
+  void nextTick(() => {
+    const caret = start + name.length + 2 // @ + 名字 + 一个空格
+    el.focus()
+    el.setSelectionRange(caret, caret)
+  })
+}
+
+function moveMention(step: number) {
+  if (!mention.value.open || !mentionOptions.value.length) return
+  const total = mentionOptions.value.length
+  mention.value.index = (mention.value.index + step + total) % total
+}
+
+// Enter：@ 列表开着就先补全，没开才发送。
+function onEnterKey() {
+  if (mention.value.open && mentionOptions.value.length) {
+    insertMention(mentionOptions.value[mention.value.index]?.name || '')
+    return
+  }
+  void send()
+}
 const pending = ref(false)
 const listEl = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLTextAreaElement | null>(null)
@@ -315,6 +524,14 @@ const statusText = computed(() => {
   }
   return `模型未接入 · ${current.reason || '后台未启用 AI 助手'}（仍可按记录出草稿）`
 })
+/**
+ * 顶部横幅的第二句：把「为什么没有模型」和「怎么接上」说清楚。
+ * 用后端给的 reason（比如「未启用 AI 助手」「模型名还没填」），管理员一看就知道缺什么。
+ */
+const offlineReason = computed(() => {
+  const why = status.value?.reason || '后台还没启用 AI 助手'
+  return `${why}。管理员到「设置 → 系统配置 → AI 助手」填好服务商、接口地址与模型名并启用，这里会自动换成模型回答。`
+})
 
 async function refreshStatus() {
   statusLoading.value = true
@@ -325,6 +542,29 @@ async function refreshStatus() {
     status.value = null
   } finally {
     statusLoading.value = false
+  }
+}
+
+/** 用户自己选过的档位优先，没选过就用后台偏好（status.thinking_mode）。 */
+async function loadThinkingMode() {
+  let mine = ''
+  try {
+    const res = await getAllConfigs()
+    mine = String(res.data?.data?.assistant_thinking_mode ?? '').trim()
+  } catch {
+    // 读不到就按后台偏好走。
+  }
+  thinkingMode.value = mine
+    ? normalizeThinkingMode(mine)
+    : normalizeThinkingMode(status.value?.thinking_mode)
+}
+
+async function pickThinkingMode(mode: AssistantThinkingMode) {
+  thinkingMode.value = mode
+  try {
+    await updateConfig('assistant_thinking_mode', mode)
+  } catch (err: any) {
+    scopeError.value = `思考过程口径没能记住：${err?.message || '保存失败'}`
   }
 }
 
@@ -409,17 +649,23 @@ async function send(text?: string, option?: string) {
   try {
     if (!live.value && !digest) {
       // 后台没开 / 没填完，且这一轮也不要数据：回一句本地占位文案，
-      // 面板不能因为没接模型就哑掉。
+      // 面板不能因为没接模型就哑掉。（占位文案不给「保存到记事本」：那是
+      // 「我没接上模型」的提示，不是小秘的回答，存下来只会添乱。）
       await new Promise((resolve) => setTimeout(resolve, 320))
-      messages.value.push({ role: 'assistant', content: placeholderReply(content) })
+      messages.value.push({ role: 'assistant', content: placeholderReply(content), placeholder: true })
       return
     }
-    const answer = await chatWithAssistant(outgoing(), digest, chatTimeoutMs.value)
+    const answer = await chatWithAssistant(outgoing(), digest, chatTimeoutMs.value, thinkingMode.value)
     messages.value.push({
       role: 'assistant',
       content: answer.reply,
       digest: answer.digest,
       draft: answer.mode === 'draft',
+      thinking: answer.thinking,
+      thinkingTruncated: answer.thinking_truncated,
+      thinkingMode: answer.thinking_mode,
+      question: content,
+      hint: digest?.option || '',
     })
   } catch (err: any) {
     const reason = err?.message || '调用失败'
@@ -432,6 +678,36 @@ async function send(text?: string, option?: string) {
     pending.value = false
     void scrollToBottom()
   }
+}
+
+/**
+ * 把这一条回答存进记事本。标题、标签、备注都由服务端生成，这里只负责把
+ * 「回答原文 + 用户问的那句话 + 这一轮的数据口径」递过去，并把结果记在这条
+ * 气泡上——存过的气泡不再让点第二次。
+ */
+async function saveNote(index: number) {
+  const msg = messages.value[index]
+  if (!msg || msg.role !== 'assistant' || msg.saving || msg.savedNote) return
+  msg.saving = true
+  msg.saveError = ''
+  try {
+    const saved = await saveAssistantNote({
+      text: msg.content,
+      question: msg.question || '',
+      hint: msg.hint || '',
+    })
+    msg.savedNote = { id: saved.id, listId: saved.list_id, title: saved.title }
+  } catch (err: any) {
+    msg.saveError = err?.message || '保存失败'
+  } finally {
+    msg.saving = false
+  }
+}
+
+/** 「去看」：关掉面板并跳到记事本那一栏（列表页就是 /admin/list/:id）。 */
+function openSavedNote(note: { listId: number }) {
+  emit('update:modelValue', false)
+  void router.push(note.listId ? `/admin/list/${note.listId}` : '/admin/all')
 }
 
 /** 常用查询存在用户配置里（和侧栏顺序 sidebar_order 一个路子）。 */
@@ -509,11 +785,14 @@ function onKeydown(e: KeyboardEvent) {
 watch(() => props.modelValue, (open) => {
   if (open) {
     window.addEventListener('keydown', onKeydown)
-    void refreshStatus()
+    void refreshStatus().then(() => loadThinkingMode())
     void loadSavedQueries()
+    void loadLists()
+    void loadLists()
     void nextTick(() => inputEl.value?.focus())
   } else {
     window.removeEventListener('keydown', onKeydown)
+    closeMention()
   }
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
@@ -543,6 +822,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 .assistant-icon-btn {
   @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground;
 }
+/* 顶部「没有可用模型」横幅：琥珀色（全站警告色沿用 text-amber-600 / dark:text-amber-300），
+   左侧加一道 4px 竖条 + 三角警示图标，深浅两套主题下都够显眼。 */
+.assistant-offline {
+  @apply flex items-start gap-2 border-b border-l-4 border-amber-500/40 border-l-amber-500 bg-amber-500/10 px-4 py-2.5 text-[12px] font-semibold leading-relaxed text-amber-600 dark:border-amber-400/30 dark:border-l-amber-400 dark:bg-amber-500/15 dark:text-amber-300;
+}
+.assistant-offline-hint {
+  @apply mt-0.5 block text-[11px] font-normal leading-relaxed text-amber-600/85 dark:text-amber-300/85;
+}
 .assistant-empty {
   @apply rounded-2xl border border-dashed border-border px-4 py-4;
 }
@@ -558,11 +845,47 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 .assistant-link {
   @apply rounded-lg px-1.5 py-1 text-[11px] font-semibold text-brand-600 transition hover:bg-muted disabled:opacity-40 dark:text-brand-300;
 }
+/* 固定高度：这一行里 select 与 input 并排（时间范围 / 起止日期 / 关键词），
+   不定高的话原生 select 会比 input 矮一点点（25 与 26 差一像素），一行里就不齐。 */
 .assistant-select {
-  @apply rounded-lg border border-border bg-background px-2 py-1 text-[11px] text-foreground outline-none transition focus:border-brand-400;
+  @apply h-7 rounded-lg border border-border bg-background px-2 py-0 text-[11px] text-foreground outline-none transition focus:border-brand-400;
+}
+/* 「保存到记事本」那一行：只出现在小秘的回答下面，小小的、不抢回答的位置 */
+.assistant-note-actions {
+  @apply -mt-1.5 flex items-center gap-2 px-1;
+}
+.assistant-note-save {
+  @apply rounded-lg border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition hover:border-brand-300 hover:text-brand-600 disabled:opacity-50 dark:hover:border-brand-500/40 dark:hover:text-brand-300;
+}
+.assistant-note-done {
+  @apply text-[11px] font-medium text-emerald-600 dark:text-emerald-400;
+}
+.assistant-note-link {
+  @apply text-[11px] font-semibold text-brand-600 transition hover:underline dark:text-brand-300;
+}
+.assistant-note-error {
+  @apply text-[11px] text-destructive;
 }
 .assistant-meta {
   @apply -mt-1.5 px-1 text-[11px] leading-relaxed text-muted-foreground;
+}
+/* 选中的档位：比普通 chip 实一点，一眼看出「现在是哪种」 */
+.assistant-chip-on {
+  @apply border-brand-400 bg-brand-50 font-bold text-brand-700 dark:border-brand-500/50 dark:bg-brand-500/15 dark:text-brand-200;
+}
+/* 简洁思考：一行小字，末尾带省略号时表示后端截过 */
+.assistant-thinking-brief {
+  @apply italic;
+}
+/* 详细思考过程：默认折叠，展开后是一块浅底，不跟回答抢位置 */
+.assistant-thinking-full {
+  @apply -mt-1.5 mx-1 rounded-lg border border-border/70 bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground;
+}
+.assistant-thinking-summary {
+  @apply cursor-pointer select-none font-semibold text-muted-foreground;
+}
+.assistant-thinking-body {
+  @apply mt-1 whitespace-pre-wrap break-words leading-relaxed;
 }
 .assistant-bubble {
   @apply max-w-[86%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed;
@@ -590,6 +913,25 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 }
 .assistant-input {
   @apply w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-[13px] text-foreground outline-none transition focus:border-brand-400;
+}
+/* 打 @ 弹出来的清单选择器：浮在输入框上方，不挤走对话区 */
+.assistant-mention {
+  @apply absolute bottom-full left-3 right-3 z-10 mb-2 overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-xl;
+}
+.assistant-mention-title {
+  @apply px-2 py-1 text-[10px] font-bold text-muted-foreground;
+}
+.assistant-mention-item {
+  @apply flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] text-foreground transition hover:bg-muted;
+}
+.assistant-mention-item-on {
+  @apply bg-muted;
+}
+.assistant-mention-dot {
+  @apply h-2.5 w-2.5 shrink-0 rounded-full;
+}
+.assistant-mention-hint {
+  @apply px-2 pt-1 pb-0.5 text-[10px] text-muted-foreground;
 }
 .assistant-send {
   @apply shrink-0 rounded-xl bg-brand-gradient px-3.5 py-2 text-xs font-bold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50;

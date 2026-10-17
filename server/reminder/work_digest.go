@@ -27,10 +27,12 @@ import (
 
 // WorkDigestOptions 描述一次工作数据汇总请求。Option 空值等同于 "all"。
 type WorkDigestOptions struct {
-	Option  string // all / today / yesterday / week / lastweek / month / lastmonth / year / custom / open
-	From    string // custom 时的起始日期（含当天，YYYY-MM-DD）
-	To      string // custom 时的结束日期（含当天，YYYY-MM-DD）
-	Keyword string // 关键词过滤（标题/备注），空表示不过滤
+	Option   string // all / today / yesterday / week / lastweek / month / lastmonth / year / custom / open
+	From     string // custom 时的起始日期（含当天，YYYY-MM-DD）
+	To       string // custom 时的结束日期（含当天，YYYY-MM-DD）
+	Keyword  string // 关键词过滤（标题/备注），空表示不过滤
+	ListID   uint   // 「@清单名」指定的数据源；0 表示所有清单
+	ListName string // 上面那个清单的名字，只用于文案（为空时按 ListID 回查一次）
 }
 
 // WorkOptionOpen 是「当前还没做完」这个口径：不限时间窗口，只看手上还挂着的。
@@ -54,6 +56,16 @@ type WorkDigestItem struct {
 	Overdue     bool   `json:"overdue,omitempty"`
 	OverdueDays int    `json:"overdue_days,omitempty"`
 	NoDue       bool   `json:"no_due,omitempty"` // 没设截止时间
+	// 归属清单 id：只用来挑「这条数据所在栏目的 AI 提示词」，不序列化给前端。
+	ListID uint `json:"-"`
+}
+
+// WorkDigestPrompt 是这次数据范围里某个栏目的 AI 提示词（用户为清单写的分析要求）。
+// 只进模型的系统提示词，不进面板摘要。
+type WorkDigestPrompt struct {
+	ListID uint
+	Name   string
+	Prompt string
 }
 
 // WorkDigestList 是清单维度的分布，让模型能说出「哪块最忙」。
@@ -79,13 +91,18 @@ type WorkDigest struct {
 	Start     string           `json:"start,omitempty"`
 	End       string           `json:"end,omitempty"`
 	Keyword   string           `json:"keyword,omitempty"`
-	All       bool             `json:"all,omitempty"` // 不限时间
+	ListID    uint             `json:"list_id,omitempty"`
+	ListName  string           `json:"list_name,omitempty"` // 「@清单名」点名的那一栏
+	All       bool             `json:"all,omitempty"`       // 不限时间
 	Completed []WorkDigestItem `json:"completed"`
 	Open      []WorkDigestItem `json:"open"`
 	Notes     []WorkDigestItem `json:"notes"`
 	Lists     []WorkDigestList `json:"lists"`
 	Stats     WorkDigestStats  `json:"stats"`
 	Truncated bool             `json:"truncated"`
+	// 这次数据范围涉及的栏目的 AI 提示词（用户为清单写的分析要求）。
+	// 不序列化：面板摘要不需要它，只有系统提示词的装配要。
+	Prompts []WorkDigestPrompt `json:"-"`
 }
 
 // BuildWorkDigest 取一段工作数据。now 由调用方传入（测试里要钉死时刻）。
@@ -96,6 +113,18 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 	keyword := strings.TrimSpace(opts.Keyword)
 
 	digest := WorkDigest{Option: option, Keyword: keyword}
+
+	// 「@清单名」：这一轮只看被点名的那一栏（面板上的 @ 选择器负责把名字填进
+	// 输入框，认名字的是 FindMentionedList + 这里）。
+	var listFilter []uint
+	if opts.ListID > 0 {
+		digest.ListID = opts.ListID
+		digest.ListName = strings.TrimSpace(opts.ListName)
+		if digest.ListName == "" {
+			digest.ListName = listNameOf(db, userID, opts.ListID)
+		}
+		listFilter = []uint{opts.ListID}
+	}
 
 	var rng CompletedRange
 	var err error
@@ -114,10 +143,25 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 		digest.End = span.End
 		digest.All = rng.Start == nil && rng.End == nil
 	}
+	if digest.ListName != "" {
+		digest.Label = digest.ListName + " · " + digest.Label
+	}
 
-	completed, err := listCompletedHistory(db, userID, rng, keyword, nil)
+	completed, err := listCompletedHistory(db, userID, rng, keyword, listFilter)
 	if err != nil {
 		return WorkDigest{}, err
+	}
+	if digest.ListID > 0 {
+		// 完成历史（Completion）本身不带清单归属，listCompletedHistory 里那次
+		// 过滤只作用在提醒上，历史行是回查提醒补的清单 —— 这里按补齐后的清单
+		// 再筛一遍；归属不明的（提醒已被删干净）跟着一起丢掉，免得混进别人的数。
+		kept := make([]CompletedItemDTO, 0, len(completed))
+		for _, row := range completed {
+			if row.ListID == digest.ListID {
+				kept = append(kept, row)
+			}
+		}
+		completed = kept
 	}
 	if option == WorkOptionOpen {
 		completed = nil
@@ -136,6 +180,7 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 		item := WorkDigestItem{
 			Title:    row.Title,
 			ListName: row.ListName,
+			ListID:   row.ListID,
 		}
 		at := row.CompletedAt.In(loc)
 		item.Day = at.Format("2006-01-02")
@@ -143,7 +188,7 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 		digest.Completed = append(digest.Completed, item)
 	}
 
-	open, overdueCount, err := listOpenWork(db, userID, rng, keyword, now, loc)
+	open, overdueCount, err := listOpenWork(db, userID, rng, keyword, digest.ListID, now, loc)
 	if err != nil {
 		return WorkDigest{}, err
 	}
@@ -153,13 +198,14 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 	}
 	digest.Open = open
 
-	notes, notesTotal, err := listWorkNotes(db, userID, rng, keyword, loc)
+	notes, notesTotal, err := listWorkNotes(db, userID, rng, keyword, digest.ListID, loc)
 	if err != nil {
 		return WorkDigest{}, err
 	}
 	digest.Notes = notes
 
 	digest.Lists = mergeWorkLists(digest.Completed, digest.Open, digest.Notes)
+	digest.Prompts = collectListPrompts(db, userID, digest)
 	digest.Stats = WorkDigestStats{
 		Completed: len(digest.Completed),
 		Open:      len(digest.Open),
@@ -168,6 +214,56 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 		Lists:     len(digest.Lists),
 	}
 	return digest, nil
+}
+
+// workDigestMaxListPrompts 一次最多带几条栏目提示词。
+// 提示词是给模型看的要求，条数太多会挤掉真正的工作数据；四条已经够覆盖
+// 「工作安排 / 信用卡 / 随手记事本 / 自建清单」这类常见组合。
+const workDigestMaxListPrompts = 4
+
+// collectListPrompts 取这次数据范围里出现过的栏目的 AI 提示词。
+//
+// 只挑**真有数据**的栏目：用户给「人生要有仪式感」写了提示词、但这段时间一条
+// 数据都没有，就别把那段话塞给模型（否则模型会对着空数据讲要求）。用 @清单名
+// 点名时只看那一栏。顺序按清单在侧栏的先后，最多 workDigestMaxListPrompts 条。
+func collectListPrompts(db *gorm.DB, userID uint, digest WorkDigest) []WorkDigestPrompt {
+	wanted := map[uint]bool{}
+	add := func(items []WorkDigestItem) {
+		for _, item := range items {
+			if item.ListID > 0 {
+				wanted[item.ListID] = true
+			}
+		}
+	}
+	add(digest.Completed)
+	add(digest.Open)
+	add(digest.Notes)
+	if digest.ListID > 0 {
+		wanted = map[uint]bool{digest.ListID: true}
+	}
+	if len(wanted) == 0 {
+		return nil
+	}
+	var rows []List
+	if err := db.Where("user_id = ? AND deleted_at IS NULL AND ai_prompt <> ''", userID).
+		Order("position ASC, id ASC").Find(&rows).Error; err != nil {
+		return nil
+	}
+	out := make([]WorkDigestPrompt, 0, len(rows))
+	for _, list := range rows {
+		if !wanted[list.ID] {
+			continue
+		}
+		prompt := strings.TrimSpace(list.AIPrompt)
+		if prompt == "" {
+			continue
+		}
+		out = append(out, WorkDigestPrompt{ListID: list.ID, Name: strings.TrimSpace(list.Name), Prompt: prompt})
+		if len(out) >= workDigestMaxListPrompts {
+			break
+		}
+	}
+	return out
 }
 
 // workRangeLabel 给区间一个口语名字，草稿的标题与提示词都用它。
@@ -202,9 +298,12 @@ func workRangeLabel(option string, span CompletedRangeSpan) string {
 // （截止时间落在区间里，或者已经逾期到此刻）。已经逾期但不在区间内的也留着 ——
 // 写周报时「手上还挂着的旧账」正是要看的东西；截止时间晚于区间结束的将来任务
 // 不算进来（那是下周的事）。
-func listOpenWork(db *gorm.DB, userID uint, rng CompletedRange, keyword string, now time.Time, loc *time.Location) ([]WorkDigestItem, int, error) {
+func listOpenWork(db *gorm.DB, userID uint, rng CompletedRange, keyword string, listID uint, now time.Time, loc *time.Location) ([]WorkDigestItem, int, error) {
 	q := db.Where("user_id = ? AND deleted_at IS NULL AND completed_at IS NULL AND kind = ?", userID, KindTask)
 	q = excludeHiddenCardReminders(q, hiddenCardListIDs(db, userID))
+	if listID > 0 {
+		q = q.Where("list_id = ?", listID)
+	}
 	if rng.End != nil {
 		// due_at <= 区间结束（含未逾期但落在区间内的）。due_at 为空的任务在
 		// 「当前未完成」口径里要保留，所以这里用 OR 把空值一起放进来。
@@ -223,7 +322,7 @@ func listOpenWork(db *gorm.DB, userID uint, rng CompletedRange, keyword string, 
 	listNames := listNamesOf(db, userID, rows)
 	overdue := 0
 	for _, row := range rows {
-		item := WorkDigestItem{Title: row.Title, ListName: listNames[row.ListID]}
+		item := WorkDigestItem{Title: row.Title, ListName: listNames[row.ListID], ListID: row.ListID}
 		if row.DueAt == nil {
 			item.NoDue = true
 			items = append(items, item)
@@ -280,9 +379,12 @@ func overdueDays(due, now time.Time) int {
 
 // listWorkNotes 取区间内新记的记事。记事的「记录时间」就是它的 completed_at
 // （记事没有到期时间，保存时会被清空），这与日历里记事的落位口径一致。
-func listWorkNotes(db *gorm.DB, userID uint, rng CompletedRange, keyword string, loc *time.Location) ([]WorkDigestItem, int, error) {
+func listWorkNotes(db *gorm.DB, userID uint, rng CompletedRange, keyword string, listID uint, loc *time.Location) ([]WorkDigestItem, int, error) {
 	q := db.Where("user_id = ? AND deleted_at IS NULL AND kind = ? AND completed_at IS NOT NULL", userID, KindNote)
 	q = excludeHiddenCardReminders(q, hiddenCardListIDs(db, userID))
+	if listID > 0 {
+		q = q.Where("list_id = ?", listID)
+	}
 	if rng.Start != nil {
 		q = q.Where(tsUTC("completed_at")+" >= datetime(?)", sqlTimeArg(*rng.Start))
 	}
@@ -309,6 +411,7 @@ func listWorkNotes(db *gorm.DB, userID uint, rng CompletedRange, keyword string,
 			Day:      at.Format("2006-01-02"),
 			Clock:    at.Format("15:04"),
 			ListName: listNames[row.ListID],
+			ListID:   row.ListID,
 		})
 	}
 	return items, total, nil
@@ -342,6 +445,41 @@ func listNamesOf(db *gorm.DB, userID uint, rows []Reminder) map[uint]string {
 
 // mergeWorkLists 按清单汇总「完成 N / 未完成 M」，完成多的排前面。记事也算
 // 这个清单里的产出（记事的清单就是它写下的地方），不然只有记事的清单会整条消失。
+// listNameOf 按 id 查一个清单的名字（查不到就返回空串）。
+func listNameOf(db *gorm.DB, userID, listID uint) string {
+	var list List
+	if err := db.Where("user_id = ? AND id = ? AND deleted_at IS NULL", userID, listID).First(&list).Error; err != nil {
+		return ""
+	}
+	return strings.TrimSpace(list.Name)
+}
+
+// FindMentionedList 在用户说的那句话里找「@清单名」——就是他点名要看哪一栏。
+//
+// 面板上打 @ 弹出的选择器只是把名字补进输入框，最终认的还是这句话：用户自己
+// 手打「@信用卡账单」也一样管用。（@全部 这类虚拟栏目不在清单表里，不参与。）
+// 清单按名字长的先试，免得短名字（例如「信用卡」）抢先匹配掉长名字。
+func FindMentionedList(db *gorm.DB, userID uint, text string) (uint, string, bool) {
+	text = strings.TrimSpace(text)
+	if text == "" || !strings.Contains(text, "@") {
+		return 0, "", false
+	}
+	var lists []List
+	if err := db.Where("user_id = ? AND deleted_at IS NULL", userID).Order("length(name) DESC").Find(&lists).Error; err != nil {
+		return 0, "", false
+	}
+	for _, list := range lists {
+		name := strings.TrimSpace(list.Name)
+		if name == "" {
+			continue
+		}
+		if strings.Contains(text, "@"+name) {
+			return list.ID, name, true
+		}
+	}
+	return 0, "", false
+}
+
 func mergeWorkLists(completed, open, notes []WorkDigestItem) []WorkDigestList {
 	index := map[string]*WorkDigestList{}
 	order := []string{}
@@ -388,6 +526,9 @@ func (d WorkDigest) Markdown() string {
 	fmt.Fprintf(&b, "【工作数据】时间段：%s", d.Label)
 	if d.Keyword != "" {
 		fmt.Fprintf(&b, "；关键词：%s", d.Keyword)
+	}
+	if d.ListName != "" {
+		fmt.Fprintf(&b, "；只看清单：%s（用户用 @%s 点名了这一栏，别把别的清单的数据算进来）", d.ListName, d.ListName)
 	}
 	b.WriteString("\n")
 	fmt.Fprintf(&b, "统计：完成 %d 条 / 还没做完 %d 条（其中逾期 %d 条）/ 记事新增 %d 条 / 涉及清单 %d 个\n",
@@ -488,7 +629,11 @@ func (d WorkDigest) DraftReport() string {
 		writeDraftItems(&b, d.Notes)
 	}
 	if d.Stats.Completed == 0 && d.Stats.Open == 0 && d.Stats.Notes == 0 {
-		b.WriteString("\n这段时间没有对应的记录。")
+		if d.ListName != "" {
+			fmt.Fprintf(&b, "\n清单「%s」在这段时间里没有记录。", d.ListName)
+		} else {
+			b.WriteString("\n这段时间没有对应的记录。")
+		}
 		if d.Keyword != "" {
 			fmt.Fprintf(&b, "（关键词「%s」没有命中）", d.Keyword)
 		}
