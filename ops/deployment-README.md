@@ -272,6 +272,10 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   （45 673 847 B）sha256 `556e16c45c5477b88e7fe443f8786a4bfcc741ffb2e45145fe302a5f8ca5ffa7`，
 >   自检 30 项全过；fnOS 包 `workordernote_0.34.0_amd64.fpk`（21 515 534 B，`fnpack` 1.2.4）md5
 >   `98373329effd299f86474884caadeec6`。三个构件已放 201 与 200 的 `images/`/`pkg/`，md5 逐字节一致。
+> - 推送：`git push` main（`738873b`、`2cfd829`）与 tag `v0.34.0`（走 HTTP 端点，CIFS 路径会被钩子拒）；
+>   Gitea **Release id 20** 挂三个附件（45 760 367 / 45 673 847 / 21 515 534 B）；
+>   镜像 `docker tag` + `docker push` 到 `192.168.3.200:3000/cyberzero/workordernote:0.34.0`，
+>   digest `sha256:bed64f76689e…`。
 
 ### 2026-10-16：0.33.0（沙箱 8908 / 201 生产上线）—— 小秘看得到工作数据：周报 / 月报 / 年报 / 工作清单 / 自定义查询，没接模型也能出草稿
 
