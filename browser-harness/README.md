@@ -851,9 +851,10 @@ resetOverduePolicyCache()                    // 进程内 2 秒缓存也要清
   注册一个一次性探针账号（`nudgeprobe<时间戳>`），收尾再**删账号 + 删提醒 + 还原注册开关**。
   在只有一个账号的干净实例上跑也能过（0.29.0 那版 43 项，2026-10-15 扩到 51 项）；`clean-self-test.sh` 不管这类数据，
   被打断后残留的探针账号要手动 `DELETE /api/users/<id>`。
-- **开关是系统偏好 `nudge_enabled`**（`ScopeSystem`，一台实例一份，不是个人偏好）：
+- **开关是个人偏好 `nudge_enabled`**（`ScopeUser`，0.34.1 起从系统偏好迁到「偏好设置 → 功能开关」，默认开）：
   关掉后**侧栏入口消失，直接访问 `/admin/nudges` 也会被送回首页**（`NudgeView` 里 watch + onMounted 兜底），
-  所以断言「页面不渲染」要用 `[data-nudge-page]` 存在与否，别用「路由 404」。
+  所以断言「页面不渲染」要用 `[data-nudge-page]` 存在与否，别用「路由 404」。**关掉的人不会出现在别人的 @ 名单里**
+  （`handleNudgeUsers` 按 `nudge_enabled` 过滤），服务端也会拒收发给他的提醒（400）；之前已发出的提醒照常保留。
 - **角标口径是「别人提醒我、我还没做完」**（`/summary` 的 `nudge_pending`），**不是未读**：
   对方点过「已收到」但还没点「已完成」时角标照旧挂着，做完才归零。
 - **本标签页自己的改动收不到 SSE 回声**：服务端广播按 `X-Client-Id` 跳过发起者

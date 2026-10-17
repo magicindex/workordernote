@@ -109,14 +109,22 @@
                 class="assistant-meta assistant-thinking-brief"
                 data-assistant-thinking-brief
               >思考：{{ msg.thinking }}{{ msg.thinkingTruncated ? '…' : '' }}</p>
+              <!-- 详细模式默认展开：折叠着只露出一行「思考过程」，用户会以为没显示
+                   （2026-10-17 反馈）。展开后仍可点标题收起。 -->
               <details
                 v-else-if="msg.thinking && msg.thinkingMode === 'full'"
                 class="assistant-thinking-full"
                 data-assistant-thinking-full
+                open
               >
-                <summary class="assistant-thinking-summary">思考过程</summary>
+                <summary class="assistant-thinking-summary">思考过程（点标题收起）</summary>
                 <p class="assistant-thinking-body">{{ msg.thinking }}</p>
               </details>
+              <p
+                v-else-if="msg.thinkingMode === 'full'"
+                class="assistant-meta"
+                data-assistant-thinking-empty
+              >这个模型没有返回思考过程（qwen2.5 这类非思考模型不产生思维链）；换成 qwen3 / r1 这类思考模型就能看到。</p>
               <!-- 一键存进记事本：标题与标签由服务端按内容自动生成，用户不用手打。
                    失败的回复不给存（那是错误提示，不是小秘的回答）。 -->
               <div

@@ -154,6 +154,9 @@ async function handleSave(key: string, value: string) {
       if (key === 'notebook_enabled') {
         authStore.setNotebookEnabled(value !== 'false')
       }
+      if (key === 'nudge_enabled') {
+        authStore.setNudgeEnabled(value !== 'false')
+      }
       listRef.value?.markSaved(key)
       if (key === 'theme_mode') {
         const themeStore = useThemeStore()

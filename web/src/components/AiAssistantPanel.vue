@@ -66,15 +66,26 @@
           <div class="flex items-center justify-between gap-2">
             <label for="ai-model-input" class="text-xs font-bold text-foreground">模型名称</label>
             <!-- 拉列表挪到模型名这一行：跟它要填的东西挨着，少占一行按钮（用户 2026-10-17 要求精简） -->
-            <button
-              type="button"
-              class="shrink-0 text-[11px] font-semibold text-brand-600 underline hover:text-brand-700 disabled:opacity-40 dark:text-brand-300"
-              :disabled="busy || !canTest"
-              data-ai-pull-models
-              @click="pullModels"
-            >
-              {{ pulling ? '拉取中…' : '拉取服务器列表' }}
-            </button>
+            <div class="flex shrink-0 items-center gap-2">
+              <button
+                v-if="!modelsOpen && modelChoices.length"
+                type="button"
+                class="text-[11px] font-semibold text-brand-600 underline hover:text-brand-700 dark:text-brand-300"
+                data-ai-model-expand
+                @click="modelsOpen = true"
+              >
+                列表（{{ modelChoices.length }}）
+              </button>
+              <button
+                type="button"
+                class="text-[11px] font-semibold text-brand-600 underline hover:text-brand-700 disabled:opacity-40 dark:text-brand-300"
+                :disabled="busy || !canTest"
+                data-ai-pull-models
+                @click="pullModels"
+              >
+                {{ pulling ? '拉取中…' : '拉取服务器列表' }}
+              </button>
+            </div>
           </div>
           <input
             id="ai-model-input"
@@ -87,10 +98,18 @@
           />
           <!-- 拉回来的模型**横着排**（用户 2026-10-17：「重起一行横向显示模型列表，以减少空间占用」）：
                原来是竖着一列带滚动条的清单，十几个模型就顶掉半屏。点一条即填入上面的输入框，仍可手填。 -->
-          <div v-if="modelChoices.length" class="mt-2 rounded-xl border border-border bg-surface/60 px-2.5 py-2" data-ai-model-list>
-            <p class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">
-              {{ modelListTitle }}
-            </p>
+          <div v-if="modelsOpen && modelChoices.length" class="mt-2 rounded-xl border border-border bg-surface/60 px-2.5 py-2" data-ai-model-list>
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">
+                {{ modelListTitle }}
+              </p>
+              <button
+                type="button"
+                class="shrink-0 text-[10px] font-semibold text-muted-foreground underline hover:text-foreground"
+                data-ai-model-collapse
+                @click="modelsOpen = false"
+              >收起</button>
+            </div>
             <div class="mt-1.5 flex flex-wrap gap-1">
               <button
                 v-for="name in modelChoices"
@@ -117,6 +136,9 @@
               {{ presetOnlyNames.slice(0, 8).join('、') }}{{ presetOnlyNames.length > 8 ? ' …' : '' }}
             </p>
           </div>
+          <span v-else-if="modelChoices.length" class="mt-1 block text-[11px] leading-4 text-muted-foreground">
+            已拉到 {{ modelChoices.length }} 个模型，当前用「{{ form.model || '（未填）' }}」；点右上「列表（{{ modelChoices.length }}）」可换。
+          </span>
           <span v-else class="mt-1 block text-[11px] leading-4 text-muted-foreground">
             还没拉到模型列表：点上面「拉取服务器列表」按当前服务商列一遍再选；也可以直接填名字（服务商上线新模型时不用改代码）。
           </span>
@@ -244,7 +266,7 @@
             <div
               v-for="list in promptLists"
               :key="list.id"
-              class="rounded-xl border border-border p-2"
+              class="rounded-xl border-2 border-brand-400 bg-brand-50/30 p-2 shadow-[0_0_0_1px_rgba(99,102,241,0.06)] dark:border-brand-400/60 dark:bg-brand-500/[0.08]"
               :data-ai-list-prompt-row="list.name"
             >
               <div class="flex items-center justify-between gap-2">
@@ -474,6 +496,11 @@ const modelListTitle = computed(() => (pulledModels.value.length
   : `预设常见名字（${modelChoices.value.length}）· 还没从服务器拉到列表`))
 /** 保存后才会生效的模型：和已保存的不一样时在「当前模型」块里提醒一句。 */
 const pendingModelChange = computed(() => !!settings.value && (form.model || '') !== (settings.value.model || ''))
+/**
+ * 拉回来的列表默认收起：选完一条就自动隐藏，只在上面的「模型名称」里显示当前值
+ * （用户 2026-10-17 要求）。需要再换时点「列表（N）」展开，或重新拉一遍。
+ */
+const modelsOpen = ref(false)
 /** 选中的档位说明：写清「它只影响显示、模型仍然会想」，免得被理解成省钱的开关。 */
 const thinkingNote = computed(() => {
   const mode = thinkingChoices.find((item) => item.value === form.thinking_mode)
@@ -666,6 +693,7 @@ async function save() {
 /** 点列表里的一条 = 填进输入框（仍要「保存设置」才生效）。 */
 function pickModel(name: string) {
   form.model = name
+  modelsOpen.value = false
   notice.value = `已选用 ${name}，点「保存设置」后生效。`
 }
 
@@ -686,6 +714,7 @@ async function pullModels() {
       if (!names.length) {
         notice.value = '连接正常，但这个服务没有返回模型列表，直接填模型名即可'
       } else {
+        modelsOpen.value = true
         // 当前填的名字不在服务器上时，顺手回填一个真能用的，省得选完还报 404
         const stale = !form.model || !names.includes(form.model)
         if (stale) {

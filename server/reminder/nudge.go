@@ -183,6 +183,46 @@ func handleListNudges(db *gorm.DB) gin.HandlerFunc {
 }
 
 // handleNudgeUsers 返回可以提醒的对象（自己除外）。
+// 关闭了「提醒@他」的人：入口藏起来，别人在 @ 列表里也看不到他。
+//
+// 这从系统偏好改成了个人偏好（用户 2026-10-17 要求）：每个账号自己决定要不要
+// 出现在这个栏目里，默认开着。列表与发提醒两处都要按本人配置过一遍，不然只藏
+// 入口、名单里仍有他，等于没关。
+func nudgeReceives(db *gorm.DB, userID uint) bool {
+	return userConfigValue(db, userID, "nudge_enabled") != "false"
+}
+
+// filterNudgeUsers 一次把候选人的配置查出来，别在循环里逐个人查（N+1）。
+func filterNudgeUsers(db *gorm.DB, users []NudgeUser) []NudgeUser {
+	if len(users) == 0 {
+		return users
+	}
+	ids := make([]uint, 0, len(users))
+	for _, u := range users {
+		ids = append(ids, u.ID)
+	}
+	var off []database.SystemConfig
+	if err := db.Where("key = ? AND value = ? AND user_id IN ?", "nudge_enabled", "false", ids).
+		Find(&off).Error; err != nil {
+		// 读不到配置时按默认（开）放行：不能因为一次查询失败把整个名单清空。
+		return users
+	}
+	if len(off) == 0 {
+		return users
+	}
+	hidden := make(map[uint]bool, len(off))
+	for _, row := range off {
+		hidden[row.UserID] = true
+	}
+	kept := users[:0]
+	for _, u := range users {
+		if !hidden[u.ID] {
+			kept = append(kept, u)
+		}
+	}
+	return kept
+}
+
 func handleNudgeUsers(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		me := currentUserID(c)
@@ -195,7 +235,7 @@ func handleNudgeUsers(db *gorm.DB) gin.HandlerFunc {
 			response.ErrorInternal(c, "读取用户列表失败")
 			return
 		}
-		response.Success(c, users)
+		response.Success(c, filterNudgeUsers(db, users))
 	}
 }
 
@@ -235,6 +275,10 @@ func handleCreateNudge(db *gorm.DB) gin.HandlerFunc {
 		var target database.User
 		if err := db.Where("id = ? AND status = 1", in.ToUserID).First(&target).Error; err != nil {
 			response.Error(c, http.StatusNotFound, response.CodeNotFound, "提醒对象不存在或已停用")
+			return
+		}
+		if !nudgeReceives(db, target.ID) {
+			response.ErrorBadRequest(c, "对方关闭了「提醒@他」，收不到提醒")
 			return
 		}
 		row := Nudge{

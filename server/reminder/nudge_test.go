@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"smallgo/server/database"
+	"smallgo/server/sysconfig"
 
 	"github.com/gin-gonic/gin"
 )
@@ -293,6 +294,31 @@ func TestNudgeUsersExcludesSelf(t *testing.T) {
 	users := nudgeData[[]NudgeUser](t, rec)
 	if len(users) != 1 || users[0].ID != mate {
 		t.Fatalf("应当只列出未停用的别人（%d），实际 %+v", mate, users)
+	}
+}
+
+// 「提醒@他」从系统偏好挪到个人偏好后：关掉的人既不进 @ 列表，也不能被直接发。
+func TestNudgeHonoursPersonalSwitch(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	gin.SetMode(gin.TestMode)
+
+	const me, mate, quiet = 941, 942, 943
+	seedNudgeUsers(t, me, mate, quiet)
+	if err := sysconfig.UpdateConfig(appDB, "nudge_enabled", "false", quiet); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := nudgeRequest(t, handleNudgeUsers(appDB), me, http.MethodGet, "", nil)
+	users := nudgeData[[]NudgeUser](t, rec)
+	if len(users) != 1 || users[0].ID != mate {
+		t.Fatalf("关掉「提醒@他」的人不该出现在名单里（只剩 %d），实际 %+v", mate, users)
+	}
+
+	body := `{"to_user_id":943,"content":"关掉的人不该收到"}`
+	rec = nudgeRequest(t, handleCreateNudge(appDB), me, http.MethodPost, body, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("给关掉的人发提醒应当 400，实际 %d %s", rec.Code, rec.Body.String())
 	}
 }
 

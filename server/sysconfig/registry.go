@@ -308,10 +308,10 @@ func init() {
 		Description: "在侧栏显示固定的「随手记事本」栏目（新建的记事都收在这里）；关掉后栏目隐藏，记事数据保留",
 	})
 	RegisterConfig(ConfigDef{
-		Key: "nudge_enabled", Scope: ScopeSystem, Type: TypeBool,
+		Key: "nudge_enabled", Scope: ScopeUser, Type: TypeBool,
 		Default: "true", Public: true,
 		Group: "features", Label: "提醒@他",
-		Description: "在侧栏「我的清单」下显示「提醒@他」页面（多人之间互相推提醒）；关掉后入口隐藏，已发提醒数据保留",
+		Description: "在侧栏「我的清单」下显示「提醒@他」页面（多人之间互相推提醒）；关掉后入口隐藏，别人在 @ 列表里也看不到你，已发提醒数据保留",
 	})
 	RegisterConfig(ConfigDef{
 		Key: "log_retention_days", Scope: ScopeSystem, Type: TypeInt,

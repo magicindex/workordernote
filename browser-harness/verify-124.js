@@ -287,6 +287,11 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
     }
 
     // 模型候选从「datalist」改成可点的清单（datalist 在手机上弹不出来，用户报「加了模型选不了」）。
+    // 清单默认收起、选完自动隐藏（2026-10-17 要求），读候选前先展开。
+    if (await page.$('[data-ai-model-expand]')) {
+      await page.click('[data-ai-model-expand]');
+      await sleep(300);
+    }
     const models = await page.evaluate(() => [...document.querySelectorAll('[data-ai-model-option]')]
       .map((el) => el.getAttribute('data-ai-model-option') || '').filter(Boolean));
     check('模型名有候选清单（可点选）', models.length >= 2, JSON.stringify(models.slice(0, 4)));
@@ -299,8 +304,12 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       await sleep(400);
       const picked = await page.evaluate(() => document.querySelector('[data-ai-model]')?.value || '');
       check('点清单里的一条会填进模型名输入框', picked === models[0], JSON.stringify({ picked, want: models[0] }));
-      const marked = await page.evaluate(() => (document.querySelector('[data-ai-model-option]')?.textContent || '').trim());
-      check('被选中的那条标了「已选」', /已选/.test(marked), marked);
+      const collapsed = await page.evaluate(() => ({
+        list: !!document.querySelector('[data-ai-model-list]'),
+        expand: !!document.querySelector('[data-ai-model-expand]'),
+      }));
+      check('选完自动收起清单，只留输入框里的当前模型',
+        collapsed.list === false && collapsed.expand === true, JSON.stringify(collapsed));
     }
 
     const currentModel = await page.evaluate(() => {
