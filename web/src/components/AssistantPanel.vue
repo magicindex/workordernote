@@ -61,18 +61,57 @@
               <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
                 写周报、把一句话变成待办、理清今天该先做什么——说一句就行。
               </p>
-              <div class="mt-3 flex flex-wrap gap-1.5">
+            </div>
+
+            <!-- 常用问法：开箱卡片与自己存的查询放在同一处（用户 2026-10-17：
+                 「本周周报…与对话框中卡片项合并，保存内容放在此处，不再放在下面」）。
+                 存完立刻在这排出现，不再放到底部「数据口径」栏。 -->
+            <div class="flex flex-wrap gap-1.5" :class="messages.length ? '' : 'mt-3'" data-assistant-quick>
+              <button
+                v-for="chip in quickChips"
+                :key="chip.label"
+                type="button"
+                class="assistant-chip"
+                :data-assistant-chip="chip.label"
+                @click="send(chip.label, chip.option)"
+              >
+                {{ chip.label }}
+              </button>
+            </div>
+            <div
+              v-if="savedQueries.length"
+              class="mt-2 flex flex-wrap items-center gap-1.5"
+              data-assistant-my-queries
+            >
+              <span class="text-[10px] font-bold text-muted-foreground" data-assistant-saved-label>我的</span>
+              <template v-for="item in savedQueries" :key="item.name">
                 <button
-                  v-for="chip in quickChips"
-                  :key="chip.label"
+                  v-if="!savedEditing"
                   type="button"
                   class="assistant-chip"
-                  :data-assistant-chip="chip.label"
-                  @click="send(chip.label, chip.option)"
+                  :data-assistant-saved="item.name"
+                  :title="describeQuery(item)"
+                  @click="runSaved(item)"
                 >
-                  {{ chip.label }}
+                  {{ item.name }}
                 </button>
-              </div>
+                <span v-else class="assistant-saved-tag">
+                  {{ item.name }}
+                  <button
+                    type="button"
+                    class="assistant-saved-remove"
+                    :data-assistant-saved-remove="item.name"
+                    title="删掉这条常用查询"
+                    @click="removeSaved(item.name)"
+                  >✕</button>
+                </span>
+              </template>
+              <button
+                type="button"
+                class="assistant-link"
+                data-assistant-saved-edit
+                @click="savedEditing = !savedEditing"
+              >{{ savedEditing ? '完成' : '管理' }}</button>
             </div>
 
             <template v-for="(msg, i) in messages" :key="i">
@@ -168,50 +207,6 @@
 
           <!-- 数据口径：周报/月报/工作清单按这里的区间取数 -->
           <section class="border-t border-border px-3 pt-3" data-assistant-scope>
-            <div class="flex flex-wrap items-center gap-1.5">
-              <!-- 预置的三条：开箱即点，不占用户配置、也不给删（删了下次又回来更奇怪） -->
-              <button
-                v-for="item in presetQueries"
-                :key="'preset-' + item.name"
-                type="button"
-                class="assistant-chip"
-                :data-assistant-preset="item.name"
-                :title="'预置常用查询 · ' + describeQuery(item)"
-                @click="runSaved(item)"
-              >
-                {{ item.name }}
-              </button>
-              <span v-if="savedQueries.length" class="text-[10px] font-bold text-muted-foreground" data-assistant-saved-label>我的</span>
-              <template v-for="item in savedQueries" :key="item.name">
-                <button
-                  v-if="!savedEditing"
-                  type="button"
-                  class="assistant-chip"
-                  :data-assistant-saved="item.name"
-                  :title="describeQuery(item)"
-                  @click="runSaved(item)"
-                >
-                  {{ item.name }}
-                </button>
-                <span v-else class="assistant-saved-tag">
-                  {{ item.name }}
-                  <button
-                    type="button"
-                    class="assistant-saved-remove"
-                    :data-assistant-saved-remove="item.name"
-                    title="删掉这条常用查询"
-                    @click="removeSaved(item.name)"
-                  >✕</button>
-                </span>
-              </template>
-              <button
-                type="button"
-                class="assistant-link"
-                data-assistant-saved-edit
-                @click="savedEditing = !savedEditing"
-              >{{ savedEditing ? '完成' : '管理' }}</button>
-            </div>
-
             <div class="mt-2 flex flex-wrap items-center gap-1.5">
               <select v-model="scope.option" class="assistant-select" data-assistant-range aria-label="时间范围">
                 <option value="">自动识别（按我说的时间词）</option>
@@ -390,13 +385,6 @@ const quickChips: { label: string; option?: string }[] = [
   { label: '写今年的年报', option: 'year' },
   { label: '手上还有哪些没做完', option: 'open' },
   { label: '这周的工作清单', option: 'week' },
-]
-
-/** 预置常用查询：开箱就能点的三条总结（不写进用户配置，用户自己存的排在后面）。 */
-const presetQueries: SavedQuery[] = [
-  { name: '本周周报', option: 'week' },
-  { name: '本月月报', option: 'month' },
-  { name: '本年总结', option: 'year' },
 ]
 
 /** 「时间范围」下拉：与「已完成」页的筛选同名，另加「当前未完成」与自定义。 */
@@ -750,6 +738,8 @@ async function loadSavedQueries() {
 
 async function persistSavedQueries(next: SavedQuery[]) {
   savedQueries.value = next
+  // 删光了就没有「我的」这一行，管理态也要退出来，否则下次新存的一条直接进删除模式。
+  if (!next.length) savedEditing.value = false
   try {
     await updateConfig('assistant_saved_queries', JSON.stringify(next))
   } catch (err: any) {

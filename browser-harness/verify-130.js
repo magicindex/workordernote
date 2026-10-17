@@ -228,9 +228,10 @@ async function waitSavedChip(page, name, timeout = 12000) {
           .every((value) => panel.options.includes(value)),
         JSON.stringify(panel.options));
       check('面板上有「关键词」输入与「存为常用」入口', panel.hasKeyword && panel.hasSave);
-      check('开箱预置三条常用查询（本周周报 / 本月月报 / 本年总结）',
-        ['本周周报', '本月月报', '本年总结'].every((name) => panel.presets.includes(name)),
-        JSON.stringify(panel.presets));
+      // 2026-10-17 起预置三条与「卡片问法」合并成一排，不再在底部单独列一行。
+      check('常用问法与卡片合并（底部不再单独列预置）',
+        panel.presets.length === 0 && panel.chips.length >= 5,
+        JSON.stringify({ presets: panel.presets, chips: panel.chips }));
 
       // 点预置「写这周的周报」：应当带上数据并把区间写在气泡下面
       await page.evaluate(() => {
@@ -258,8 +259,8 @@ async function waitSavedChip(page, name, timeout = 12000) {
       check('未接模型时提示这是草稿', afterChip.draftNote === true);
       await page.screenshot({ path: path.join(SHOTS, 'assistant-digest-1440.png') }).catch(() => {});
 
-      // 预置的常用查询点一下就能用（不用先配置）
-      await page.evaluate(() => document.querySelector('[data-assistant-preset="本月月报"]')?.click());
+      // 卡片问法点一下就能用（不用先配置）
+      await page.evaluate(() => document.querySelector('[data-assistant-chip="写这个月的月报"]')?.click());
       await waitDigestOption(page, 'month');
       const presetRun = await page.evaluate(() => {
         const metas = [...document.querySelectorAll('[data-assistant-digest]')];
@@ -269,7 +270,7 @@ async function waitSavedChip(page, name, timeout = 12000) {
           range: document.querySelector('[data-assistant-range]')?.value || '',
         };
       });
-      check('点预置「本月月报」直接按本月查一次',
+      check('点卡片「写这个月的月报」直接按本月查一次',
         presetRun.option === 'month' && presetRun.range === 'month', JSON.stringify(presetRun));
 
       // ---------------- 4. 自定义常用查询：存 / 用 / 删 ----------------
@@ -356,10 +357,10 @@ async function waitSavedChip(page, name, timeout = 12000) {
       await page.evaluate(() => document.querySelector('[data-assistant-saved-edit]')?.click());
       await sleep(400);
       const presetInManage = await page.evaluate(() => ({
-        still: !!document.querySelector('[data-assistant-preset="本周周报"]'),
+        still: !!document.querySelector('[data-assistant-chip="写这周的周报"]'),
         remove: !!document.querySelector('[data-assistant-saved-remove="本周周报"]'),
       }));
-      check('预置查询在「管理」里也不给删（它不占用户配置）',
+      check('开箱卡片在「管理」里也不给删（它不占用户配置）',
         presetInManage.still === true && presetInManage.remove === false, JSON.stringify(presetInManage));
       await page.evaluate((name) => document.querySelector(`[data-assistant-saved-remove="${name}"]`)?.click(), queryName);
       await sleep(1200);

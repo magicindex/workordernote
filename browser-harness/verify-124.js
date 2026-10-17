@@ -433,7 +433,7 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
     await sleep(900);
     await clickEl(page, '[data-assistant-trigger]');
     await sleep(900);
-    await clickEl(page, '[data-assistant-preset="本周周报"]');
+    await clickEl(page, '[data-assistant-chip="写这周的周报"]');
     await sleep(preLive ? 12000 : 2200);
 
     const saveBtn = await page.evaluate(() => {
