@@ -9,7 +9,21 @@
           <header class="flex items-center gap-3 border-b border-border px-4 py-3">
             <span class="assistant-avatar">秘</span>
             <div class="min-w-0 flex-1">
-              <p class="font-display text-base font-extrabold tracking-tight">AI 小秘</p>
+              <!-- 接上模型叫「AI 小秘」是绿的，没配置是红的（用户 2026-10-17）；
+                   状态还在查时保持正文色，不先闪一下红。 -->
+              <p
+                class="flex items-center gap-1.5 font-display text-base font-extrabold tracking-tight"
+                :class="connState === 'live' ? 'text-emerald-600 dark:text-emerald-400' : connState === 'off' ? 'text-red-500 dark:text-red-400' : ''"
+                data-assistant-title
+              >
+                AI 小秘
+                <span
+                  class="assistant-conn"
+                  :data-assistant-conn-state="connState"
+                  data-assistant-conn
+                  aria-hidden="true"
+                ></span>
+              </p>
               <p class="truncate text-[11px] text-muted-foreground" data-assistant-status :title="statusText">
                 {{ statusText }}
               </p>
@@ -505,6 +519,8 @@ const canSaveQuery = computed(() => !!scope.value.option || !!scope.value.keywor
 const status = ref<AssistantStatus | null>(null)
 const statusLoading = ref(false)
 const live = computed(() => !!status.value?.active)
+/** 面板标题旁的小圆点：已接入=绿，未配置=红，检查中=灰。 */
+const connState = computed(() => (statusLoading.value ? 'checking' : live.value ? 'live' : 'off'))
 /**
  * 等模型回答的上限：跟着后端配置走（系统配置 → AI 助手 → 请求超时），
  * 再留 20 秒余量。本地模型（Ollama）第一次说话要等它把模型读进内存，
@@ -814,6 +830,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   transform: translateX(100%);
 }
 
+/* 连接状态点：颜色跟着标题走（绿=接上模型，红=没配置），外面一圈淡淡的同色光晕。 */
+.assistant-conn {
+  @apply inline-block h-2 w-2 rounded-full;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+}
 .assistant-avatar {
   @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-sm font-black text-white shadow-glow;
 }

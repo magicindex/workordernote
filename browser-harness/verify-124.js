@@ -91,6 +91,12 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       check('已接模型时状态行如实说明「模型已接入」并写出服务商/模型', /模型已接入/.test(statusLine) && statusLine.length > 6, statusLine);
     } else {
       check('未接模型时状态行如实说明「模型未接入」', statusLine.includes('模型未接入'), statusLine);
+      const connOff = await page.evaluate(() => ({
+        state: document.querySelector('[data-assistant-conn]')?.getAttribute('data-assistant-conn-state') || '',
+        color: getComputedStyle(document.querySelector('[data-assistant-title]')).color,
+      }));
+      check('未配置模型时「AI 小秘」标题标红',
+        connOff.state === 'off' && /rgb\(2[0-9]{2}, \d+, \d+\)/.test(connOff.color), JSON.stringify(connOff));
       check('状态行不谎报「模型已接入」', !statusLine.includes('模型已接入'), statusLine);
     }
 

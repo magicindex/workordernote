@@ -183,6 +183,12 @@ async function main() {
       await sleep(700);
       const statusText = await page.evaluate(() => (document.querySelector('[data-assistant-status]')?.textContent || '').trim());
       check('面板状态行显示「模型已接入」', /模型已接入/.test(statusText), statusText);
+      const connLive = await page.evaluate(() => ({
+        state: document.querySelector('[data-assistant-conn]')?.getAttribute('data-assistant-conn-state') || '',
+        color: getComputedStyle(document.querySelector('[data-assistant-title]')).color,
+      }));
+      check('接上模型后「AI 小秘」标题标绿',
+        connLive.state === 'live' && /rgb\(\d+, 1[0-9]{2}, \d+\)/.test(connLive.color), JSON.stringify(connLive));
       // 顶部「没有可用模型」横幅只属于未接模型那一面（用户 2026-10-17）：接了模型就不许出现。
       const offlineBanner = await page.evaluate(() => (document.querySelector('[data-assistant-offline]')?.textContent || '').trim());
       check('已接模型时顶部没有「没有可用模型」横幅', !offlineBanner, offlineBanner);
