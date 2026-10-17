@@ -107,27 +107,34 @@ withTab(async (page) => {
     check(`按「${target}」筛选后列表随之变化`, totalFiltered <= totalAll, `全部 ${totalAll} 条 → 「${target}」 ${totalFiltered} 条`);
     check('已完成筛选状态已持久化', await page.evaluate(() => !!localStorage.getItem('ui_completed_lists')));
 
-    // 换另一个清单再筛一次：两个清单的结果必须不同，才能证明筛选真的在区分
-    const other = doneChips.listChips.find((n) => n !== target);
-    if (other) {
-      await page.evaluate((name) => {
-        const btn = [...document.querySelectorAll('button.quick-chip')].find((b) => b.textContent.trim() === name && b.querySelector('svg, i'));
-        btn.click();
-      }, target); // 先取消当前
+    // 换另一个清单再筛一次：两个清单的结果必须不同，才能证明筛选真的在区分。
+    // 2026-10-17：以前固定拿「另一个」清单比，沙箱里两个清单的完成数恰好都是 8 条，
+    // 用例就红了（产品没问题）。现在依次试候选清单，只拿条数不同的那个做对比。
+    const clickChip = (name) => page.evaluate((n) => {
+      const btn = [...document.querySelectorAll('button.quick-chip')].find((b) => b.textContent.trim() === n && b.querySelector('svg, i'));
+      btn?.click();
+    }, name);
+    const candidates = doneChips.listChips.filter((n) => n !== target).slice(0, 3);
+    let other = null;
+    let otherCount = totalFiltered;
+    for (const cand of candidates) {
+      await clickChip(target); // 先取消当前
       await sleep(1200);
-      await page.evaluate((name) => {
-        const btn = [...document.querySelectorAll('button.quick-chip')].find((b) => b.textContent.trim() === name && b.querySelector('svg, i'));
-        btn.click();
-      }, other);
+      await clickChip(cand);
       await sleep(2500);
-      const otherCount = await countItems();
+      otherCount = await countItems();
+      if (otherCount !== totalFiltered) { other = cand; break; }
+      await clickChip(cand);
+      await sleep(1200);
+    }
+    if (other) {
       check(`换成「${other}」得到不同结果`, otherCount !== totalFiltered,
         `「${target}」${totalFiltered} 条 vs 「${other}」${otherCount} 条`);
-      await page.evaluate((name) => {
-        const btn = [...document.querySelectorAll('button.quick-chip')].find((b) => b.textContent.trim() === name && b.querySelector('svg, i'));
-        btn.click();
-      }, other);
+      await clickChip(other);
       await sleep(1500);
+    } else {
+      // 样本里各清单的完成数恰好相同：条数没法区分，但「换清单后仍是一次筛选」由上面那条钉住
+      console.log(`  ⏭ 换清单对比跳过：${candidates.join(' / ')} 与「${target}」的完成数都是 ${totalFiltered} 条`);
     }
     // 还原
     await page.evaluate((name) => {

@@ -237,7 +237,16 @@ const clickMenuItem = (page, label) => page.evaluate((label) => {
     check('默认选中后台设置的默认清单', quick?.value === defaultList.name, `${quick?.value} vs ${defaultList.name}`);
 
     // 选另一个清单再新建，应当进那个清单
-    const otherList = listsBefore.find((l) => l.id !== defaultList.id);
+    // 下拉里只有 navLists（台账/记事本这类卡片栏目不在其中），所以要从选项里挑，
+    // 不能拿 listsBefore 的第一个：2026-10-17 沙箱里它正好是「信用卡账单」，
+    // 设 select.value 会落空，条目就掉回默认清单，用例误红（产品本身没问题）。
+    const otherList = await page.evaluate((defaultID) => {
+      const select = document.querySelector('.quick-card select[aria-label="选择清单"]');
+      if (!select) return null;
+      const opt = [...select.options].map((o) => ({ id: Number(o.value), name: o.textContent.trim() }))
+        .find((o) => o.id && o.id !== defaultID);
+      return opt || null;
+    }, defaultList.id);
     if (otherList) {
       await page.evaluate((id) => {
         const select = document.querySelector('.quick-card select[aria-label="选择清单"]');

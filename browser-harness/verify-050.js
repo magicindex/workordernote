@@ -109,7 +109,19 @@ async function openEditor(page, listName) {
     const listsRes = await apiGet(page, BASE.replace(/\/$/, '') + '/api/reminder/lists');
     const lists = listsRes.body?.data || [];
     if (!lists.length) { check('实例里至少有一个清单', false, '没有清单，无法验证'); return; }
-    const target = lists.find((l) => l.open_count > 0) || lists[0];
+    // 用「普通清单里真的有未完成任务」的那一个做样本：卡片栏目（信用卡/记事本/仪式感）
+    // 的页面没有 article.reminder-row，拿它当样本会在后面 getComputedStyle(null) 崩掉。
+    // 2026-10-17 沙箱里排第一的正好是信用卡账单，open_count 也大于 0，所以以前会误选。
+    const allItems = (await apiGet(page, BASE.replace(/\/$/, '') + '/api/reminder/items?view=all&status=open')).body?.data || [];
+    const openByList = new Map();
+    for (const it of allItems) {
+      if (it.kind === 'note') continue;
+      openByList.set(it.list_id, (openByList.get(it.list_id) || 0) + 1);
+    }
+    const target = lists.find((l) => l.template === 'general' && openByList.get(l.id) > 0)
+      || lists.find((l) => openByList.get(l.id) > 0)
+      || lists.find((l) => l.template === 'general')
+      || lists[0];
     const original = { id: target.id, name: target.name, color: target.color };
     const originalHex = HEX[original.color] || HEX.blue;
     const nextColor = Object.keys(HEX).find((c) => c !== original.color);

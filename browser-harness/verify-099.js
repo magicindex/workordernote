@@ -100,20 +100,24 @@ const clickMenuItem = async (page, label) => {
     await login(page, BASE);
     let listId = null;
     let reminderId = null;
+    let regularList = null;
     try {
       // ---------- 1. 侧栏图标 ----------
       await page.goto(ROOT + '/admin', { waitUntil: 'domcontentloaded' });
       await waitFor(page, () => !!document.querySelector('button[aria-label="新建清单"]'), { timeout: 20000 });
       await sleep(800);
       const lists = (await api(page, '/api/reminder/lists')).body?.data || [];
-      const first = lists.find((l) => l.template !== 'credit_card');
+      // 卡片栏目（记事本/信用卡/仪式感）在侧栏用的是模板自带图标，没有 data-list-icon，
+      // 只有普通清单（template='general'）才带。2026-10-17 沙箱里排第一的是随手记事本，
+      // 旧写法拿它比对必然 null，用例误红（产品没问题）。
+      regularList = lists.find((l) => l.template === 'general') || lists.find((l) => l.template !== 'credit_card');
       const iconsInNav = await page.evaluate(() => document.querySelectorAll('.nav-row [data-list-icon]').length);
       check('侧栏每个清单行都有图标块', iconsInNav >= 1, String(iconsInNav));
-      check('清单行不再用颜色圆点', (await hasLegacyDot(page, first.name)) === false,
-        String(await hasLegacyDot(page, first.name)));
+      check('清单行不再用颜色圆点', (await hasLegacyDot(page, regularList.name)) === false,
+        String(await hasLegacyDot(page, regularList.name)));
       check('侧栏图标与清单数据一致',
-        (await navIconOf(page, first.name)) === (first.icon || 'list'),
-        `${await navIconOf(page, first.name)} vs ${first.icon}`);
+        (await navIconOf(page, regularList.name)) === (regularList.icon || 'list'),
+        `${await navIconOf(page, regularList.name)} vs ${regularList.icon}`);
 
       // ---------- 2. 新建清单选图标 ----------
       await page.evaluate(() => document.querySelector('button[aria-label="新建清单"]').click());
@@ -205,8 +209,7 @@ const clickMenuItem = async (page, label) => {
         .filter((i) => /自检图标/.test(String(i.title)));
       check('图标测试数据已清理', listsLeft.length === 0 && itemsLeft.length === 0,
         `清单 ${listsLeft.length} / 提醒 ${itemsLeft.length}`);
-      check('清理后原清单的图标没被动过',
-        (await navIconOf(page, (await api(page, '/api/reminder/lists')).body?.data?.[0]?.name || '')) !== null);
+      check('清理后原清单的图标没被动过', (await navIconOf(page, regularList?.name || '')) !== null);
     }
 
     console.log(`  截图：${path.join(SHOTS, 'list-icons.png')}`);
