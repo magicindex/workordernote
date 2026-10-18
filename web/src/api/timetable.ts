@@ -7,6 +7,12 @@ export interface TimetableSummary {
   name: string
   position: number
   entry_count: number
+  // 排课节奏（详情接口才一定带上；列表接口可能没有）
+  lesson_minutes?: number
+  break_minutes?: number
+  early_until?: string
+  morning_until?: string
+  afternoon_until?: string
 }
 
 export interface TimetableEntry {
@@ -41,8 +47,18 @@ export const createTimetable = (name: string) => request.post('/api/timetable/ta
 
 export const getTimetable = (id: number) => request.get(`/api/timetable/tables/${id}`)
 
-export const updateTimetable = (id: number, payload: { name?: string; position?: number }) =>
-  request.patch(`/api/timetable/tables/${id}`, payload)
+export const updateTimetable = (
+  id: number,
+  payload: {
+    name?: string
+    position?: number
+    lesson_minutes?: number
+    break_minutes?: number
+    early_until?: string
+    morning_until?: string
+    afternoon_until?: string
+  },
+) => request.patch(`/api/timetable/tables/${id}`, payload)
 
 export const deleteTimetable = (id: number) => request.delete(`/api/timetable/tables/${id}`)
 

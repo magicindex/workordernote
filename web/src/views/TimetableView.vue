@@ -167,10 +167,13 @@
         <div class="grid grid-cols-2 gap-2">
           <label class="block">
             <span class="text-xs font-bold text-foreground">开始</span>
-            <input v-model="form.start_time" type="time" class="input-field mt-1" data-entry-start />
+            <input v-model="form.start_time" type="time" class="input-field mt-1" data-entry-start @input="syncEndFromStart" />
           </label>
           <label class="block">
-            <span class="text-xs font-bold text-foreground">结束</span>
+            <span class="flex items-center justify-between text-xs font-bold text-foreground">
+              结束
+              <button type="button" class="text-[10px] font-semibold text-brand-600 dark:text-brand-300" @click="syncEndFromStart">按课时</button>
+            </span>
             <input v-model="form.end_time" type="time" class="input-field mt-1" data-entry-end />
           </label>
         </div>
@@ -211,7 +214,39 @@
           <span class="text-xs font-bold text-foreground">名字</span>
           <input v-model="tableName" class="input-field mt-1" maxlength="20" placeholder="例如：哥哥 / 妹妹 / 我" data-table-name />
         </label>
-        <p class="text-[11px] leading-4 text-muted-foreground">一个账号可以建多张表，顶部标签切换；每张表的课程各归各的。</p>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block">
+            <span class="text-xs font-bold text-foreground">一节课（分钟）</span>
+            <input v-model.number="tableForm.lesson" type="number" min="15" max="180" step="5" class="input-field mt-1" data-table-lesson />
+          </label>
+          <label class="block">
+            <span class="text-xs font-bold text-foreground">课间（分钟）</span>
+            <input v-model.number="tableForm.brk" type="number" min="0" max="60" step="5" class="input-field mt-1" data-table-break />
+          </label>
+        </div>
+
+        <label class="block">
+          <span class="text-xs font-bold text-foreground">四段分界</span>
+          <span class="mt-1 grid grid-cols-3 gap-2">
+            <label class="block">
+              <span class="mb-1 block text-[10.5px] text-muted-foreground">早课结束</span>
+              <input v-model="tableForm.early" type="time" class="input-field" data-table-early />
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-[10.5px] text-muted-foreground">上午结束</span>
+              <input v-model="tableForm.morning" type="time" class="input-field" data-table-morning />
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-[10.5px] text-muted-foreground">下午结束</span>
+              <input v-model="tableForm.afternoon" type="time" class="input-field" data-table-afternoon />
+            </label>
+          </span>
+        </label>
+
+        <p class="text-[11px] leading-4 text-muted-foreground">
+          一个账号可以建多张表，顶部标签切换；每张表的课程各归各的。新建课程时填了开始时间，结束时间按「一节课」自动带出，
+          下一节的开始时间按「课间」接上；课间操当成「课外活动」加一节即可。
+        </p>
         <p v-if="tableError" class="text-xs font-semibold text-destructive">{{ tableError }}</p>
         <div class="flex items-center gap-2 pt-1">
           <button type="button" class="btn-secondary !h-9 !px-3 !text-xs text-destructive" data-table-delete @click="removeTable">删除这张表</button>
@@ -292,21 +327,28 @@ const weekDates = computed(() => {
 })
 
 // 一天分早课 / 上午 / 下午 / 晚课四段（用户 2026-10-18 要求）。
-// 边界按**开始时间**：<09:00 早课（早读、第一节那类）、09:00–11:59 上午、
-// 12:00–17:59 下午、≥18:00 晚课；空的那一段不摆标题，免得七列全是空壳。
-// 边界想挪就改这里一处 —— 卡片、标签、测试都跟着它走。
-const PERIODS = [
-  { key: 'early', label: '早课', from: 0, to: 9 },
-  { key: 'morning', label: '上午', from: 9, to: 12 },
-  { key: 'afternoon', label: '下午', from: 12, to: 18 },
-  { key: 'evening', label: '晚课', from: 18, to: 24 },
-] as const
-type PeriodKey = typeof PERIODS[number]['key']
+// 三条分界线跟着**这张表**的设置走（默认 09:00 / 12:00 / 18:00），
+// 所以学校作息不同就改表设置，不用改代码；空段不摆标题，七列不会全是空壳。
+const activeTable = ref<TimetableSummary | null>(null)
+const pacing = computed(() => ({
+  lesson: activeTable.value?.lesson_minutes || 45,
+  brk: activeTable.value?.break_minutes ?? 10,
+  early: activeTable.value?.early_until || '09:00',
+  morning: activeTable.value?.morning_until || '12:00',
+  afternoon: activeTable.value?.afternoon_until || '18:00',
+}))
+type PeriodKey = 'early' | 'morning' | 'afternoon' | 'evening'
+const periodDefs = computed(() => [
+  { key: 'early' as PeriodKey, label: '早课', until: pacing.value.early },
+  { key: 'morning' as PeriodKey, label: '上午', until: pacing.value.morning },
+  { key: 'afternoon' as PeriodKey, label: '下午', until: pacing.value.afternoon },
+  { key: 'evening' as PeriodKey, label: '晚课', until: '24:00' },
+])
 function periodOf(entry: TimetableEntry): PeriodKey {
-  const hour = Number((entry.start_time || '00:00').slice(0, 2))
-  if (hour < 9) return 'early'
-  if (hour < 12) return 'morning'
-  if (hour < 18) return 'afternoon'
+  const start = entry.start_time || '00:00'
+  for (const period of periodDefs.value) {
+    if (start < period.until) return period.key
+  }
   return 'evening'
 }
 
@@ -319,7 +361,7 @@ const days = computed(() => weekdays.map((day, i) => {
     label: day.label,
     date: weekDates.value[i],
     entries: own,
-    periods: PERIODS
+    periods: periodDefs.value
       .map((period) => ({
         ...period,
         entries: own.filter((entry) => periodOf(entry) === period.key),
@@ -364,6 +406,7 @@ async function loadEntries(id: number) {
   const res = await getTimetable(id)
   if (res.data?.code !== 0) throw new Error(res.data?.message || '读取课程表失败')
   entries.value = res.data.data?.entries || []
+  activeTable.value = res.data.data?.table || null
 }
 
 async function selectTable(id: number) {
@@ -421,11 +464,17 @@ const tableOpen = ref(false)
 const tableName = ref('')
 const tableError = ref('')
 const savingTable = ref(false)
+const tableForm = reactive({ lesson: 45, brk: 10, early: '09:00', morning: '12:00', afternoon: '18:00' })
 
 function openTableSettings() {
   const current = tables.value.find((t) => t.id === activeId.value)
   if (!current) return
   tableName.value = current.name
+  tableForm.lesson = pacing.value.lesson
+  tableForm.brk = pacing.value.brk
+  tableForm.early = pacing.value.early
+  tableForm.morning = pacing.value.morning
+  tableForm.afternoon = pacing.value.afternoon
   tableError.value = ''
   tableOpen.value = true
 }
@@ -436,7 +485,14 @@ async function saveTableSettings() {
   savingTable.value = true
   tableError.value = ''
   try {
-    const res = await updateTimetable(activeId.value, { name })
+    const res = await updateTimetable(activeId.value, {
+      name,
+      lesson_minutes: tableForm.lesson,
+      break_minutes: tableForm.brk,
+      early_until: tableForm.early,
+      morning_until: tableForm.morning,
+      afternoon_until: tableForm.afternoon,
+    })
     if (res.data?.code !== 0) throw new Error(res.data?.message || '保存失败')
     tableOpen.value = false
     await loadTables(activeId.value)
@@ -469,19 +525,42 @@ const entryError = ref('')
 const savingEntry = ref(false)
 const form = reactive<EntryInput>(blankEntry())
 
-function blankEntry(): EntryInput {
+// 把 HH:MM 往后推 n 分钟；跨过 23:59 就卡在当天最后一分钟，不滚到第二天。
+function addMinutes(hhmm: string, minutes: number) {
+  const [h, m] = (hhmm || '00:00').split(':').map(Number)
+  const total = Math.min(23 * 60 + 59, (h || 0) * 60 + (m || 0) + minutes)
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+function blankEntry(start = '08:00'): EntryInput {
   return {
     title: '', kind: 'course', weekday: todayWeekday,
-    start_time: '08:00', end_time: '08:45',
+    start_time: start, end_time: addMinutes(start, pacing.value.lesson),
     location: '', teacher: '', note: '', color: palette[0].key,
   }
 }
 
+// 新的一节默认接在当天最后一节后面（结束时间 + 课间），没有课就从 08:00 开始。
+function nextStartFor(weekday: number) {
+  const own = entries.value
+    .filter((entry) => entry.weekday === weekday)
+    .sort((a, b) => a.start_time.localeCompare(b.start_time))
+  const last = own[own.length - 1]
+  return last ? addMinutes(last.end_time, pacing.value.brk) : '08:00'
+}
+
 function openNewEntry(weekday: number) {
   entryEditing.value = null
-  Object.assign(form, blankEntry(), { weekday })
+  Object.assign(form, blankEntry('08:00'), { weekday, start_time: nextStartFor(weekday) })
+  form.end_time = addMinutes(form.start_time, pacing.value.lesson)
   entryError.value = ''
   entryOpen.value = true
+}
+
+// 改了开始时间就按「一节课」重算结束；想手动改结束仍然可以。
+function syncEndFromStart() {
+  if (!form.start_time) return
+  form.end_time = addMinutes(form.start_time, pacing.value.lesson)
 }
 
 function openEditEntry(entry: TimetableEntry) {

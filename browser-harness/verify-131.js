@@ -96,6 +96,17 @@ async function waitForCard(page, selector, timeout = 12000) {
       const names = (list.body?.data?.tables || []).map((t) => t.name);
       check('表列表按账号返回两张新表', names.includes(`${STAMP}-哥哥`) && names.includes(`${STAMP}-妹妹`), names.join(','));
 
+      const detail = await api(page, `/api/timetable/tables/${id1}`, 'GET');
+      const pacing = detail.body?.data?.table || {};
+      check(
+        '新表默认 45 分钟一节课 / 10 分钟课间 / 09:00·12:00·18:00 分界',
+        pacing.lesson_minutes === 45 && pacing.break_minutes === 10 &&
+          pacing.early_until === '09:00' && pacing.morning_until === '12:00' && pacing.afternoon_until === '18:00',
+        JSON.stringify(pacing),
+      );
+      const badPacing = await api(page, `/api/timetable/tables/${id1}`, 'PATCH', { early_until: '13:00' });
+      check('分界顺序反了会被拒（400）', badPacing.status === 400, JSON.stringify(badPacing.body));
+
       // ---------------- 4. 课程 / 课外活动 ----------------
       const course = await api(page, `/api/timetable/tables/${id1}/entries`, 'POST', {
         title: `${STAMP} 数学`, kind: 'course', weekday: 1, start_time: '08:00', end_time: '08:45',
@@ -187,6 +198,16 @@ async function waitForCard(page, selector, timeout = 12000) {
       await sleep(700);
       await page.click('[data-timetable-add-entry="7"]');
       await sleep(600);
+      const defaults = await page.evaluate(() => ({
+        start: document.querySelector('[data-entry-start]')?.value,
+        end: document.querySelector('[data-entry-end]')?.value,
+      }));
+      const minutes = (hhmm) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+      check(
+        '新建时按「一节课 45 分钟」自动带出结束时间',
+        !!defaults.start && !!defaults.end && minutes(defaults.end) - minutes(defaults.start) === 45,
+        JSON.stringify(defaults),
+      );
       await page.type('[data-entry-title]', `${STAMP} 家庭日`);
       await page.click('[data-entry-kind-activity]');
       await page.$eval('[data-entry-start]', (el) => { el.value = '09:00'; el.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -204,7 +225,8 @@ async function waitForCard(page, selector, timeout = 12000) {
       await page.click('[data-entry-save]');
       await sleep(1200);
       const edited = await page.$$eval('[data-day-column="7"] [data-entry-id]', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ')));
-      check('改完时间卡片跟着变', edited.some((t) => t.includes('10:00–12:00')), edited.join(' | '));
+      // 改开始时间会自动按课时（45 分钟）重算结束，所以卡片变成 10:00–10:45。
+      check('改开始时间后按课时重算结束并落到卡片', edited.some((t) => t.includes('10:00–10:45')), edited.join(' | '));
 
       page.once('dialog', async (d) => { await d.accept(); });
       await page.click('[data-day-column="7"] [data-entry-id]');

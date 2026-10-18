@@ -174,3 +174,44 @@ func TestTimetableNameValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestTimetablePacingDefaultsAndValidation(t *testing.T) {
+	db := newTestDB(t)
+	status, created := call(t, handleCreateTable(db), http.MethodPost, `{"name":"哥哥"}`, 9, nil)
+	if status != http.StatusOK {
+		t.Fatalf("建表失败：%d %v", status, created)
+	}
+	id := dataID(t, created)
+	data := created["data"].(map[string]interface{})
+	if data["lesson_minutes"].(float64) != defaultLessonMinutes ||
+		data["break_minutes"].(float64) != defaultBreakMinutes {
+		t.Errorf("默认节奏应当 45/10，实际 %v/%v", data["lesson_minutes"], data["break_minutes"])
+	}
+	if data["early_until"] != defaultEarlyUntil || data["afternoon_until"] != defaultAfternoonUntil {
+		t.Errorf("默认分界不对：%v %v %v", data["early_until"], data["morning_until"], data["afternoon_until"])
+	}
+
+	// 只改一条分界线：其余保持原值，整体仍按顺序校验。
+	status, updated := call(t, handleUpdateTable(db), http.MethodPatch,
+		`{"early_until":"08:30","lesson_minutes":40,"break_minutes":5}`, 9, params{"id": id})
+	if status != http.StatusOK || updated["code"].(float64) != 0 {
+		t.Fatalf("保存节奏失败：%d %v", status, updated)
+	}
+	up := updated["data"].(map[string]interface{})
+	if up["early_until"] != "08:30" || up["lesson_minutes"].(float64) != 40 || up["morning_until"] != defaultMorningUntil {
+		t.Errorf("节奏没按预期保存：%v", up)
+	}
+
+	// 分界顺序反了、课时越界都要拒。
+	for _, body := range []string{
+		`{"early_until":"13:00"}`,  // 早课线跑到上午线后面
+		`{"lesson_minutes":5}`,     // 一节课太短
+		`{"break_minutes":90}`,     // 课间太长
+		`{"morning_until":"8:30"}`, // 格式不对
+	} {
+		status, parsed := call(t, handleUpdateTable(db), http.MethodPatch, body, 9, params{"id": id})
+		if status != http.StatusBadRequest {
+			t.Errorf("非法节奏应当 400（%s），实际 %d %v", body, status, parsed)
+		}
+	}
+}

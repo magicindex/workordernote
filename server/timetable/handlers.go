@@ -1,6 +1,7 @@
 package timetable
 
 import (
+	"errors"
 	"net/http"
 	"regexp"
 	"strings"
@@ -20,6 +21,10 @@ const (
 	maxLocationRunes   = 40
 	maxTeacherRunes    = 30
 	maxNoteRunes       = 300
+
+	minLessonMinutes = 15
+	maxLessonMinutes = 180
+	maxBreakMinutes  = 60
 )
 
 var clockPattern = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
@@ -93,7 +98,11 @@ func handleCreateTable(db *gorm.DB) gin.HandlerFunc {
 		var maxPos struct{ P int }
 		db.Model(&Timetable{}).Select("coalesce(max(position), -1) as p").
 			Where("user_id = ?", userID).Scan(&maxPos)
-		table := Timetable{UserID: userID, Name: name, Position: maxPos.P + 1}
+		table := Timetable{
+			UserID: userID, Name: name, Position: maxPos.P + 1,
+			LessonMinutes: defaultLessonMinutes, BreakMinutes: defaultBreakMinutes,
+			EarlyUntil: defaultEarlyUntil, MorningUntil: defaultMorningUntil, AfternoonUntil: defaultAfternoonUntil,
+		}
 		if err := db.Create(&table).Error; err != nil {
 			response.ErrorInternal(c, "保存课程表失败")
 			return
@@ -131,8 +140,13 @@ func handleUpdateTable(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		var req struct {
-			Name     *string `json:"name"`
-			Position *int    `json:"position"`
+			Name           *string `json:"name"`
+			Position       *int    `json:"position"`
+			LessonMinutes  *int    `json:"lesson_minutes"`
+			BreakMinutes   *int    `json:"break_minutes"`
+			EarlyUntil     *string `json:"early_until"`
+			MorningUntil   *string `json:"morning_until"`
+			AfternoonUntil *string `json:"afternoon_until"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			response.ErrorBadRequest(c, "请求格式不对")
@@ -151,6 +165,39 @@ func handleUpdateTable(db *gorm.DB) gin.HandlerFunc {
 		if req.Position != nil {
 			updates["position"] = *req.Position
 			table.Position = *req.Position
+		}
+		// 节奏字段先算成「改完后的值」再整体校验，避免半套参数落库。
+		if req.LessonMinutes != nil || req.BreakMinutes != nil ||
+			req.EarlyUntil != nil || req.MorningUntil != nil || req.AfternoonUntil != nil {
+			lesson, brk := table.LessonMinutes, table.BreakMinutes
+			early, morning, afternoon := table.EarlyUntil, table.MorningUntil, table.AfternoonUntil
+			if req.LessonMinutes != nil {
+				lesson = *req.LessonMinutes
+			}
+			if req.BreakMinutes != nil {
+				brk = *req.BreakMinutes
+			}
+			if req.EarlyUntil != nil {
+				early = *req.EarlyUntil
+			}
+			if req.MorningUntil != nil {
+				morning = *req.MorningUntil
+			}
+			if req.AfternoonUntil != nil {
+				afternoon = *req.AfternoonUntil
+			}
+			pacing, err := normalizePacing(lesson, brk, early, morning, afternoon)
+			if err != nil {
+				response.ErrorBadRequest(c, err.Error())
+				return
+			}
+			updates["lesson_minutes"] = pacing.lesson
+			updates["break_minutes"] = pacing.brk
+			updates["early_until"] = pacing.early
+			updates["morning_until"] = pacing.morning
+			updates["afternoon_until"] = pacing.afternoon
+			table.LessonMinutes, table.BreakMinutes = pacing.lesson, pacing.brk
+			table.EarlyUntil, table.MorningUntil, table.AfternoonUntil = pacing.early, pacing.morning, pacing.afternoon
 		}
 		if len(updates) == 0 {
 			response.Success(c, table)
@@ -383,6 +430,44 @@ func ownedTable(db *gorm.DB, userID uint, rawID string) (Timetable, bool) {
 		return Timetable{}, false
 	}
 	return table, true
+}
+
+const (
+	defaultLessonMinutes  = 45
+	defaultBreakMinutes   = 10
+	defaultEarlyUntil     = "09:00"
+	defaultMorningUntil   = "12:00"
+	defaultAfternoonUntil = "18:00"
+)
+
+type pacingValues struct {
+	lesson, brk               int
+	early, morning, afternoon string
+}
+
+// normalizePacing 校验并规整一张表的排课节奏：
+// 45 分钟一节课、10 分钟课间是默认值，三条分界线必须先后有序。
+func normalizePacing(lesson, brk int, early, morning, afternoon string) (pacingValues, error) {
+	var out pacingValues
+	if lesson < minLessonMinutes || lesson > maxLessonMinutes {
+		return out, errors.New("一节课的分钟数要在 15–180 之间")
+	}
+	if brk < 0 || brk > maxBreakMinutes {
+		return out, errors.New("课间分钟数要在 0–60 之间")
+	}
+	early, morning, afternoon = strings.TrimSpace(early), strings.TrimSpace(morning), strings.TrimSpace(afternoon)
+	for _, item := range []struct{ name, value string }{
+		{"早课结束时间", early}, {"上午结束时间", morning}, {"下午结束时间", afternoon},
+	} {
+		if !clockPattern.MatchString(item.value) {
+			return out, errors.New(item.name + "要写成 HH:MM")
+		}
+	}
+	if !(early < morning && morning < afternoon) {
+		return out, errors.New("分界时间要按早课 → 上午 → 下午 → 晚课的顺序递增")
+	}
+	out = pacingValues{lesson: lesson, brk: brk, early: early, morning: morning, afternoon: afternoon}
+	return out, nil
 }
 
 func normalizeTableName(raw string) (string, error) {
