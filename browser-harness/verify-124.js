@@ -550,6 +550,14 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       };
     });
     check('偏好设置里有「AI 提示词」一节和系统提示词输入框', prefShape.section && prefShape.hasPrompt, JSON.stringify(prefShape));
+    // 个人系统提示词是 Internal 配置：不能再以「assistant」一组出现在通用列表里，
+    // 否则页面上会有两个「我的系统提示词」输入框（用户 2026-10-18 说重复）。
+    const dupShape = await page.evaluate(() => ({
+      metaItem: !!document.querySelector('[data-config-key="ai_user_prompt"]'),
+      promptBoxes: document.querySelectorAll('[data-ai-pref-prompt]').length,
+    }));
+    check('只留「AI 提示词」一节，通用列表里不再重复出现系统提示词',
+      !dupShape.metaItem && dupShape.promptBoxes === 1, JSON.stringify(dupShape));
     check('没写过时标「用默认」', prefShape.state.includes('用默认'), prefShape.state);
 
     const USER_PROMPT = '回答时先给结论，再用三行以内说明';

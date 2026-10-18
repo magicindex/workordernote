@@ -50,11 +50,18 @@ func handleGetSystemConfigMeta(db *gorm.DB) gin.HandlerFunc {
 
 // handleGetUserConfigMeta returns metadata for user-scope configs. The value
 // is the caller's own override, falling back to the registered default.
+//
+// Internal 的键不出现在这张表里（与系统配置页同一口径）：它们各有专用入口，
+// 通用接口只读，摆进「偏好设置」只会让人以为能改。典型是 ai_user_prompt
+// （走 /api/assistant/prompts）和 dnd_manual（点侧栏喇叭切换）。
 func handleGetUserConfigMeta(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetUint("userID")
 		metas := make([]ConfigMeta, 0)
 		for _, def := range ListConfigs(ScopeUser) {
+			if def.Internal {
+				continue
+			}
 			value := def.Default
 			if v, err := GetConfig(db, def.Key, userID); err == nil {
 				value = v
