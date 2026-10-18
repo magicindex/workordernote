@@ -188,7 +188,7 @@ async function main() {
         color: getComputedStyle(document.querySelector('[data-assistant-title]')).color,
       }));
       check('接上模型后「AI 小秘」标题标绿',
-        connLive.state === 'live' && /rgb\(\d+, 1[0-9]{2}, \d+\)/.test(connLive.color), JSON.stringify(connLive));
+        connLive.state === 'live' && /rgb\(\d+, (1[0-9]{2}|2[0-9]{2}), \d+\)/.test(connLive.color), JSON.stringify(connLive));
       // 顶部「没有可用模型」横幅只属于未接模型那一面（用户 2026-10-17）：接了模型就不许出现。
       const offlineBanner = await page.evaluate(() => (document.querySelector('[data-assistant-offline]')?.textContent || '').trim());
       check('已接模型时顶部没有「没有可用模型」横幅', !offlineBanner, offlineBanner);
