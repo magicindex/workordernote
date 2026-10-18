@@ -177,6 +177,21 @@ async function waitForCard(page, selector, timeout = 12000) {
       const wedCards = await page.$$eval('[data-day-column="3"] [data-entry-id]', (els) => els.map((e) => [e.getAttribute('data-entry-kind'), e.className]));
       check('课外活动卡片标 activity 且是虚线边', wedCards.some(([k, cls]) => k === 'activity' && /timetable-card-activity/.test(cls)), JSON.stringify(wedCards));
 
+      // 按节次铺开整周骨架：默认 08:00 起、45 分钟一节、课间 10 分钟 → 第3节 09:50。
+      const slotsShown = await page.$$eval('[data-timetable-slot]', (els) => els.length);
+      check('打开「空节次」后整周按节次铺出骨架', slotsShown >= 40, `实际 ${slotsShown}`);
+      await page.click('[data-day-column="1"] [data-timetable-slot="3"]');
+      await sleep(700);
+      const slotPrefill = await page.evaluate(() => ({
+        start: document.querySelector('[data-entry-start]')?.value,
+        slot: document.querySelector('[data-entry-slot]')?.value,
+      }));
+      check('点空节次会按第 3 节预填 09:50', slotPrefill.start === '09:50' && slotPrefill.slot === '3', JSON.stringify(slotPrefill));
+      await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find((x) => /取消/.test(x.textContent || '')); b && b.click(); });
+      await sleep(500);
+      await page.click('[data-timetable-show-slots]');
+      await sleep(600);
+
       // 一天四段：08:00 早课、10:00 上午、19:00 晚课；周三 15:30 落下午。
       const monPeriods = await page.$$eval('[data-day-column="1"] [data-timetable-period]', (els) => els.map((e) => e.getAttribute('data-timetable-period')));
       const monLabels = await page.$$eval('[data-day-column="1"] [data-timetable-period-label]', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));

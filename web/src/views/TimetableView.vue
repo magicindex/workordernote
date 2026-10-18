@@ -38,6 +38,10 @@
             <span class="timetable-tab-count">{{ table.entry_count }}</span>
           </button>
         </div>
+        <label class="flex shrink-0 items-center gap-1.5 rounded-xl border border-border/70 px-2 py-1 text-[11px] font-semibold text-muted-foreground" title="把整周按节次铺成空格子，点一格就能加课">
+          <input v-model="showSlots" type="checkbox" class="h-3.5 w-3.5 accent-brand-500" data-timetable-show-slots />
+          空节次
+        </label>
         <button
           type="button"
           class="icon-button !h-8 !w-8 text-muted-foreground"
@@ -85,30 +89,42 @@
               >
                 <p class="timetable-period-label" :data-timetable-period-label="period.key">
                     {{ period.label }}
-                    <span class="timetable-period-count">{{ period.entries.length }}</span>
+                    <span v-if="period.count" class="timetable-period-count">{{ period.count }}</span>
                   </p>
-                  <button
-                    v-for="entry in period.entries"
-                    :key="entry.id"
-                    type="button"
-                    class="timetable-card"
-                    :class="[paletteOf(entry).card, entry.kind === 'activity' ? 'timetable-card-activity' : '']"
-                    :data-entry-id="entry.id"
-                    :data-entry-kind="entry.kind"
-                    @click="openEditEntry(entry)"
-                  >
-                    <span class="timetable-card-bar" :class="paletteOf(entry).barBg"></span>
-                    <span class="flex min-w-0 flex-1 flex-col">
-                      <span class="timetable-card-time">{{ entry.start_time }}<span class="opacity-40">–</span>{{ entry.end_time }}</span>
-                      <span class="flex items-center gap-1">
-                        <span class="timetable-card-title" :title="entry.title">{{ entry.title }}</span>
-                        <span v-if="entry.kind === 'activity'" class="timetable-activity-tag">活动</span>
+                  <template v-for="item in period.items" :key="item.kind === 'entry' ? 'e' + item.entry.id : 's' + item.slot.index">
+                    <button
+                      v-if="item.kind === 'entry'"
+                      type="button"
+                      class="timetable-card"
+                      :class="[paletteOf(item.entry).card, item.entry.kind === 'activity' ? 'timetable-card-activity' : '']"
+                      :data-entry-id="item.entry.id"
+                      :data-entry-kind="item.entry.kind"
+                      @click="openEditEntry(item.entry)"
+                    >
+                      <span class="timetable-card-bar" :class="paletteOf(item.entry).barBg"></span>
+                      <span class="flex min-w-0 flex-1 flex-col">
+                        <span class="timetable-card-time">{{ item.entry.start_time }}<span class="opacity-40">–</span>{{ item.entry.end_time }}</span>
+                        <span class="flex items-center gap-1">
+                          <span class="timetable-card-title" :title="item.entry.title">{{ item.entry.title }}</span>
+                          <span v-if="item.entry.kind === 'activity'" class="timetable-activity-tag">活动</span>
+                        </span>
+                        <span v-if="item.entry.location || item.entry.teacher" class="timetable-card-meta">
+                          {{ [item.entry.location, item.entry.teacher].filter(Boolean).join(' · ') }}
+                        </span>
                       </span>
-                      <span v-if="entry.location || entry.teacher" class="timetable-card-meta">
-                        {{ [entry.location, entry.teacher].filter(Boolean).join(' · ') }}
-                      </span>
-                    </span>
-                  </button>
+                    </button>
+                    <button
+                      v-else
+                      type="button"
+                      class="timetable-slot"
+                      :data-timetable-slot="item.slot.index"
+                      @click="openNewEntry(day.weekday, item.slot.start)"
+                    >
+                      <span class="timetable-slot-index">第{{ item.slot.index }}节</span>
+                      <span class="timetable-slot-time">{{ item.slot.start }}</span>
+                      <svg viewBox="0 0 24 24" class="ml-auto h-3 w-3 opacity-50" fill="none" stroke="currentColor"><path d="M12 6v12M6 12h12" stroke-width="2" stroke-linecap="round"/></svg>
+                    </button>
+                  </template>
               </div>
 
               <button
@@ -163,6 +179,19 @@
             </span>
           </label>
         </div>
+
+        <label class="block">
+          <span class="flex items-center justify-between text-xs font-bold text-foreground">
+            节次
+            <span class="text-[10px] font-medium text-muted-foreground">按「{{ pacing.first }}」起排，第 {{ pacing.count }} 节截止</span>
+          </span>
+          <select class="input-field mt-1" :value="selectedSlotIndex" @change="onPickSlot" data-entry-slot>
+            <option :value="0">自定义时间</option>
+            <option v-for="slot in slots" :key="slot.index" :value="slot.index">
+              第{{ slot.index }}节 · {{ slot.start }}–{{ slot.end }}
+            </option>
+          </select>
+        </label>
 
         <div class="grid grid-cols-2 gap-2">
           <label class="block">
@@ -225,6 +254,17 @@
           </label>
         </div>
 
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block">
+            <span class="text-xs font-bold text-foreground">每天几节</span>
+            <input v-model.number="tableForm.count" type="number" min="1" max="16" class="input-field mt-1" data-table-count />
+          </label>
+          <label class="block">
+            <span class="text-xs font-bold text-foreground">第一节课开始</span>
+            <input v-model="tableForm.first" type="time" class="input-field mt-1" data-table-first />
+          </label>
+        </div>
+
         <label class="block">
           <span class="text-xs font-bold text-foreground">四段分界</span>
           <span class="mt-1 grid grid-cols-3 gap-2">
@@ -277,7 +317,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import Modal from '../components/Modal.vue'
 import {
@@ -330,13 +370,29 @@ const weekDates = computed(() => {
 // 三条分界线跟着**这张表**的设置走（默认 09:00 / 12:00 / 18:00），
 // 所以学校作息不同就改表设置，不用改代码；空段不摆标题，七列不会全是空壳。
 const activeTable = ref<TimetableSummary | null>(null)
+const showSlots = ref(localStorage.getItem('timetable.show_slots') !== '0')
+watch(showSlots, (on) => localStorage.setItem('timetable.show_slots', on ? '1' : '0'))
 const pacing = computed(() => ({
   lesson: activeTable.value?.lesson_minutes || 45,
   brk: activeTable.value?.break_minutes ?? 10,
+  count: activeTable.value?.period_count || 8,
+  first: activeTable.value?.first_period || '08:00',
   early: activeTable.value?.early_until || '09:00',
   morning: activeTable.value?.morning_until || '12:00',
   afternoon: activeTable.value?.afternoon_until || '18:00',
 }))
+// 按「第几节」推出整周的骨架：第一节 + 课时/课间 递推。空格子不写数据库，
+// 点一下才变成真正的课程，所以整周模板不会把空节塞进数据里。
+const slots = computed(() => {
+  const out: { index: number; start: string; end: string }[] = []
+  for (let i = 0; i < pacing.value.count; i += 1) {
+    const start = addMinutes(pacing.value.first, i * (pacing.value.lesson + pacing.value.brk))
+    if (start >= '23:59') break
+    out.push({ index: i + 1, start, end: addMinutes(start, pacing.value.lesson) })
+  }
+  return out
+})
+
 type PeriodKey = 'early' | 'morning' | 'afternoon' | 'evening'
 const periodDefs = computed(() => [
   { key: 'early' as PeriodKey, label: '早课', until: pacing.value.early },
@@ -344,12 +400,15 @@ const periodDefs = computed(() => [
   { key: 'afternoon' as PeriodKey, label: '下午', until: pacing.value.afternoon },
   { key: 'evening' as PeriodKey, label: '晚课', until: '24:00' },
 ])
-function periodOf(entry: TimetableEntry): PeriodKey {
-  const start = entry.start_time || '00:00'
+function periodOfStart(start: string): PeriodKey {
+  const at = start || '00:00'
   for (const period of periodDefs.value) {
-    if (start < period.until) return period.key
+    if (at < period.until) return period.key
   }
   return 'evening'
+}
+function periodOf(entry: TimetableEntry): PeriodKey {
+  return periodOfStart(entry.start_time)
 }
 
 const days = computed(() => weekdays.map((day, i) => {
@@ -362,11 +421,18 @@ const days = computed(() => weekdays.map((day, i) => {
     date: weekDates.value[i],
     entries: own,
     periods: periodDefs.value
-      .map((period) => ({
-        ...period,
-        entries: own.filter((entry) => periodOf(entry) === period.key),
-      }))
-      .filter((period) => period.entries.length > 0),
+      .map((period) => {
+        const taken = new Set(own.map((entry) => entry.start_time))
+        const items = [
+          ...own.filter((entry) => periodOf(entry) === period.key)
+            .map((entry) => ({ kind: 'entry' as const, at: entry.start_time, entry })),
+          ...(showSlots.value ? slots.value : [])
+            .filter((slot) => !taken.has(slot.start) && periodOfStart(slot.start) === period.key)
+            .map((slot) => ({ kind: 'slot' as const, at: slot.start, slot })),
+        ].sort((a, b) => a.at.localeCompare(b.at))
+        return { ...period, items, count: own.filter((entry) => periodOf(entry) === period.key).length }
+      })
+      .filter((period) => period.items.length > 0),
   }
 }))
 
@@ -464,7 +530,7 @@ const tableOpen = ref(false)
 const tableName = ref('')
 const tableError = ref('')
 const savingTable = ref(false)
-const tableForm = reactive({ lesson: 45, brk: 10, early: '09:00', morning: '12:00', afternoon: '18:00' })
+const tableForm = reactive({ lesson: 45, brk: 10, count: 8, first: '08:00', early: '09:00', morning: '12:00', afternoon: '18:00' })
 
 function openTableSettings() {
   const current = tables.value.find((t) => t.id === activeId.value)
@@ -472,6 +538,8 @@ function openTableSettings() {
   tableName.value = current.name
   tableForm.lesson = pacing.value.lesson
   tableForm.brk = pacing.value.brk
+  tableForm.count = pacing.value.count
+  tableForm.first = pacing.value.first
   tableForm.early = pacing.value.early
   tableForm.morning = pacing.value.morning
   tableForm.afternoon = pacing.value.afternoon
@@ -489,6 +557,8 @@ async function saveTableSettings() {
       name,
       lesson_minutes: tableForm.lesson,
       break_minutes: tableForm.brk,
+      period_count: tableForm.count,
+      first_period: tableForm.first,
       early_until: tableForm.early,
       morning_until: tableForm.morning,
       afternoon_until: tableForm.afternoon,
@@ -549,12 +619,23 @@ function nextStartFor(weekday: number) {
   return last ? addMinutes(last.end_time, pacing.value.brk) : '08:00'
 }
 
-function openNewEntry(weekday: number) {
+function openNewEntry(weekday: number, start?: string) {
   entryEditing.value = null
-  Object.assign(form, blankEntry('08:00'), { weekday, start_time: nextStartFor(weekday) })
-  form.end_time = addMinutes(form.start_time, pacing.value.lesson)
+  const at = start || nextStartFor(weekday)
+  Object.assign(form, blankEntry(at), { weekday, start_time: at })
+  form.end_time = addMinutes(at, pacing.value.lesson)
   entryError.value = ''
   entryOpen.value = true
+}
+
+const selectedSlotIndex = computed(() => slots.value.find((slot) => slot.start === form.start_time)?.index || 0)
+
+function onPickSlot(event: Event) {
+  const index = Number((event.target as HTMLSelectElement).value)
+  const slot = slots.value.find((item) => item.index === index)
+  if (!slot) return
+  form.start_time = slot.start
+  form.end_time = slot.end
 }
 
 // 改了开始时间就按「一节课」重算结束；想手动改结束仍然可以。
@@ -658,6 +739,13 @@ async function removeEntry() {
   @apply h-px flex-1 bg-border/70;
 }
 .timetable-period-count { @apply tabular-nums text-[9.5px] font-semibold text-muted-foreground/50; }
+
+.timetable-slot {
+  @apply flex items-center gap-1.5 rounded-lg border border-dashed border-border/70 px-2 py-1 text-left text-muted-foreground/70 transition;
+}
+.timetable-slot:hover { @apply border-brand-300 bg-brand-50/40 text-brand-700 dark:border-brand-400/40 dark:bg-brand-500/[0.06] dark:text-brand-300; }
+.timetable-slot-index { @apply text-[10px] font-bold tabular-nums; }
+.timetable-slot-time { @apply text-[10px] tabular-nums opacity-70; }
 
 .timetable-add {
   @apply mt-auto flex items-center justify-center gap-1 rounded-lg border border-dashed border-border/80 py-1.5 text-[11px] font-semibold text-muted-foreground/70 transition;
