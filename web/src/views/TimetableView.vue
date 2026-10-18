@@ -120,7 +120,7 @@
                       :data-timetable-slot="item.slot.index"
                       @click="openNewEntry(day.weekday, item.slot.start)"
                     >
-                      <span class="timetable-slot-index">第{{ item.slot.index }}节</span>
+                      <span class="timetable-slot-index">第{{ item.slot.sectionIndex }}节</span>
                       <span class="timetable-slot-time">{{ item.slot.start }}</span>
                       <svg viewBox="0 0 24 24" class="ml-auto h-3 w-3 opacity-50" fill="none" stroke="currentColor"><path d="M12 6v12M6 12h12" stroke-width="2" stroke-linecap="round"/></svg>
                     </button>
@@ -188,7 +188,7 @@
           <select class="input-field mt-1" :value="selectedSlotIndex" @change="onPickSlot" data-entry-slot>
             <option :value="0">自定义时间</option>
             <option v-for="slot in slots" :key="slot.index" :value="slot.index">
-              {{ sectionLabel(slot.section) }} 第{{ slot.index }}节 · {{ slot.start }}–{{ slot.end }}
+              {{ sectionLabel(slot.section) }} 第{{ slot.sectionIndex }}节 · {{ slot.start }}–{{ slot.end }}
             </option>
           </select>
         </label>
@@ -254,23 +254,8 @@
           </label>
         </div>
 
-        <div class="grid grid-cols-3 gap-2">
-          <label class="block">
-            <span class="text-xs font-bold text-foreground">早休（早课→上午）</span>
-            <input v-model.number="tableForm.earlyBrk" type="number" min="0" max="60" step="5" class="input-field mt-1" data-table-early-break />
-          </label>
-          <label class="block">
-            <span class="text-xs font-bold text-foreground">午休（上午→下午）</span>
-            <input v-model.number="tableForm.noonBrk" type="number" min="0" max="60" step="5" class="input-field mt-1" data-table-noon-break />
-          </label>
-          <label class="block">
-            <span class="text-xs font-bold text-foreground">晚修（下午→晚课）</span>
-            <input v-model.number="tableForm.eveningBrk" type="number" min="0" max="60" step="5" class="input-field mt-1" data-table-evening-break />
-          </label>
-        </div>
-
         <div class="flex items-center justify-between gap-2">
-          <span class="text-[11px] text-muted-foreground">重排从表内第一节的时间起算，段内按课时+课间，跨段加早休/午休/晚修。</span>
+          <span class="text-[11px] text-muted-foreground">重排按每段自己的第 1 节起算，段内课时 + 课间往后排。</span>
           <button type="button" class="btn-secondary !h-8 shrink-0 !px-3 !text-[11px]" data-table-regenerate @click="regenerateAll">
             按课时重排
           </button>
@@ -305,7 +290,7 @@
             <div class="space-y-1">
               <template v-for="(period, index) in tableForm.periods" :key="index">
                 <div v-if="period.section === section.key" class="grid grid-cols-[42px_1fr_1fr_22px] items-center gap-1.5">
-                  <span class="text-[10.5px] font-semibold tabular-nums text-muted-foreground">第{{ index + 1 }}节</span>
+                  <span class="text-[10.5px] font-semibold tabular-nums text-muted-foreground">第{{ sectionIndexAt(index) }}节</span>
                   <input v-model="period.start" type="time" class="input-field !h-8 !px-2 !text-[11px]" :data-table-period-start="index" />
                   <input v-model="period.end" type="time" class="input-field !h-8 !px-2 !text-[11px]" :data-table-period-end="index" />
                   <button
@@ -323,7 +308,7 @@
 
         <p class="text-[11px] leading-4 text-muted-foreground">
           一个账号可以建多张表，顶部标签切换；每张表的课程各归各的。每节次的时间段按学校作息自己排
-          （早课/上午/下午/晚课分开），重排时跨段会加上早休、午休、晚修；新建课程时选节次就直接带出起止时间。
+          （早课/上午/下午/晚课分开，每段都从自己的第 1 节算起）；新建课程时选节次就直接带出起止时间。
         </p>
         <p v-if="tableError" class="text-xs font-semibold text-destructive">{{ tableError }}</p>
         <div class="flex items-center gap-2 pt-1">
@@ -423,19 +408,18 @@ const sectionLabel = (key: string) => SECTIONS.find((item) => item.key === key)?
 const pacing = computed(() => ({
   lesson: activeTable.value?.lesson_minutes || 45,
   brk: activeTable.value?.break_minutes ?? 10,
-  first: activeTable.value?.first_period || '08:00',
 }))
 
 // 骨架直接来自表设置里的节次表：第 N 节 + 自己的起止。空格子不写数据库，
 // 点一下才变成真正的课程，所以整周模板不会把空节塞进数据里。
 const slots = computed(() => {
   const list = activeTable.value?.periods || []
-  return list.map((period, i) => ({
-    index: i + 1,
-    section: (period.section || 'morning') as PeriodKey,
-    start: period.start,
-    end: period.end,
-  }))
+  const counters: Record<string, number> = {}
+  return list.map((period, i) => {
+    const section = (period.section || 'morning') as PeriodKey
+    counters[section] = (counters[section] || 0) + 1
+    return { index: i + 1, section, sectionIndex: counters[section], start: period.start, end: period.end }
+  })
 })
 
 const sectionsWithSlots = computed(() => SECTIONS.map((section) => ({
@@ -592,7 +576,6 @@ const savingTable = ref(false)
 type DraftPeriod = { section: PeriodKey; start: string; end: string }
 const tableForm = reactive({
   lesson: 45, brk: 10,
-  earlyBrk: 20, noonBrk: 60, eveningBrk: 60,
   periods: [] as DraftPeriod[],
 })
 
@@ -605,9 +588,6 @@ function openTableSettings() {
   tableName.value = current.name
   tableForm.lesson = pacing.value.lesson
   tableForm.brk = pacing.value.brk
-  tableForm.earlyBrk = current.early_break_minutes ?? 20
-  tableForm.noonBrk = current.noon_break_minutes ?? 60
-  tableForm.eveningBrk = current.evening_break_minutes ?? 60
   tableForm.periods = (current.periods || []).map((period) => ({
     section: (period.section || 'morning') as PeriodKey,
     start: period.start,
@@ -659,23 +639,25 @@ function removePeriod(index: number) {
 function regenerateAll() {
   const lesson = Number(tableForm.lesson) || 45
   const brk = Number(tableForm.brk) || 0
-  const gapAfter: Record<string, number> = {
-    early: Number(tableForm.earlyBrk) || 0,
-    morning: Number(tableForm.noonBrk) || 0,
-    afternoon: Number(tableForm.eveningBrk) || 0,
-  }
-  let cursor = tableForm.periods[0]?.start || '08:00'
-  let previous = ''
-  tableForm.periods = tableForm.periods.map((period, i) => {
-    if (i > 0 && period.section !== previous) {
-      cursor = addMinutes(cursor, gapAfter[previous] ?? 0)
+  let section = ''
+  let cursor = ''
+  tableForm.periods = tableForm.periods.map((period) => {
+    // 换段就回到这一段的第 1 节：每段时间各排各的，互不影响。
+    if (period.section !== section) {
+      section = period.section
+      cursor = period.start || '08:00'
     }
     const start = cursor
     const end = addMinutes(start, lesson)
     cursor = addMinutes(end, brk)
-    previous = period.section
     return { ...period, start, end }
   })
+}
+
+// 编辑区显示「第几节」时按段内序号算（早课第 1 节、上午也有自己的第 1 节）。
+function sectionIndexAt(index: number) {
+  const section = tableForm.periods[index]?.section
+  return tableForm.periods.slice(0, index + 1).filter((period) => period.section === section).length
 }
 
 async function saveTableSettings() {
@@ -698,9 +680,6 @@ async function saveTableSettings() {
       name,
       lesson_minutes: tableForm.lesson,
       break_minutes: tableForm.brk,
-      early_break_minutes: tableForm.earlyBrk,
-      noon_break_minutes: tableForm.noonBrk,
-      evening_break_minutes: tableForm.eveningBrk,
       periods: tableForm.periods,
     })
     if (res.data?.code !== 0) throw new Error(res.data?.message || '保存失败')

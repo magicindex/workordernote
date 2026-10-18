@@ -27,14 +27,7 @@ type Timetable struct {
 	// 每张表自己的设置：填了开始时间就自动带出结束时间。
 	LessonMinutes int    `gorm:"not null;default:45" json:"lesson_minutes"`
 	BreakMinutes  int    `gorm:"not null;default:10" json:"break_minutes"`
-	PeriodCount   int    `gorm:"not null;default:8" json:"period_count"`
-	FirstPeriod   string `gorm:"size:5;not null;default:'08:00'" json:"first_period"`
-
-	// 三段长休（用户 2026-10-19：「按课时重排，中间早休、午休、晚修时间无法计算」）：
-	// 早课→上午、上午→下午、下午→晚课之间的整段空档，重排时按它们接上。
-	EarlyBreakMinutes   int `gorm:"not null;default:20" json:"early_break_minutes"`
-	NoonBreakMinutes    int `gorm:"not null;default:60" json:"noon_break_minutes"`
-	EveningBreakMinutes int `gorm:"not null;default:60" json:"evening_break_minutes"`
+	PeriodCount int `gorm:"not null;default:8" json:"period_count"`
 
 	// 每节次的具体时间段（用户 2026-10-19：「允许设置每节次时间段」）：
 	// 段（早课/上午/下午/晚课）+ 起止，顺序即节次顺序。存 JSON，跟着表走。

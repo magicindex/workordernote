@@ -104,11 +104,9 @@ func handleCreateTable(db *gorm.DB) gin.HandlerFunc {
 		table := Timetable{
 			UserID: userID, Name: name, Position: maxPos.P + 1,
 			LessonMinutes: defaultLessonMinutes, BreakMinutes: defaultBreakMinutes,
-			PeriodCount: defaultPeriodCount, FirstPeriod: defaultFirstPeriod,
-			EarlyBreakMinutes: defaultEarlyBreak, NoonBreakMinutes: defaultNoonBreak, EveningBreakMinutes: defaultEveningBreak,
+			PeriodCount: defaultPeriodCount,
 		}
-		table.Periods = defaultPeriods(defaultFirstPeriod, defaultLessonMinutes, defaultBreakMinutes,
-			defaultEarlyBreak, defaultNoonBreak, defaultEveningBreak, defaultPeriodCount)
+		table.Periods = defaultPeriods()
 		table.PeriodsJSON = marshalPeriods(table.Periods)
 		if err := db.Create(&table).Error; err != nil {
 			response.ErrorInternal(c, "保存课程表失败")
@@ -151,12 +149,8 @@ func handleUpdateTable(db *gorm.DB) gin.HandlerFunc {
 			Position      *int            `json:"position"`
 			LessonMinutes *int            `json:"lesson_minutes"`
 			BreakMinutes  *int            `json:"break_minutes"`
-			PeriodCount   *int            `json:"period_count"`
-			FirstPeriod   *string         `json:"first_period"`
-			EarlyBreak    *int            `json:"early_break_minutes"`
-			NoonBreak     *int            `json:"noon_break_minutes"`
-			EveningBreak  *int            `json:"evening_break_minutes"`
-			Periods       *[]CoursePeriod `json:"periods"`
+			PeriodCount *int            `json:"period_count"`
+			Periods     *[]CoursePeriod `json:"periods"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			response.ErrorBadRequest(c, "请求格式不对")
@@ -189,47 +183,24 @@ func handleUpdateTable(db *gorm.DB) gin.HandlerFunc {
 			table.Periods = periods
 			table.PeriodsJSON = marshalPeriods(periods)
 			table.PeriodCount = len(periods)
-		} else if req.LessonMinutes != nil || req.BreakMinutes != nil || req.FirstPeriod != nil ||
-			req.EarlyBreak != nil || req.NoonBreak != nil || req.EveningBreak != nil {
-			lesson, brk, first := table.LessonMinutes, table.BreakMinutes, table.FirstPeriod
+		} else if req.LessonMinutes != nil || req.BreakMinutes != nil || req.PeriodCount != nil {
+			lesson, brk := table.LessonMinutes, table.BreakMinutes
 			if req.LessonMinutes != nil {
 				lesson = *req.LessonMinutes
 			}
 			if req.BreakMinutes != nil {
 				brk = *req.BreakMinutes
 			}
-			if req.FirstPeriod != nil {
-				first = strings.TrimSpace(*req.FirstPeriod)
-			}
-			lesson, brk, first, err := normalizePacing(lesson, brk, first)
+			lesson, brk, err := normalizePacing(lesson, brk)
 			if err != nil {
 				response.ErrorBadRequest(c, err.Error())
 				return
 			}
-			earlyBreak, noonBreak, eveningBreak := table.EarlyBreakMinutes, table.NoonBreakMinutes, table.EveningBreakMinutes
-			if req.EarlyBreak != nil {
-				earlyBreak = *req.EarlyBreak
-			}
-			if req.NoonBreak != nil {
-				noonBreak = *req.NoonBreak
-			}
-			if req.EveningBreak != nil {
-				eveningBreak = *req.EveningBreak
-			}
-			if err := validateBreaks(earlyBreak, noonBreak, eveningBreak); err != nil {
-				response.ErrorBadRequest(c, err.Error())
-				return
-			}
-			periods := regeneratePeriods(first, lesson, brk, earlyBreak, noonBreak, eveningBreak, table.Periods)
+			periods := regeneratePeriods(lesson, brk, table.Periods)
 			updates["lesson_minutes"], updates["break_minutes"] = lesson, brk
-			updates["first_period"] = first
-			updates["early_break_minutes"] = earlyBreak
-			updates["noon_break_minutes"] = noonBreak
-			updates["evening_break_minutes"] = eveningBreak
 			updates["periods"] = marshalPeriods(periods)
 			updates["period_count"] = len(periods)
-			table.LessonMinutes, table.BreakMinutes, table.FirstPeriod = lesson, brk, first
-			table.EarlyBreakMinutes, table.NoonBreakMinutes, table.EveningBreakMinutes = earlyBreak, noonBreak, eveningBreak
+			table.LessonMinutes, table.BreakMinutes = lesson, brk
 			table.Periods, table.PeriodsJSON, table.PeriodCount = periods, marshalPeriods(periods), len(periods)
 		}
 		if len(updates) == 0 {
@@ -465,8 +436,7 @@ func ownedTable(db *gorm.DB, userID uint, rawID string) (Timetable, bool) {
 	// periods 是 JSON 文本列：老表没写过就按课时/课间/起点补一份骨架。
 	table.Periods = parsePeriods(table.PeriodsJSON)
 	if len(table.Periods) == 0 {
-		table.Periods = defaultPeriods(table.FirstPeriod, table.LessonMinutes, table.BreakMinutes,
-			table.EarlyBreakMinutes, table.NoonBreakMinutes, table.EveningBreakMinutes, table.PeriodCount)
+		table.Periods = defaultPeriods()
 	}
 	return table, true
 }
@@ -475,13 +445,29 @@ const (
 	defaultLessonMinutes = 45
 	defaultBreakMinutes  = 10
 	defaultPeriodCount   = 8
-	defaultFirstPeriod   = "08:00"
-	defaultEarlyBreak    = 20
-	defaultNoonBreak     = 60
-	defaultEveningBreak  = 60
 )
 
 var periodSections = map[string]bool{"early": true, "morning": true, "afternoon": true, "evening": true}
+
+// 节次表以 JSON 存在 `timetables.periods` 里；坏数据按空处理，前端会退回默认骨架。
+func marshalPeriods(list []CoursePeriod) string {
+	raw, err := json.Marshal(list)
+	if err != nil {
+		return "[]"
+	}
+	return string(raw)
+}
+
+func parsePeriods(raw string) []CoursePeriod {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var out []CoursePeriod
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil
+	}
+	return out
+}
 
 // addMinutes 把 "HH:MM" 往后推 delta 分钟（跨天就夹到 23:59，课程表不跨夜）。
 func addMinutes(base string, delta int) string {
@@ -497,92 +483,43 @@ func addMinutes(base string, delta int) string {
 	return fmt.Sprintf("%02d:%02d", total/60, total%60)
 }
 
-// sectionOf 只在「没有现成节次表」时用来给默认骨架分段落。
-func sectionOf(at string) string {
-	switch {
-	case at < "09:00":
-		return "early"
-	case at < "12:00":
-		return "morning"
-	case at < "18:00":
-		return "afternoon"
-	default:
-		return "evening"
-	}
-}
-
-// gapAfter 返回某一段结束后的长休：早课→早休、上午→午休、下午→晚修。
-func gapAfter(section string, earlyBreak, noonBreak, eveningBreak int) int {
-	switch section {
-	case "early":
-		return earlyBreak
-	case "morning":
-		return noonBreak
-	case "afternoon":
-		return eveningBreak
-	}
-	return 0
-}
-
-// defaultPeriods 建表时铺一份骨架：默认早 2 / 上午 3 / 下午 2 / 晚 1，
-// 段内 45+10，跨段加早休/午休/晚修；节数更多时补在晚课。
-func defaultPeriods(first string, lesson, brk, earlyBreak, noonBreak, eveningBreak, count int) []CoursePeriod {
-	if count < 1 {
-		count = 1
-	}
-	if count > maxPeriodCount {
-		count = maxPeriodCount
-	}
+// defaultPeriods 建表时铺一份骨架：四段各自从自己的第 1 节开始，段内 45+10。
+func defaultPeriods() []CoursePeriod {
 	plan := []struct {
 		section string
-		n       int
-	}{{"early", 2}, {"morning", 3}, {"afternoon", 2}, {"evening", 1}}
-	out := make([]CoursePeriod, 0, count)
-	cursor := first
-	prevSection := ""
-	used := map[string]int{}
-	planAt := 0
-	for i := 0; i < count; i += 1 {
-		for planAt < len(plan) && used[plan[planAt].section] >= plan[planAt].n {
-			planAt += 1
+		starts  []string
+	}{
+		{"early", []string{"07:30", "08:25"}},
+		{"morning", []string{"09:20", "10:15", "11:10"}},
+		{"afternoon", []string{"14:00", "14:55"}},
+		{"evening", []string{"19:00"}},
+	}
+	out := make([]CoursePeriod, 0, defaultPeriodCount)
+	for _, item := range plan {
+		for _, start := range item.starts {
+			out = append(out, CoursePeriod{Section: item.section, Start: start, End: addMinutes(start, defaultLessonMinutes)})
 		}
-		section := plan[len(plan)-1].section
-		if planAt < len(plan) {
-			section = plan[planAt].section
-		}
-		if i > 0 && section != prevSection {
-			cursor = addMinutes(cursor, gapAfter(prevSection, earlyBreak, noonBreak, eveningBreak))
-		}
-		end := addMinutes(cursor, lesson)
-		out = append(out, CoursePeriod{Section: section, Start: cursor, End: end})
-		cursor = addMinutes(end, brk)
-		prevSection = section
-		used[section] += 1
 	}
 	return out
 }
 
-// regeneratePeriods 按「段内课时+课间、跨段长休」重排：
-// 第一段从 first 起步（不是早课就用它自己原来的起点），之后每段接上一段 + 长休。
-func regeneratePeriods(first string, lesson, brk, earlyBreak, noonBreak, eveningBreak int, current []CoursePeriod) []CoursePeriod {
+// regeneratePeriods 只按课时/课间重排：每段从自己的第 1 节开始，互不影响
+// （用户 2026-10-19：「每个区域都从第1节课开始排，时间按第一节课开始时间计算」）。
+func regeneratePeriods(lesson, brk int, current []CoursePeriod) []CoursePeriod {
 	if len(current) == 0 {
-		return defaultPeriods(first, lesson, brk, earlyBreak, noonBreak, eveningBreak, defaultPeriodCount)
+		return defaultPeriods()
 	}
 	out := make([]CoursePeriod, 0, len(current))
-	cursor := first
-	prevSection := ""
-	for i, period := range current {
-		if i == 0 {
-			if period.Section != "early" {
-				cursor = period.Start
-			}
-		} else if period.Section != prevSection {
-			cursor = addMinutes(cursor, gapAfter(prevSection, earlyBreak, noonBreak, eveningBreak))
+	cursor := ""
+	prev := ""
+	for _, period := range current {
+		if period.Section != prev {
+			cursor = period.Start
+			prev = period.Section
 		}
 		end := addMinutes(cursor, lesson)
 		out = append(out, CoursePeriod{Section: period.Section, Start: cursor, End: end})
 		cursor = addMinutes(end, brk)
-		prevSection = period.Section
 	}
 	return out
 }
@@ -618,49 +555,15 @@ func normalizePeriods(in []CoursePeriod) ([]CoursePeriod, error) {
 	return out, nil
 }
 
-// marshalPeriods / parsePeriods 负责节次表和 JSON 文本列互转。
-func marshalPeriods(periods []CoursePeriod) string {
-	raw, err := json.Marshal(periods)
-	if err != nil {
-		return "[]"
-	}
-	return string(raw)
-}
-
-func parsePeriods(raw string) []CoursePeriod {
-	if strings.TrimSpace(raw) == "" {
-		return nil
-	}
-	var periods []CoursePeriod
-	if err := json.Unmarshal([]byte(raw), &periods); err != nil {
-		return nil
-	}
-	return periods
-}
-
-// validateBreaks 三段长休都按分钟存，0 表示不休息。
-func validateBreaks(earlyBreak, noonBreak, eveningBreak int) error {
-	for name, value := range map[string]int{"早休": earlyBreak, "午休": noonBreak, "晚修": eveningBreak} {
-		if value < 0 || value > maxBreakMinutes {
-			return errors.New(name + "分钟数要在 0–60 之间")
-		}
-	}
-	return nil
-}
-
-// normalizePacing 校验课时、课间与第一节起点，返回规整后的值。
-func normalizePacing(lesson, brk int, first string) (int, int, string, error) {
+// normalizePacing 校验课时与课间，返回规整后的值。
+func normalizePacing(lesson, brk int) (int, int, error) {
 	if lesson < minLessonMinutes || lesson > maxLessonMinutes {
-		return 0, 0, "", errors.New("一节课的分钟数要在 15–180 之间")
+		return 0, 0, errors.New("一节课的分钟数要在 15–180 之间")
 	}
 	if brk < 0 || brk > maxBreakMinutes {
-		return 0, 0, "", errors.New("课间分钟数要在 0–60 之间")
+		return 0, 0, errors.New("课间分钟数要在 0–60 之间")
 	}
-	first = strings.TrimSpace(first)
-	if !clockPattern.MatchString(first) {
-		return 0, 0, "", errors.New("第一节课开始时间要写成 HH:MM")
-	}
-	return lesson, brk, first, nil
+	return lesson, brk, nil
 }
 
 func normalizeTableName(raw string) (string, error) {

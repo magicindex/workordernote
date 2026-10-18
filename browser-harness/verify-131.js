@@ -105,18 +105,16 @@ async function waitForCard(page, selector, timeout = 12000) {
         JSON.stringify({ lesson: pacing.lesson_minutes, brk: pacing.break_minutes, n: slots.length }),
       );
       check(
-        '第一节 08:00–08:45 归早课，第二节 08:55 起',
-        slots[0]?.start === '08:00' && slots[0]?.end === '08:45' && slots[0]?.section === 'early' && slots[1]?.start === '08:55',
-        JSON.stringify(slots.slice(0, 2)),
+        '骨架四段依次 早课 07:30/08:25、上午 09:20/10:15/11:10、下午 14:00/14:55、晚课 19:00',
+        slots[0]?.start === '07:30' && slots[1]?.start === '08:25' &&
+          slots[2]?.start === '09:20' && slots[4]?.start === '11:10' &&
+          slots[5]?.start === '14:00' && slots[7]?.start === '19:00' &&
+          slots[2]?.section === 'morning' && slots[7]?.section === 'evening',
+        JSON.stringify(slots.map((p) => `${p.section}:${p.start}`)),
       );
-      // 早休/午休/晚修：默认 20/60/60，改早休后上午第一节要跟着顺延。
-      check('新表默认早休 20 / 午休 60 / 晚修 60', pacing.early_break_minutes === 20 && pacing.noon_break_minutes === 60 && pacing.evening_break_minutes === 60, JSON.stringify([pacing.early_break_minutes, pacing.noon_break_minutes, pacing.evening_break_minutes]));
-      const stretched = await api(page, `/api/timetable/tables/${id1}`, 'PATCH', { early_break_minutes: 40 });
-      const stretchedSlots = stretched.body?.data?.periods || [];
-      // 早课 08:00–08:45、08:55–09:40，课间 10 + 早休 40 → 上午第一节 10:30。
-      check('改早休后上午第一节顺延到 10:30', stretchedSlots[2]?.start === '10:30', JSON.stringify(stretchedSlots[2]));
 
-      const customPeriods = slots.map((p, i) => (i === 0 ? { ...p, start: '07:40', end: '08:25' } : p));
+      // 只挪早课第一节的开始：结束仍留 08:15，免得压到下面一节。
+      const customPeriods = slots.map((p, i) => (i === 0 ? { ...p, start: '07:40' } : p));
       const custom = await api(page, `/api/timetable/tables/${id1}`, 'PATCH', { periods: customPeriods });
       check('每节次时间段可以自己设（第一节改 07:40）', custom.body?.data?.periods?.[0]?.start === '07:40', JSON.stringify(custom.body?.data?.periods?.[0]));
       const overlap = await api(page, `/api/timetable/tables/${id1}`, 'PATCH', {
@@ -194,7 +192,7 @@ async function waitForCard(page, selector, timeout = 12000) {
       const wedCards = await page.$$eval('[data-day-column="3"] [data-entry-id]', (els) => els.map((e) => [e.getAttribute('data-entry-kind'), e.className]));
       check('课外活动卡片标 activity 且是虚线边', wedCards.some(([k, cls]) => k === 'activity' && /timetable-card-activity/.test(cls)), JSON.stringify(wedCards));
 
-      // 按节次铺开整周骨架：默认 08:00 起、45+10，跨段加早休 → 第 3 节 10:10。
+      // 按节次铺开整周骨架：每段从自己的第 1 节起算（40 项检查里的节次时间以标签为准）。
       // 空节次开关会记住上次选择，先确保这次是开着的。
       await page.evaluate(() => {
         const box = document.querySelector('[data-timetable-show-slots]');
@@ -282,24 +280,24 @@ async function waitForCard(page, selector, timeout = 12000) {
       const addButtons = await page.$$eval('[data-table-add]', (els) => els.map((e) => e.getAttribute('data-table-add')));
       check('设置里四段各有「加一节」', addButtons.length === 4 && addButtons.includes('early') && addButtons.includes('evening'), addButtons.join(','));
       await page.$eval('[data-table-period-start="1"]', (el) => {
-        el.value = '08:50';
+        el.value = '08:30';
         el.dispatchEvent(new Event('input', { bubbles: true }));
       });
       await page.$eval('[data-table-period-end="1"]', (el) => {
-        el.value = '09:35';
+        el.value = '09:00';
         el.dispatchEvent(new Event('input', { bubbles: true }));
       });
       await page.click('[data-table-save]');
       await sleep(1200);
       const afterPeriods = (await api(page, `/api/timetable/tables/${id1}`, 'GET')).body?.data?.table?.periods || [];
-      check('改完第 2 节时间段会存进这张表', afterPeriods[1]?.start === '08:50' && afterPeriods[1]?.end === '09:35', JSON.stringify(afterPeriods[1]));
+      check('改完第 2 节时间段会存进这张表', afterPeriods[1]?.start === '08:30' && afterPeriods[1]?.end === '09:00', JSON.stringify(afterPeriods[1]));
       await page.evaluate(() => {
         const box = document.querySelector('[data-timetable-show-slots]');
         if (box && !box.checked) box.click();
       });
       await sleep(600);
       const slotTwo = await page.$eval('[data-timetable-slot="2"]', (el) => el.textContent.replace(/\s+/g, ' ').trim()).catch(() => '');
-      check('改完第 2 节时间段，骨架立刻变成 08:50', slotTwo.includes('08:50'), slotTwo);
+      check('改完第 2 节时间段，骨架立刻变成 08:30', slotTwo.includes('08:30'), slotTwo);
 
       await page.click('[data-timetable-settings]');
       await sleep(500);

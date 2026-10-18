@@ -192,7 +192,7 @@ func TestTimetablePacingDefaultsAndValidation(t *testing.T) {
 		t.Fatalf("建表应当铺 %d 节骨架，实际 %d", defaultPeriodCount, len(periods))
 	}
 	first := periods[0].(map[string]interface{})
-	if first["start"] != "08:00" || first["end"] != "08:45" || first["section"] != "early" {
+	if first["start"] != "07:30" || first["end"] != "08:15" || first["section"] != "early" {
 		t.Errorf("第一节不对：%v", first)
 	}
 
@@ -226,9 +226,9 @@ func TestTimetablePacingDefaultsAndValidation(t *testing.T) {
 		}
 	}
 
-	// 只改课时：按新节奏重排，段结构保持。
+	// 只改课时：每段从自己的第 1 节起算，段结构保持（第一节 08:00 不动）。
 	status, updated = call(t, handleUpdateTable(db), http.MethodPatch,
-		`{"lesson_minutes":40,"break_minutes":5,"first_period":"07:30"}`, 9, params{"id": id})
+		`{"lesson_minutes":40,"break_minutes":5}`, 9, params{"id": id})
 	if status != http.StatusOK || updated["code"].(float64) != 0 {
 		t.Fatalf("保存节奏失败：%d %v", status, updated)
 	}
@@ -237,8 +237,11 @@ func TestTimetablePacingDefaultsAndValidation(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("重排后节数应保持 3，实际 %d", len(got))
 	}
-	if got[0].(map[string]interface{})["start"] != "07:30" {
-		t.Errorf("重排后第一节应从 07:30 开始：%v", got[0])
+	if got[0].(map[string]interface{})["start"] != "08:00" || got[0].(map[string]interface{})["end"] != "08:40" {
+		t.Errorf("重排后第一节应保持 08:00 起、40 分钟：%v", got[0])
+	}
+	if got[1].(map[string]interface{})["start"] != "08:45" {
+		t.Errorf("第二节应接 5 分钟课间到 08:45：%v", got[1])
 	}
 	if up["lesson_minutes"].(float64) != 40 || up["break_minutes"].(float64) != 5 {
 		t.Errorf("节奏没保存：%v/%v", up["lesson_minutes"], up["break_minutes"])

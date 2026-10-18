@@ -11,10 +11,6 @@ export interface TimetableSummary {
   lesson_minutes?: number
   break_minutes?: number
   period_count?: number
-  first_period?: string
-  early_break_minutes?: number
-  noon_break_minutes?: number
-  evening_break_minutes?: number
   periods?: CoursePeriod[]
 }
 
@@ -65,10 +61,6 @@ export const updateTimetable = (
     lesson_minutes?: number
     break_minutes?: number
     period_count?: number
-    first_period?: string
-    early_break_minutes?: number
-    noon_break_minutes?: number
-    evening_break_minutes?: number
     periods?: CoursePeriod[]
   },
 ) => request.patch(`/api/timetable/tables/${id}`, payload)
