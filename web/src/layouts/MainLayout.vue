@@ -88,6 +88,23 @@
             <span v-if="summary[item.key]" class="nav-count">{{ summary[item.key] }}</span>
           </RouterLink>
 
+          <!-- 课程表（用户 2026-10-18）：给家里人各排一张，课程与课外活动分开标色。
+               入口跟信用卡/记事本一样由个人偏好 timetable_enabled 控制，默认关。 -->
+          <RouterLink
+            v-if="authStore.timetableEnabled"
+            to="/admin/timetable"
+            class="nav-row"
+            :class="{ 'nav-row-active': isActive('/admin/timetable') }"
+            :title="railActive ? '课程表' : '课程表：按周几排课，课程和课外活动分开'"
+            data-nav-timetable
+            @click="mobileOpen = false"
+          >
+            <span class="nav-symbol h-5 w-5 bg-violet-500/12 text-violet-500">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="5" width="16" height="15" rx="2.5" stroke-width="1.7"/><path d="M4 10h16M9 3.5v3M15 3.5v3M8.5 14h2M13.5 14h2M8.5 17h2" stroke-width="1.7" stroke-linecap="round"/></svg>
+            </span>
+            <span class="flex-1">课程表</span>
+          </RouterLink>
+
           <div class="mt-7 flex items-center justify-between px-3">
             <p class="nav-caption !px-0 !pb-0">我的清单</p>
             <span class="rail-hide flex items-center gap-0.5">

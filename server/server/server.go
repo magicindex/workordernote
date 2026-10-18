@@ -26,6 +26,7 @@ import (
 	"smallgo/server/scheduler"
 	"smallgo/server/security"
 	"smallgo/server/sysconfig"
+	"smallgo/server/timetable"
 	"smallgo/server/upload"
 	"smallgo/server/user"
 	"smallgo/server/version"
@@ -455,6 +456,9 @@ func NewRouter(cfg config.Config, db *gorm.DB, jwtSecret string) *gin.Engine {
 	// AI 助手（「呼叫小秘」）：对话给登录用户，模型参数（服务商/地址/密钥/模型名）
 	// 只给管理员，密钥读接口只回掩码。见 server/assistant 包注释。
 	assistant.RegisterRoutes(authGroup, adminGroup, db)
+
+	// 课程表：登录用户自己的多张表与课程/课外活动，读写都按 user_id 过滤。
+	timetable.RegisterRoutes(authGroup, db)
 
 	// Register apps from the registry (includes the qrcode example app).
 	apps.SetupAll(publicGroup, db)

@@ -42,6 +42,8 @@ const router = createRouter({
         { path: 'calendar', name: 'Calendar', component: () => import('../views/CalendarView.vue'), meta: { title: '日历' } },
         { path: 'list/:id', name: 'ReminderList', component: () => import('../views/HomeView.vue'), meta: { reminderView: 'all', title: '我的清单' } },
         // 「提醒@他」：多人之间互相推提醒（侧栏「我的清单」下的入口，开关是系统偏好 nudge_enabled）。
+        // 「课程表」：每人一张或多张表，课程/课外活动分开标色；入口随个人偏好 timetable_enabled 显示。
+        { path: 'timetable', name: 'Timetable', component: () => import('../views/TimetableView.vue'), meta: { title: '课程表' } },
         { path: 'nudges', name: 'Nudges', component: () => import('../views/NudgeView.vue'), meta: { title: '提醒@他' } },
         { path: 'notifications', name: 'Notifications', component: () => import('../views/NotificationsView.vue'), meta: { title: '通知中心' } },
         { path: 'channels', name: 'Channels', component: () => import('../views/ChannelsView.vue'), meta: { title: '通知方式' } },
