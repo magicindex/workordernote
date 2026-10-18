@@ -328,6 +328,24 @@ async function waitForCard(page, selector, timeout = 12000) {
       const renamed = await page.$$eval('[data-timetable-tab]', (els) => els.map((e) => e.textContent.trim()));
       check('表可以改名', renamed.some((t) => t.includes(`${STAMP}-哥哥2`)), renamed.join(' | '));
 
+      // 打印：拦截 window.open，检查生成的当周页里有课程、班级与 A4 横向声明。
+      await page.evaluate(() => {
+        window.__printHtml = null;
+        window.open = () => ({
+          document: { open() {}, write(html) { window.__printHtml = html }, close() {} },
+          focus() {}, print() {}, setTimeout(fn) { fn() },
+        });
+      });
+      await sleep(200);
+      await page.click('[data-timetable-print]');
+      await sleep(400);
+      const printHtml = await page.evaluate(() => window.__printHtml || '');
+      check(
+        '打印会生成当周页面（含课程、班级与 A4 横向设置）',
+        printHtml.includes(`${STAMP} 数学`) && printHtml.includes('三班 / 教学楼 201') && printHtml.includes('A4 landscape'),
+        `len=${printHtml.length}`,
+      );
+
       // 移动端也看一眼（截图留档）
       await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
       await page.goto(`${BASE}/admin/timetable`, { waitUntil: 'networkidle2' });
