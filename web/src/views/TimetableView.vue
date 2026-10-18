@@ -613,6 +613,21 @@ function printTimetable() {
   // 按「节次 × 星期」排成表格：每一行就是一个节次，课程按开始时间落进对应那一行，
   // 所以打印出来的行数永远等于表里配的节次数，不会因为手工时间多长出一行。
   const dayLists = days.value.map((day) => day.entries)
+  // 版面色：跟这张表在页面上用的浅色一致（把强调色往白里兑 90%），
+  // 节次行、节次列、早课/上午/下午/晚课分界行都用它，打印出来是同一块浅底。
+  const light = (hex: string) => '#' + [1, 3, 5]
+    .map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) + (255 - parseInt(hex.slice(i, i + 2), 16)) * 0.88))
+    .map((c) => c.toString(16).padStart(2, '0'))
+    .join('')
+  const band = light(tableAccent(table).tint)
+  // 四段各给一种浅底色（顺序：早课琥珀、上午天蓝、下午翠绿、晚课紫罗兰），
+  // 节次行与节次列仍用这张表的浅色，一眼能看出段落又不抢课程的字。
+  const sectionBands: Record<PeriodKey, string> = {
+    early: light('#f59e0b'),
+    morning: light('#0ea5e9'),
+    afternoon: light('#10b981'),
+    evening: light('#8b5cf6'),
+  }
   const rows: {
     section: PeriodKey
     start: string
@@ -659,7 +674,7 @@ function printTimetable() {
   const body = SECTIONS.map((section) => {
     const own = rows.filter((row) => row.section === section.key)
     if (!own.length) return ''
-    const divider = `<tr class="sec"><th colspan="8">${esc(section.label)}</th></tr>`
+    const divider = `<tr class="sec"><th colspan="8" style="background:${sectionBands[section.key]}">${esc(section.label)}</th></tr>`
     const lines = own.map((row) => {
       const cells = row.cells.map((list, i) => {
         const today = days.value[i].weekday === todayWeekday ? ' class="today"' : ''
@@ -690,9 +705,9 @@ h1 span { font-size: 12px; font-weight: 500; color: #4b5563; margin-left: 8px; }
 .sub { font-size: 11px; color: #6b7280; }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 th, td { border: 1px solid #cbd5e1; vertical-align: top; padding: 4px 5px; }
-thead th { background: #eef2ff; font-size: 11.5px; text-align: left; font-weight: 700; }
+thead th { background: ${band}; font-size: 11.5px; text-align: left; font-weight: 700; }
 th .th-date { display: block; font-weight: 400; font-size: 9.5px; color: #6b7280; }
-th.t { width: 13%; background: #f8fafc; text-align: left; }
+th.t { width: 13%; background: ${band}; text-align: left; }
 .t-time { display: block; font-size: 10px; color: #374151; font-variant-numeric: tabular-nums; }
 .t-no { display: block; font-size: 9px; font-weight: 500; color: #6b7280; }
 td.today { background: #f8fafc; }
@@ -701,7 +716,7 @@ td.today { background: #f8fafc; }
 .meta { display: block; font-size: 9px; color: #6b7280; margin-top: 1px; }
 .e-time { display: block; font-size: 8.5px; color: #6b7280; font-variant-numeric: tabular-nums; }
 .cell + .cell { margin-top: 3px; padding-top: 3px; border-top: 1px dashed #d1d5db; }
-tr.sec th { background: #e5e7eb; font-size: 10.5px; letter-spacing: .18em; text-align: left; padding: 3px 6px; }
+tr.sec th { background: ${band}; font-size: 10.5px; letter-spacing: .18em; text-align: left; padding: 3px 6px; }
 footer { margin-top: 8px; font-size: 9px; color: #9ca3af; display: flex; justify-content: space-between; }
 </style></head><body>
 <header>
