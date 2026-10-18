@@ -66,7 +66,7 @@
           :class="editing ? 'is-on' : ''"
           :data-timetable-edit="editing ? 'on' : 'off'"
           title="编辑时把课程拖到空节次；拖到已有课上则互换"
-          @click="editing = !editing"
+          @click="toggleEditing"
         >
           <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke-width="1.8" stroke-linejoin="round"/></svg>
           {{ editing ? '完成' : '编辑' }}
@@ -987,6 +987,18 @@ function syncEndFromStart() {
 // 拖到另一节课上 = 两节课互换位置（星期与起止对调）。只改这两条，不动同一天的其他课。
 const editing = ref(false)
 const dragId = ref<number | null>(null)
+// 进编辑态先替用户把「空节次」打开（不然没有落点），退出时恢复原来的勾选。
+let slotsBeforeEdit = true
+function toggleEditing() {
+  if (!editing.value) {
+    slotsBeforeEdit = showSlots.value
+    showSlots.value = true
+    editing.value = true
+    return
+  }
+  editing.value = false
+  showSlots.value = slotsBeforeEdit
+}
 let lastDropAt = 0
 
 function onDragStart(event: DragEvent, entry: TimetableEntry) {

@@ -343,10 +343,26 @@ async function waitForCard(page, selector, timeout = 12000) {
       await dismissAlerts(page);
       await page.click(`[data-timetable-tab*="${STAMP}-拖动"]`);
       await sleep(700);
-      await page.click('[data-timetable-edit]');
+      // 先把「空节次」关掉，验证编辑态会临时打开、退出后恢复原选择（用户 2026-10-19）。
+      await page.evaluate(() => {
+        const box = document.querySelector('[data-timetable-show-slots]');
+        if (box && box.checked) box.click();
+      });
       await sleep(400);
+      const slotsBefore = await page.$$eval('[data-timetable-slot]', (els) => els.length);
+      await page.click('[data-timetable-edit]');
+      await sleep(500);
       const editOn = await page.$eval('[data-timetable-edit]', (el) => el.getAttribute('data-timetable-edit'));
       check('点「编辑」进入拖动模式', editOn === 'on', editOn || '');
+      const slotsInEdit = await page.$$eval('[data-timetable-slot]', (els) => els.length);
+      check('进编辑态默认把空节次打开（有落点可拖）', slotsBefore === 0 && slotsInEdit > 0, `${slotsBefore} -> ${slotsInEdit}`);
+      await page.click('[data-timetable-edit]');
+      await sleep(500);
+      const slotsRestored = await page.$$eval('[data-timetable-slot]', (els) => els.length);
+      const boxRestored = await page.$eval('[data-timetable-show-slots]', (el) => el.checked);
+      check('退出编辑后按原来的空节次选择恢复', slotsRestored === 0 && !boxRestored, `slots=${slotsRestored} checked=${boxRestored}`);
+      await page.click('[data-timetable-edit]');
+      await sleep(500);
       const dragged = await page.evaluate(() => {
         const card = document.querySelector('[data-day-column="1"] [data-entry-id]');
         const slot = document.querySelector('[data-day-column="2"] [data-timetable-slot]');
