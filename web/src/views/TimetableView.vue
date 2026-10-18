@@ -271,11 +271,18 @@
           <div class="grid gap-2 sm:grid-cols-2">
           <div v-for="section in SECTIONS" :key="section.key" class="rounded-xl border border-border/70 p-2">
             <div class="mb-1.5 flex items-center justify-between">
-              <span class="text-[11.5px] font-bold">
+              <span class="flex items-center gap-1 text-[11.5px] font-bold">
                 {{ section.label }}
-                <span class="ml-1 font-medium text-muted-foreground">
-                  {{ tableForm.periods.filter((p) => p.section === section.key).length }} 节
-                </span>
+                <input
+                  type="number"
+                  min="0"
+                  max="16"
+                  class="w-9 rounded-md border border-border/70 bg-surface px-1 py-0.5 text-center text-[11px] font-semibold tabular-nums"
+                  :value="tableForm.periods.filter((p) => p.section === section.key).length"
+                  :data-table-section-count="section.key"
+                  @change="setSectionCount(section.key, Number(($event.target as HTMLInputElement).value))"
+                />
+                <span class="font-medium text-muted-foreground">节</span>
               </span>
               <button
                 type="button"
@@ -609,6 +616,25 @@ function addPeriod(section: PeriodKey) {
     ? list.map((period, i) => (period.section === section ? i + 1 : -1)).filter((i) => i >= 0).pop() ?? list.length
     : list.length
   list.splice(insertAt as number, 0, { section, start, end: addMinutes(start, tableForm.lesson) })
+}
+
+// 直接改「几节」：多了按课时/课间往后补，少了从这一段的末尾删。
+function setSectionCount(section: PeriodKey, raw: number) {
+  const list = tableForm.periods
+  const own = list.filter((period) => period.section === section)
+  const target = Math.max(0, Math.min(16, Math.round(raw || 0)))
+  if (target === own.length) return
+  if (target > own.length) {
+    for (let i = own.length; i < target; i += 1) addPeriod(section)
+    return
+  }
+  let removed = 0
+  for (let i = list.length - 1; i >= 0 && removed < own.length - target; i -= 1) {
+    if (list[i].section === section) {
+      list.splice(i, 1)
+      removed += 1
+    }
+  }
 }
 
 function removePeriod(index: number) {
