@@ -12,24 +12,26 @@ export interface CardAccent {
   to: string
   /** 文字色（按底色深浅选，浅底用深字） */
   ink: string
+  /** 倒计时数字的流光三色（渐变两端 + 中间一道柔光，见 heroStyle） */
+  sheen: [string, string, string]
 }
 
 export const CARD_ACCENTS: CardAccent[] = [
-  { key: '', label: '默认（浅色随机）', from: '#e2e8f0', to: '#cbd5e1', ink: '#0f172a' },
+  { key: '', label: '默认（浅色随机）', from: '#e2e8f0', to: '#cbd5e1', ink: '#0f172a', sheen: ['#0f172a', '#5b6b85', '#94a3b8'] },
   // 深色系：两端都够深，白字对比度 ≥4.7（原来的中浅渐变配白字只有 2.6～3.0，看不清 ——
   // 用户 2026-10-11：「浅色背景影响字体显示，字体是白色的，自动调整字体颜色」）。
-  { key: 'slate', label: '石墨', from: '#475569', to: '#1e293b', ink: '#ffffff' },
-  { key: 'rose', label: '玫红', from: '#e11d48', to: '#9f1239', ink: '#ffffff' },
+  { key: 'slate', label: '石墨', from: '#475569', to: '#1e293b', ink: '#ffffff', sheen: ['#ffffff', '#e2e8f0', '#cbd5e1'] },
+  { key: 'rose', label: '玫红', from: '#e11d48', to: '#9f1239', ink: '#ffffff', sheen: ['#ffffff', '#ffe4e6', '#fda4af'] },
   // 浅色系（琥珀 / 鎏金）：底色浅，自动配深字（对比度 8.3 / 5.5）
-  { key: 'amber', label: '琥珀', from: '#fcd34d', to: '#f59e0b', ink: '#0f172a' },
-  { key: 'gold', label: '鎏金', from: '#f9e79f', to: '#b8860b', ink: '#0f172a' },
-  { key: 'orange', label: '暖橘', from: '#c2410c', to: '#7c2d12', ink: '#ffffff' },
-  { key: 'emerald', label: '翡翠', from: '#047857', to: '#064e3b', ink: '#ffffff' },
-  { key: 'teal', label: '青碧', from: '#0f766e', to: '#134e4a', ink: '#ffffff' },
-  { key: 'sky', label: '天蓝', from: '#0369a1', to: '#0c4a6e', ink: '#ffffff' },
-  { key: 'indigo', label: '靛蓝', from: '#4f46e5', to: '#3730a3', ink: '#ffffff' },
-  { key: 'violet', label: '紫罗兰', from: '#7c3aed', to: '#5b21b6', ink: '#ffffff' },
-  { key: 'fuchsia', label: '品红', from: '#c026d3', to: '#86198f', ink: '#ffffff' },
+  { key: 'amber', label: '琥珀', from: '#fcd34d', to: '#f59e0b', ink: '#0f172a', sheen: ['#0f172a', '#78350f', '#b45309'] },
+  { key: 'gold', label: '鎏金', from: '#f9e79f', to: '#b8860b', ink: '#0f172a', sheen: ['#0f172a', '#713f12', '#a16207'] },
+  { key: 'orange', label: '暖橘', from: '#c2410c', to: '#7c2d12', ink: '#ffffff', sheen: ['#ffffff', '#ffedd5', '#fdba74'] },
+  { key: 'emerald', label: '翡翠', from: '#047857', to: '#064e3b', ink: '#ffffff', sheen: ['#ffffff', '#d1fae5', '#a7f3d0'] },
+  { key: 'teal', label: '青碧', from: '#0f766e', to: '#134e4a', ink: '#ffffff', sheen: ['#ffffff', '#ccfbf1', '#99f6e4'] },
+  { key: 'sky', label: '天蓝', from: '#0369a1', to: '#0c4a6e', ink: '#ffffff', sheen: ['#ffffff', '#e0f2fe', '#bae6fd'] },
+  { key: 'indigo', label: '靛蓝', from: '#4f46e5', to: '#3730a3', ink: '#ffffff', sheen: ['#ffffff', '#e0e7ff', '#c7d2fe'] },
+  { key: 'violet', label: '紫罗兰', from: '#7c3aed', to: '#5b21b6', ink: '#ffffff', sheen: ['#ffffff', '#ede9fe', '#ddd6fe'] },
+  { key: 'fuchsia', label: '品红', from: '#c026d3', to: '#86198f', ink: '#ffffff', sheen: ['#ffffff', '#fae8ff', '#f5d0fe'] },
 ]
 
 /**
@@ -45,12 +47,12 @@ export interface LightAccent extends CardAccent {
 }
 
 export const LIGHT_ACCENTS: LightAccent[] = [
-  { key: 'light-sky', label: '浅天蓝', from: '#e0f2fe', to: '#bae6fd', ink: '#075985', heroKey: 'sky' },
-  { key: 'light-violet', label: '浅紫', from: '#ede9fe', to: '#ddd6fe', ink: '#5b21b6', heroKey: 'violet' },
-  { key: 'light-rose', label: '浅玫', from: '#ffe4e6', to: '#fecdd3', ink: '#9f1239', heroKey: 'rose' },
-  { key: 'light-amber', label: '浅金', from: '#fef3c7', to: '#fde68a', ink: '#92400e', heroKey: 'gold' },
-  { key: 'light-emerald', label: '浅绿', from: '#d1fae5', to: '#a7f3d0', ink: '#065f46', heroKey: 'emerald' },
-  { key: 'light-teal', label: '浅青', from: '#ccfbf1', to: '#99f6e4', ink: '#115e59', heroKey: 'teal' },
+  { key: 'light-sky', label: '浅天蓝', from: '#e0f2fe', to: '#bae6fd', ink: '#075985', heroKey: 'sky', sheen: ['#ffffff', '#e0f2fe', '#bae6fd'] },
+  { key: 'light-violet', label: '浅紫', from: '#ede9fe', to: '#ddd6fe', ink: '#5b21b6', heroKey: 'violet', sheen: ['#ffffff', '#ede9fe', '#ddd6fe'] },
+  { key: 'light-rose', label: '浅玫', from: '#ffe4e6', to: '#fecdd3', ink: '#9f1239', heroKey: 'rose', sheen: ['#ffffff', '#ffe4e6', '#fda4af'] },
+  { key: 'light-amber', label: '浅金', from: '#fef3c7', to: '#fde68a', ink: '#92400e', heroKey: 'gold', sheen: ['#0f172a', '#713f12', '#a16207'] },
+  { key: 'light-emerald', label: '浅绿', from: '#d1fae5', to: '#a7f3d0', ink: '#065f46', heroKey: 'emerald', sheen: ['#ffffff', '#d1fae5', '#a7f3d0'] },
+  { key: 'light-teal', label: '浅青', from: '#ccfbf1', to: '#99f6e4', ink: '#115e59', heroKey: 'teal', sheen: ['#ffffff', '#ccfbf1', '#99f6e4'] },
 ]
 
 /** 没挑颜色时按 id 稳定落一档浅色（同一张卡每次都是同一个色）。 */
@@ -130,6 +132,43 @@ const BY_KEY = new Map(CARD_ACCENTS.map((a) => [a.key, a]))
 /** 取某个色名对应的色板项；空值或未知色名都回落到「默认」。 */
 export function cardAccent(key?: string | null): CardAccent {
   return BY_KEY.get(String(key || '')) || CARD_ACCENTS[0]
+}
+
+/** 两个十六进制色按比例混出一个中间色（卡面渐变的中段用）。 */
+function mixHex(a: string, b: string, t: number): string {
+  const parse = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+  const [r1, g1, b1] = parse(a)
+  const [r2, g2, b2] = parse(b)
+  const ch = (x: number, y: number) => Math.round(x + (y - x) * t).toString(16).padStart(2, '0')
+  return `#${ch(r1, r2)}${ch(g1, g2)}${ch(b1, b2)}`
+}
+
+/**
+ * 卡面背景：不再是一块两色斜拼，而是**三层渐变叠出来的「模板」**——
+ *   1) 右上角一层柔光（卡面被光打亮的感觉）；
+ *   2) 左下角一层暗角（把内容托住，白字更立得住）；
+ *   3) 底色本身用「亮 → 混色 → 暗」三段，过渡更柔。
+ * 三层叠完后，再用 ::before 盖一层**径向渐变蒙版**的细斜纹（见 CeremonyPanel 样式），
+ * 卡面就有了纸面/绸面的质感，而不是一块纯色。
+ * 亮色卡面（琥珀/鎏金）把柔光换成更深的一层，避免整张卡发白。
+ */
+export function accentSurface(accentKey?: string | null, id?: number | string): string {
+  const key = accentKey || defaultAccentFor(id).heroKey
+  const a = cardAccent(key)
+  const ink = bestInk(a.from, a.to)
+  const dark = ink === LIGHT_INK
+  const mid = mixHex(a.from, a.to, 0.55)
+  return [
+    `radial-gradient(135% 100% at 82% -14%, rgba(255,255,255,${dark ? '0.30' : '0.55'}) 0%, rgba(255,255,255,0) 62%)`,
+    `radial-gradient(120% 90% at 4% 112%, rgba(2,6,23,${dark ? '0.42' : '0.20'}) 0%, rgba(2,6,23,0) 60%)`,
+    `linear-gradient(152deg, ${a.from} 0%, ${mid} 56%, ${a.to} 100%)`,
+  ].join(', ')
+}
+
+/** 倒计时数字的流光三色：贴着卡面同色系的柔光，不再是紫+青两块撞色。 */
+export function accentSheen(accentKey?: string | null, id?: number | string): [string, string, string] {
+  const key = accentKey || defaultAccentFor(id).heroKey
+  return cardAccent(key).sheen
 }
 
 /** 卡面（倒计时块）的 CSS 渐变。 */
