@@ -19,7 +19,7 @@
     <template v-else>
       <!-- 多张表：一人一张，顶部标签切换（用户 2026-10-18「支持多人表，通过索引分割标签切换」）。
            2026-10-18 二次改版：每张表带自己的浅彩色（与它课程卡的色系一致），标签与表头背景同色。 -->
-      <div v-if="tables.length" class="mt-4 flex flex-wrap items-center gap-2">
+      <div v-if="tables.length" class="mt-4 flex min-w-0 items-center gap-2">
         <div class="timetable-tabs" role="tablist" aria-label="课程表">
           <button
             v-for="table in tables"
@@ -77,28 +77,39 @@
             </header>
 
             <div class="flex flex-1 flex-col gap-2">
-              <button
-                v-for="entry in day.entries"
-                :key="entry.id"
-                type="button"
-                class="timetable-card"
-                :class="[paletteOf(entry).card, entry.kind === 'activity' ? 'timetable-card-activity' : '']"
-                :data-entry-id="entry.id"
-                :data-entry-kind="entry.kind"
-                @click="openEditEntry(entry)"
+              <div
+                v-for="period in day.periods"
+                :key="period.key"
+                class="timetable-period"
+                :data-timetable-period="period.key"
               >
-                <span class="timetable-card-bar" :class="paletteOf(entry).barBg"></span>
-                <span class="flex min-w-0 flex-1 flex-col">
-                  <span class="timetable-card-time">{{ entry.start_time }}<span class="opacity-40">–</span>{{ entry.end_time }}</span>
-                  <span class="flex items-center gap-1">
-                    <span class="timetable-card-title" :title="entry.title">{{ entry.title }}</span>
-                    <span v-if="entry.kind === 'activity'" class="timetable-activity-tag">活动</span>
-                  </span>
-                  <span v-if="entry.location || entry.teacher" class="timetable-card-meta">
-                    {{ [entry.location, entry.teacher].filter(Boolean).join(' · ') }}
-                  </span>
-                </span>
-              </button>
+                <p class="timetable-period-label" :data-timetable-period-label="period.key">
+                    {{ period.label }}
+                    <span class="timetable-period-count">{{ period.entries.length }}</span>
+                  </p>
+                  <button
+                    v-for="entry in period.entries"
+                    :key="entry.id"
+                    type="button"
+                    class="timetable-card"
+                    :class="[paletteOf(entry).card, entry.kind === 'activity' ? 'timetable-card-activity' : '']"
+                    :data-entry-id="entry.id"
+                    :data-entry-kind="entry.kind"
+                    @click="openEditEntry(entry)"
+                  >
+                    <span class="timetable-card-bar" :class="paletteOf(entry).barBg"></span>
+                    <span class="flex min-w-0 flex-1 flex-col">
+                      <span class="timetable-card-time">{{ entry.start_time }}<span class="opacity-40">–</span>{{ entry.end_time }}</span>
+                      <span class="flex items-center gap-1">
+                        <span class="timetable-card-title" :title="entry.title">{{ entry.title }}</span>
+                        <span v-if="entry.kind === 'activity'" class="timetable-activity-tag">活动</span>
+                      </span>
+                      <span v-if="entry.location || entry.teacher" class="timetable-card-meta">
+                        {{ [entry.location, entry.teacher].filter(Boolean).join(' · ') }}
+                      </span>
+                    </span>
+                  </button>
+              </div>
 
               <button
                 type="button"
@@ -280,12 +291,42 @@ const weekDates = computed(() => {
   })
 })
 
-const days = computed(() => weekdays.map((day, i) => ({
-  weekday: day.value,
-  label: day.label,
-  date: weekDates.value[i],
-  entries: entries.value.filter((entry) => entry.weekday === day.value),
-})))
+// 一天分早课 / 上午 / 下午 / 晚课四段（用户 2026-10-18 要求）。
+// 边界按**开始时间**：<09:00 早课（早读、第一节那类）、09:00–11:59 上午、
+// 12:00–17:59 下午、≥18:00 晚课；空的那一段不摆标题，免得七列全是空壳。
+// 边界想挪就改这里一处 —— 卡片、标签、测试都跟着它走。
+const PERIODS = [
+  { key: 'early', label: '早课', from: 0, to: 9 },
+  { key: 'morning', label: '上午', from: 9, to: 12 },
+  { key: 'afternoon', label: '下午', from: 12, to: 18 },
+  { key: 'evening', label: '晚课', from: 18, to: 24 },
+] as const
+type PeriodKey = typeof PERIODS[number]['key']
+function periodOf(entry: TimetableEntry): PeriodKey {
+  const hour = Number((entry.start_time || '00:00').slice(0, 2))
+  if (hour < 9) return 'early'
+  if (hour < 12) return 'morning'
+  if (hour < 18) return 'afternoon'
+  return 'evening'
+}
+
+const days = computed(() => weekdays.map((day, i) => {
+  const own = entries.value
+    .filter((entry) => entry.weekday === day.value)
+    .sort((a, b) => a.start_time.localeCompare(b.start_time))
+  return {
+    weekday: day.value,
+    label: day.label,
+    date: weekDates.value[i],
+    entries: own,
+    periods: PERIODS
+      .map((period) => ({
+        ...period,
+        entries: own.filter((entry) => periodOf(entry) === period.key),
+      }))
+      .filter((period) => period.entries.length > 0),
+  }
+}))
 
 // 每张表带一个稳定的浅彩色（按表 id 落在色板里），标签、底板光晕与它自己的课程同色系。
 function tableAccent(table: TimetableSummary) {
@@ -491,10 +532,12 @@ async function removeEntry() {
 
 <style scoped>
 .timetable-tabs {
-  @apply inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-border bg-surface/85 p-1 shadow-sm backdrop-blur;
+  @apply flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-surface/85 p-1 shadow-sm backdrop-blur;
+  scrollbar-width: none;
 }
+.timetable-tabs::-webkit-scrollbar { display: none; }
 .timetable-tab {
-  @apply inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold text-muted-foreground transition duration-150;
+  @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-1.5 text-xs font-bold text-muted-foreground transition duration-150;
 }
 .timetable-tab:hover { @apply bg-muted/70 text-foreground; }
 .timetable-tab-dot { @apply h-2 w-2 rounded-full opacity-90; }
@@ -525,6 +568,17 @@ async function removeEntry() {
 .timetable-activity-tag {
   @apply shrink-0 whitespace-nowrap rounded bg-surface/70 px-1 py-px text-[9px] font-bold leading-4 text-foreground/60;
 }
+
+.timetable-period { @apply flex flex-col gap-1.5; }
+.timetable-period + .timetable-period { @apply mt-1; }
+.timetable-period-label {
+  @apply flex items-center gap-1 px-0.5 text-[10px] font-bold tracking-wide text-muted-foreground/70;
+}
+.timetable-period-label::after {
+  content: '';
+  @apply h-px flex-1 bg-border/70;
+}
+.timetable-period-count { @apply tabular-nums text-[9.5px] font-semibold text-muted-foreground/50; }
 
 .timetable-add {
   @apply mt-auto flex items-center justify-center gap-1 rounded-lg border border-dashed border-border/80 py-1.5 text-[11px] font-semibold text-muted-foreground/70 transition;

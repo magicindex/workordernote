@@ -105,6 +105,15 @@ async function waitForCard(page, selector, timeout = 12000) {
         title: `${STAMP} 机器人`, kind: 'activity', weekday: 3, start_time: '15:30', end_time: '17:00',
         location: '科技楼', teacher: '张老师', note: '带工具箱', color: 'amber',
       });
+      // 上午 / 晚课各补一节，用来验「早课 / 上午 / 下午 / 晚课」四段的归位。
+      await api(page, `/api/timetable/tables/${id1}/entries`, 'POST', {
+        title: `${STAMP} 物理`, kind: 'course', weekday: 1, start_time: '10:00', end_time: '10:45',
+        location: '三班', teacher: '李老师', note: '', color: 'sky',
+      });
+      await api(page, `/api/timetable/tables/${id1}/entries`, 'POST', {
+        title: `${STAMP} 自习`, kind: 'activity', weekday: 1, start_time: '19:00', end_time: '20:00',
+        location: '教室', teacher: '', note: '', color: 'slate',
+      });
       check('课程能建', course.body?.code === 0 && course.body?.data?.kind === 'course');
       check('课外活动能建', activity.body?.code === 0 && activity.body?.data?.kind === 'activity');
 
@@ -157,6 +166,14 @@ async function waitForCard(page, selector, timeout = 12000) {
       const wedCards = await page.$$eval('[data-day-column="3"] [data-entry-id]', (els) => els.map((e) => [e.getAttribute('data-entry-kind'), e.className]));
       check('课外活动卡片标 activity 且是虚线边', wedCards.some(([k, cls]) => k === 'activity' && /timetable-card-activity/.test(cls)), JSON.stringify(wedCards));
 
+      // 一天四段：08:00 早课、10:00 上午、19:00 晚课；周三 15:30 落下午。
+      const monPeriods = await page.$$eval('[data-day-column="1"] [data-timetable-period]', (els) => els.map((e) => e.getAttribute('data-timetable-period')));
+      const monLabels = await page.$$eval('[data-day-column="1"] [data-timetable-period-label]', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
+      check('周一按早课 / 上午 / 晚课分成三段', JSON.stringify(monPeriods) === JSON.stringify(['early', 'morning', 'evening']), monPeriods.join(','));
+      check('分段的标题就是早课 / 上午 / 晚课', monLabels.every((t) => /^(早课|上午|晚课)\s*\d+$/.test(t)), monLabels.join(' | '));
+      const wedPeriods = await page.$$eval('[data-day-column="3"] [data-timetable-period]', (els) => els.map((e) => e.getAttribute('data-timetable-period')));
+      check('周三 15:30 的课落在下午', JSON.stringify(wedPeriods) === JSON.stringify(['afternoon']), wedPeriods.join(','));
+
       await page.screenshot({ path: path.join(SHOTS, 'timetable-1440.png') });
 
       // 切到妹妹：哥哥的课不该出现
@@ -178,8 +195,9 @@ async function waitForCard(page, selector, timeout = 12000) {
       const added = await waitForCard(page, '[data-day-column="7"] [data-entry-id]');
       check('界面上能加一节（落在周日）', added);
 
+      await sleep(700);
       await page.click('[data-day-column="7"] [data-entry-id]');
-      await sleep(600);
+      await sleep(800);
       const prefilled = await page.$eval('[data-entry-title]', (el) => el.value);
       check('点卡片打开的是这一节（表单预填）', prefilled === `${STAMP} 家庭日`, prefilled);
       await page.$eval('[data-entry-start]', (el) => { el.value = '10:00'; el.dispatchEvent(new Event('input', { bubbles: true })); });
