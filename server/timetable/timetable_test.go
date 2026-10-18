@@ -187,31 +187,66 @@ func TestTimetablePacingDefaultsAndValidation(t *testing.T) {
 		data["break_minutes"].(float64) != defaultBreakMinutes {
 		t.Errorf("默认节奏应当 45/10，实际 %v/%v", data["lesson_minutes"], data["break_minutes"])
 	}
-	if data["early_until"] != defaultEarlyUntil || data["afternoon_until"] != defaultAfternoonUntil {
-		t.Errorf("默认分界不对：%v %v %v", data["early_until"], data["morning_until"], data["afternoon_until"])
+	periods, _ := data["periods"].([]interface{})
+	if len(periods) != defaultPeriodCount {
+		t.Fatalf("建表应当铺 %d 节骨架，实际 %d", defaultPeriodCount, len(periods))
+	}
+	first := periods[0].(map[string]interface{})
+	if first["start"] != "08:00" || first["end"] != "08:45" || first["section"] != "early" {
+		t.Errorf("第一节不对：%v", first)
 	}
 
-	// 只改一条分界线：其余保持原值，整体仍按顺序校验。
+	// 手改每节次的时间段：只改第二节，其余不动，顺序仍要合法。
 	status, updated := call(t, handleUpdateTable(db), http.MethodPatch,
-		`{"early_until":"08:30","lesson_minutes":40,"break_minutes":5}`, 9, params{"id": id})
+		`{"periods":[{"section":"early","start":"08:00","end":"08:45"},{"section":"early","start":"08:50","end":"09:35"},{"section":"morning","start":"09:45","end":"10:30"}]}`,
+		9, params{"id": id})
+	if status != http.StatusOK || updated["code"].(float64) != 0 {
+		t.Fatalf("保存节次失败：%d %v", status, updated)
+	}
+	up := updated["data"].(map[string]interface{})
+	got, _ := up["periods"].([]interface{})
+	if len(got) != 3 || up["period_count"].(float64) != 3 {
+		t.Fatalf("节次没按预期保存：%v", up["periods"])
+	}
+	second := got[1].(map[string]interface{})
+	if second["start"] != "08:50" || second["end"] != "09:35" {
+		t.Errorf("第二节时间不对：%v", second)
+	}
+
+	// 结束时早于开始、时间叠在一起、段写错都要拒。
+	for name, body := range map[string]string{
+		"结束早于开始": `{"periods":[{"section":"early","start":"08:50","end":"08:40"}]}`,
+		"节次重叠":   `{"periods":[{"section":"early","start":"08:00","end":"08:45"},{"section":"morning","start":"08:30","end":"09:15"}]}`,
+		"段写错":    `{"periods":[{"section":"noon","start":"08:00","end":"08:45"}]}`,
+		"时间格式":   `{"periods":[{"section":"early","start":"8:00","end":"08:45"}]}`,
+	} {
+		status, resp := call(t, handleUpdateTable(db), http.MethodPatch, body, 9, params{"id": id})
+		if status != http.StatusBadRequest {
+			t.Errorf("%s 应当被拒，实际 %d %v", name, status, resp)
+		}
+	}
+
+	// 只改课时：按新节奏重排，段结构保持。
+	status, updated = call(t, handleUpdateTable(db), http.MethodPatch,
+		`{"lesson_minutes":40,"break_minutes":5,"first_period":"07:30"}`, 9, params{"id": id})
 	if status != http.StatusOK || updated["code"].(float64) != 0 {
 		t.Fatalf("保存节奏失败：%d %v", status, updated)
 	}
-	up := updated["data"].(map[string]interface{})
-	if up["early_until"] != "08:30" || up["lesson_minutes"].(float64) != 40 || up["morning_until"] != defaultMorningUntil {
-		t.Errorf("节奏没按预期保存：%v", up)
+	up = updated["data"].(map[string]interface{})
+	got, _ = up["periods"].([]interface{})
+	if len(got) != 3 {
+		t.Fatalf("重排后节数应保持 3，实际 %d", len(got))
+	}
+	if got[0].(map[string]interface{})["start"] != "07:30" {
+		t.Errorf("重排后第一节应从 07:30 开始：%v", got[0])
+	}
+	if up["lesson_minutes"].(float64) != 40 || up["break_minutes"].(float64) != 5 {
+		t.Errorf("节奏没保存：%v/%v", up["lesson_minutes"], up["break_minutes"])
 	}
 
-	// 分界顺序反了、课时越界都要拒。
-	for _, body := range []string{
-		`{"early_until":"13:00"}`,  // 早课线跑到上午线后面
-		`{"lesson_minutes":5}`,     // 一节课太短
-		`{"break_minutes":90}`,     // 课间太长
-		`{"morning_until":"8:30"}`, // 格式不对
-	} {
-		status, parsed := call(t, handleUpdateTable(db), http.MethodPatch, body, 9, params{"id": id})
-		if status != http.StatusBadRequest {
-			t.Errorf("非法节奏应当 400（%s），实际 %d %v", body, status, parsed)
-		}
+	// 课时越界要拒。
+	if status, _ := call(t, handleUpdateTable(db), http.MethodPatch,
+		`{"lesson_minutes":5}`, 9, params{"id": id}); status != http.StatusBadRequest {
+		t.Errorf("课时越界应当被拒，实际 %d", status)
 	}
 }

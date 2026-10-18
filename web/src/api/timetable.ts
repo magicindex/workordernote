@@ -10,9 +10,16 @@ export interface TimetableSummary {
   // 排课节奏（详情接口才一定带上；列表接口可能没有）
   lesson_minutes?: number
   break_minutes?: number
-  early_until?: string
-  morning_until?: string
-  afternoon_until?: string
+  period_count?: number
+  first_period?: string
+  periods?: CoursePeriod[]
+}
+
+// 一节课的骨架：属于哪一段 + 起止时间（用户 2026-10-19：每节次时间段可自己设）。
+export interface CoursePeriod {
+  section: 'early' | 'morning' | 'afternoon' | 'evening'
+  start: string
+  end: string
 }
 
 export interface TimetableEntry {
@@ -54,9 +61,9 @@ export const updateTimetable = (
     position?: number
     lesson_minutes?: number
     break_minutes?: number
-    early_until?: string
-    morning_until?: string
-    afternoon_until?: string
+    period_count?: number
+    first_period?: string
+    periods?: CoursePeriod[]
   },
 ) => request.patch(`/api/timetable/tables/${id}`, payload)
 

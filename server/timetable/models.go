@@ -22,19 +22,29 @@ type Timetable struct {
 	Name     string `gorm:"size:40;not null" json:"name"`
 	Position int    `gorm:"not null;default:0" json:"position"`
 
-	// 排课节奏：一节课多长、课间多长，以及早课/上午/下午/晚课三条分界线。
+	// 排课节奏：一节课多长、课间多长，以及「按课时重排」的起点与节数。
 	// 用户 2026-10-18 提出「45 分钟下课 10 分钟、课间操怎么体现」，所以把它做成
-	// 每张表自己的设置：填了开始时间就自动带出结束时间，分界也能按学校作息改。
-	LessonMinutes  int    `gorm:"not null;default:45" json:"lesson_minutes"`
-	BreakMinutes   int    `gorm:"not null;default:10" json:"break_minutes"`
-	PeriodCount    int    `gorm:"not null;default:8" json:"period_count"`
-	FirstPeriod    string `gorm:"size:5;not null;default:'08:00'" json:"first_period"`
-	EarlyUntil     string `gorm:"size:5;not null;default:'09:00'" json:"early_until"`
-	MorningUntil   string `gorm:"size:5;not null;default:'12:00'" json:"morning_until"`
-	AfternoonUntil string `gorm:"size:5;not null;default:'18:00'" json:"afternoon_until"`
+	// 每张表自己的设置：填了开始时间就自动带出结束时间。
+	LessonMinutes int    `gorm:"not null;default:45" json:"lesson_minutes"`
+	BreakMinutes  int    `gorm:"not null;default:10" json:"break_minutes"`
+	PeriodCount   int    `gorm:"not null;default:8" json:"period_count"`
+	FirstPeriod   string `gorm:"size:5;not null;default:'08:00'" json:"first_period"`
+
+	// 每节次的具体时间段（用户 2026-10-19：「允许设置每节次时间段」）：
+	// 段（早课/上午/下午/晚课）+ 起止，顺序即节次顺序。存 JSON，跟着表走。
+	PeriodsJSON string         `gorm:"column:periods;type:text" json:"-"`
+	Periods     []CoursePeriod `gorm:"-" json:"periods"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// CoursePeriod 是一节课的骨架（不是某个学生某天的课）。
+// Section 取 early/morning/afternoon/evening，前端按它把卡片分到四段。
+type CoursePeriod struct {
+	Section string `json:"section"`
+	Start   string `json:"start"`
+	End     string `json:"end"`
 }
 
 type TimetableEntry struct {
