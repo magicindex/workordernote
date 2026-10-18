@@ -254,16 +254,26 @@
           </label>
         </div>
 
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-3 gap-2">
           <label class="block">
-            <span class="text-xs font-bold text-foreground">第一节课开始</span>
-            <input v-model="tableForm.first" type="time" class="input-field mt-1" data-table-first />
+            <span class="text-xs font-bold text-foreground">早休（早课→上午）</span>
+            <input v-model.number="tableForm.earlyBrk" type="number" min="0" max="60" step="5" class="input-field mt-1" data-table-early-break />
           </label>
-          <span class="flex items-end">
-            <button type="button" class="btn-secondary !h-[38px] w-full !px-3 !text-[11.5px]" data-table-regenerate @click="regenerateAll">
-              按课时重排
-            </button>
-          </span>
+          <label class="block">
+            <span class="text-xs font-bold text-foreground">午休（上午→下午）</span>
+            <input v-model.number="tableForm.noonBrk" type="number" min="0" max="60" step="5" class="input-field mt-1" data-table-noon-break />
+          </label>
+          <label class="block">
+            <span class="text-xs font-bold text-foreground">晚修（下午→晚课）</span>
+            <input v-model.number="tableForm.eveningBrk" type="number" min="0" max="60" step="5" class="input-field mt-1" data-table-evening-break />
+          </label>
+        </div>
+
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[11px] text-muted-foreground">重排从表内第一节的时间起算，段内按课时+课间，跨段加早休/午休/晚修。</span>
+          <button type="button" class="btn-secondary !h-8 shrink-0 !px-3 !text-[11px]" data-table-regenerate @click="regenerateAll">
+            按课时重排
+          </button>
         </div>
 
         <div class="space-y-2">
@@ -312,8 +322,8 @@
         </div>
 
         <p class="text-[11px] leading-4 text-muted-foreground">
-          一个账号可以建多张表，顶部标签切换；每张表的课程各归各的。每节次的时间段按学校作息自己排（早课/上午/下午/晚课分开），
-          新建课程时选节次就直接带出起止时间；课间操、早读可以加一节短的，或当成「课外活动」。
+          一个账号可以建多张表，顶部标签切换；每张表的课程各归各的。每节次的时间段按学校作息自己排
+          （早课/上午/下午/晚课分开），重排时跨段会加上早休、午休、晚修；新建课程时选节次就直接带出起止时间。
         </p>
         <p v-if="tableError" class="text-xs font-semibold text-destructive">{{ tableError }}</p>
         <div class="flex items-center gap-2 pt-1">
@@ -581,7 +591,8 @@ const tableError = ref('')
 const savingTable = ref(false)
 type DraftPeriod = { section: PeriodKey; start: string; end: string }
 const tableForm = reactive({
-  lesson: 45, brk: 10, first: '08:00',
+  lesson: 45, brk: 10,
+  earlyBrk: 20, noonBrk: 60, eveningBrk: 60,
   periods: [] as DraftPeriod[],
 })
 
@@ -594,7 +605,9 @@ function openTableSettings() {
   tableName.value = current.name
   tableForm.lesson = pacing.value.lesson
   tableForm.brk = pacing.value.brk
-  tableForm.first = pacing.value.first
+  tableForm.earlyBrk = current.early_break_minutes ?? 20
+  tableForm.noonBrk = current.noon_break_minutes ?? 60
+  tableForm.eveningBrk = current.evening_break_minutes ?? 60
   tableForm.periods = (current.periods || []).map((period) => ({
     section: (period.section || 'morning') as PeriodKey,
     start: period.start,
@@ -611,7 +624,7 @@ function addPeriod(section: PeriodKey) {
   const previous = inSection.length
     ? inSection[inSection.length - 1]
     : [...list].reverse()[0]
-  const start = previous ? addMinutes(previous.end, tableForm.brk) : (tableForm.first || '08:00')
+  const start = previous ? addMinutes(previous.end, tableForm.brk) : '08:00'
   const insertAt = inSection.length
     ? list.map((period, i) => (period.section === section ? i + 1 : -1)).filter((i) => i >= 0).pop() ?? list.length
     : list.length
@@ -641,12 +654,27 @@ function removePeriod(index: number) {
   tableForm.periods.splice(index, 1)
 }
 
-// 按「一节课 + 课间」从第一节课开始重排，段结构不动。
+// 按「段内课时+课间、跨段加早休/午休/晚修」重排，段结构不动。
+// 起点用表内第一节自己的时间，不再单独设一个「第一节课开始」。
 function regenerateAll() {
-  const first = tableForm.first || '08:00'
+  const lesson = Number(tableForm.lesson) || 45
+  const brk = Number(tableForm.brk) || 0
+  const gapAfter: Record<string, number> = {
+    early: Number(tableForm.earlyBrk) || 0,
+    morning: Number(tableForm.noonBrk) || 0,
+    afternoon: Number(tableForm.eveningBrk) || 0,
+  }
+  let cursor = tableForm.periods[0]?.start || '08:00'
+  let previous = ''
   tableForm.periods = tableForm.periods.map((period, i) => {
-    const start = addMinutes(first, i * (tableForm.lesson + tableForm.brk))
-    return { ...period, start, end: addMinutes(start, tableForm.lesson) }
+    if (i > 0 && period.section !== previous) {
+      cursor = addMinutes(cursor, gapAfter[previous] ?? 0)
+    }
+    const start = cursor
+    const end = addMinutes(start, lesson)
+    cursor = addMinutes(end, brk)
+    previous = period.section
+    return { ...period, start, end }
   })
 }
 
@@ -670,7 +698,9 @@ async function saveTableSettings() {
       name,
       lesson_minutes: tableForm.lesson,
       break_minutes: tableForm.brk,
-      first_period: tableForm.first,
+      early_break_minutes: tableForm.earlyBrk,
+      noon_break_minutes: tableForm.noonBrk,
+      evening_break_minutes: tableForm.eveningBrk,
       periods: tableForm.periods,
     })
     if (res.data?.code !== 0) throw new Error(res.data?.message || '保存失败')
