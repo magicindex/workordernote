@@ -36,6 +36,14 @@ function check(name, ok, extra = '') {
   else { failed++; console.log(`  ✗ ${name}${extra ? ' — ' + extra : ''}`); }
 }
 
+async function setManage(page, on) {
+  const inManage = await page.evaluate(() => !!document.querySelector('[data-assistant-scope]')).catch(() => false);
+  if (inManage !== on) {
+    await page.evaluate(() => document.querySelector('[data-assistant-manage]')?.click());
+    await sleep(450);
+  }
+}
+
 async function gotoRetry(page, url, tries = 3) {
   for (let i = 0; i < tries; i += 1) {
     try { await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }); return true; }
@@ -208,14 +216,15 @@ async function waitSavedChip(page, name, timeout = 12000) {
       await waitFor(page, () => !!document.querySelector('[data-assistant-panel]'), { timeout: 12000 }).catch(() => {});
       const panel = await page.evaluate(() => {
         const chips = [...document.querySelectorAll('[data-assistant-chip]')].map((el) => el.getAttribute('data-assistant-chip'));
-        const range = document.querySelector('[data-assistant-range]');
         return {
           open: !!document.querySelector('[data-assistant-panel]'),
           chips,
           presets: [...document.querySelectorAll('[data-assistant-preset]')].map((el) => el.getAttribute('data-assistant-preset')),
-          options: range ? [...range.options].map((o) => o.value) : [],
+          // 范围/关键词/存为常用收进「管理」，默认不占输入框上面那一行。
+          hasRange: !!document.querySelector('[data-assistant-range]'),
           hasKeyword: !!document.querySelector('[data-assistant-keyword]'),
           hasSave: !!document.querySelector('[data-assistant-save]'),
+          hasManage: !!document.querySelector('[data-assistant-manage]'),
         };
       });
       check('侧栏「呼叫小秘」打得开面板', opened === true && panel.open === true, JSON.stringify(panel).slice(0, 160));
@@ -223,11 +232,28 @@ async function waitSavedChip(page, name, timeout = 12000) {
         ['写这周的周报', '写这个月的月报', '写今年的年报'].every((label) => panel.chips.includes(label))
           && panel.chips.some((label) => /工作清单/.test(label)),
         JSON.stringify(panel.chips));
-      check('时间范围可选 本周 / 上周 / 本月 / 上月 / 今年 / 自定义 / 当前未完成',
+      check('输入框上面不再单独摆范围 / 关键词 / 存为常用，收进「管理」',
+        panel.hasManage === true && !panel.hasRange && !panel.hasKeyword && !panel.hasSave,
+        JSON.stringify(panel).slice(0, 200));
+      await page.click('[data-assistant-manage]');
+      await sleep(400);
+      const managePanel = await page.evaluate(() => {
+        const range = document.querySelector('[data-assistant-range]');
+        return {
+          options: range ? [...range.options].map((o) => o.value) : [],
+          hasKeyword: !!document.querySelector('[data-assistant-keyword]'),
+          hasSave: !!document.querySelector('[data-assistant-save]'),
+          removables: [...document.querySelectorAll('[data-assistant-chip-remove]')].map((el) => el.getAttribute('data-assistant-chip-remove')),
+        };
+      });
+      check('「管理」里能选时间范围（本周 / 上月 / 今年 / 自定义 / 当前未完成）',
         ['week', 'lastweek', 'month', 'lastmonth', 'year', 'today', 'yesterday', 'open', 'custom']
-          .every((value) => panel.options.includes(value)),
-        JSON.stringify(panel.options));
-      check('面板上有「关键词」输入与「存为常用」入口', panel.hasKeyword && panel.hasSave);
+          .every((value) => managePanel.options.includes(value)),
+        JSON.stringify(managePanel.options));
+      check('「管理」里有「关键词」与「存为常用」入口', managePanel.hasKeyword && managePanel.hasSave);
+      check('「管理」里提示词都带删除按钮（含开箱卡片）',
+        managePanel.removables.length >= 5, JSON.stringify(managePanel.removables));
+      await setManage(page, false);
       // 2026-10-17 起预置三条与「卡片问法」合并成一排，不再在底部单独列一行。
       check('常用问法与卡片合并（底部不再单独列预置）',
         panel.presets.length === 0 && panel.chips.length >= 5,
@@ -247,10 +273,9 @@ async function waitSavedChip(page, name, timeout = 12000) {
           digestOption: meta?.getAttribute('data-assistant-digest-option') || '',
           metaText: (meta?.innerText || '').replace(/\s+/g, ' ').trim(),
           draftNote: !!document.querySelector('[data-assistant-draft-note]'),
-          range: document.querySelector('[data-assistant-range]')?.value || '',
         };
       });
-      check('点「写这周的周报」会先把时间范围选成「本周」', afterChip.range === 'week', JSON.stringify(afterChip).slice(0, 200));
+      check('点「写这周的周报」会先把时间范围选成「本周」', afterChip.digestOption === 'week', JSON.stringify(afterChip).slice(0, 200));
       check('回复里带着这次自检的那条已完成任务（界面上也查得到）',
         afterChip.reply.includes(doneTitle), afterChip.reply.slice(0, 200));
       check('气泡下面写清「已附上数据：本周（…）· 完成 N · 未完成 M」',
@@ -267,13 +292,13 @@ async function waitSavedChip(page, name, timeout = 12000) {
         const last = metas[metas.length - 1];
         return {
           option: last?.getAttribute('data-assistant-digest-option') || '',
-          range: document.querySelector('[data-assistant-range]')?.value || '',
         };
       });
       check('点卡片「写这个月的月报」直接按本月查一次',
-        presetRun.option === 'month' && presetRun.range === 'month', JSON.stringify(presetRun));
+        presetRun.option === 'month', JSON.stringify(presetRun));
 
       // ---------------- 4. 自定义常用查询：存 / 用 / 删 ----------------
+      await setManage(page, true);
       await page.evaluate(() => {
         const setVal = (sel, value, evt) => {
           const el = document.querySelector(sel);
@@ -301,6 +326,8 @@ async function waitSavedChip(page, name, timeout = 12000) {
       await sleep(200);
       await page.evaluate(() => document.querySelector('[data-assistant-save-confirm]')?.click());
       await sleep(1200);
+      // 存完还在管理态，先点「完成」回到普通态再看 chip。
+      await setManage(page, false);
       const savedState = await page.evaluate((name) => ({
         chip: !!document.querySelector(`[data-assistant-saved="${name}"]`),
       }), queryName);
@@ -353,21 +380,33 @@ async function waitSavedChip(page, name, timeout = 12000) {
       check('点常用查询能直接按「本月 + 关键词」再问一次',
         usedQuery.option === 'month' && /关键词/.test(usedQuery.text), JSON.stringify(usedQuery).slice(0, 240));
 
-      // 管理 → 删掉
-      await page.evaluate(() => document.querySelector('[data-assistant-saved-edit]')?.click());
-      await sleep(400);
-      const presetInManage = await page.evaluate(() => ({
-        still: !!document.querySelector('[data-assistant-chip="写这周的周报"]'),
-        remove: !!document.querySelector('[data-assistant-saved-remove="本周周报"]'),
-      }));
-      check('开箱卡片在「管理」里也不给删（它不占用户配置）',
-        presetInManage.still === true && presetInManage.remove === false, JSON.stringify(presetInManage));
+      // 管理 → 删掉自己存的常用查询
+      await setManage(page, true);
       await page.evaluate((name) => document.querySelector(`[data-assistant-saved-remove="${name}"]`)?.click(), queryName);
       await sleep(1200);
       const removed = await page.evaluate((name) => !!document.querySelector(`[data-assistant-saved="${name}"]`), queryName);
       const storedAfter = (await api(page, '/api/configs')).body?.data?.assistant_saved_queries || '';
       check('「管理」里能删掉这条常用查询，配置里也不留',
         removed === false && !storedAfter.includes(queryName), JSON.stringify({ removed, storedAfter }).slice(0, 160));
+
+      // 开箱提示词也能删（用户 2026-10-19：「在管理中增加删除常用快速提示词」），删完可恢复
+      await setManage(page, true);
+      await page.evaluate(() => document.querySelector('[data-assistant-chip-remove="写今年的年报"]')?.click());
+      await sleep(800);
+      const chipHidden = await page.evaluate(() => ({
+        gone: !document.querySelector('[data-assistant-chip-remove="写今年的年报"]'),
+        restore: !!document.querySelector('[data-assistant-restore-chips]'),
+      }));
+      const hiddenConfig = (await api(page, '/api/configs')).body?.data?.assistant_hidden_chips || '';
+      check('管理里能删掉开箱提示词，并记进配置',
+        chipHidden.gone === true && hiddenConfig.includes('写今年的年报'), JSON.stringify({ chipHidden, hiddenConfig }).slice(0, 160));
+      await page.evaluate(() => document.querySelector('[data-assistant-restore-chips]')?.click());
+      await sleep(800);
+      await setManage(page, false);
+      const chipBack = await page.evaluate(() => !!document.querySelector('[data-assistant-chip="写今年的年报"]'));
+      const restoredConfig = (await api(page, '/api/configs')).body?.data?.assistant_hidden_chips || '';
+      check('删掉的提示词能一键恢复，配置里清空',
+        chipBack === true && !restoredConfig.includes('写今年的年报'), JSON.stringify({ chipBack, restoredConfig }).slice(0, 160));
       // ---------------- 4.5 「@清单名」：把数据源收到某一栏 ----------------
       // 用户 2026-10-17：「ai数据来源 增加 @ 功能，使用@清单名称 来指定数据源，
       // 输入@自动显示列表通过选择补充到对话框中」。

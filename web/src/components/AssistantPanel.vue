@@ -80,17 +80,34 @@
             <!-- 常用问法：开箱卡片与自己存的查询放在同一处（用户 2026-10-17：
                  「本周周报…与对话框中卡片项合并，保存内容放在此处，不再放在下面」）。
                  存完立刻在这排出现，不再放到底部「数据口径」栏。 -->
-            <div class="flex flex-wrap gap-1.5" :class="messages.length ? '' : 'mt-3'" data-assistant-quick>
+            <div class="flex flex-wrap items-center gap-1.5" :class="messages.length ? '' : 'mt-3'" data-assistant-quick>
+              <template v-for="chip in visibleChips" :key="chip.label">
+                <button
+                  v-if="!quickEditing"
+                  type="button"
+                  class="assistant-chip"
+                  :data-assistant-chip="chip.label"
+                  @click="send(chip.label, chip.option)"
+                >
+                  {{ chip.label }}
+                </button>
+                <span v-else class="assistant-saved-tag">
+                  {{ chip.label }}
+                  <button
+                    type="button"
+                    class="assistant-saved-remove"
+                    :data-assistant-chip-remove="chip.label"
+                    title="从常用提示词里删掉，可在「管理」里恢复"
+                    @click="hideChip(chip.label)"
+                  >✕</button>
+                </span>
+              </template>
               <button
-                v-for="chip in quickChips"
-                :key="chip.label"
                 type="button"
-                class="assistant-chip"
-                :data-assistant-chip="chip.label"
-                @click="send(chip.label, chip.option)"
-              >
-                {{ chip.label }}
-              </button>
+                class="assistant-link"
+                data-assistant-manage
+                @click="quickEditing = !quickEditing"
+              >{{ quickEditing ? '完成' : '管理' }}</button>
             </div>
             <div
               v-if="savedQueries.length"
@@ -100,7 +117,7 @@
               <span class="text-[10px] font-bold text-muted-foreground" data-assistant-saved-label>我的</span>
               <template v-for="item in savedQueries" :key="item.name">
                 <button
-                  v-if="!savedEditing"
+                  v-if="!quickEditing"
                   type="button"
                   class="assistant-chip"
                   :data-assistant-saved="item.name"
@@ -120,12 +137,6 @@
                   >✕</button>
                 </span>
               </template>
-              <button
-                type="button"
-                class="assistant-link"
-                data-assistant-saved-edit
-                @click="savedEditing = !savedEditing"
-              >{{ savedEditing ? '完成' : '管理' }}</button>
             </div>
 
             <template v-for="(msg, i) in messages" :key="i">
@@ -219,8 +230,11 @@
             </div>
           </div>
 
-          <!-- 数据口径：周报/月报/工作清单按这里的区间取数 -->
-          <section class="border-t border-border px-3 pt-3" data-assistant-scope>
+          <!-- 管理面板：范围/关键词/存为常用，只在点「管理」时展开 -->
+          <section v-if="quickEditing" class="border-t border-border px-3 pt-3" data-assistant-scope>
+            <p class="text-[11px] leading-4 text-muted-foreground">
+              先选时间范围、填关键词，再问我；存成常用后就在上面那排。点提示词上的 ✕ 可删掉不用的。
+            </p>
             <div class="mt-2 flex flex-wrap items-center gap-1.5">
               <select v-model="scope.option" class="assistant-select" data-assistant-range aria-label="时间范围">
                 <option value="">自动识别（按我说的时间词）</option>
@@ -258,7 +272,16 @@
               <button type="button" class="assistant-link" data-assistant-save-confirm @click="confirmSave">保存</button>
               <button type="button" class="assistant-link" data-assistant-save-cancel @click="savingName = null">取消</button>
             </div>
-            <p v-if="scopeError" class="mt-1.5 text-[11px] text-destructive" data-assistant-scope-error>{{ scopeError }}</p>
+            <div class="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+              <p v-if="scopeError" class="text-[11px] text-destructive" data-assistant-scope-error>{{ scopeError }}</p>
+              <button
+                v-if="hiddenChips.length"
+                type="button"
+                class="assistant-link"
+                data-assistant-restore-chips
+                @click="restoreChips"
+              >恢复默认提示词</button>
+            </div>
           </section>
 
           <!-- 输入区 -->
@@ -421,7 +444,9 @@ const thinkingMode = ref<AssistantThinkingMode>('brief')
 const scope = ref({ option: '', from: '', to: '', keyword: '' })
 const scopeError = ref('')
 const savedQueries = ref<SavedQuery[]>([])
-const savedEditing = ref(false)
+const hiddenChips = ref<string[]>([])
+const quickEditing = ref(false)
+const visibleChips = computed(() => quickChips.filter((chip) => !hiddenChips.value.includes(chip.label)))
 const savingName = ref<string | null>(null)
 
 /** 对话只存在内存里：关掉面板再打开还在，刷新页面就清空（要落库再说）。 */
@@ -734,6 +759,15 @@ function describeQuery(item: SavedQuery): string {
 async function loadSavedQueries() {
   try {
     const res = await getAllConfigs()
+    const hiddenRaw = String(res.data?.data?.assistant_hidden_chips ?? '')
+    if (hiddenRaw) {
+      const parsedHidden = JSON.parse(hiddenRaw)
+      if (Array.isArray(parsedHidden)) {
+        hiddenChips.value = parsedHidden
+          .filter((row: any) => typeof row === 'string')
+          .filter((label: string) => quickChips.some((chip) => chip.label === label))
+      }
+    }
     const raw = String(res.data?.data?.assistant_saved_queries ?? '')
     if (!raw) return
     const parsed = JSON.parse(raw)
@@ -754,13 +788,29 @@ async function loadSavedQueries() {
 
 async function persistSavedQueries(next: SavedQuery[]) {
   savedQueries.value = next
-  // 删光了就没有「我的」这一行，管理态也要退出来，否则下次新存的一条直接进删除模式。
-  if (!next.length) savedEditing.value = false
   try {
     await updateConfig('assistant_saved_queries', JSON.stringify(next))
   } catch (err: any) {
     scopeError.value = `常用查询没能保存：${err?.message || '保存失败'}`
   }
+}
+
+async function persistHiddenChips(next: string[]) {
+  hiddenChips.value = next
+  try {
+    await updateConfig('assistant_hidden_chips', JSON.stringify(next))
+  } catch (err: any) {
+    scopeError.value = `提示词没能保存：${err?.message || '保存失败'}`
+  }
+}
+
+function hideChip(label: string) {
+  if (hiddenChips.value.includes(label)) return
+  void persistHiddenChips([...hiddenChips.value, label])
+}
+
+function restoreChips() {
+  void persistHiddenChips([])
 }
 
 function beginSave() {
