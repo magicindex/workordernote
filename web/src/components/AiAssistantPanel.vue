@@ -228,90 +228,6 @@
           </span>
         </label>
 
-        <label class="block sm:col-span-2">
-          <span class="text-xs font-bold text-foreground">系统提示词</span>
-          <textarea
-            v-model="form.system_prompt"
-            rows="3"
-            class="input-field !py-2 mt-1.5 text-[13px] leading-5"
-            :disabled="busy"
-            data-ai-prompt
-          ></textarea>
-          <span class="mt-1 block text-[11px] leading-4 text-muted-foreground">
-            每轮对话都由服务端加在最前面（前端传不进来，也不会被对话内容顶掉）。
-            <button
-              type="button"
-              class="underline hover:text-foreground"
-              :disabled="busy"
-              @click="form.system_prompt = settings?.default_system_prompt || ''"
-            >
-              恢复默认
-            </button>
-          </span>
-        </label>
-
-        <!-- 各栏目的 AI 提示词（用户 2026-10-17：「为每个不同栏目增加 ai 提示词以更好完成相关
-             ai 分析」）：存在清单上而不是这里保存的一份全局配置——新建清单天然能带，多个清单
-             填同一段文字就是「共用」。这里只是给已存在的清单一个统一的编辑入口。 -->
-        <div class="sm:col-span-2" data-ai-list-prompts>
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-xs font-bold text-foreground">各栏目的 AI 提示词</span>
-            <span v-if="promptSavedId" class="text-[11px] font-semibold text-emerald-500" data-ai-list-prompt-saved>已保存</span>
-          </div>
-          <p class="mt-1 text-[11px] leading-4 text-muted-foreground">
-            小秘分析到某一栏的数据时，把这里的要求一起交给模型（只作用于那一栏，不影响别的）。
-            「引用其他栏目」会把那段文字复制过来，之后各改各的。
-          </p>
-          <div class="mt-2 space-y-2">
-            <div
-              v-for="list in promptLists"
-              :key="list.id"
-              class="rounded-xl border-2 border-brand-400 bg-brand-50/30 p-2 shadow-[0_0_0_1px_rgba(99,102,241,0.06)] dark:border-brand-400/60 dark:bg-brand-500/[0.08]"
-              :data-ai-list-prompt-row="list.name"
-            >
-              <div class="flex items-center justify-between gap-2">
-                <span class="truncate text-xs font-semibold text-foreground" :title="list.name">{{ list.name }}</span>
-                <span class="shrink-0 text-[10px] text-muted-foreground">{{ promptDirty(list) ? '未保存' : (list.ai_prompt ? '已设置' : '没设置') }}</span>
-              </div>
-              <textarea
-                v-model="promptDraft[list.id]"
-                rows="2"
-                maxlength="600"
-                class="input-field mt-1.5 !py-1.5 text-[12px] leading-5"
-                :disabled="busy || promptSavingId === list.id"
-                :placeholder="`这一栏的分析要求（可选），例如：按基站/线路分组，多说进度`"
-                :data-ai-list-prompt="list.name"
-              ></textarea>
-              <div class="mt-1 flex items-center justify-between gap-2">
-                <select
-                  v-model="promptRef[list.id]"
-                  class="input-field !h-7 !w-32 !py-0 text-[11px]"
-                  :disabled="busy || promptSavingId === list.id"
-                  :aria-label="`引用其他栏目的提示词（${list.name}）`"
-                  :data-ai-list-prompt-ref="list.name"
-                  @change="copyPromptRef(list.id)"
-                >
-                  <option value="">引用其他栏目…</option>
-                  <option
-                    v-for="other in promptSources(list)"
-                    :key="other.id"
-                    :value="String(other.id)"
-                  >{{ other.name }}</option>
-                </select>
-                <button
-                  type="button"
-                  class="btn-secondary !h-7 !rounded-lg !px-2 text-[11px]"
-                  :disabled="!promptDirty(list) || busy || promptSavingId === list.id"
-                  :data-ai-list-prompt-save="list.name"
-                  @click="saveListPrompt(list)"
-                >
-                  {{ promptSavingId === list.id ? '保存中…' : '保存' }}
-                </button>
-              </div>
-            </div>
-            <p v-if="!promptLists.length" class="text-[11px] text-muted-foreground">还没有清单。</p>
-          </div>
-        </div>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
@@ -393,15 +309,14 @@
 
 <script setup lang="ts">
 /**
- * 「系统配置 → AI 助手」：把模型参数（服务商 / 地址 / API Key / 模型名 / 提示词）
- * 做成后台可填的通用样式。
+ * 「系统配置 → AI 助手」：把模型参数（服务商 / 地址 / API Key / 模型名 / 思考口径）
+ * 做成后台可填的通用样式。提示词是个人偏好，放在「偏好设置 → AI 提示词」。
  *
  * 为什么不并进 ConfigGroupList（那边是「一个键一个值」的通用渲染）：这里要
  * 服务商预设联动、密钥掩码回显、连通性测试与结果明细，跟 SyncPanel 的理由一样
  * ——不是一维的键值能表达的。
  */
 import { computed, onMounted, reactive, ref } from 'vue'
-import { getLists, updateList, type ReminderList } from '../api/reminder'
 import {
   detectLocalOllama,
   getAssistantSettings,
@@ -431,18 +346,6 @@ const detection = ref<AssistantOllamaDetection | null>(null)
 /** 「检测本机 Ollama」带回来的模型列表：它比预设里的名字更贴近这台机器。 */
 const detectedModels = ref<string[]>([])
 
-/**
- * 各栏目的 AI 提示词：编辑的是**清单自己的** ai_prompt（不是这一屏的全局配置），
- * 所以保存走 PATCH /api/reminder/lists/:id，和「保存设置」是两条独立的路径。
- * 草稿按清单 id 存，用户改到一半时列表刷新也不会丢。
- */
-const promptLists = ref<ReminderList[]>([])
-const promptDraft = reactive<Record<number, string>>({})
-const promptRef = reactive<Record<number, string>>({})
-const promptSavingId = ref(0)
-const promptSavedId = ref(0)
-let promptSavedTimer: ReturnType<typeof setTimeout> | undefined
-
 /** 上一次选中的服务商：切换预设时用它判断「地址/模型是不是还是上一个预设的值」。 */
 const lastProviderId = ref('')
 
@@ -453,7 +356,6 @@ const form = reactive({
   api_key: '',
   clear_api_key: false,
   model: '',
-  system_prompt: '',
   timeout_seconds: 60,
   thinking_mode: 'brief' as AssistantThinkingMode,
 })
@@ -561,7 +463,9 @@ function payload(): AssistantSettingsInput {
     provider: form.provider,
     base_url: form.base_url,
     model: form.model,
-    system_prompt: form.system_prompt,
+    // 系统提示词已搬到「偏好设置」，这里不再显示；保存时原样带回，避免把
+    // 管理员设的默认值清空（后端把空串当成「改成默认」）。
+    system_prompt: settings.value?.system_prompt || '',
     timeout_seconds: Number(form.timeout_seconds) || 60,
     thinking_mode: form.thinking_mode,
   }
@@ -578,7 +482,6 @@ function applySettings(data: AssistantSettings) {
   form.api_key = ''
   form.clear_api_key = false
   form.model = data.model
-  form.system_prompt = data.system_prompt
   form.timeout_seconds = data.timeout_seconds
   form.thinking_mode = normalizeThinkingMode(data.thinking_mode)
   lastProviderId.value = data.provider
@@ -594,56 +497,6 @@ async function load() {
     errorMsg.value = err?.message || '加载 AI 配置失败'
   } finally {
     loading.value = false
-  }
-  // 栏目提示词是清单上的字段（另走一条接口），和上面那屏配置互不阻塞。
-  void loadListPrompts()
-}
-
-/** 当前草稿与已保存的值不同 → 显示「未保存」并允许点保存。 */
-function promptDirty(list: ReminderList) {
-  return (promptDraft[list.id] ?? '').trim() !== (list.ai_prompt || '').trim()
-}
-
-/** 「引用」下拉里列出别的、已经写了提示词的栏目（自己的不列）。 */
-function promptSources(current: ReminderList) {
-  return promptLists.value.filter((item) => item.id !== current.id && (item.ai_prompt || '').trim() !== '')
-}
-
-/** 选一个栏目 = 把那段文字复制进草稿（一次性；之后各改各的，不是引用同一份）。 */
-function copyPromptRef(id: number) {
-  const picked = promptLists.value.find((item) => String(item.id) === String(promptRef[id]))
-  if (picked) promptDraft[id] = picked.ai_prompt || ''
-  promptRef[id] = ''
-}
-
-async function loadListPrompts() {
-  try {
-    const res = await getLists()
-    const rows: ReminderList[] = res.data?.data || []
-    promptLists.value = rows
-    for (const list of rows) {
-      promptDraft[list.id] = list.ai_prompt || ''
-      promptRef[list.id] = ''
-    }
-  } catch {
-    // 清单取不到不该把整屏弄成错误态：配置本身还能读写，这里留空即可。
-  }
-}
-
-async function saveListPrompt(list: ReminderList) {
-  promptSavingId.value = list.id
-  try {
-    const text = (promptDraft[list.id] || '').trim()
-    await updateList(list.id, { ai_prompt: text })
-    list.ai_prompt = text
-    promptDraft[list.id] = text
-    promptSavedId.value = list.id
-    if (promptSavedTimer) clearTimeout(promptSavedTimer)
-    promptSavedTimer = setTimeout(() => { promptSavedId.value = 0 }, 2400)
-  } catch (err: any) {
-    errorMsg.value = err?.response?.data?.message || err?.message || '保存栏目提示词失败'
-  } finally {
-    promptSavingId.value = 0
   }
 }
 

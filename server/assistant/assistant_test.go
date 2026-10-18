@@ -724,3 +724,85 @@ func TestTestEndpointReportsUnreachableUpstream(t *testing.T) {
 		t.Fatalf("应当报告无法连接，实际 %q", detail)
 	}
 }
+
+// callAs 发一个带登录用户上下文（userID）的请求，供个人配置类用例使用。
+func callAs(t *testing.T, handler gin.HandlerFunc, method, path, body string, userID uint) (int, map[string]interface{}) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(method, path, strings.NewReader(body))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Set("userID", userID)
+	handler(ctx)
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("响应不是合法 JSON: %v（%s）", err, recorder.Body.String())
+	}
+	return recorder.Code, parsed
+}
+
+// TestSystemPromptIsPerUser 锁住「系统提示词是个人偏好」：两个人各写各的，
+// 互不覆盖；没写的人用默认值。
+func TestSystemPromptIsPerUser(t *testing.T) {
+	db := newTestDB(t)
+	saveComplete(t, db, "http://127.0.0.1:1", settingsInput{SystemPrompt: "管理员的默认"})
+
+	status, parsed := callAs(t, handleSavePromptPrefs(db), http.MethodPut, "/api/assistant/prompts",
+		`{"system_prompt":"  只对我生效的人设  "}`, 7)
+	if status != http.StatusOK {
+		t.Fatalf("保存应当 200，实际 %d（%v）", status, parsed)
+	}
+	if got := effectiveSystemPrompt(db, 7, "管理员的默认"); got != "只对我生效的人设" {
+		t.Errorf("本人提示词没生效：%q", got)
+	}
+	if got := effectiveSystemPrompt(db, 8, "管理员的默认"); got != "管理员的默认" {
+		t.Errorf("别人不该看到我的提示词：%q", got)
+	}
+
+	status, parsed = callAs(t, handleGetPromptPrefs(db), http.MethodGet, "/api/assistant/prompts", "", 7)
+	if status != http.StatusOK {
+		t.Fatalf("读取应当 200，实际 %d（%v）", status, parsed)
+	}
+	data, _ := parsed["data"].(map[string]interface{})
+	if data["system_prompt"] != "只对我生效的人设" || data["default_system_prompt"] != "管理员的默认" {
+		t.Errorf("读取结果不对：%v", data)
+	}
+
+	// 对话时也用「我的」那份，而不是管理员设的默认值。
+	var gotMessages []Message
+	upstream := newStubUpstream(t, func(w http.ResponseWriter, r *http.Request) {
+		var body chatRequest
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotMessages = body.Messages
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"收到"}}]}`))
+	})
+	saveComplete(t, db, upstream.URL, settingsInput{SystemPrompt: "管理员的默认"})
+	status, _ = callAs(t, handleChat(db), http.MethodPost, "/api/assistant/chat",
+		`{"messages":[{"role":"user","content":"你好"}]}`, 7)
+	if status != http.StatusOK || len(gotMessages) == 0 || gotMessages[0].Content != "只对我生效的人设" {
+		t.Errorf("对话应当带上我自己的系统提示词，实际 %d %+v", status, gotMessages)
+	}
+
+	long := strings.Repeat("字", maxUserPromptRunes+1)
+	status, parsed = callAs(t, handleSavePromptPrefs(db), http.MethodPut, "/api/assistant/prompts",
+		`{"system_prompt":"`+long+`"}`, 7)
+	if status != http.StatusBadRequest || !strings.Contains(asString(parsed["message"]), "2000") {
+		t.Errorf("超长应当 400 并说明上限，实际 %d %v", status, parsed)
+	}
+
+	// 清空 = 回到默认。
+	status, _ = callAs(t, handleSavePromptPrefs(db), http.MethodPut, "/api/assistant/prompts",
+		`{"system_prompt":""}`, 7)
+	if status != http.StatusOK {
+		t.Fatalf("清空应当 200，实际 %d", status)
+	}
+	if got := effectiveSystemPrompt(db, 7, "管理员的默认"); got != "管理员的默认" {
+		t.Errorf("清空后应当回到默认：%q", got)
+	}
+}
+
+func asString(v interface{}) string {
+	s, _ := v.(string)
+	return s
+}

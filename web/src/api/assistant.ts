@@ -343,3 +343,20 @@ export async function testAssistantSettings(input?: AssistantSettingsInput): Pro
     unwrapError(err, '测试连接失败')
   }
 }
+
+/** 「我的系统提示词」：空串表示还没写，会回退到 default_system_prompt。 */
+export interface AssistantPromptPrefs {
+  system_prompt: string
+  default_system_prompt: string
+  max_length: number
+}
+
+/** 读自己的系统提示词（登录用户即可，不需要管理员）。 */
+export function getPromptPrefs() {
+  return request.get('/api/assistant/prompts')
+}
+
+/** 写自己的系统提示词；传空串 = 恢复默认（管理员设的那份）。 */
+export function savePromptPrefs(system_prompt: string) {
+  return request.put('/api/assistant/prompts', { system_prompt })
+}

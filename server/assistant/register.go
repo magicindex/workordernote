@@ -47,6 +47,13 @@ func init() {
 		Default: defaultSystemPrompt, Internal: true, Group: "assistant", Label: "系统提示词",
 		Description: "每轮对话都由服务端加在最前面，决定小秘的人设与边界",
 	})
+	// 个人系统提示词：每个人一份，放在偏好设置里改；Internal 让它不出现在
+	// 通用配置接口的列表里（读写走 /api/assistant/prompts）。
+	sysconfig.RegisterConfig(sysconfig.ConfigDef{
+		Key: keyUserPrompt, Scope: sysconfig.ScopeUser, Type: sysconfig.TypeString,
+		Default: "", Internal: true, Group: "assistant", Label: "我的系统提示词",
+		Description: "只影响你自己和小秘的对话；留空则使用管理员设的默认提示词",
+	})
 	sysconfig.RegisterConfig(sysconfig.ConfigDef{
 		Key: keyTimeout, Scope: sysconfig.ScopeSystem, Type: sysconfig.TypeInt,
 		Default: "60", Internal: true, Group: "assistant", Label: "请求超时（秒）",
@@ -72,6 +79,10 @@ func RegisterRoutes(auth *gin.RouterGroup, admin *gin.RouterGroup, db *gorm.DB) 
 	// 把小秘的一段回答存进记事本（标题与标签由服务端自动生成）：
 	// 与对话一样是每个用户自己的数据，所以挂登录用户组。
 	auth.POST("/assistant/notes", handleSaveNote(db))
+	// 个人提示词：登录用户读写自己的（系统提示词）。各栏目的提示词存在清单上，
+	// 走 /api/reminder/lists/:id 的 ai_prompt 字段。
+	auth.GET("/assistant/prompts", handleGetPromptPrefs(db))
+	auth.PUT("/assistant/prompts", handleSavePromptPrefs(db))
 
 	admin.GET("/assistant/admin/settings", handleGetSettings(db))
 	admin.PUT("/assistant/admin/settings", handleSaveSettings(db))

@@ -35,9 +35,17 @@ const (
 	keyAPIKey       = "ai_api_key"
 	keyModel        = "ai_model"
 	keySystemPrompt = "ai_system_prompt"
+	// keyUserPrompt 是「每个人自己的系统提示词」。0.35.0 之前系统提示词只有
+	// 管理员能改；现在它是个人偏好：这个人写过就用他的，没写才回退到管理员
+	// 设的默认值（keySystemPrompt）。
+	keyUserPrompt   = "ai_user_prompt"
 	keyTimeout      = "ai_timeout_seconds"
 	keyThinkingMode = "ai_thinking_mode"
 )
+
+// maxUserPromptRunes 是个人系统提示词的长度上限。默认提示词约 230 字，2000
+// 足够写清楚人设与边界，又不至于把每一轮请求都撑成一篇长文。
+const maxUserPromptRunes = 2000
 
 // 超时（秒）：太长会把一个卡住的上游拖成「转圈半分钟没反应」，太短会误杀
 // 慢模型的长回答。默认 60，允许 5–600。
@@ -181,6 +189,28 @@ func configValue(db *gorm.DB, key string) string {
 		value = v
 	}
 	return value
+}
+
+// userSystemPrompt 读这个人自己的系统提示词；没写过就是空串。
+// userID 为 0（后台/测试没有当前用户）时直接返回空，绝不回退去读别人的行。
+func userSystemPrompt(db *gorm.DB, userID uint) string {
+	if userID == 0 {
+		return ""
+	}
+	v, err := sysconfig.GetConfig(db, keyUserPrompt, userID)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(v)
+}
+
+// effectiveSystemPrompt 给出这一轮真正要用的系统提示词：本人的优先，
+// 没写就用管理员设的默认值（settings.SystemPrompt，默认值是内置文案）。
+func effectiveSystemPrompt(db *gorm.DB, userID uint, fallback string) string {
+	if v := userSystemPrompt(db, userID); v != "" {
+		return v
+	}
+	return strings.TrimSpace(fallback)
 }
 
 // loadSettings 读出当前生效的设置；缺项/脏值一律退回默认值，绝不返回错误——

@@ -17,6 +17,9 @@
       @save="handleSave"
     />
 
+    <!-- AI 提示词（系统提示词 + 各栏目）：个人偏好，登录用户都能改 -->
+    <AiPromptPrefs v-if="!loading" />
+
     <!-- 默认清单：新建提醒不带清单时落在这里，删除清单后其提醒也归到这里 -->
     <div class="surface mt-4 rounded-2xl p-4 sm:p-6">
       <h3 class="text-sm font-bold text-foreground">默认清单</h3>
@@ -66,6 +69,7 @@
 import { computed, onMounted, ref } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfigGroupList from '../components/ConfigGroupList.vue'
+import AiPromptPrefs from '../components/AiPromptPrefs.vue'
 import { getUserConfigMeta, updateConfig } from '../api/config'
 import type { ConfigMeta } from '../api/config'
 import { getLists, updateList, type ReminderList } from '../api/reminder'

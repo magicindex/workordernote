@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"smallgo/server/logger"
 	"smallgo/server/response"
+	"smallgo/server/sysconfig"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -82,6 +84,7 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 		}
 		started := time.Now()
 		settings := loadSettings(db)
+		systemPrompt := effectiveSystemPrompt(db, c.GetUint("userID"), settings.SystemPrompt)
 		active := settings.active()
 		thinkingMode := settings.ThinkingMode
 		if strings.TrimSpace(body.Thinking) != "" {
@@ -131,9 +134,9 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 		payload := messages
 		switch {
 		case found:
-			payload = append([]Message{{Role: "system", Content: digestSystemPrompt(settings.SystemPrompt, digest)}}, messages...)
-		case settings.SystemPrompt != "":
-			payload = append([]Message{{Role: "system", Content: settings.SystemPrompt}}, messages...)
+			payload = append([]Message{{Role: "system", Content: digestSystemPrompt(systemPrompt, digest)}}, messages...)
+		case systemPrompt != "":
+			payload = append([]Message{{Role: "system", Content: systemPrompt}}, messages...)
 		}
 		result, err := newClient(settings).Chat(c.Request.Context(), payload)
 		if err != nil {
@@ -169,6 +172,45 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 			"thinking_truncated": thinkingTruncated,
 			"thinking_mode":      thinkingMode,
 		})
+	}
+}
+
+// handleGetPromptPrefs 返回「我」的系统提示词与默认值。
+//
+// system_prompt 是这个人自己写的那份（空串 = 还没写）；default_system_prompt
+// 是没写时会生效的管理员默认值，面板拿它做占位提示与「恢复默认」的说明。
+func handleGetPromptPrefs(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		settings := loadSettings(db)
+		response.Success(c, gin.H{
+			"system_prompt":         userSystemPrompt(db, c.GetUint("userID")),
+			"default_system_prompt": strings.TrimSpace(settings.SystemPrompt),
+			"max_length":            maxUserPromptRunes,
+		})
+	}
+}
+
+// handleSavePromptPrefs 只改调用者自己的那一行（user_id = 当前登录用户），
+// 所以没有管理员权限的人也能保存，改不到别人。
+func handleSavePromptPrefs(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			SystemPrompt string `json:"system_prompt"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.ErrorBadRequest(c, "请求格式不对")
+			return
+		}
+		value := strings.TrimSpace(strings.ReplaceAll(req.SystemPrompt, "\r\n", "\n"))
+		if utf8.RuneCountInString(value) > maxUserPromptRunes {
+			response.ErrorBadRequest(c, fmt.Sprintf("系统提示词最多 %d 个字符", maxUserPromptRunes))
+			return
+		}
+		if err := sysconfig.UpdateConfig(db, keyUserPrompt, value, c.GetUint("userID")); err != nil {
+			response.ErrorInternal(c, "保存失败")
+			return
+		}
+		response.Success(c, gin.H{"system_prompt": value})
 	}
 }
 

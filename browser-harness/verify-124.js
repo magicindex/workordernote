@@ -507,19 +507,75 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       check('收尾把测试记事删掉了', del.status === 200 && del.body?.code === 0, JSON.stringify(del.body));
     }
 
-    // ---------- 5b. 各栏目的 AI 提示词：存在清单上、可引用、清空即生效（用户 2026-10-17）----------
-    await page.goto(`${BASE}/admin/configs`, { waitUntil: 'networkidle2' });
-    await sleep(900);
-    const listRows = (await api(page, '/api/reminder/lists')).body?.data || [];
+    // ---------- 5b. 提示词搬到偏好设置：系统提示词 + 各栏目提示词（用户 2026-10-18）----------
+    // 这两样以前在「系统配置 → AI 助手」里，只有管理员能改；现在是个人偏好。
+    const adminHasPrompts = await page.evaluate(() => ({
+      system: !!document.querySelector('[data-ai-prompt]'),
+      lists: !!document.querySelector('[data-ai-list-prompts]'),
+    }));
+    check('系统配置页不再显示提示词（只有管理员进得去，别人改不了）',
+      !adminHasPrompts.system && !adminHasPrompts.lists, JSON.stringify(adminHasPrompts));
+
+    let listRows = (await api(page, '/api/reminder/lists')).body?.data || [];
+    let extraList = null;
+    const generalsOf = (rows) => rows.filter((row) => !row.template || row.template === 'general');
+    if (generalsOf(listRows).length < 2) {
+      // 新实例只有一条默认清单：造一条临时清单，用完删掉。
+      const created = await api(page, '/api/reminder/lists', 'POST', { name: '验提示词-临时', color: 'blue', icon: 'list' });
+      extraList = created.body?.data || null;
+      listRows = (await api(page, '/api/reminder/lists')).body?.data || [];
+      check('为验证补了一条临时清单', !!extraList && listRows.some((row) => row.id === extraList.id), JSON.stringify(created.body).slice(0, 120));
+    }
     check('清单接口带 ai_prompt 字段（默认是空串）',
       listRows.length > 0 && listRows.every((row) => typeof row.ai_prompt === 'string'),
       JSON.stringify(listRows.slice(0, 2).map((row) => ({ name: row.name, ai_prompt: row.ai_prompt }))));
 
-    const generalLists = listRows.filter((row) => !row.template || row.template === 'general');
+    const generalLists = generalsOf(listRows);
     const target = generalLists[0] || null;
     const other = generalLists[1] || null;
     check('至少有两条普通清单可用来验「各栏一条 / 互相引用」', !!target && !!other,
       JSON.stringify(generalLists.map((row) => row.name)));
+
+    // 自己可能已经写过：先清回默认，才能验「用默认」这个初始态。
+    await api(page, '/api/assistant/prompts', 'PUT', { system_prompt: '' });
+    await page.goto(`${BASE}/admin/settings`, { waitUntil: 'networkidle2' });
+    await sleep(1200);
+    const prefShape = await page.evaluate(() => {
+      const box = document.querySelector('[data-ai-pref-prompt]');
+      return {
+        section: !!document.querySelector('[data-ai-prompt-prefs]'),
+        hasPrompt: !!box,
+        value: box ? box.value : '',
+        state: (document.querySelector('[data-ai-pref-prompt-state]')?.textContent || '').trim(),
+      };
+    });
+    check('偏好设置里有「AI 提示词」一节和系统提示词输入框', prefShape.section && prefShape.hasPrompt, JSON.stringify(prefShape));
+    check('没写过时标「用默认」', prefShape.state.includes('用默认'), prefShape.state);
+
+    const USER_PROMPT = '回答时先给结论，再用三行以内说明';
+    await page.click('[data-ai-pref-prompt]');
+    await page.keyboard.down('Control');
+    await page.keyboard.press('A');
+    await page.keyboard.up('Control');
+    await page.keyboard.type(USER_PROMPT);
+    await sleep(250);
+    const prefDirty = await page.evaluate(() => (document.querySelector('[data-ai-pref-prompt-state]')?.textContent || '').trim());
+    check('改过之后标「未保存」', prefDirty.includes('未保存'), prefDirty);
+    await page.click('[data-ai-pref-prompt-save]');
+    await sleep(900);
+    const prefSaved = await page.evaluate(() => ({
+      state: (document.querySelector('[data-ai-pref-prompt-state]')?.textContent || '').trim(),
+      notice: !!document.querySelector('[data-ai-pref-prompt-notice]'),
+    }));
+    const myPrompt = (await api(page, '/api/assistant/prompts')).body?.data || {};
+    check('保存后写进「我自己」的那份，并提示已保存',
+      prefSaved.state.includes('已保存') && prefSaved.notice && myPrompt.system_prompt === USER_PROMPT,
+      JSON.stringify({ ...prefSaved, saved: myPrompt.system_prompt }));
+
+    const adminSettingsNow = (await api(page, '/api/assistant/admin/settings')).body?.data || {};
+    check('管理员设的默认提示词没被我改掉',
+      adminSettingsNow.system_prompt === (before.system_prompt || before.default_system_prompt || ''),
+      JSON.stringify({ now: adminSettingsNow.system_prompt?.slice(0, 24), before: before.system_prompt?.slice(0, 24) }));
 
     const sectionShape = await page.evaluate(() => {
       const rows = Array.from(document.querySelectorAll('[data-ai-list-prompt-row]'));
@@ -575,7 +631,14 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       check('清空提示词接口正常', cleared.body?.code === 0, JSON.stringify(cleared.body).slice(0, 120));
     }
 
-    // ---------- 6. 收尾：恢复原设置（密钥留空表示不动） ----------
+    // 收尾：把自己的系统提示词清回默认，删掉临时清单。
+    await api(page, '/api/assistant/prompts', 'PUT', { system_prompt: '' });
+    if (extraList) {
+      const removed = await api(page, `/api/reminder/lists/${extraList.id}`, 'DELETE');
+      check('收尾删掉了临时清单', removed.body?.code === 0, JSON.stringify(removed.body).slice(0, 120));
+    }
+
+    // ---------- 6. 收尾：恢复原设置（密钥留空表示不动）----------
     await api(page, '/api/assistant/admin/settings', 'PUT', {
       enabled: before.enabled === true,
       provider: before.provider || 'deepseek',
