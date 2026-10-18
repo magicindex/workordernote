@@ -345,6 +345,11 @@ async function waitForCard(page, selector, timeout = 12000) {
         printHtml.includes(`${STAMP} 数学`) && printHtml.includes('三班 / 教学楼 201') && printHtml.includes('A4 landscape'),
         `len=${printHtml.length}`,
       );
+      // 打印的行数必须等于表里配的节次数：课要落在节次里，不能因为手工时间多长出一行。
+      const printTable = (await api(page, `/api/timetable/tables/${id1}`, 'GET')).body?.data?.table || {};
+      const periodTotal = (printTable.periods || []).length;
+      const printedRows = (printHtml.match(/<th class="t"><span/g) || []).length;
+      check('打印的行数等于节次数（课程都落在节次内）', printedRows === periodTotal, `${printedRows} vs ${periodTotal}`);
 
       // 移动端也看一眼（截图留档）
       await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });

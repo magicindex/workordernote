@@ -485,6 +485,24 @@ function sectionOfStart(start: string): PeriodKey {
   return 'evening'
 }
 
+// 把一节课塞进它所在的节次格：开始时间落在哪一节的 [start, end) 就进哪一格，
+// 跨过末尾的挂到最后一个节次，早于第一节的挂到第一节。这样卡片永远排在第 1…N 节里，
+// 不会再出现「节次外多出一行」——空节次开关关掉时，排了课的那一节也不再显示空格子。
+type TimetableSlot = { index: number; section: string; sectionIndex: number; start: string; end: string }
+type PeriodItem =
+  | { kind: 'entry'; at: string; entry: TimetableEntry }
+  | { kind: 'slot'; at: string; slot: TimetableSlot }
+
+function slotIndexFor(entry: TimetableEntry, sectionSlots: { start: string; end: string }[]) {
+  const at = entry.start_time
+  const inside = sectionSlots.findIndex((slot) => at >= slot.start && at < slot.end)
+  if (inside >= 0) return inside
+  for (let i = sectionSlots.length - 1; i >= 0; i -= 1) {
+    if (at >= sectionSlots[i].start) return i
+  }
+  return sectionSlots.length ? 0 : -1
+}
+
 const days = computed(() => weekdays.map((day, i) => {
   const own = entries.value
     .filter((entry) => entry.weekday === day.value)
@@ -497,13 +515,21 @@ const days = computed(() => weekdays.map((day, i) => {
     periods: SECTIONS
       .map((period) => {
         const ownInSection = own.filter((entry) => sectionOfStart(entry.start_time) === period.key)
-        const taken = new Set(ownInSection.map((entry) => entry.start_time))
-        const items = [
-          ...ownInSection.map((entry) => ({ kind: 'entry' as const, at: entry.start_time, entry })),
-          ...(showSlots.value ? slots.value : [])
-            .filter((slot) => slot.section === period.key && !taken.has(slot.start))
-            .map((slot) => ({ kind: 'slot' as const, at: slot.start, slot })),
-        ].sort((a, b) => a.at.localeCompare(b.at))
+        const sectionSlots = slots.value.filter((slot) => slot.section === period.key)
+        const buckets: TimetableEntry[][] = sectionSlots.map(() => [])
+        const loose: TimetableEntry[] = []
+        for (const entry of ownInSection) {
+          const index = slotIndexFor(entry, sectionSlots)
+          if (index >= 0) buckets[index].push(entry)
+          else loose.push(entry)
+        }
+        const items: PeriodItem[] = []
+        sectionSlots.forEach((slot, index) => {
+          const list = buckets[index].sort((a, b) => a.start_time.localeCompare(b.start_time))
+          if (list.length) list.forEach((entry) => items.push({ kind: 'entry', at: entry.start_time, entry }))
+          else if (showSlots.value) items.push({ kind: 'slot', at: slot.start, slot })
+        })
+        for (const entry of loose) items.push({ kind: 'entry', at: entry.start_time, entry })
         return { ...period, items, count: ownInSection.length }
       })
       .filter((period) => period.items.length > 0),
@@ -584,37 +610,47 @@ function printTimetable() {
   if (!table) return
   const esc = (value: string) =>
     (value || '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string))
-  // 按「节次 × 星期」排成表格：左边一列是时间，右边七列是课。
-  // 骨架里有空节也照排，手工填的怪时间单独占一行，四段之间插分界线。
+  // 按「节次 × 星期」排成表格：每一行就是一个节次，课程按开始时间落进对应那一行，
+  // 所以打印出来的行数永远等于表里配的节次数，不会因为手工时间多长出一行。
   const dayLists = days.value.map((day) => day.entries)
   const rows: {
     section: PeriodKey
     start: string
     end: string
     number: number | null
-    cells: (TimetableEntry | null)[]
+    cells: TimetableEntry[][]
   }[] = []
   for (const section of SECTIONS) {
-    const known = new Map<string, { end: string; number: number | null }>()
-    for (const slot of slots.value) {
-      if (slot.section === section.key) known.set(slot.start, { end: slot.end, number: slot.sectionIndex })
+    const sectionSlots = slots.value.filter((slot) => slot.section === section.key)
+    if (sectionSlots.length) {
+      sectionSlots.forEach((slot, index) => {
+        rows.push({
+          section: section.key,
+          start: slot.start,
+          end: slot.end,
+          number: slot.sectionIndex,
+          cells: dayLists.map((list) =>
+            list
+              .filter((entry) => sectionOfStart(entry.start_time) === section.key && slotIndexFor(entry, sectionSlots) === index)
+              .sort((a, b) => a.start_time.localeCompare(b.start_time)),
+          ),
+        })
+      })
+      continue
     }
-    for (const list of dayLists) {
+    // 这张表还没配节次时，退化成按课程时间成行，至少不会丢课。
+    const byStart = new Map<string, { end: string; cells: TimetableEntry[][] }>()
+    dayLists.forEach((list, dayIndex) => {
       for (const entry of list) {
         if (sectionOfStart(entry.start_time) !== section.key) continue
-        if (!known.has(entry.start_time)) known.set(entry.start_time, { end: entry.end_time, number: null })
+        if (!byStart.has(entry.start_time)) {
+          byStart.set(entry.start_time, { end: entry.end_time, cells: dayLists.map(() => []) })
+        }
+        byStart.get(entry.start_time)!.cells[dayIndex].push(entry)
       }
-    }
-    for (const [start, info] of [...known.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-      rows.push({
-        section: section.key,
-        start,
-        end: info.end,
-        number: info.number,
-        cells: dayLists.map((list) =>
-          list.find((entry) => entry.start_time === start && sectionOfStart(entry.start_time) === section.key) || null,
-        ),
-      })
+    })
+    for (const [start, info] of [...byStart.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      rows.push({ section: section.key, start, end: info.end, number: null, cells: info.cells })
     }
   }
   const head = days.value
@@ -625,12 +661,16 @@ function printTimetable() {
     if (!own.length) return ''
     const divider = `<tr class="sec"><th colspan="8">${esc(section.label)}</th></tr>`
     const lines = own.map((row) => {
-      const cells = row.cells.map((entry, i) => {
+      const cells = row.cells.map((list, i) => {
         const today = days.value[i].weekday === todayWeekday ? ' class="today"' : ''
-        if (!entry) return `<td${today}></td>`
-        const meta = [entryLocation(entry), entry.teacher].filter(Boolean).join(' · ')
-        return `<td${today}><span class="title">${esc(entry.title)}${entry.kind === 'activity' ? '<em>活动</em>' : ''}</span>` +
-          (meta ? `<span class="meta">${esc(meta)}</span>` : '') + '</td>'
+        if (!list.length) return `<td${today}></td>`
+        const inner = list.map((entry) => {
+          const meta = [entryLocation(entry), entry.teacher].filter(Boolean).join(' · ')
+          return `<div class="cell"><span class="e-time">${esc(entry.start_time)}–${esc(entry.end_time)}</span>` +
+            `<span class="title">${esc(entry.title)}${entry.kind === 'activity' ? '<em>活动</em>' : ''}</span>` +
+            (meta ? `<span class="meta">${esc(meta)}</span>` : '') + '</div>'
+        }).join('')
+        return `<td${today}>${inner}</td>`
       }).join('')
       const number = row.number ? `<span class="t-no">第${row.number}节</span>` : ''
       return `<tr><th class="t"><span class="t-time">${esc(row.start)}–${esc(row.end)}</span>${number}</th>${cells}</tr>`
@@ -659,6 +699,8 @@ td.today { background: #f8fafc; }
 .title { display: block; font-size: 11.5px; font-weight: 600; line-height: 1.3; }
 .title em { font-style: normal; font-size: 9px; font-weight: 500; color: #6b7280; border: 1px solid #d1d5db; border-radius: 3px; padding: 0 3px; margin-left: 3px; vertical-align: 1px; }
 .meta { display: block; font-size: 9px; color: #6b7280; margin-top: 1px; }
+.e-time { display: block; font-size: 8.5px; color: #6b7280; font-variant-numeric: tabular-nums; }
+.cell + .cell { margin-top: 3px; padding-top: 3px; border-top: 1px dashed #d1d5db; }
 tr.sec th { background: #e5e7eb; font-size: 10.5px; letter-spacing: .18em; text-align: left; padding: 3px 6px; }
 footer { margin-top: 8px; font-size: 9px; color: #9ca3af; display: flex; justify-content: space-between; }
 </style></head><body>
