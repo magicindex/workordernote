@@ -175,6 +175,48 @@ func TestTimetableNameValidation(t *testing.T) {
 	}
 }
 
+// 用户 2026-10-19：「节次按当前时间设置成默认」——新建表沿用当前表的节次与课时。
+func TestTimetableCreateCopiesPeriods(t *testing.T) {
+	db := newTestDB(t)
+	_, created := call(t, handleCreateTable(db), http.MethodPost, `{"name":"哥哥"}`, 9, nil)
+	id := dataID(t, created)
+
+	if status, _ := call(t, handleUpdateTable(db), http.MethodPatch,
+		`{"lesson_minutes":40}`, 9, params{"id": id}); status != http.StatusOK {
+		t.Fatalf("改课时失败：%d", status)
+	}
+	if status, _ := call(t, handleUpdateTable(db), http.MethodPatch,
+		`{"periods":[{"section":"early","start":"07:10","end":"07:50"},{"section":"morning","start":"08:10","end":"08:50"}]}`,
+		9, params{"id": id}); status != http.StatusOK {
+		t.Fatalf("改节次失败：%d", status)
+	}
+
+	status, copied := call(t, handleCreateTable(db), http.MethodPost,
+		`{"name":"妹妹","copy_from":`+id+`}`, 9, nil)
+	if status != http.StatusOK || copied["code"].(float64) != 0 {
+		t.Fatalf("复制建表失败：%d %v", status, copied)
+	}
+	data := copied["data"].(map[string]interface{})
+	periods, _ := data["periods"].([]interface{})
+	if len(periods) != 2 {
+		t.Fatalf("新表应沿用 2 节，实际 %d", len(periods))
+	}
+	first := periods[0].(map[string]interface{})
+	if first["start"] != "07:10" || first["section"] != "early" || data["lesson_minutes"].(float64) != 40 {
+		t.Errorf("新表没沿用当前表的节次/课时：%v / %v", first, data["lesson_minutes"])
+	}
+
+	// 不属于自己的表 id 不给复制，退回默认骨架。
+	status, other := call(t, handleCreateTable(db), http.MethodPost,
+		`{"name":"路人","copy_from":999999}`, 9, nil)
+	if status != http.StatusOK {
+		t.Fatalf("建表失败：%d", status)
+	}
+	if got := other["data"].(map[string]interface{})["periods"].([]interface{}); len(got) != defaultPeriodCount {
+		t.Errorf("非法 copy_from 应退回默认骨架，实际 %d 节", len(got))
+	}
+}
+
 func TestTimetablePacingDefaultsAndValidation(t *testing.T) {
 	db := newTestDB(t)
 	status, created := call(t, handleCreateTable(db), http.MethodPost, `{"name":"哥哥"}`, 9, nil)

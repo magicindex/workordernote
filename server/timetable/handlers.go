@@ -79,6 +79,9 @@ func handleCreateTable(db *gorm.DB) gin.HandlerFunc {
 		userID := c.GetUint("userID")
 		var req struct {
 			Name string `json:"name"`
+			// 用户 2026-10-19：「节次按当前时间设置成默认」——新表直接沿用当前这张表的
+			// 节次表与课时/课间，省得每次重填；没给或表不属于自己就用内置默认。
+			CopyFrom uint `json:"copy_from"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			response.ErrorBadRequest(c, "请求格式不对")
@@ -107,6 +110,14 @@ func handleCreateTable(db *gorm.DB) gin.HandlerFunc {
 			PeriodCount: defaultPeriodCount,
 		}
 		table.Periods = defaultPeriods()
+		if req.CopyFrom != 0 {
+			if source, ok := ownedTable(db, userID, fmt.Sprint(req.CopyFrom)); ok && len(source.Periods) > 0 {
+				table.Periods = source.Periods
+				table.PeriodCount = len(source.Periods)
+				table.LessonMinutes = source.LessonMinutes
+				table.BreakMinutes = source.BreakMinutes
+			}
+		}
 		table.PeriodsJSON = marshalPeriods(table.Periods)
 		if err := db.Create(&table).Error; err != nil {
 			response.ErrorInternal(c, "保存课程表失败")

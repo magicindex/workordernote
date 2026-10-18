@@ -49,7 +49,9 @@ export interface EntryInput {
 
 export const getTimetables = () => request.get('/api/timetable/tables')
 
-export const createTimetable = (name: string) => request.post('/api/timetable/tables', { name })
+// copyFrom：新建时沿用这张表的节次与课时（用户 2026-10-19：「节次按当前时间设置成默认」）。
+export const createTimetable = (name: string, copyFrom?: number) =>
+  request.post('/api/timetable/tables', copyFrom ? { name, copy_from: copyFrom } : { name })
 
 export const getTimetable = (id: number) => request.get(`/api/timetable/tables/${id}`)
 

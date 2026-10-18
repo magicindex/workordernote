@@ -2,6 +2,17 @@
   <div class="page-container animate-fade-in">
     <PageHeader title="课程表" description="按周几排课：一张表一个人，课程与课外活动分开标色。">
       <template #actions>
+        <button
+          v-if="tables.length"
+          type="button"
+          class="btn-secondary !h-9 !px-3 !text-xs"
+          title="改这张表的名称、课时与各段节次"
+          data-timetable-settings
+          @click="openTableSettings"
+        >
+          <svg viewBox="0 0 24 24" class="mr-1 h-4 w-4" fill="none" stroke="currentColor"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06A2 2 0 1 1 7.03 4.14l.06.06A1.7 1.7 0 0 0 8.96 4.6 1.7 1.7 0 0 0 10 3.05V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.04 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.12.38.44.66.84.76H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.24Z" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          设置
+        </button>
         <button type="button" class="btn-primary !h-9 !px-3 !text-xs" data-timetable-add-table @click="openNewTable">
           <svg viewBox="0 0 24 24" class="mr-1 h-4 w-4" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2" stroke-linecap="round"/></svg>
           新建表
@@ -42,16 +53,6 @@
           <input v-model="showSlots" type="checkbox" class="h-3.5 w-3.5 accent-brand-500" data-timetable-show-slots />
           空节次
         </label>
-        <button
-          type="button"
-          class="icon-button !h-8 !w-8 text-muted-foreground"
-          aria-label="课程表设置"
-          title="重命名或删除这张表"
-          data-timetable-settings
-          @click="openTableSettings"
-        >
-          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"/></svg>
-        </button>
       </div>
 
       <div v-if="!tables.length" class="mt-6 surface rounded-2xl px-6 py-14 text-center" data-timetable-empty>
@@ -558,7 +559,8 @@ async function submitNewTable() {
   creatingTable.value = true
   newTableError.value = ''
   try {
-    const res = await createTimetable(name)
+    // 新表沿用当前这张表的节次与课时，不用每次重填（没有当前表时服务端给默认骨架）。
+    const res = await createTimetable(name, activeId.value || undefined)
     if (res.data?.code !== 0) throw new Error(res.data?.message || '创建失败')
     createOpen.value = false
     await loadTables(res.data.data?.id || 0)

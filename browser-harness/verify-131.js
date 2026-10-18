@@ -117,6 +117,15 @@ async function waitForCard(page, selector, timeout = 12000) {
       const customPeriods = slots.map((p, i) => (i === 0 ? { ...p, start: '07:40' } : p));
       const custom = await api(page, `/api/timetable/tables/${id1}`, 'PATCH', { periods: customPeriods });
       check('每节次时间段可以自己设（第一节改 07:40）', custom.body?.data?.periods?.[0]?.start === '07:40', JSON.stringify(custom.body?.data?.periods?.[0]));
+      // 新建表沿用当前这张表的节次与课时（用户 2026-10-19：「节次按当前时间设置成默认」）。
+      const copiedTable = await api(page, '/api/timetable/tables', 'POST', { name: `${STAMP}-复制`, copy_from: Number(id1) });
+      if (copiedTable.body?.data?.id) createdTables.push(String(copiedTable.body.data.id));
+      check(
+        '新建表沿用当前这张表的节次',
+        JSON.stringify((copiedTable.body?.data?.periods || []).map((p) => p.start)) === JSON.stringify((custom.body?.data?.periods || []).map((p) => p.start)),
+        JSON.stringify(copiedTable.body?.data?.periods?.map((p) => p.start)),
+      );
+
       const overlap = await api(page, `/api/timetable/tables/${id1}`, 'PATCH', {
         periods: [{ section: 'early', start: '08:00', end: '08:45' }, { section: 'morning', start: '08:30', end: '09:15' }],
       });
