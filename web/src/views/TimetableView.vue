@@ -1066,9 +1066,23 @@ async function onDropOnEntry(event: DragEvent, target: TimetableEntry) {
   if (!editing.value || !source || source.id === target.id) return
   lastDropAt = Date.now()
   try {
-    // 先让目标去源的位置，再把源放到目标腾出来的位置，两条各自带上自己的全部字段。
-    await patchEntryPosition(target, source.weekday, source.start_time, source.end_time)
-    await patchEntryPosition(source, target.weekday, target.start_time, target.end_time)
+    // 只换「上什么课」，不换节次：两边各自保留原来的星期与起止时间，
+    // 把课程内容（名称/类型/地点/老师/备注/颜色）对调过去。
+    const swap = (from: TimetableEntry, to: TimetableEntry) => updateEntry(to.id, {
+      title: from.title,
+      kind: from.kind,
+      weekday: to.weekday,
+      start_time: to.start_time,
+      end_time: to.end_time,
+      location: from.location,
+      teacher: from.teacher,
+      note: from.note,
+      color: from.color,
+    })
+    const resA = await swap(source, target)
+    if (resA.data?.code !== 0) throw new Error(resA.data?.message || '交换失败')
+    const resB = await swap(target, source)
+    if (resB.data?.code !== 0) throw new Error(resB.data?.message || '交换失败')
     await Promise.all([loadEntries(activeId.value), loadTables(activeId.value)])
   } catch (err: any) {
     window.alert(err.message || '交换失败')

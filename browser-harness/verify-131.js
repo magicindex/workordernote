@@ -394,9 +394,14 @@ async function waitForCard(page, selector, timeout = 12000) {
       const aRow = swappedList.find((e) => String(e.id) === swapInfo.a);
       const bRow = swappedList.find((e) => String(e.id) === swapInfo.b);
       check(
-        '拖到已有课上会互换（星期与起止对调）',
-        swapInfo.ok && aRow?.weekday === 1 && aRow?.start_time === '09:00' && bRow?.weekday === 2 && bRow?.start_time === '07:30',
-        JSON.stringify({ a: aRow && { w: aRow.weekday, s: aRow.start_time }, b: bRow && { w: bRow.weekday, s: bRow.start_time } }),
+        '拖到已有课上只对调课程，节次时间保持不变',
+        swapInfo.ok
+          && aRow?.weekday === 2 && aRow?.start_time === '07:30' && aRow?.title === `${STAMP} 乙`
+          && bRow?.weekday === 1 && bRow?.start_time === '09:00' && bRow?.title === `${STAMP} 甲`,
+        JSON.stringify({
+          a: aRow && { w: aRow.weekday, s: aRow.start_time, t: aRow.title },
+          b: bRow && { w: bRow.weekday, s: bRow.start_time, t: bRow.title },
+        }),
       );
       await page.click('[data-timetable-edit]');
       await sleep(300);
