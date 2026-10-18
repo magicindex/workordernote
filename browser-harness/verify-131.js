@@ -147,7 +147,7 @@ async function waitForCard(page, selector, timeout = 12000) {
       });
       await api(page, `/api/timetable/tables/${id1}/entries`, 'POST', {
         title: `${STAMP} 自习`, kind: 'activity', weekday: 1, start_time: '19:00', end_time: '20:00',
-        location: '教室', teacher: '', note: '', color: 'slate',
+        location: '', teacher: '', note: '', color: 'slate',
       });
       check('课程能建', course.body?.code === 0 && course.body?.data?.kind === 'course');
       check('课外活动能建', activity.body?.code === 0 && activity.body?.data?.kind === 'activity');
@@ -288,6 +288,10 @@ async function waitForCard(page, selector, timeout = 12000) {
       await sleep(600);
       const addButtons = await page.$$eval('[data-table-add]', (els) => els.map((e) => e.getAttribute('data-table-add')));
       check('设置里四段各有「加一节」', addButtons.length === 4 && addButtons.includes('early') && addButtons.includes('evening'), addButtons.join(','));
+      await page.$eval('[data-table-location]', (el) => {
+        el.value = '三班 / 教学楼 201';
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      });
       await page.$eval('[data-table-period-start="1"]', (el) => {
         el.value = '08:30';
         el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -298,7 +302,12 @@ async function waitForCard(page, selector, timeout = 12000) {
       });
       await page.click('[data-table-save]');
       await sleep(1200);
-      const afterPeriods = (await api(page, `/api/timetable/tables/${id1}`, 'GET')).body?.data?.table?.periods || [];
+      const afterTable = (await api(page, `/api/timetable/tables/${id1}`, 'GET')).body?.data?.table || {};
+      check('表设置能存班级 / 地点', afterTable.location === '三班 / 教学楼 201', JSON.stringify(afterTable.location));
+      const monTexts = await page.$$eval('[data-day-column="1"] [data-entry-id]', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
+      check('课程没填地点时卡片自动用表里的班级 / 地点', monTexts.some((t) => t.includes(`${STAMP} 自习`) && t.includes('三班 / 教学楼 201')), monTexts.join(' | '));
+      check('课程自己填了地点仍以它为准', monTexts.some((t) => t.includes(`${STAMP} 数学`) && t.includes('三班')), monTexts.join(' | '));
+      const afterPeriods = afterTable.periods || [];
       check('改完第 2 节时间段会存进这张表', afterPeriods[1]?.start === '08:30' && afterPeriods[1]?.end === '09:00', JSON.stringify(afterPeriods[1]));
       await page.evaluate(() => {
         const box = document.querySelector('[data-timetable-show-slots]');

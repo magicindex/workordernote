@@ -78,7 +78,8 @@ func handleCreateTable(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetUint("userID")
 		var req struct {
-			Name string `json:"name"`
+			Name     string `json:"name"`
+			Location string `json:"location"`
 			// 用户 2026-10-19：「节次按当前时间设置成默认」——新表直接沿用当前这张表的
 			// 节次表与课时/课间，省得每次重填；没给或表不属于自己就用内置默认。
 			CopyFrom uint `json:"copy_from"`
@@ -88,6 +89,11 @@ func handleCreateTable(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		name, err := normalizeTableName(req.Name)
+		if err != nil {
+			response.ErrorBadRequest(c, err.Error())
+			return
+		}
+		location, err := normalizeLocation(req.Location)
 		if err != nil {
 			response.ErrorBadRequest(c, err.Error())
 			return
@@ -105,7 +111,7 @@ func handleCreateTable(db *gorm.DB) gin.HandlerFunc {
 		db.Model(&Timetable{}).Select("coalesce(max(position), -1) as p").
 			Where("user_id = ?", userID).Scan(&maxPos)
 		table := Timetable{
-			UserID: userID, Name: name, Position: maxPos.P + 1,
+			UserID: userID, Name: name, Location: location, Position: maxPos.P + 1,
 			LessonMinutes: defaultLessonMinutes, BreakMinutes: defaultBreakMinutes,
 			PeriodCount: defaultPeriodCount,
 		}
@@ -157,6 +163,7 @@ func handleUpdateTable(db *gorm.DB) gin.HandlerFunc {
 		}
 		var req struct {
 			Name          *string         `json:"name"`
+			Location      *string         `json:"location"`
 			Position      *int            `json:"position"`
 			LessonMinutes *int            `json:"lesson_minutes"`
 			BreakMinutes  *int            `json:"break_minutes"`
@@ -176,6 +183,15 @@ func handleUpdateTable(db *gorm.DB) gin.HandlerFunc {
 			}
 			updates["name"] = name
 			table.Name = name
+		}
+		if req.Location != nil {
+			location, err := normalizeLocation(*req.Location)
+			if err != nil {
+				response.ErrorBadRequest(c, err.Error())
+				return
+			}
+			updates["location"] = location
+			table.Location = location
 		}
 		if req.Position != nil {
 			updates["position"] = *req.Position
@@ -575,6 +591,15 @@ func normalizePacing(lesson, brk int) (int, int, error) {
 		return 0, 0, errors.New("课间分钟数要在 0–60 之间")
 	}
 	return lesson, brk, nil
+}
+
+// 表级「班级 / 地点」：可选，留空表示不设置（卡片就只显示条目自己的地点）。
+func normalizeLocation(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if utf8.RuneCountInString(raw) > 40 {
+		return "", errText("班级 / 地点最多 40 个字符")
+	}
+	return raw, nil
 }
 
 func normalizeTableName(raw string) (string, error) {

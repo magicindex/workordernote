@@ -109,8 +109,8 @@
                           <span class="timetable-card-title" :title="item.entry.title">{{ item.entry.title }}</span>
                           <span v-if="item.entry.kind === 'activity'" class="timetable-activity-tag">活动</span>
                         </span>
-                        <span v-if="item.entry.location || item.entry.teacher" class="timetable-card-meta">
-                          {{ [item.entry.location, item.entry.teacher].filter(Boolean).join(' · ') }}
+                        <span v-if="entryLocation(item.entry) || item.entry.teacher" class="timetable-card-meta">
+                          {{ [entryLocation(item.entry), item.entry.teacher].filter(Boolean).join(' · ') }}
                         </span>
                       </span>
                     </button>
@@ -243,6 +243,19 @@
         <label class="block">
           <span class="text-xs font-bold text-foreground">名字</span>
           <input v-model="tableName" class="input-field mt-1" maxlength="20" placeholder="例如：哥哥 / 妹妹 / 我" data-table-name />
+        </label>
+        <label class="block">
+          <span class="flex items-center justify-between text-xs font-bold text-foreground">
+            班级 / 地点（可选）
+            <span class="text-[10px] font-medium text-muted-foreground">课程自己没填地点时显示它</span>
+          </span>
+          <input
+            v-model="tableLocation"
+            class="input-field mt-1"
+            maxlength="40"
+            placeholder="例如：三班 / 教学楼 201"
+            data-table-location
+          />
         </label>
         <div class="grid grid-cols-2 gap-2">
           <label class="block">
@@ -394,6 +407,12 @@ const weekDates = computed(() => {
 // 每节次的时间段是表设置里自己排的（用户 2026-10-19：「允许设置每节次时间段」），
 // 所以换学校作息不用改代码；卡片落在哪一段看它离哪一节最近。
 const activeTable = ref<TimetableSummary | null>(null)
+
+// 表级「班级 / 地点」：课程条目自己不填地点时，卡片与弹窗都退回用它（用户 2026-10-19）。
+const activeLocation = computed(() => (activeTable.value?.location || '').trim())
+function entryLocation(entry: TimetableEntry) {
+  return (entry.location || '').trim() || activeLocation.value
+}
 const showSlots = ref(localStorage.getItem('timetable.show_slots') !== '0')
 watch(showSlots, (on) => localStorage.setItem('timetable.show_slots', on ? '1' : '0'))
 
@@ -573,6 +592,7 @@ async function submitNewTable() {
 
 const tableOpen = ref(false)
 const tableName = ref('')
+const tableLocation = ref('')
 const tableError = ref('')
 const savingTable = ref(false)
 type DraftPeriod = { section: PeriodKey; start: string; end: string }
@@ -588,6 +608,7 @@ function openTableSettings() {
     : tables.value.find((t) => t.id === activeId.value)
   if (!current) return
   tableName.value = current.name
+  tableLocation.value = current.location || ''
   tableForm.lesson = pacing.value.lesson
   tableForm.brk = pacing.value.brk
   tableForm.periods = (current.periods || []).map((period) => ({
@@ -680,6 +701,7 @@ async function saveTableSettings() {
   try {
     const res = await updateTimetable(activeId.value, {
       name,
+      location: tableLocation.value.trim(),
       lesson_minutes: tableForm.lesson,
       break_minutes: tableForm.brk,
       periods: tableForm.periods,

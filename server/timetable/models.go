@@ -21,6 +21,9 @@ type Timetable struct {
 	UserID   uint   `gorm:"index;not null" json:"-"`
 	Name     string `gorm:"size:40;not null" json:"name"`
 	Position int    `gorm:"not null;default:0" json:"position"`
+	// 班级 / 地点（用户 2026-10-19：「名字后边增加 班级\地点（可选），设置好班级后课程表自动引用」）：
+	// 表级默认值，课程条目自己不填地点时卡片就显示它；条目填了则以条目为准。
+	Location string `gorm:"size:60;not null;default:''" json:"location"`
 
 	// 排课节奏：一节课多长、课间多长，以及「按课时重排」的起点与节数。
 	// 用户 2026-10-18 提出「45 分钟下课 10 分钟、课间操怎么体现」，所以把它做成
