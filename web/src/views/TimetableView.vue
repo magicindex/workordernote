@@ -60,6 +60,17 @@
             <span class="timetable-tab-count">{{ table.entry_count }}</span>
           </button>
         </div>
+        <button
+          type="button"
+          class="timetable-edit-toggle"
+          :class="editing ? 'is-on' : ''"
+          :data-timetable-edit="editing ? 'on' : 'off'"
+          title="编辑时把课程拖到空节次；拖到已有课上则互换"
+          @click="editing = !editing"
+        >
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          {{ editing ? '完成' : '编辑' }}
+        </button>
         <label class="flex shrink-0 items-center gap-1.5 rounded-xl border border-border/70 px-2 py-1 text-[11px] font-semibold text-muted-foreground" title="把整周按节次铺成空格子，点一格就能加课">
           <input v-model="showSlots" type="checkbox" class="h-3.5 w-3.5 accent-brand-500" data-timetable-show-slots />
           空节次
@@ -108,10 +119,16 @@
                       v-if="item.kind === 'entry'"
                       type="button"
                       class="timetable-card"
-                      :class="[paletteOf(item.entry).card, item.entry.kind === 'activity' ? 'timetable-card-activity' : '']"
+                      :class="[paletteOf(item.entry).card, item.entry.kind === 'activity' ? 'timetable-card-activity' : '', editing ? 'timetable-card-draggable' : '']"
                       :data-entry-id="item.entry.id"
                       :data-entry-kind="item.entry.kind"
+                      :draggable="editing"
                       @click="openEditEntry(item.entry)"
+                      @dragstart="onDragStart($event, item.entry)"
+                      @dragend="onDragEnd"
+                      @dragover="onDragOver"
+                      @dragleave="onDragLeave"
+                      @drop="onDropOnEntry($event, item.entry)"
                     >
                       <span class="timetable-card-bar" :class="paletteOf(item.entry).barBg"></span>
                       <span class="flex min-w-0 flex-1 flex-col">
@@ -131,6 +148,9 @@
                       class="timetable-slot"
                       :data-timetable-slot="item.slot.index"
                       @click="openNewEntry(day.weekday, item.slot.start)"
+                      @dragover="onDragOver"
+                      @dragleave="onDragLeave"
+                      @drop="onDropOnSlot($event, day.weekday, item.slot)"
                     >
                       <span class="timetable-slot-index">第{{ item.slot.sectionIndex }}节</span>
                       <span class="timetable-slot-time">{{ item.slot.start }}</span>
@@ -936,6 +956,8 @@ function nextStartFor(weekday: number) {
 }
 
 function openNewEntry(weekday: number, start?: string) {
+  // 刚拖完手一松可能还带一次 click，别顺手把「添加」弹窗打开。
+  if (Date.now() - lastDropAt < 400) return
   entryEditing.value = null
   const at = start || nextStartFor(weekday)
   Object.assign(form, blankEntry(at), { weekday, start_time: at })
@@ -958,6 +980,88 @@ function onPickSlot(event: Event) {
 function syncEndFromStart() {
   if (!form.start_time) return
   form.end_time = addMinutes(form.start_time, pacing.value.lesson)
+}
+
+// ---------------- 拖动换课 ----------------
+// 编辑态下把课程拖到空节次 = 挪过去（星期与起止一起改，长度按目标节次）；
+// 拖到另一节课上 = 两节课互换位置（星期与起止对调）。只改这两条，不动同一天的其他课。
+const editing = ref(false)
+const dragId = ref<number | null>(null)
+let lastDropAt = 0
+
+function onDragStart(event: DragEvent, entry: TimetableEntry) {
+  if (!editing.value) {
+    event.preventDefault()
+    return
+  }
+  dragId.value = entry.id
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(entry.id))
+  }
+}
+
+function onDragEnd() {
+  dragId.value = null
+}
+
+function onDragOver(event: DragEvent) {
+  if (!editing.value || !dragId.value) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  ;(event.currentTarget as HTMLElement)?.classList.add('is-drop')
+}
+
+function onDragLeave(event: DragEvent) {
+  ;(event.currentTarget as HTMLElement)?.classList.remove('is-drop')
+}
+
+async function patchEntryPosition(entry: TimetableEntry, weekday: number, start: string, end: string) {
+  const res = await updateEntry(entry.id, {
+    title: entry.title,
+    kind: entry.kind,
+    weekday,
+    start_time: start,
+    end_time: end,
+    location: entry.location,
+    teacher: entry.teacher,
+    note: entry.note,
+    color: entry.color,
+  })
+  if (res.data?.code !== 0) throw new Error(res.data?.message || '移动失败')
+}
+
+async function onDropOnSlot(event: DragEvent, weekday: number, slot: { start: string; end: string }) {
+  event.preventDefault()
+  onDragLeave(event)
+  const source = entries.value.find((entry) => entry.id === dragId.value)
+  dragId.value = null
+  if (!editing.value || !source) return
+  lastDropAt = Date.now()
+  try {
+    await patchEntryPosition(source, weekday, slot.start, slot.end)
+    await Promise.all([loadEntries(activeId.value), loadTables(activeId.value)])
+  } catch (err: any) {
+    window.alert(err.message || '移动失败')
+  }
+}
+
+async function onDropOnEntry(event: DragEvent, target: TimetableEntry) {
+  event.preventDefault()
+  onDragLeave(event)
+  const source = entries.value.find((entry) => entry.id === dragId.value)
+  dragId.value = null
+  if (!editing.value || !source || source.id === target.id) return
+  lastDropAt = Date.now()
+  try {
+    // 先让目标去源的位置，再把源放到目标腾出来的位置，两条各自带上自己的全部字段。
+    await patchEntryPosition(target, source.weekday, source.start_time, source.end_time)
+    await patchEntryPosition(source, target.weekday, target.start_time, target.end_time)
+    await Promise.all([loadEntries(activeId.value), loadTables(activeId.value)])
+  } catch (err: any) {
+    window.alert(err.message || '交换失败')
+    await loadEntries(activeId.value)
+  }
 }
 
 function openEditEntry(entry: TimetableEntry) {
@@ -1034,7 +1138,13 @@ async function removeEntry() {
   @apply rounded-full bg-brand-500/15 px-1.5 py-0.5 text-[9.5px] font-bold leading-none text-brand-600 dark:text-brand-300;
 }
 
+.timetable-edit-toggle { @apply inline-flex shrink-0 items-center gap-1 rounded-xl border border-border/70 bg-surface px-2.5 py-1 text-[11px] font-bold text-muted-foreground transition duration-150; }
+.timetable-edit-toggle:hover { @apply text-foreground; }
+.timetable-edit-toggle.is-on { @apply border-brand-400/60 bg-brand-500/10 text-brand-600 dark:text-brand-300; }
 .timetable-card { @apply relative flex overflow-hidden rounded-xl border p-2.5 pl-3 text-left transition duration-150; }
+.timetable-card-draggable { @apply cursor-grab active:cursor-grabbing; }
+.timetable-slot.is-drop,
+.timetable-card.is-drop { @apply border-brand-400 bg-brand-500/10; outline: 2px dashed rgb(var(--brand-400)); outline-offset: -2px; }
 .timetable-card:hover { @apply -translate-y-0.5 shadow-md; }
 .timetable-card-bar { @apply absolute inset-y-1.5 left-0 w-[3px] rounded-full; }
 .timetable-card-activity { @apply border-dashed; }

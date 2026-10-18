@@ -328,6 +328,66 @@ async function waitForCard(page, selector, timeout = 12000) {
       const renamed = await page.$$eval('[data-timetable-tab]', (els) => els.map((e) => e.textContent.trim()));
       check('表可以改名', renamed.some((t) => t.includes(`${STAMP}-哥哥2`)), renamed.join(' | '));
 
+      // 拖动换课（用户 2026-10-19：「空节次左边增加编辑功能，点击编辑可以拖动课程到空位置，
+      // 拖动位置如果又内容则交换」）。用一张临时表，别动前面那些断言依赖的课程。
+      const dragTable = await api(page, '/api/timetable/tables', 'POST', { name: `${STAMP}-拖动` });
+      const dragId = dragTable.body?.data?.id || dragTable.body?.data?.table?.id;
+      createdTables.push(dragId);
+      const mkEntry = (title, start, end) => api(page, `/api/timetable/tables/${dragId}/entries`, 'POST', {
+        title, kind: 'course', weekday: 1, start_time: start, end_time: end, color: 'indigo',
+      });
+      await mkEntry(`${STAMP} 甲`, '07:30', '08:15');
+      await mkEntry(`${STAMP} 乙`, '09:00', '09:45');
+      await page.goto(`${BASE}/admin/timetable`, { waitUntil: 'networkidle2' });
+      await sleep(1300);
+      await dismissAlerts(page);
+      await page.click(`[data-timetable-tab*="${STAMP}-拖动"]`);
+      await sleep(700);
+      await page.click('[data-timetable-edit]');
+      await sleep(400);
+      const editOn = await page.$eval('[data-timetable-edit]', (el) => el.getAttribute('data-timetable-edit'));
+      check('点「编辑」进入拖动模式', editOn === 'on', editOn || '');
+      const dragged = await page.evaluate(() => {
+        const card = document.querySelector('[data-day-column="1"] [data-entry-id]');
+        const slot = document.querySelector('[data-day-column="2"] [data-timetable-slot]');
+        if (!card || !slot) return { ok: false };
+        const dt = new DataTransfer();
+        card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        slot.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        slot.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        return { ok: true, title: card.getAttribute('data-entry-id'), slot: slot.textContent.replace(/\s+/g, ' ').trim() };
+      });
+      await sleep(1500);
+      const dragAfter = (await api(page, `/api/timetable/tables/${dragId}`, 'GET')).body?.data?.entries || [];
+      const movedOne = dragAfter.find((e) => String(e.id) === dragged.title);
+      check('把课拖到空节次会挪到那一天的该节次', dragged.ok && movedOne?.weekday === 2 && movedOne?.start_time === '07:30', JSON.stringify({ dragged, moved: movedOne && { w: movedOne.weekday, s: movedOne.start_time } }));
+
+      // 再拖一次，落点已经有课：两节互换星期与时间。
+      const swapInfo = await page.evaluate(() => {
+        const a = document.querySelector('[data-day-column="2"] [data-entry-id]');
+        const b = document.querySelector('[data-day-column="1"] [data-entry-id]');
+        if (!a || !b) return { ok: false };
+        const dt = new DataTransfer();
+        a.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        b.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        b.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        return { ok: true, a: a.getAttribute('data-entry-id'), b: b.getAttribute('data-entry-id') };
+      });
+      await sleep(1500);
+      const swappedList = (await api(page, `/api/timetable/tables/${dragId}`, 'GET')).body?.data?.entries || [];
+      const aRow = swappedList.find((e) => String(e.id) === swapInfo.a);
+      const bRow = swappedList.find((e) => String(e.id) === swapInfo.b);
+      check(
+        '拖到已有课上会互换（星期与起止对调）',
+        swapInfo.ok && aRow?.weekday === 1 && aRow?.start_time === '09:00' && bRow?.weekday === 2 && bRow?.start_time === '07:30',
+        JSON.stringify({ a: aRow && { w: aRow.weekday, s: aRow.start_time }, b: bRow && { w: bRow.weekday, s: bRow.start_time } }),
+      );
+      await page.click('[data-timetable-edit]');
+      await sleep(300);
+      // 回到哥哥那张做打印校验（刚才在临时表上拖课）。
+      await page.click(`[data-timetable-tab*="${STAMP}-哥哥2"]`);
+      await sleep(800);
+
       // 打印：拦截 window.open，检查生成的当周页里有课程、班级与 A4 横向声明。
       await page.evaluate(() => {
         window.__printHtml = null;
