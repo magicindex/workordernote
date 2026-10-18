@@ -17,22 +17,25 @@
     </div>
 
     <template v-else>
-      <!-- 多张表：一人一张，顶部标签切换（用户 2026-10-18「支持多人表，通过索引分割标签切换」） -->
+      <!-- 多张表：一人一张，顶部标签切换（用户 2026-10-18「支持多人表，通过索引分割标签切换」）。
+           2026-10-18 二次改版：每张表带自己的浅彩色（与它课程卡的色系一致），标签与表头背景同色。 -->
       <div v-if="tables.length" class="mt-4 flex flex-wrap items-center gap-2">
-        <div class="flex flex-wrap items-center gap-1 rounded-2xl border border-border bg-muted/40 p-1" role="tablist" aria-label="课程表">
+        <div class="timetable-tabs" role="tablist" aria-label="课程表">
           <button
             v-for="table in tables"
             :key="table.id"
             type="button"
             role="tab"
             class="timetable-tab"
-            :class="table.id === activeId ? 'timetable-tab-on' : ''"
+            :class="table.id === activeId ? tableAccent(table).tabText : ''"
+            :style="table.id === activeId ? { backgroundColor: tableAccent(table).tint + '2b' } : undefined"
             :aria-selected="table.id === activeId"
             :data-timetable-tab="table.name"
             @click="selectTable(table.id)"
           >
+            <span class="timetable-tab-dot" :class="tableAccent(table).barBg"></span>
             {{ table.name }}
-            <span class="ml-1 text-[10px] font-semibold opacity-60">{{ table.entry_count }}</span>
+            <span class="timetable-tab-count">{{ table.entry_count }}</span>
           </button>
         </div>
         <button
@@ -53,53 +56,63 @@
         <button type="button" class="btn-primary mt-4 !h-9 !px-4 !text-xs" @click="openNewTable">建第一张表</button>
       </div>
 
-      <!-- 一周七天，各一列；窄屏自动堆成一天一块，手机上不用横向拖 -->
-      <div v-else class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-7" data-timetable-board>
-        <section
-          v-for="day in days"
-          :key="day.weekday"
-          class="surface flex flex-col rounded-2xl p-2.5"
-          :class="day.weekday === todayWeekday ? 'ring-2 ring-brand-400/60' : ''"
-          :data-day-column="day.weekday"
-        >
-          <header class="flex items-center justify-between px-1 pb-2">
-            <span class="text-xs font-extrabold" :class="day.weekday === todayWeekday ? 'text-brand-600 dark:text-brand-300' : 'text-foreground'">
-              {{ day.label }}
-            </span>
-            <span v-if="day.weekday === todayWeekday" class="rounded-full bg-brand-500/12 px-1.5 py-0.5 text-[10px] font-bold text-brand-600 dark:text-brand-300">今天</span>
-            <span v-else class="text-[10px] font-semibold text-muted-foreground">{{ day.entries.length || '' }}</span>
-          </header>
+      <!-- 一周七天，各一列；窄屏自动堆成一天一块，手机上不用横向拖。
+           七天共用一块底板，列与列之间只留 1px 细线，比七张独立卡片更整。 -->
+      <div v-else class="timetable-shell mt-4" data-timetable-board :style="{ backgroundImage: shellGlow }">
+        <div class="timetable-grid">
+          <section
+            v-for="day in days"
+            :key="day.weekday"
+            class="timetable-day"
+            :class="day.weekday === todayWeekday ? 'timetable-day-today' : ''"
+            :data-day-column="day.weekday"
+          >
+            <header class="timetable-day-head">
+              <div class="flex items-baseline gap-1.5">
+                <span class="timetable-day-name" :class="day.weekday === todayWeekday ? 'text-brand-600 dark:text-brand-300' : 'text-foreground'">{{ day.label }}</span>
+                <span class="timetable-day-date">{{ day.date }}</span>
+              </div>
+              <span v-if="day.weekday === todayWeekday" class="timetable-today">今天</span>
+              <span v-else class="timetable-day-count">{{ day.entries.length || '—' }}</span>
+            </header>
 
-          <div class="flex flex-1 flex-col gap-2">
-            <button
-              v-for="entry in day.entries"
-              :key="entry.id"
-              type="button"
-              class="timetable-card text-left"
-              :class="[paletteOf(entry).card, entry.kind === 'activity' ? 'timetable-card-activity' : '']"
-              :data-entry-id="entry.id"
-              :data-entry-kind="entry.kind"
-              @click="openEditEntry(entry)"
-            >
-              <span class="text-[11px] font-bold tabular-nums text-foreground/65">{{ entry.start_time }}–{{ entry.end_time }}</span>
-              <p class="mt-1 truncate text-[13px] font-bold text-foreground" :title="entry.title">{{ entry.title }}</p>
-              <p v-if="entry.location || entry.teacher" class="mt-0.5 truncate text-[10.5px] leading-4 text-foreground/60">
-                {{ [entry.kind === 'activity' ? '活动' : '', entry.location, entry.teacher].filter(Boolean).join(' · ') }}
-              </p>
-            </button>
+            <div class="flex flex-1 flex-col gap-2">
+              <button
+                v-for="entry in day.entries"
+                :key="entry.id"
+                type="button"
+                class="timetable-card"
+                :class="[paletteOf(entry).card, entry.kind === 'activity' ? 'timetable-card-activity' : '']"
+                :data-entry-id="entry.id"
+                :data-entry-kind="entry.kind"
+                @click="openEditEntry(entry)"
+              >
+                <span class="timetable-card-bar" :class="paletteOf(entry).barBg"></span>
+                <span class="flex min-w-0 flex-1 flex-col">
+                  <span class="timetable-card-time">{{ entry.start_time }}<span class="opacity-40">–</span>{{ entry.end_time }}</span>
+                  <span class="flex items-center gap-1">
+                    <span class="timetable-card-title" :title="entry.title">{{ entry.title }}</span>
+                    <span v-if="entry.kind === 'activity'" class="timetable-activity-tag">活动</span>
+                  </span>
+                  <span v-if="entry.location || entry.teacher" class="timetable-card-meta">
+                    {{ [entry.location, entry.teacher].filter(Boolean).join(' · ') }}
+                  </span>
+                </span>
+              </button>
 
-            <button
-              type="button"
-              class="timetable-add"
-              :data-timetable-add-entry="day.weekday"
-              :aria-label="`给${day.label}加一节`"
-              @click="openNewEntry(day.weekday)"
-            >
-              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M12 6v12M6 12h12" stroke-width="2" stroke-linecap="round"/></svg>
-              添加
-            </button>
-          </div>
-        </section>
+              <button
+                type="button"
+                class="timetable-add"
+                :data-timetable-add-entry="day.weekday"
+                :aria-label="`给${day.label}加一节`"
+                @click="openNewEntry(day.weekday)"
+              >
+                <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M12 6v12M6 12h12" stroke-width="2" stroke-linecap="round"/></svg>
+                添加
+              </button>
+            </div>
+          </section>
+        </div>
       </div>
     </template>
 
@@ -235,14 +248,14 @@ const weekdays = [
 
 // 课程配色：与清单/卡片同一套审美，浅底 + 同色描边；深色模式自动降透明度。
 const palette = [
-  { key: 'indigo', label: '靛蓝', dot: 'bg-indigo-500', card: 'bg-indigo-50/80 border-indigo-200/80 dark:bg-indigo-500/[0.12] dark:border-indigo-400/25', time: 'text-indigo-600 dark:text-indigo-300' },
-  { key: 'rose', label: '玫红', dot: 'bg-rose-500', card: 'bg-rose-50/80 border-rose-200/80 dark:bg-rose-500/[0.12] dark:border-rose-400/25', time: 'text-rose-600 dark:text-rose-300' },
-  { key: 'emerald', label: '翠绿', dot: 'bg-emerald-500', card: 'bg-emerald-50/80 border-emerald-200/80 dark:bg-emerald-500/[0.12] dark:border-emerald-400/25', time: 'text-emerald-600 dark:text-emerald-300' },
-  { key: 'amber', label: '琥珀', dot: 'bg-amber-500', card: 'bg-amber-50/80 border-amber-200/80 dark:bg-amber-500/[0.12] dark:border-amber-400/25', time: 'text-amber-600 dark:text-amber-300' },
-  { key: 'sky', label: '天蓝', dot: 'bg-sky-500', card: 'bg-sky-50/80 border-sky-200/80 dark:bg-sky-500/[0.12] dark:border-sky-400/25', time: 'text-sky-600 dark:text-sky-300' },
-  { key: 'violet', label: '紫罗兰', dot: 'bg-violet-500', card: 'bg-violet-50/80 border-violet-200/80 dark:bg-violet-500/[0.12] dark:border-violet-400/25', time: 'text-violet-600 dark:text-violet-300' },
-  { key: 'teal', label: '青碧', dot: 'bg-teal-500', card: 'bg-teal-50/80 border-teal-200/80 dark:bg-teal-500/[0.12] dark:border-teal-400/25', time: 'text-teal-600 dark:text-teal-300' },
-  { key: 'slate', label: '石墨', dot: 'bg-slate-500', card: 'bg-slate-50/80 border-slate-200/80 dark:bg-slate-500/[0.12] dark:border-slate-400/25', time: 'text-slate-600 dark:text-slate-300' },
+  { key: 'indigo', label: '靛蓝', dot: 'bg-indigo-500', card: 'bg-indigo-50/80 border-indigo-200/80 dark:bg-indigo-500/[0.12] dark:border-indigo-400/25', time: 'text-indigo-600 dark:text-indigo-300', barBg: 'bg-indigo-400', tint: '#6366f1', tabText: 'text-indigo-700 dark:text-indigo-300' },
+  { key: 'rose', label: '玫红', dot: 'bg-rose-500', card: 'bg-rose-50/80 border-rose-200/80 dark:bg-rose-500/[0.12] dark:border-rose-400/25', time: 'text-rose-600 dark:text-rose-300', barBg: 'bg-rose-400', tint: '#f43f5e', tabText: 'text-rose-700 dark:text-rose-300' },
+  { key: 'emerald', label: '翠绿', dot: 'bg-emerald-500', card: 'bg-emerald-50/80 border-emerald-200/80 dark:bg-emerald-500/[0.12] dark:border-emerald-400/25', time: 'text-emerald-600 dark:text-emerald-300', barBg: 'bg-emerald-400', tint: '#10b981', tabText: 'text-emerald-700 dark:text-emerald-300' },
+  { key: 'amber', label: '琥珀', dot: 'bg-amber-500', card: 'bg-amber-50/80 border-amber-200/80 dark:bg-amber-500/[0.12] dark:border-amber-400/25', time: 'text-amber-600 dark:text-amber-300', barBg: 'bg-amber-400', tint: '#f59e0b', tabText: 'text-amber-700 dark:text-amber-300' },
+  { key: 'sky', label: '天蓝', dot: 'bg-sky-500', card: 'bg-sky-50/80 border-sky-200/80 dark:bg-sky-500/[0.12] dark:border-sky-400/25', time: 'text-sky-600 dark:text-sky-300', barBg: 'bg-sky-400', tint: '#0ea5e9', tabText: 'text-sky-700 dark:text-sky-300' },
+  { key: 'violet', label: '紫罗兰', dot: 'bg-violet-500', card: 'bg-violet-50/80 border-violet-200/80 dark:bg-violet-500/[0.12] dark:border-violet-400/25', time: 'text-violet-600 dark:text-violet-300', barBg: 'bg-violet-400', tint: '#8b5cf6', tabText: 'text-violet-700 dark:text-violet-300' },
+  { key: 'teal', label: '青碧', dot: 'bg-teal-500', card: 'bg-teal-50/80 border-teal-200/80 dark:bg-teal-500/[0.12] dark:border-teal-400/25', time: 'text-teal-600 dark:text-teal-300', barBg: 'bg-teal-400', tint: '#14b8a6', tabText: 'text-teal-700 dark:text-teal-300' },
+  { key: 'slate', label: '石墨', dot: 'bg-slate-500', card: 'bg-slate-50/80 border-slate-200/80 dark:bg-slate-500/[0.12] dark:border-slate-400/25', time: 'text-slate-600 dark:text-slate-300', barBg: 'bg-slate-400', tint: '#64748b', tabText: 'text-slate-700 dark:text-slate-300' },
 ]
 
 const tables = ref<TimetableSummary[]>([])
@@ -256,11 +269,33 @@ const todayWeekday = (() => {
   return d === 0 ? 7 : d
 })()
 
-const days = computed(() => weekdays.map((day) => ({
+// 本周一到周日的日期，列头写「周一 10/19」；跨天时也一眼知道是哪天。
+const weekDates = computed(() => {
+  const now = new Date()
+  const dow = now.getDay() === 0 ? 7 : now.getDay()
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (dow - 1))
+  return weekdays.map((day) => {
+    const dt = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + day.value - 1)
+    return `${dt.getMonth() + 1}/${dt.getDate()}`
+  })
+})
+
+const days = computed(() => weekdays.map((day, i) => ({
   weekday: day.value,
   label: day.label,
+  date: weekDates.value[i],
   entries: entries.value.filter((entry) => entry.weekday === day.value),
 })))
+
+// 每张表带一个稳定的浅彩色（按表 id 落在色板里），标签、底板光晕与它自己的课程同色系。
+function tableAccent(table: TimetableSummary) {
+  return palette[(table.id - 1 + palette.length) % palette.length]
+}
+const activeAccent = computed(() => {
+  const current = tables.value.find((t) => t.id === activeId.value)
+  return current ? tableAccent(current) : palette[0]
+})
+const shellGlow = computed(() => `radial-gradient(760px 300px at 12% -20%, ${activeAccent.value.tint}1f, transparent 68%)`)
 
 function paletteOf(entry: TimetableEntry) {
   // 没选颜色时按标题做稳定落档：同一个课程刷新后颜色不变。
@@ -455,26 +490,47 @@ async function removeEntry() {
 </script>
 
 <style scoped>
+.timetable-tabs {
+  @apply inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-border bg-surface/85 p-1 shadow-sm backdrop-blur;
+}
 .timetable-tab {
-  @apply rounded-xl px-3 py-1.5 text-xs font-bold text-muted-foreground transition;
+  @apply inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold text-muted-foreground transition duration-150;
 }
-.timetable-tab:hover { @apply text-foreground bg-surface/70; }
-.timetable-tab-on {
-  @apply bg-surface text-foreground shadow-sm;
+.timetable-tab:hover { @apply bg-muted/70 text-foreground; }
+.timetable-tab-dot { @apply h-2 w-2 rounded-full opacity-90; }
+.timetable-tab-count {
+  @apply rounded-md bg-foreground/[0.07] px-1 py-0.5 text-[10px] font-semibold leading-none opacity-80;
 }
-.timetable-card {
-  @apply rounded-xl border p-2.5 transition duration-150;
+
+/* 七天共用一块底板：列间只留 1px 细线，整块像一张纸上的周历 */
+.timetable-shell { @apply overflow-hidden rounded-[22px] border border-border bg-surface bg-no-repeat shadow-sm; }
+.timetable-grid { @apply grid grid-cols-1 gap-px bg-border/70 sm:grid-cols-2 xl:grid-cols-7; }
+.timetable-day { @apply flex min-h-[13rem] flex-col gap-2 bg-surface p-3; }
+.timetable-day-today { @apply bg-brand-500/[0.035]; }
+.timetable-day-head { @apply flex items-center justify-between pb-0.5; }
+.timetable-day-name { @apply text-[12.5px] font-extrabold tracking-wide; }
+.timetable-day-date { @apply text-[10.5px] font-semibold tabular-nums text-muted-foreground/80; }
+.timetable-day-count { @apply text-[10px] font-semibold tabular-nums text-muted-foreground/60; }
+.timetable-today {
+  @apply rounded-full bg-brand-500/15 px-1.5 py-0.5 text-[9.5px] font-bold leading-none text-brand-600 dark:text-brand-300;
 }
+
+.timetable-card { @apply relative flex overflow-hidden rounded-xl border p-2.5 pl-3 text-left transition duration-150; }
 .timetable-card:hover { @apply -translate-y-0.5 shadow-md; }
+.timetable-card-bar { @apply absolute inset-y-1.5 left-0 w-[3px] rounded-full; }
 .timetable-card-activity { @apply border-dashed; }
+.timetable-card-time { @apply whitespace-nowrap text-[10.5px] font-bold tabular-nums leading-4 text-foreground/60; }
+.timetable-card-title { @apply mt-0.5 truncate text-[13px] font-bold leading-5 text-foreground; }
+.timetable-card-meta { @apply truncate text-[10.5px] leading-4 text-foreground/55; }
+.timetable-activity-tag {
+  @apply shrink-0 whitespace-nowrap rounded bg-surface/70 px-1 py-px text-[9px] font-bold leading-4 text-foreground/60;
+}
+
 .timetable-add {
-  @apply flex items-center justify-center gap-1 rounded-lg border border-dashed border-border py-1.5 text-[11px] font-semibold text-muted-foreground transition;
+  @apply mt-auto flex items-center justify-center gap-1 rounded-lg border border-dashed border-border/80 py-1.5 text-[11px] font-semibold text-muted-foreground/70 transition;
 }
-.timetable-add:hover { @apply border-brand-400 text-brand-600 dark:text-brand-300; }
-.timetable-kind {
-  @apply rounded-xl border border-border py-2 text-xs font-bold text-muted-foreground transition;
-}
-.timetable-kind-on {
-  @apply border-brand-400 bg-brand-500/10 text-brand-600 dark:text-brand-300;
-}
+.timetable-add:hover { @apply border-brand-400 bg-brand-500/5 text-brand-600 dark:text-brand-300; }
+
+.timetable-kind { @apply rounded-xl border border-border py-2 text-xs font-bold text-muted-foreground transition; }
+.timetable-kind-on { @apply border-brand-400 bg-brand-500/10 text-brand-600 dark:text-brand-300; }
 </style>
