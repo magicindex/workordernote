@@ -2,17 +2,6 @@
   <div class="page-container animate-fade-in">
     <PageHeader title="课程表" description="按周几排课：一张表一个人，课程与课外活动分开标色。">
       <template #actions>
-        <button
-          v-if="tables.length"
-          type="button"
-          class="btn-secondary !h-9 !px-3 !text-xs"
-          title="打印当前这张表（A4 横向，一周一页）"
-          data-timetable-print
-          @click="printTimetable"
-        >
-          <svg viewBox="0 0 24 24" class="mr-1 h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M7 8V3.5h10V8"/><rect x="3.5" y="8" width="17" height="8" rx="2"/><path d="M7 13h10v7.5H7z"/></svg>
-          打印
-        </button>
         <button type="button" class="btn-primary !h-9 !px-3 !text-xs" data-timetable-add-table @click="openNewTable">
           <svg viewBox="0 0 24 24" class="mr-1 h-4 w-4" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2" stroke-linecap="round"/></svg>
           新建表
@@ -27,6 +16,17 @@
         >
           <svg viewBox="0 0 24 24" class="mr-1 h-4 w-4" fill="none" stroke="currentColor"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06A2 2 0 1 1 7.03 4.14l.06.06A1.7 1.7 0 0 0 8.96 4.6 1.7 1.7 0 0 0 10 3.05V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.04 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.12.38.44.66.84.76H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.24Z" stroke-width="1.6" stroke-linejoin="round"/></svg>
           设置
+        </button>
+        <button
+          v-if="tables.length"
+          type="button"
+          class="btn-secondary !h-9 !px-3 !text-xs"
+          title="打印当前这张表（A4 横向，一周一页）"
+          data-timetable-print
+          @click="printTimetable"
+        >
+          <svg viewBox="0 0 24 24" class="mr-1 h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M7 8V3.5h10V8"/><rect x="3.5" y="8" width="17" height="8" rx="2"/><path d="M7 13h10v7.5H7z"/></svg>
+          打印
         </button>
       </template>
     </PageHeader>
@@ -251,23 +251,23 @@
     <!-- 表设置：改名 / 删除 -->
     <Modal v-model="tableOpen" title="课程表设置" size="lg">
       <form class="space-y-3" @submit.prevent="saveTableSettings">
-        <label class="block">
-          <span class="text-xs font-bold text-foreground">名字</span>
-          <input v-model="tableName" class="input-field mt-1" maxlength="20" placeholder="例如：哥哥 / 妹妹 / 我" data-table-name />
-        </label>
-        <label class="block">
-          <span class="flex items-center justify-between text-xs font-bold text-foreground">
-            班级 / 地点（可选）
-            <span class="text-[10px] font-medium text-muted-foreground">课程自己没填地点时显示它</span>
-          </span>
-          <input
-            v-model="tableLocation"
-            class="input-field mt-1"
-            maxlength="40"
-            placeholder="例如：三班 / 教学楼 201"
-            data-table-location
-          />
-        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block">
+            <span class="text-xs font-bold text-foreground">名字</span>
+            <input v-model="tableName" class="input-field mt-1" maxlength="20" placeholder="例如：哥哥 / 妹妹 / 我" data-table-name />
+          </label>
+          <label class="block">
+            <span class="text-xs font-bold text-foreground">班级 / 地点（可选）</span>
+            <input
+              v-model="tableLocation"
+              class="input-field mt-1"
+              maxlength="40"
+              placeholder="例如：三班 / 教学楼 201"
+              title="课程自己没填地点时显示它"
+              data-table-location
+            />
+          </label>
+        </div>
         <div class="grid grid-cols-2 gap-2">
           <label class="block">
             <span class="text-xs font-bold text-foreground">一节课（分钟）</span>
@@ -584,15 +584,58 @@ function printTimetable() {
   if (!table) return
   const esc = (value: string) =>
     (value || '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string))
-  const columns = days.value.map((day) => {
-    const items = day.entries.map((entry) => {
-      const meta = [entryLocation(entry), entry.teacher].filter(Boolean).join(' · ')
-      return `<li><span class="time">${esc(entry.start_time)}–${esc(entry.end_time)}</span>` +
-        `<span class="title">${esc(entry.title)}${entry.kind === 'activity' ? '<em>活动</em>' : ''}</span>` +
-        (meta ? `<span class="meta">${esc(meta)}</span>` : '') + '</li>'
+  // 按「节次 × 星期」排成表格：左边一列是时间，右边七列是课。
+  // 骨架里有空节也照排，手工填的怪时间单独占一行，四段之间插分界线。
+  const dayLists = days.value.map((day) => day.entries)
+  const rows: {
+    section: PeriodKey
+    start: string
+    end: string
+    number: number | null
+    cells: (TimetableEntry | null)[]
+  }[] = []
+  for (const section of SECTIONS) {
+    const known = new Map<string, { end: string; number: number | null }>()
+    for (const slot of slots.value) {
+      if (slot.section === section.key) known.set(slot.start, { end: slot.end, number: slot.sectionIndex })
+    }
+    for (const list of dayLists) {
+      for (const entry of list) {
+        if (sectionOfStart(entry.start_time) !== section.key) continue
+        if (!known.has(entry.start_time)) known.set(entry.start_time, { end: entry.end_time, number: null })
+      }
+    }
+    for (const [start, info] of [...known.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      rows.push({
+        section: section.key,
+        start,
+        end: info.end,
+        number: info.number,
+        cells: dayLists.map((list) =>
+          list.find((entry) => entry.start_time === start && sectionOfStart(entry.start_time) === section.key) || null,
+        ),
+      })
+    }
+  }
+  const head = days.value
+    .map((day) => `<th>${esc(day.label)}<span class="th-date">${esc(day.date)}</span></th>`)
+    .join('')
+  const body = SECTIONS.map((section) => {
+    const own = rows.filter((row) => row.section === section.key)
+    if (!own.length) return ''
+    const divider = `<tr class="sec"><th colspan="8">${esc(section.label)}</th></tr>`
+    const lines = own.map((row) => {
+      const cells = row.cells.map((entry, i) => {
+        const today = days.value[i].weekday === todayWeekday ? ' class="today"' : ''
+        if (!entry) return `<td${today}></td>`
+        const meta = [entryLocation(entry), entry.teacher].filter(Boolean).join(' · ')
+        return `<td${today}><span class="title">${esc(entry.title)}${entry.kind === 'activity' ? '<em>活动</em>' : ''}</span>` +
+          (meta ? `<span class="meta">${esc(meta)}</span>` : '') + '</td>'
+      }).join('')
+      const number = row.number ? `<span class="t-no">第${row.number}节</span>` : ''
+      return `<tr><th class="t"><span class="t-time">${esc(row.start)}–${esc(row.end)}</span>${number}</th>${cells}</tr>`
     }).join('')
-    const isToday = day.weekday === todayWeekday ? ' class="today"' : ''
-    return `<td${isToday}><ul>${items || '<li class="empty">—</li>'}</ul></td>`
+    return divider + lines
   }).join('')
   const range = `${weekDates.value[0] || ''} – ${weekDates.value[6] || ''}`
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
@@ -606,17 +649,17 @@ h1 { font-size: 20px; margin: 0; letter-spacing: .02em; }
 h1 span { font-size: 12px; font-weight: 500; color: #4b5563; margin-left: 8px; }
 .sub { font-size: 11px; color: #6b7280; }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-th, td { border: 1px solid #cbd5e1; vertical-align: top; padding: 5px 6px; }
-th { background: #eef2ff; font-size: 12px; text-align: left; }
-th .th-date { font-weight: 400; font-size: 10px; color: #6b7280; margin-left: 4px; }
+th, td { border: 1px solid #cbd5e1; vertical-align: top; padding: 4px 5px; }
+thead th { background: #eef2ff; font-size: 11.5px; text-align: left; font-weight: 700; }
+th .th-date { display: block; font-weight: 400; font-size: 9.5px; color: #6b7280; }
+th.t { width: 13%; background: #f8fafc; text-align: left; }
+.t-time { display: block; font-size: 10px; color: #374151; font-variant-numeric: tabular-nums; }
+.t-no { display: block; font-size: 9px; font-weight: 500; color: #6b7280; }
 td.today { background: #f8fafc; }
-ul { list-style: none; margin: 0; padding: 0; }
-li { margin: 0 0 5px; break-inside: avoid; }
-.time { display: block; font-size: 10px; color: #374151; font-variant-numeric: tabular-nums; }
-.title { display: block; font-size: 12.5px; font-weight: 600; line-height: 1.3; }
-.title em { font-style: normal; font-size: 9.5px; font-weight: 500; color: #6b7280; border: 1px solid #d1d5db; border-radius: 3px; padding: 0 3px; margin-left: 4px; vertical-align: 1px; }
-.meta { display: block; font-size: 9.5px; color: #6b7280; }
-.empty { color: #d1d5db; text-align: center; font-size: 12px; }
+.title { display: block; font-size: 11.5px; font-weight: 600; line-height: 1.3; }
+.title em { font-style: normal; font-size: 9px; font-weight: 500; color: #6b7280; border: 1px solid #d1d5db; border-radius: 3px; padding: 0 3px; margin-left: 3px; vertical-align: 1px; }
+.meta { display: block; font-size: 9px; color: #6b7280; margin-top: 1px; }
+tr.sec th { background: #e5e7eb; font-size: 10.5px; letter-spacing: .18em; text-align: left; padding: 3px 6px; }
 footer { margin-top: 8px; font-size: 9px; color: #9ca3af; display: flex; justify-content: space-between; }
 </style></head><body>
 <header>
@@ -624,8 +667,8 @@ footer { margin-top: 8px; font-size: 9px; color: #9ca3af; display: flex; justify
   <div class="sub">${esc(range)}</div>
 </header>
 <table>
-  <thead><tr>${days.value.map((day) => `<th>${esc(day.label)} <span class="th-date">${esc(day.date)}</span></th>`).join('')}</tr></thead>
-  <tbody><tr>${columns}</tr></tbody>
+  <thead><tr><th class="t">节次</th>${head}</tr></thead>
+  <tbody>${body}</tbody>
 </table>
 <footer><span>工作序记 · 打印时间 ${esc(new Date().toLocaleString('zh-CN', { hour12: false }))}</span><span>${esc(table.name)}</span></footer>
 </body></html>`
