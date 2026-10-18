@@ -67,7 +67,7 @@
         <div
           v-for="list in promptLists"
           :key="list.id"
-          class="rounded-xl border-2 border-brand-400 bg-brand-50/30 p-2 shadow-[0_0_0_1px_rgba(99,102,241,0.06)] dark:border-brand-400/60 dark:bg-brand-500/[0.08]"
+          class="rounded-xl border border-border p-2"
           :data-ai-list-prompt-row="list.name"
         >
           <div class="flex items-center justify-between gap-2">
