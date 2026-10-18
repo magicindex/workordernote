@@ -12,7 +12,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { withTab, sleep } = require('./harness');
+const { withTab, sleep, waitFor } = require('./harness');
 const { login, APP } = require('./reminders-app');
 
 const BASE = (process.env.APP_URL || APP).replace(/\/$/, '');
@@ -231,6 +231,40 @@ function parseCsv(text) {
     check('图标用的是清单颜色（与同一行标题同色）',
       !!noteSlot && !!noteSlot.iconColor && noteSlot.iconColor === noteSlot.titleColor,
       JSON.stringify({ icon: noteSlot?.iconColor, title: noteSlot?.titleColor }));
+
+    // ---------- 4e. 点开一条记事：编辑器从**左侧**划出，备注吃掉下方剩余高度 ----------
+    // 用户 2026-10-18：「点击条目，左侧弹出编辑窗口，不改变当前格局，把下方剩余空间划给备注」。
+    await page.evaluate(() => {
+      const btn = document.querySelector('.reminder-row button.min-w-0.flex-1.text-left');
+      if (btn) btn.click();
+    });
+    await waitFor(page, () => !!document.querySelector('.editor-panel'), { timeout: 10000 });
+    await sleep(500);
+    const noteDrawer = await page.evaluate(() => {
+      const panel = document.querySelector('.editor-panel');
+      if (!panel) return null;
+      const r = panel.getBoundingClientRect();
+      const ta = panel.querySelector('textarea');
+      return {
+        left: Math.round(r.left),
+        gapRight: Math.round(document.documentElement.clientWidth - r.right),
+        height: Math.round(r.height),
+        viewportH: document.documentElement.clientHeight,
+        notesHeight: ta ? Math.round(ta.getBoundingClientRect().height) : 0,
+      };
+    });
+    check('点记事从左侧划出编辑器（列表留在原位，不被右侧抽屉盖住）',
+      !!noteDrawer && noteDrawer.left <= 2 && noteDrawer.gapRight > 100,
+      noteDrawer ? JSON.stringify(noteDrawer) : '没打开');
+    check('编辑器跟随窗口全高，备注框吃掉下方剩余空间',
+      !!noteDrawer && noteDrawer.height >= noteDrawer.viewportH - 2 && noteDrawer.notesHeight >= 180,
+      noteDrawer ? JSON.stringify(noteDrawer) : '没打开');
+    await page.evaluate(() => {
+      const panel = document.querySelector('.editor-panel');
+      const cancel = panel && [...panel.querySelectorAll('button')].find((b) => (b.textContent || '').trim() === '取消');
+      if (cancel) cancel.click();
+    });
+    await sleep(600);
 
     // ---------- 5. 智能清单「全部」仍能看到记事 ----------
     await gotoRetry(page, BASE + '/admin/all');

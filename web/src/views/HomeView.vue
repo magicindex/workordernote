@@ -602,6 +602,7 @@
         :reminder-id="editingId"
         :lists="navLists"
         :channels="selectableChannels"
+        :side="isNoteBucketPage ? 'left' : 'right'"
         @saved="onEditorSaved"
         @deleted="onEditorDeleted"
       />

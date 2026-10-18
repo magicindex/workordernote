@@ -3,13 +3,13 @@
     <div
       v-if="modelValue"
       class="fixed inset-0 z-[70] flex"
-      :class="isModal ? 'items-center justify-center p-3 sm:p-6' : 'justify-end'"
+      :class="isModal ? 'items-center justify-center p-3 sm:p-6' : side === 'left' ? 'justify-start' : 'justify-end'"
     >
       <div class="absolute inset-0 bg-slate-950/25 backdrop-blur-sm" @click="close"></div>
-      <aside class="editor-panel" :class="isModal ? 'editor-panel-modal' : ''">
+      <aside class="editor-panel" :class="[isModal ? 'editor-panel-modal' : '', side === 'left' ? 'editor-panel-left' : '']">
         <div class="flex items-center justify-between border-b border-border px-4 py-3 sm:px-6 sm:py-5">
           <div>
-            <p class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">{{ isCreate ? '新建' : '提醒详情' }}</p>
+            <p class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">{{ isCreate ? '新建' : editing.kind === 'note' ? '记事详情' : '提醒详情' }}</p>
             <h2 class="mt-0.5 text-base font-extrabold sm:mt-1 sm:text-lg">
               {{ (isCreate ? '新建' : '编辑') + (editing.kind === 'note' ? '记事' : '提醒') }}
             </h2>
@@ -40,7 +40,7 @@
 
         <form class="flex min-h-0 flex-1 flex-col" @submit.prevent="save">
           <div
-            class="min-h-0 flex-1 overflow-y-auto p-4"
+            class="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"
             :class="isModal ? 'space-y-3 sm:space-y-4 sm:p-5' : 'space-y-4 sm:space-y-6 sm:p-6'"
           >
             <label class="editor-field"><span>标题</span><input v-model="editing.title" autofocus maxlength="200" :placeholder="editing.kind === 'note' ? '记点什么…' : '要提醒什么？'" /></label>
@@ -51,7 +51,7 @@
                 <button type="button" class="channel-pill flex-1" :class="{ selected: editing.kind === 'note' }" @click="setKind('note')">记事（仅作记录）</button>
               </div>
             </div>
-            <label class="editor-field"><span>备注</span><textarea v-model="editing.notes" rows="4" maxlength="5000" placeholder="补充一些细节…"></textarea></label>
+            <label class="editor-field" :class="editing.kind === 'note' ? 'editor-notes-grow' : ''"><span>备注</span><textarea v-model="editing.notes" rows="4" maxlength="5000" placeholder="补充一些细节…"></textarea></label>
 
             <div
               v-if="editing.kind !== 'note'"
@@ -179,6 +179,11 @@ const props = defineProps<{
    * 列表视图仍是抽屉，来回切换时位置一致、滚动列表也没被遮住。
    */
   presentation?: 'drawer' | 'modal'
+  /**
+   * 抽屉贴在屏幕哪一侧。记事本页从**左边**划出：那一页的条目本来就是「时间—标题—正文」
+   * 一路往下读，右侧抽屉会盖住刚点的那一条；从左边出来，列表留在原位不动。
+   */
+  side?: 'right' | 'left'
 }>()
 
 const emit = defineEmits<{
@@ -419,4 +424,10 @@ async function save() {
 .drawer-enter-active .editor-panel, .drawer-leave-active .editor-panel { transition: transform .28s cubic-bezier(.2,.8,.2,1); }
 .drawer-enter-from, .drawer-leave-to { opacity: 0; }
 .drawer-enter-from .editor-panel, .drawer-leave-to .editor-panel { transform: translateX(100%); }
+/* 左侧抽屉：从左边划入，边框换到右侧，几何仍是贴边全高。 */
+.editor-panel-left { border-left: 0; @apply border-r border-r-border; }
+.drawer-enter-from .editor-panel-left, .drawer-leave-to .editor-panel-left { transform: translateX(-100%); }
+/* 记事本页的备注吃掉表单的下方剩余空间，编辑窗口多高它就多高；内容长了在框内滚动。 */
+.editor-notes-grow { @apply flex min-h-[9rem] flex-1 flex-col; }
+.editor-notes-grow textarea { @apply min-h-[7rem] flex-1 resize-none; }
 </style>
