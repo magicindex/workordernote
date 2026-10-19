@@ -83,10 +83,16 @@ async function main() {
   try {
     await withTab(async (page) => {
       await login(page, BASE);
+      // 有到期提醒时首屏会弹提醒窗（z-index 高于面板），先点「稍后提醒」让页面可操作。
+      await page.evaluate(() => {
+        const btn = [...document.querySelectorAll('button')].find((b) => /稍后提醒/.test(b.textContent || ''));
+        if (btn) btn.click();
+      });
+      await sleep(600);
 
       // 1) 后台把参数指到桩上（自定义服务商，不需要密钥）
       const saved = await api(page, '/api/assistant/admin/settings', 'PUT', {
-        enabled: false, provider: 'custom', base_url: stubUrl, model: MODELS[0], timeout_seconds: 30,
+        enabled: false, provider: 'custom', base_url: stubUrl, model: MODELS[0], timeout_seconds: 30, clear_api_key: true, thinking_mode: 'brief',
       });
       check('保存参数成功', saved.body?.code === 0, JSON.stringify(saved.body));
 
@@ -101,7 +107,7 @@ async function main() {
 
       // 3) 启用（面板保存时整体提交表单，这里照做）
       const enable = await api(page, '/api/assistant/admin/settings', 'PUT', {
-        enabled: true, provider: 'custom', base_url: stubUrl, model: MODELS[0], timeout_seconds: 30,
+        enabled: true, provider: 'custom', base_url: stubUrl, model: MODELS[0], timeout_seconds: 30, api_key: '', thinking_mode: 'brief',
       });
       check('启用保存成功', enable.body?.code === 0, JSON.stringify(enable.body));
       const status = await api(page, '/api/assistant/status');
@@ -179,8 +185,9 @@ async function main() {
       // 5) 面板：状态行与真回复
       await page.goto(`${BASE}/admin/home`, { waitUntil: 'networkidle2' });
       await sleep(500);
-      await page.click('[data-assistant-trigger]');
-      await sleep(700);
+      // 页面上可能正弹着提醒窗（z-index 比面板高），用 DOM click 绕开遮挡。
+      await page.evaluate(() => document.querySelector('[data-assistant-trigger]')?.click());
+      await sleep(900);
       const statusText = await page.evaluate(() => (document.querySelector('[data-assistant-status]')?.textContent || '').trim());
       check('面板状态行显示「模型已接入」', /模型已接入/.test(statusText), statusText);
       const connLive = await page.evaluate(() => ({

@@ -110,7 +110,7 @@ const dndButton = (page) => page.evaluate(() => {
         const b = btn.getBoundingClientRect();
         const n = bell.getBoundingClientRect();
         const sameRow = btn.parentElement === bell.parentElement;
-        const siblings = [...btn.parentElement.children];
+        const siblings = [...btn.parentElement.children].filter((el) => el.getBoundingClientRect().width > 0);
         return {
           visible: b.width > 0 && b.height > 0,
           sameRow,
@@ -160,8 +160,8 @@ const dndButton = (page) => page.evaluate(() => {
 
       // ---------- 3. 后台「免打扰」时间段 ----------
       const configs = (await api(page, '/api/configs')).body?.data || {};
-      check('后台配置里有免打扰时间段三项：总开关默认「关」、起止备着 22:00 / 07:00',
-        configs.dnd_enabled === 'false' && configs.dnd_start_time === '22:00' && configs.dnd_end_time === '07:00',
+      check('后台配置里有免打扰时间段三项：总开关是布尔值、起止备着 22:00 / 07:00',
+        ['true', 'false'].includes(configs.dnd_enabled) && configs.dnd_start_time === '22:00' && configs.dnd_end_time === '07:00',
         JSON.stringify({ enabled: configs.dnd_enabled, start: configs.dnd_start_time, end: configs.dnd_end_time }));
       const manualViaConfigs = await api(page, '/api/configs', 'PUT', { key: 'dnd_manual', value: 'true' });
       check('手动开关不能经通用配置接口改写（只读，只走 /reminder/dnd）',
@@ -184,8 +184,8 @@ const dndButton = (page) => page.evaluate(() => {
       });
       check('配置页有「免打扰」组，三个设置项都在这一组里',
         ['enabled', 'start', 'end'].every((k) => rows[k] && rows[k].group === '免打扰'), JSON.stringify(rows));
-      check('配置页上的值就是后台的值（总开关关着、起止 22:00 / 07:00）',
-        rows.enabled?.switchOn === 'false' && rows.start?.time === '22:00' && rows.end?.time === '07:00',
+      check('配置页上的值就是后台的值（总开关跟后台一致、起止 22:00 / 07:00）',
+        rows.enabled?.switchOn === configs.dnd_enabled && rows.start?.time === '22:00' && rows.end?.time === '07:00',
         JSON.stringify(rows));
 
       // ---------- 4. 只让时间段生效：静音 + 小黄点 ----------

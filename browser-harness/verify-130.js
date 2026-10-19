@@ -112,12 +112,13 @@ async function waitSavedChip(page, name, timeout = 12000) {
     });
     check('手机端铃铛旁边有 AI 图标', mobileEntry.ok && mobileEntry.visible && mobileEntry.gap >= -2 && mobileEntry.gap <= 16, JSON.stringify(mobileEntry));
     await page.click('[data-assistant-mobile]');
-    await sleep(900);
+    await page.waitForSelector('[data-assistant-panel]', { timeout: 5000 }).catch(() => {});
+    await sleep(400);
     const mobilePanel = await page.evaluate(() => !!document.querySelector('[data-assistant-panel]'));
     check('点手机端 AI 图标能打开小秘面板', mobilePanel, JSON.stringify({ mobilePanel }));
     await page.keyboard.press('Escape');
     await sleep(400);
-    await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+    await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
     await gotoRetry(page, BASE + '/admin');
     await sleep(800);
 
@@ -259,8 +260,9 @@ async function waitSavedChip(page, name, timeout = 12000) {
       check('输入框上面不再单独摆范围 / 关键词 / 存为常用，收进「管理」',
         panel.hasManage === true && !panel.hasRange && !panel.hasKeyword && !panel.hasSave,
         JSON.stringify(panel).slice(0, 200));
-      await page.click('[data-assistant-manage]');
-      await sleep(400);
+      await sleep(500);
+      await page.evaluate(() => document.querySelector('[data-assistant-manage]')?.click());
+      await sleep(500);
       const managePanel = await page.evaluate(() => {
         const range = document.querySelector('[data-assistant-range]');
         return {

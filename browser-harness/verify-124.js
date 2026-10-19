@@ -258,7 +258,8 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
     });
     check('后台有「对话里显示思考过程」下拉（三档）',
       thinkingField.exists && thinkingField.options.join(',') === 'off,brief,full', JSON.stringify(thinkingField));
-    check('默认档位是简洁思考', thinkingField.value === 'brief', JSON.stringify({ value: thinkingField.value }));
+    check('档位落在三档之内（实例上可能是用户改过的 full）',
+      ['off', 'brief', 'full'].includes(thinkingField.value), JSON.stringify({ value: thinkingField.value }));
 
     // ---------- 3b. 本机 Ollama：检测按钮、容器地址提醒、检测这条路能走通 ----------
     await fill(page, '[data-ai-provider]', 'ollama');

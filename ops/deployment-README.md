@@ -223,6 +223,49 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-10-19：0.36.0（201 生产 / 201 沙箱上线；200 待手动）—— 课程表上线（多人表、四段节次、拖动换课、A4 打印）；小秘能查课表；计划卡片显示剩余时间；仪式感卡片可调透明度；手机顶栏 AI 入口
+
+> **发版记录**（VERSION `0.36.0`，源码提交 `da99fb3`，镜像 `workordernote:0.36.0` =
+> `sha256:8b7a7572617dcaec5a5b1447c51b2fc34b8c178e6c646fbf2a59ce920e2c8c19`，91.5 MB）
+>
+> 用户原话（发版指令）：「发版」。
+>
+> **本版内容**
+> - **课程表**：多人表按标签切换；一天分早课/上午/下午/晚课，每段从自己的第 1 节编号，
+>   节数与每节时间都可改；「按课时重排」只在段内推；七列按节次行对齐、段间画横线；
+>   编辑态拖动换课（空格移动、有课互换）；课程卡显示备注；颜色色点有选中态。
+> - **A4 横向打印**：左列节次+时间段、右侧七天，四段分色分界线，备注并在地点行右端不出 A4。
+> - **小秘能查课表**：`work_digest` 增课程（≤80 节），面板摘要「课程 N 节」，问「周三下午有什么课」按表/星期/节次回答。
+> - **计划页循环卡片**改显示「剩余 X 天 X 小时 X 分」。
+> - **仪式感卡片**：文案改「与你共度 N 次」，新增卡片透明度（背景层单独变淡，文字不受影响）。
+> - **手机顶栏 AI 入口**；小秘范围/关键词收进「管理」，提示词可删可恢复。
+>
+> **用例与自检**
+> - 沙箱（8908，0.36.0 镜像）：`verify-131` **51/51**、`verify-107` **26/26**、
+>   `verify-130`（关掉 AI 后跑草稿口径）**45/45**、`verify-124-model`（桩）**61/61**。
+> - 离线包自检 **30/30**（`reminders-upstream/pkg/WorkOrderNote-0.36.0-offline-amd64.tar.gz`，
+>   sha256 `6e179aa496865f3cb477eb350d46960a30ceea3e875cc0bd4ef3a82d655f74e3`）。
+> - 套件修正（属测试环境差异，不是产品回归）：`verify-124-model` 的 PUT 改带 `clear_api_key` 与
+>   `thinking_mode:'brief'`、面板改 DOM click 绕开提醒弹窗；`verify-130` 手机视口还原时补
+>   `isMobile:false/hasTouch:false`。
+> - 备份：沙箱 `/tmp/staging-pre0360-20261019-095354.tgz`；201 `data` → `/tmp/prod-data-pre0360-20261019-100427.tgz`（22 MB）。
+> - 上线：沙箱 09:52 → 201 生产 10:04（备份 → 改 compose 镜像 tag → `docker compose up -d`）。
+>   两台 `/api/version` 均 `0.36.0 / da99fb3`，8906 health ok，AI 状态 ready。
+> - 镜像同时推到 `192.168.3.200:3000/cyberzero/workordernote:0.36.0`，digest `sha256:58182be1bd80d3153d3ada848ed5b81c27b167c62a45d1be585771286f96addb`。
+> - **生产全量回归（8906，0.36.0，10:04–11:05）：55 套件 / 1444 项通过；首轮 5 个套件红**
+>   （`verify-print` 登录限流、`verify-112`/`verify-115` 读的是卡片旧背景层、`verify-124` 的档位默认、
+>   `verify-129` 顶栏序位与免打扰默认值），单独复跑全部转绿：print 24/24、112 46/46、115 34/34、
+>   124 71/71、129 21/21。修正只动断言（读 `.ceremony-bg-fill`、可见兄弟节点算序位、接受用户改过的档位/免打扰值），
+>   没有产品代码改动。
+> - 构件：离线包 `pkg/WorkOrderNote-0.36.0-offline-amd64.tar.gz`（45 808 087 B，sha256
+>   `6e179aa496865f3cb477eb350d46960a30ceea3e875cc0bd4ef3a82d655f74e3`）；
+>   fnOS 包 `release/0.36.0/workordernote_0.36.0_amd64.fpk`（21 585 098 B，md5 `9245ba0c6e8ef1ee99b1d84b8b65389d`）。
+> - **200（192.168.3.200）尚未升级**：本机没有该机的 SSH 凭据，需要在 200 上执行
+>   `sudo docker pull 192.168.3.200:3000/cyberzero/workordernote:0.36.0 &&
+>    sudo docker tag 192.168.3.200:3000/cyberzero/workordernote:0.36.0 workordernote:0.36.0 &&
+>    sudo sed -i 's|workordernote:0.35.0|workordernote:0.36.0|' /vol1/1000/Docker/workordernote/docker-compose.yml &&
+>    cd /vol1/1000/Docker/workordernote && sudo docker compose up -d`（升级前先备份 `data`）。
+
 ### 2026-10-18：0.35.0（201 生产 / 201 沙箱 / 200 生产上线）—— 详细思考真展开、模型清单收起；栏目提示词描边、@ 提醒归个人；小秘红绿标题；仪式感卡片重做；记事本左抽屉
 
 > **发版记录**（VERSION `0.35.0`，源码提交 `f58ada9`，镜像 `workordernote:0.35.0` =

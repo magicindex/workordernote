@@ -345,7 +345,7 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
           id: it?.id, apiAccent: it?.accent,
           // 倒计时已经没有自己的底色块（2026-10-13 起直接压在卡面上）：
           // 看卡片的渐变，以及倒计时用的字色变量。
-          cardBg: hero ? getComputedStyle(hero.closest('[data-ceremony-card]')).backgroundImage : '',
+          cardBg: hero ? getComputedStyle(hero.closest('[data-ceremony-card]').querySelector('.ceremony-bg-fill') || hero.closest('[data-ceremony-card]')).backgroundImage : '',
           heroBg: hero ? getComputedStyle(hero).backgroundImage : '',
           heroInk: hero ? getComputedStyle(hero).getPropertyValue('--ceremony-ink').trim() : '',
         };
@@ -385,7 +385,7 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
           const hero = c.querySelector('[data-ceremony-countdown]');
           return {
             t: (c.querySelector('[data-ceremony-title]')?.textContent || '').trim(),
-            cardBg: getComputedStyle(c).backgroundImage,
+            cardBg: getComputedStyle(c.querySelector('.ceremony-bg-fill') || c).backgroundImage,
             heroBg: hero ? getComputedStyle(hero).backgroundImage : '',
             heroInk: hero ? getComputedStyle(hero).color : '',
           };

@@ -91,7 +91,7 @@ const api = (page, p, method = 'GET', body = null, extraHeaders = null) => page.
       const img = card.querySelector('.ceremony-bg-img');
       return {
         imageAttr: card.getAttribute('data-ceremony-image'),
-        cardBg: getComputedStyle(card).backgroundImage,
+        cardBg: getComputedStyle(card.querySelector('.ceremony-bg-fill') || card).backgroundImage,
         cardColor: getComputedStyle(card).color,
         heroBg: getComputedStyle(hero).backgroundImage,
         heroColor: getComputedStyle(hero).color,
