@@ -240,6 +240,23 @@ const madeIds = [];
     }, loopTitle.slice(0, 10));
     check('列表里循环任务完成一次后显示「第 2 次」', loopBadge === '第 2 次', JSON.stringify({ loopBadge }));
 
+    // 计划页的同一张卡片：不再说第几次，改成「剩余 天 小时 分」
+    await gotoRetry(page, BASE + '/admin/planned');
+    await waitSel(page, '[data-cycle-badge]', 20000);
+    await sleep(1200);
+    const planBadge = await page.evaluate((t) => {
+      const row = [...document.querySelectorAll('.reminder-row')].find((r) => r.textContent.includes(t));
+      if (!row) return null;
+      const badge = row.querySelector('[data-cycle-badge]');
+      return badge ? {
+        text: badge.textContent.replace(/\s+/g, ' ').trim(),
+        remaining: badge.getAttribute('data-cycle-remaining') || '',
+      } : null;
+    }, loopTitle.slice(0, 10));
+    check('计划页循环卡片改显示剩余时间（天/小时/分）',
+      !!planBadge && /^(剩余|已逾期) (\d+ 天 )?\d+ 小时 \d+ 分$/.test(planBadge.text) && !/^第/.test(planBadge.text),
+      JSON.stringify(planBadge));
+
     // ---------- 6. 信用卡「第 x 期」 ----------
     const cardList = ((await api(page, '/api/reminder/lists')).body?.data || []).find((l) => l.template === 'credit_card');
     if (cardList) {

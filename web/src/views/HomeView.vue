@@ -542,9 +542,10 @@
                   <span v-if="item.priority" class="priority-mark" :class="`priority-${item.priority}`">{{ '!'.repeat(item.priority) }}</span>
                   <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ item.calendar === 'lunar' ? `农历${ruleLabel(item.repeat_rule)}` : ruleLabel(item.repeat_rule) }}</span>
                   <span v-if="item.repeat_notify_minutes" class="tiny-badge">过期提醒</span>
-                  <!-- 循环周期：这是第几次（后端按完成历史算，非循环项目不返回） -->
-                  <span v-if="item.cycle_index" class="tiny-badge !text-brand-600 dark:!text-brand-300" data-cycle-badge>
-                    第 {{ item.cycle_index }} 次
+                  <!-- 循环周期：计划页看成「这一轮到什么时候」，其余页面仍显示第几次。
+                       倒计时跟着页面每分钟的 E 走（下面 setInterval 已经在跳）。 -->
+                  <span v-if="item.cycle_index" class="tiny-badge !text-brand-600 dark:!text-brand-300" data-cycle-badge :data-cycle-remaining="isPlanned ? cycleRemaining(item) : ''">
+                    {{ isPlanned ? cycleRemaining(item) || `第 ${item.cycle_index} 次` : `第 ${item.cycle_index} 次` }}
                   </span>
                 </div>
                 <p v-if="item.notes" class="mt-0.5 break-words text-xs leading-4 text-muted-foreground sm:mt-1 sm:truncate">{{ item.notes }}</p>
@@ -914,6 +915,25 @@ const dateWindow = computed(() => (isAllPage.value && listRange.value !== 'month
 // 计划页的输入窗口与今天页不同：只用自定义时间/时间段，没有任何相对快捷项，
 // 也没有「记事」（计划里只有任务）。见模板里的 v-if="isPlanned" 一支。
 const isPlanned = computed(() => view.value === 'planned')
+
+// 计划页循环卡片上的倒计时：当前这一轮的到期时间还剩多久。
+// 口径是页面自己的 clockNow（每分钟跳一次），不单独起定时器；
+// 用户要的是「天 / 小时 / 分」都写出来，所以不用时:分那种紧凑格式。
+function cycleRemaining(item: { due_at?: string | null }): string {
+  if (!item.due_at) return ''
+  const at = new Date(item.due_at).getTime()
+  if (!Number.isFinite(at)) return ''
+  const diff = at - clockNow.value
+  const total = Math.abs(diff)
+  const days = Math.floor(total / 86_400_000)
+  const hours = Math.floor((total % 86_400_000) / 3_600_000)
+  const minutes = Math.max(1, Math.floor((total % 3_600_000) / 60_000))
+  const parts: string[] = []
+  if (days > 0) parts.push(`${days} 天`)
+  if (days > 0 || hours > 0) parts.push(`${hours} 小时`)
+  parts.push(`${minutes} 分`)
+  return `${diff < 0 ? '已逾期' : '剩余'} ${parts.join(' ')}`
+}
 const planStartOpen = ref(false)
 const planEndOpen = ref(false)
 const planStartAnchor = ref<HTMLElement | null>(null)
