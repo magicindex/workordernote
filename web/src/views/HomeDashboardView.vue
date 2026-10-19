@@ -40,14 +40,6 @@
           <span class="home-col-count">{{ upcoming.length }} 条</span>
         </header>
         <div class="home-col-body">
-        <!-- 列表自己的说明（用户 2026-10-13：「清单列表补充说明14天待办任务」）：
-             14 天口径 + 标题前面那个级别字怎么读，都写在列表里，不用回看页头。 -->
-        <p class="mb-3 mt-3 text-[11px] leading-4 text-muted-foreground" data-home-legend>
-          到期时间落在今天到 14 天后、且还没逾期的任务（含循环任务的下一次）。
-          标题前的字是级别：<b class="text-rose-500">急</b>=已逾期、
-          <b class="text-amber-500">今</b>=今天、<b class="text-sky-500">明</b>=明天、
-          <b class="text-sky-500">后</b>=后天、周X=本周内、日期=更远。
-        </p>
         <p v-if="!upcoming.length" class="rounded-2xl border border-dashed border-border bg-surface/40 px-4 py-10 text-center text-xs text-muted-foreground">
           接下来 14 天没有待办，安心。
         </p>
@@ -97,9 +89,6 @@
           <span class="home-col-count">{{ overdue.length }} 条</span>
         </header>
         <div class="home-col-body">
-        <p class="mb-3 mt-3 text-[11px] leading-4 text-muted-foreground" data-home-legend-overdue>
-          到期日当天过了「逾期提醒时间」还没完成的都在这儿（点「知道了」顺延也不会离开这一栏）。
-        </p>
         <p v-if="!overdue.length" class="rounded-2xl border border-dashed border-border bg-surface/40 px-4 py-10 text-center text-xs text-muted-foreground">
           没有逾期的事，很好。
         </p>

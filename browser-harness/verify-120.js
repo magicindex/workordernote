@@ -173,10 +173,13 @@ const itemsOf = (res) => {
     check('每行前面是栏目图标（有图标、有 svg）', !!iconInfo && iconInfo.hasIcon && iconInfo.hasSvg, JSON.stringify(iconInfo));
     check('每行前面没有复选框了', !!iconInfo && iconInfo.hasCheckbox === false, JSON.stringify(iconInfo));
 
-    check('第一列写明是「未来 14 天待办」并解释了级别字',
-      (board.legends[0] || '').includes('未来 14 天待办') && /急/.test(board.legends[0]) && /今/.test(board.legends[0]),
+    // 用户 2026-10-19：「说明文字删除」——卡片内部不再放 14 天口径/级别字/逾期口径的整段说明。
+    check('第一列标题是「未来 14 天待办」，卡片里没有说明文字',
+      (board.legends[0] || '').includes('未来 14 天待办') && !/到期时间落在今天到/.test(board.legends[0]),
       JSON.stringify(board.legends[0]));
-    check('第二列写明是「已逾期」', (board.legends[1] || '').includes('已逾期'), JSON.stringify(board.legends[1]));
+    check('第二列标题是「已逾期」，卡片里没有说明文字',
+      (board.legends[1] || '').includes('已逾期') && !/逾期提醒时间/.test(board.legends[1]),
+      JSON.stringify(board.legends[1]));
 
     // ---------------- 3b. 每条后面的倒计时 + 标题条底色 ----------------
     const extras = await page.evaluate((titles) => {
