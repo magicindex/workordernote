@@ -86,6 +86,8 @@ export interface ReminderItem {
   bg_blur?: number
   /** 背景图蒙板：透明度百分比（0–100，越大越清透；默认 45） */
   bg_mask?: number
+  /** 整卡背景透明度：100 = 不透明，0 = 只剩文字（见 server/reminder/models.go） */
+  bg_alpha?: number
   created_at: string
   updated_at: string
 }
@@ -114,6 +116,8 @@ export interface SaveReminderInput {
   /** 背景图蒙板：虚化像素数（0–24）/ 透明度百分比（0–100）；不传＝不改 */
   bg_blur?: number
   bg_mask?: number
+  /** 整卡背景透明度：100 = 不透明，0 = 只剩文字（见 server/reminder/models.go） */
+  bg_alpha?: number
   version?: number
 }
 

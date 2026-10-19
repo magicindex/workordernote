@@ -63,8 +63,10 @@ type SaveReminderInput struct {
 	Background *string `json:"background"`
 	// BgBlur / BgMask 是背景图的蒙板（虚化像素数 / 蒙板浓度百分比，见 models.go）。
 	// 同样用指针：缺省 = 不改。
-	BgBlur  *int `json:"bg_blur"`
-	BgMask  *int `json:"bg_mask"`
+	BgBlur *int `json:"bg_blur"`
+	BgMask *int `json:"bg_mask"`
+	// BgAlpha 整张卡片背景的透明度（0–100，缺省 = 不改；新建时默认 100）。
+	BgAlpha *int `json:"bg_alpha"`
 	Version uint `json:"version"`
 }
 
@@ -118,6 +120,9 @@ func validateReminderInput(in *SaveReminderInput) error {
 	}
 	if in.BgMask != nil && (*in.BgMask < 0 || *in.BgMask > 100) {
 		return errors.New("背景蒙板透明度超出范围（0–100）")
+	}
+	if in.BgAlpha != nil && (*in.BgAlpha < 0 || *in.BgAlpha > 100) {
+		return errors.New("卡片透明度超出范围（0–100）")
 	}
 	if in.RepeatRule == "" {
 		in.RepeatRule = "none"
@@ -286,12 +291,17 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 		if in.BgMask != nil {
 			bgMask = *in.BgMask
 		}
+		bgAlpha := defaultBgAlpha
+		if in.BgAlpha != nil {
+			bgAlpha = *in.BgAlpha
+		}
 		created = Reminder{
 			UserID: userID, ListID: in.ListID, Title: in.Title, Notes: in.Notes,
 			Accent:     accent,
 			Background: background,
 			BgBlur:     bgBlur,
 			BgMask:     bgMask,
+			BgAlpha:    bgAlpha,
 			CardRole:   in.CardRole,
 			Kind:       in.Kind,
 			Priority:   in.Priority, DueAt: in.DueAt, AllDay: in.AllDay,
@@ -403,6 +413,9 @@ func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) 
 		}
 		if in.BgMask != nil {
 			existing.BgMask = *in.BgMask
+		}
+		if in.BgAlpha != nil {
+			existing.BgAlpha = *in.BgAlpha
 		}
 		existing.SnoozedUntil = nil
 		existing.Version++

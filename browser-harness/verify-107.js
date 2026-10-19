@@ -220,7 +220,41 @@ const madeIds = [];
     const repeating = ceremonyItems.find((i) => i.title.includes('情人节')) || null;
     check('循环项目带 cycle_index（第一年就是第 1 次）',
       !!repeating && repeating.cycle_index === 1, JSON.stringify({ title: repeating?.title, cycle: repeating?.cycle_index }));
-    check('仪式感卡片上显示「第 x 次」角标', !!valentine?.cycle.includes('第 1 次'), JSON.stringify({ cycle: valentine?.cycle }));
+    check('仪式感卡片上写「与你共度 1 次」', !!valentine?.cycle.includes('与你共度 1 次'), JSON.stringify({ cycle: valentine?.cycle }));
+
+    // 卡片透明度（用户 2026-10-19：「可以把整个卡片调整为透明（不含文字）」）
+    const hasAlpha = await page.evaluate(() => {
+      const card = [...document.querySelectorAll('[data-ceremony-card]')].find((c) => c.textContent.includes('情人节'));
+      return !!card?.querySelector('[data-ceremony-form-bg-alpha]') || false;
+    });
+    await page.evaluate(() => {
+      const card = [...document.querySelectorAll('[data-ceremony-card]')].find((c) => c.textContent.includes('情人节'));
+      card?.querySelector('[data-ceremony-edit]')?.click();
+    });
+    await sleep(700);
+    const alphaSlider = await page.evaluate(() => !!document.querySelector('[data-ceremony-form-bg-alpha]'));
+    check('编辑卡片时有「卡片透明度」滑杆', alphaSlider, JSON.stringify({ hasAlpha, alphaSlider }));
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-ceremony-form-bg-alpha]');
+      if (el) { el.value = '30'; el.dispatchEvent(new Event('input', { bubbles: true })); }
+    });
+    await sleep(200);
+    await page.evaluate(() => document.querySelector('[data-ceremony-form-save]')?.click());
+    await sleep(1800);
+    const ghost = await page.evaluate(() => {
+      const card = [...document.querySelectorAll('[data-ceremony-card]')].find((c) => c.textContent.includes('情人节'));
+      if (!card) return null;
+      const fill = card.querySelector('[data-ceremony-bg-fill]');
+      const title = card.querySelector('[data-ceremony-title]');
+      return {
+        alpha: fill?.getAttribute('data-ceremony-bg-fill') || '',
+        opacity: fill ? getComputedStyle(fill).opacity : '',
+        titleColor: title ? getComputedStyle(title).color : '',
+      };
+    });
+    check('卡片背景能淡到 30%，文字颜色保持不变',
+      !!ghost && ghost.alpha === '30' && ghost.opacity === '0.3' && !!ghost.titleColor && !/rgba\(0, 0, 0, 0\)|transparent/.test(ghost.titleColor),
+      JSON.stringify(ghost));
 
     // 普通列表里的循环任务：完成一次后变「第 2 次」
     const loopTitle = `自检循环次数-${STAMP}`;

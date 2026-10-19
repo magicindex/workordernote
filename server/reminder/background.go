@@ -36,6 +36,9 @@ const (
 	maxBgBlur     = 24
 	defaultBgBlur = 0
 	defaultBgMask = 45
+	// defaultBgAlpha 卡片背景默认不透明白底（100 = 与之前一样），
+	// 想做成只留文字时再往 0 拉。
+	defaultBgAlpha = 100
 )
 
 // validateBackground 校验背景值：空、preset:<slug>、或本机上传出来的路径。

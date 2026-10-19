@@ -21,7 +21,7 @@
       <article
         v-for="entry in cards"
         :key="entry.id"
-        class="surface ceremony-card"
+        class="surface ceremony-card !bg-transparent"
         :class="{ 'has-image': !!cardImage(entry) }"
         :style="cardStyle(entry)"
         :data-ceremony-card="entry.id"
@@ -31,6 +31,9 @@
         :data-ceremony-bg-blur="entry.bgBlur || 0"
         :data-ceremony-bg-mask="entry.bgMask ?? 45"
       >
+        <!-- 卡面配色单独一层（用户 2026-10-19：「卡片透明度可调，整张卡片透明但不含文字」）：
+             透明度只作用在这层背景上，文字/图标/按钮都在它上面，不跟着变淡。 -->
+        <span class="ceremony-bg-fill" :style="bgFillStyle(entry)" :data-ceremony-bg-fill="entry.bgAlpha ?? 100" aria-hidden="true"></span>
         <!-- 背景图（用户 2026-10-13）：预设主题图或自己上传的图片。
              只在本机有文件的上传图在对端会加载失败 → @error 把它从这张卡片上去掉，
              卡片回落到配色渐变，不显示破图。 -->
@@ -39,7 +42,7 @@
           :src="cardImage(entry)"
           class="ceremony-bg-img"
           :class="{ 'ceremony-bg-img-blurred': (entry.bgBlur || 0) > 0 }"
-          :style="{ filter: (entry.bgBlur || 0) > 0 ? `blur(${entry.bgBlur}px)` : 'none' }"
+          :style="{ filter: (entry.bgBlur || 0) > 0 ? `blur(${entry.bgBlur}px)` : 'none', opacity: bgAlpha(entry) }"
           alt=""
           aria-hidden="true"
           @error="markImageFailed(entry.id)"
@@ -47,7 +50,7 @@
         <span
           v-if="cardImage(entry)"
           class="ceremony-bg-scrim"
-          :style="{ backgroundImage: maskGradient(entry.bgMask) }"
+          :style="{ backgroundImage: maskGradient(entry.bgMask), opacity: bgAlpha(entry) }"
           :data-ceremony-bg-mask="entry.bgMask ?? 45"
           aria-hidden="true"
         ></span>
@@ -81,7 +84,7 @@
             </p>
             <p v-if="entry.passLabel || entry.cycle > 0 || entry.notes" class="ceremony-extra">
               <span v-if="entry.passLabel" class="tiny-badge" :data-ceremony-cycle="entry.id" data-ceremony-pass>{{ entry.passLabel }}</span>
-              <span v-else-if="entry.cycle > 0" class="tiny-badge" :data-ceremony-cycle="entry.id">第 {{ entry.cycle }} 次</span>
+              <span v-else-if="entry.cycle > 0" class="tiny-badge" :data-ceremony-cycle="entry.id">与你共度 {{ entry.cycle }} 次</span>
               <span v-if="entry.notes" class="truncate">{{ entry.notes }}</span>
             </p>
           </div>
@@ -239,6 +242,19 @@
             <p class="text-[11px] font-medium text-muted-foreground">
               透明度越大背景越清透；越小蒙板越浓、字越清楚。
             </p>
+            <label class="flex items-center gap-2 text-[11px] font-bold text-muted-foreground">
+              <span class="w-14 shrink-0">卡片透明度</span>
+              <input
+                v-model.number="form.bgAlpha"
+                type="range" min="0" max="100" step="5"
+                class="h-1.5 flex-1 accent-brand-500"
+                data-ceremony-form-bg-alpha
+              />
+              <span class="w-10 shrink-0 text-right tabular-nums">{{ form.bgAlpha }}%</span>
+            </label>
+            <p class="text-[11px] font-medium text-muted-foreground">
+              整张卡片的背景（配色 / 图片 / 蒙板）一起变淡，文字和图标不受影响；100% 就是原来的实心卡。
+            </p>
             <p v-if="form.bgMask >= 80" class="text-[11px] font-semibold text-amber-600 dark:text-amber-400" data-ceremony-form-bg-mask-warn>
               透明度偏高：背景很亮（浅色照片或浅色主题图）时，卡面上的白字可能看不清，建议 30–60%。
             </p>
@@ -318,7 +334,8 @@ const milestoneYears = ref(0)
 
 const form = reactive({
   title: '', dueAt: '' as string, repeat: 'yearly', calendar: 'solar', accent: '', background: '',
-  bgBlur: 0, bgMask: 45, // 背景蒙板：虚化像素 / 透明度百分比（见 server/reminder/models.go）
+  bgBlur: 0, bgMask: 45, // 背景蒙板：虚化像素 / 蒙板透明度百分比（见 server/reminder/models.go）
+  bgAlpha: 100, // 整卡背景透明度：100 = 不透明，0 = 只剩文字
   // 日期这一栏的标题：生日模板写「第一次生日时间」、结婚纪念日/金婚写「结婚日期」、
   // 情人节/七夕写「第一次情人节 / 第一次七夕」，其余（含「新建事项」）还是「日期」
   // ——用户 2026-10-13：「选择生日模板日期模板改成 出生年月日会不会更好理解」，
@@ -335,7 +352,14 @@ const swatchGradient = (a: CardAccent) => `linear-gradient(135deg, ${a.from} 0%,
  * 倒计时块：选了颜色用该色的浓郁渐变 + 配套字色；「默认」档也给一档**浅色**
  * （按 id 稳定随机，见 utils/card-accents.ts），不再是一块死灰。
  */
-function heroStyle(entry: { accent?: string; id: number }) {
+// 透明卡（背景透明度 ≤ 55%）不再用卡面派生的白字/深字：底下是什么颜色由页面主题决定，
+// 只有主题字色才稳定可读（暗色主题下 --color-foreground 是浅色，反之亦然）。
+function cardInk(entry: { accent?: string; id: number; background?: string; bgAlpha?: number }) {
+  if ((entry.bgAlpha ?? 100) <= 55) return 'rgb(var(--color-foreground))'
+  return cardImage(entry) ? '#ffffff' : heroInk(entry.accent, entry.id)
+}
+
+function heroStyle(entry: { accent?: string; id: number; background?: string; bgAlpha?: number }) {
   // 倒计时**不再有自己的卡片效果**（用户 2026-10-13：「倒计时不增加卡片效果，直接显示在
   // 大卡片中」）：这里只给字色与流光要用的变量，不再画独立底色/描边。
   //   --ceremony-ink 数字的基色（也是流光渐变的两端；对比度用例读它 —— 数字本身是
@@ -344,7 +368,7 @@ function heroStyle(entry: { accent?: string; id: number }) {
   //                  深色卡面用**亮**的靛蓝/紫/青（一眼能看清），浅色卡面（琥珀/鎏金）
   //                  用**深**的同色系（否则亮青亮紫压在浅金上会糊成一片）。
   //                  与登录页/日历「月·周」那套 .flow-text 是同一个视觉语言。
-  const ink = heroInk(entry.accent, entry.id)
+  const ink = cardInk(entry)
   const white = ink === '#ffffff'
   // 流光的三种颜色改成**贴着卡面同色系**的柔光（用户 2026-10-18：「卡片不美观」）：
   // 原来固定用靛蓝/紫/青，压在红卡面上像贴纸；现在玫红卡面扫的是白→浅玫→粉，
@@ -393,14 +417,26 @@ function markImageFailed(id: number) {
   failedImages.value = new Set(failedImages.value).add(id)
 }
 
-function cardStyle(entry: { accent?: string; id: number; background?: string }) {
+// 卡面背景的透明度：100 完全不透明，0 只剩文字。卡面本身不再画底色，
+// 底色改由 .ceremony-bg-fill 这一层承担，所以这里只管「这层有多淡」。
+function bgAlpha(entry: { bgAlpha?: number }) {
+  const value = entry.bgAlpha ?? 100
+  return Math.min(100, Math.max(0, value)) / 100
+}
+function bgFillStyle(entry: { accent?: string; id: number; bgAlpha?: number }) {
+  return {
+    backgroundImage: accentSurface(entry.accent, entry.id),
+    opacity: bgAlpha(entry),
+  }
+}
+
+function cardStyle(entry: { accent?: string; id: number; background?: string; bgAlpha?: number }) {
   // 整张卡片 = 倒计时那一套渐变（用户 2026-10-13：「卡片颜色也与倒计时颜色一致，
   // 不再单独设定卡片颜色」）。原来卡面是同色系的一层浅淡底、倒计时是浓渐变两块色，
   // 现在合成一块：字色、次级字色、图标底盘都按这套渐变算。
   // 有背景图时：渐变仍在（图片没加载出来时就是它），字色固定用白色（蒙版保证对比度）。
-  const ink = cardImage(entry) ? '#ffffff' : heroInk(entry.accent, entry.id)
+  const ink = cardInk(entry)
   return {
-    backgroundImage: accentSurface(entry.accent, entry.id),
     color: ink,
     '--ceremony-ink-soft': softInk(ink),
     // 图标底盘：深字（浅色渐变）用一层淡黑，白字用一层淡白，保证图标看得清
@@ -537,6 +573,7 @@ const cards = computed(() => items.value
       background: item.background || '',
       bgBlur: item.bg_blur ?? 0,
       bgMask: item.bg_mask ?? 45,
+      bgAlpha: item.bg_alpha ?? 100,
     }
   })
   // 排序（用户 2026-10-11 要求「倒计时最短的在最前边，以此类推」）：
@@ -610,6 +647,7 @@ function edit(entry: ReminderItem) {
     background: entry.background || '',
     bgBlur: entry.bg_blur ?? 0,
     bgMask: entry.bg_mask ?? 45,
+    bgAlpha: entry.bg_alpha ?? 100,
     dateField: dateFieldForTitle(entry.title),
   })
   createOpen.value = true
@@ -654,6 +692,7 @@ async function save() {
       background: form.background,
       bg_blur: form.bgBlur,
       bg_mask: form.bgMask,
+      bg_alpha: form.bgAlpha,
       channels: ['inapp'],
     }
     // 婚庆里程碑模板（银婚 25 / 金婚 50 / 钻石婚 60、75）：用户填的是**结婚日期**，
@@ -957,12 +996,14 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 .ceremony-days-past { @apply opacity-90; }
 /* 背景图（用户 2026-10-13）：图片铺满整卡，上面压一层暗色蒙版保证白字可读；
    卡片自身的配色渐变仍在内联 style 里 —— 图片没加载出来/对端没有这个文件时就是它。 */
+.ceremony-bg-fill { @apply pointer-events-none absolute inset-0; }
 .ceremony-bg-img { @apply pointer-events-none absolute inset-0 h-full w-full object-cover; }
 /* 蒙板层：颜色/浓度由 maskGradient() 内联给（可调「透明度」） */
 .ceremony-bg-scrim { @apply pointer-events-none absolute inset-0; }
 /* 虚化时放大一点：否则模糊会把卡片边缘也「吃掉」，四边透出底色 */
 .ceremony-bg-img-blurred { transform: scale(1.08); }
-.ceremony-card > *:not(.ceremony-bg-img):not(.ceremony-bg-scrim):not(.ceremony-actions) { position: relative; z-index: 1; }
+.ceremony-card > .ceremony-bg-fill { position: absolute; inset: 0; }
+.ceremony-card > *:not(.ceremony-bg-img):not(.ceremony-bg-scrim):not(.ceremony-bg-fill):not(.ceremony-actions) { position: relative; z-index: 1; }
 .ceremony-actions { z-index: 2; }
 /* 背景图选择器（预设主题图 + 纯色） */
 .ceremony-bg-option { @apply flex flex-col items-center gap-1 overflow-hidden rounded-xl border border-border/70 bg-surface p-1 text-[10px] font-bold text-muted-foreground transition hover:border-brand-500/40; }

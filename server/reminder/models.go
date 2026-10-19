@@ -123,8 +123,12 @@ type Reminder struct {
 	//                 （0–100：越大越清透、背景越亮；越小蒙板越浓、字越清楚）
 	// 默认写在建表里：老卡片迁移过来就是 blur=0 / mask=45（透明度 45%，
 	// 也就是蒙板浓度 55%，与上一版写死在样式里的观感一致）。
-	BgBlur       int               `gorm:"not null;default:0" json:"bg_blur,omitempty"`
-	BgMask       int               `gorm:"not null;default:45" json:"bg_mask,omitempty"`
+	BgBlur int `gorm:"not null;default:0" json:"bg_blur,omitempty"`
+	BgMask int `gorm:"not null;default:45" json:"bg_mask,omitempty"`
+	// BgAlpha 是**整张卡片背景的透明度**（用户 2026-10-19 要求：「增加卡片透明度调整，
+	// 可以把整个卡片调整为透明（不含文字）」）：100 = 不透明，0 = 只留文字。
+	// 只作用于卡片的背景层（配色渐变 / 背景图 / 蒙板），文字、图标、按钮不受影响。
+	BgAlpha      int               `gorm:"not null;default:100" json:"bg_alpha,omitempty"`
 	CompletedAt  *time.Time        `gorm:"index:idx_reminders_user_completed" json:"completed_at"`
 	SnoozedUntil *time.Time        `json:"snoozed_until"`
 	Position     int               `gorm:"not null;default:0" json:"position"`
