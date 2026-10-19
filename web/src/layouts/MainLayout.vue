@@ -355,6 +355,19 @@
             <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span v-if="summary.unread" class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-red-500"></span>
           </RouterLink>
+          <!-- 手机端（用户 2026-10-19）：「铃铛旁边增加 ai 图标，用于手机 ai 对话」——
+               手机上侧栏是抽屉，呼叫小秘在抽屉里不好找，这里给一个常驻入口。
+               桌面端已有左上角「呼叫小秘」，所以这个按钮只在 <640px 出现。 -->
+          <button
+            type="button"
+            class="icon-button sm:hidden"
+            aria-label="呼叫小秘（AI 助手）"
+            title="呼叫小秘：写周报、一句话建任务"
+            data-assistant-mobile
+            @click="openAssistant"
+          >
+            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m12 3.6 1.9 4.4 4.4 1.9-4.4 1.9L12 16.2l-1.9-4.4-4.4-1.9 4.4-1.9L12 3.6Z" stroke-width="1.7" stroke-linejoin="round"/><path d="M18.6 15.4l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8.8-1.9Z" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          </button>
           <!-- 免打扰（用户 2026-10-16）：「首行消息（铃铛图标）旁边放一个喇叭标志，点击进入静音标志，
                退出显示喇叭，点击进入免打扰模式。后台增加免打扰时间段。权责级别优先在 所有通知以上。」
                喇叭 = 正常；静音 = 免打扰中。后台时间段生效时按钮也变成静音，右上角再加一个小黄点

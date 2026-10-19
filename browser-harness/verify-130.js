@@ -97,6 +97,30 @@ async function waitSavedChip(page, name, timeout = 12000) {
   await withTab(async (page) => {
     await login(page, BASE);
 
+    // ---------------- 0. 手机端的 AI 入口（用户 2026-10-19：「在手机端 铃铛旁边增加 ai 图标」） ----------------
+    // 先切到手机宽，验「铃铛旁边、点开就是小秘面板」，再把视口还原，后面的桌面流程照常。
+    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    await gotoRetry(page, BASE + '/admin');
+    await sleep(900);
+    const mobileEntry = await page.evaluate(() => {
+      const btn = document.querySelector('[data-assistant-mobile]');
+      const bell = document.querySelector('header a[href="/admin/notifications"]');
+      if (!btn || !bell) return { ok: false };
+      const b = btn.getBoundingClientRect();
+      const n = bell.getBoundingClientRect();
+      return { ok: true, visible: b.width > 0 && b.height > 0, gap: Math.round(b.left - n.right) };
+    });
+    check('手机端铃铛旁边有 AI 图标', mobileEntry.ok && mobileEntry.visible && mobileEntry.gap >= -2 && mobileEntry.gap <= 16, JSON.stringify(mobileEntry));
+    await page.click('[data-assistant-mobile]');
+    await sleep(900);
+    const mobilePanel = await page.evaluate(() => !!document.querySelector('[data-assistant-panel]'));
+    check('点手机端 AI 图标能打开小秘面板', mobilePanel, JSON.stringify({ mobilePanel }));
+    await page.keyboard.press('Escape');
+    await sleep(400);
+    await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+    await gotoRetry(page, BASE + '/admin');
+    await sleep(800);
+
     // 前置：这一套是「没接模型」的口径（`mode=draft`、回复里原样出现条目标题）。
     // 实例若已经接上模型，回复会被模型改写，下面的断言必然不匹配——直接说清原因，
     // 免得后来的人把这堆红看成产品坏了。
