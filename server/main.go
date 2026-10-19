@@ -66,10 +66,14 @@ func workDigestProvider(db *gorm.DB, userID uint, req assistant.WorkDigestReques
 		// 面板没选时间段：看用户这句话里有没有「上周」「近 7 天」这类时间词。
 		detected, ok := reminder.DetectWorkOptions(req.Text, now)
 		if !ok {
-			if !mentioned {
+			if !mentioned && reminder.LooksLikeScheduleQuery(req.Text) {
+				// 问课表但没带时间词：把本周的课表附上，工作数据按本周算。
+				detected, ok = reminder.WorkDigestOptions{Option: "week"}, true
+			} else if !mentioned {
 				return assistant.WorkDigestResult{}, nil // Found=false：这一轮不附数据
 			}
-		} else {
+		}
+		if ok {
 			detected.ListID, detected.ListName = opts.ListID, opts.ListName
 			opts = detected
 		}
@@ -95,6 +99,7 @@ func workDigestProvider(db *gorm.DB, userID uint, req assistant.WorkDigestReques
 		Overdue:   digest.Stats.Overdue,
 		Notes:     digest.Stats.Notes,
 		Lists:     digest.Stats.Lists,
+		Courses:   digest.Stats.Courses,
 		Truncated: digest.Truncated,
 		Markdown:  digest.Markdown(),
 		Draft:     digest.DraftReport(),

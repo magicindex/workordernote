@@ -1117,11 +1117,17 @@ func DescribeCompletedRange(rng CompletedRange, loc *time.Location) CompletedRan
 // 之所以统一成整段，是因为「到此刻为止」会让边界随时间漂移：同一份数据在
 // 月初和月末查「本月」得到不同的终点描述，用户核对时无从判断。
 func ParseCompletedRange(option, from, to string) (CompletedRange, error) {
+	return parseCompletedRangeAt(option, from, to, time.Now())
+}
+
+// parseCompletedRangeAt 是 ParseCompletedRange 的「按给定时刻算」版本：
+// AI 的快照传的是它自己钉住的 now，这样测试里的「本周」不会随真实日期漂。
+func parseCompletedRangeAt(option, from, to string, at time.Time) (CompletedRange, error) {
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		return CompletedRange{}, err
 	}
-	now := time.Now().In(loc)
+	now := at.In(loc)
 	startOfToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 	endOfToday := startOfToday.AddDate(0, 0, 1)
 	startOfThisMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)

@@ -160,7 +160,7 @@
               >
                 已附上数据：{{ msg.digest.label }} · 完成 {{ msg.digest.completed }} · 未完成
                 {{ msg.digest.open }}{{ msg.digest.overdue ? `（逾期 ${msg.digest.overdue}）` : '' }} · 记事
-                {{ msg.digest.notes }}{{ msg.digest.keyword ? ` · 关键词「${msg.digest.keyword}」` : '' }}{{
+                {{ msg.digest.notes }}{{ msg.digest.courses ? ` · 课程 ${msg.digest.courses} 节` : '' }}{{ msg.digest.keyword ? ` · 关键词「${msg.digest.keyword}」` : '' }}{{
                   msg.digest.list_name ? ` · 只看清单「${msg.digest.list_name}」` : ''
                 }}
               </p>

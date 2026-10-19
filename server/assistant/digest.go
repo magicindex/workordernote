@@ -46,6 +46,7 @@ type WorkDigestResult struct {
 	Overdue   int
 	Notes     int
 	Lists     int
+	Courses   int
 	Truncated bool
 	Markdown  string
 	Draft     string
@@ -92,6 +93,7 @@ type digestView struct {
 	Overdue   int    `json:"overdue"`
 	Notes     int    `json:"notes"`
 	Lists     int    `json:"lists"`
+	Courses   int    `json:"courses"`
 	Truncated bool   `json:"truncated"`
 }
 
@@ -196,6 +198,7 @@ func viewOfDigest(digest WorkDigestResult) *digestView {
 		Overdue:   digest.Overdue,
 		Notes:     digest.Notes,
 		Lists:     digest.Lists,
+		Courses:   digest.Courses,
 		Truncated: digest.Truncated,
 	}
 }

@@ -85,6 +85,7 @@ export interface AssistantDigestView {
   overdue: number
   notes: number
   lists: number
+  courses?: number
   truncated: boolean
 }
 

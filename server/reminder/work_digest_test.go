@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"smallgo/server/timetable"
 )
 
 // 免打扰/周报这些功能都依赖「时间段口径」与「已完成 页一致」。这里固定一个
@@ -487,5 +489,85 @@ func TestNormalizeListAIPrompt(t *testing.T) {
 	}
 	if _, err := normalizeListAIPrompt(ok + "多"); err == nil {
 		t.Fatal("超长要拒绝，不能静默截断")
+	}
+}
+
+// 课表也要进 AI 的快照：小秘得能回答「这周三下午有什么课」。
+// 课表按周几重复，所以给的是本周那天的日期，测试钉住 2026-10-16（周五）。
+func TestWorkDigestIncludesTimetable(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	userID, now := workDigestFixture(t)
+
+	table := timetable.Timetable{UserID: userID, Name: "小明", Location: "三班", LessonMinutes: 45, BreakMinutes: 10}
+	if err := appDB.Create(&table).Error; err != nil {
+		t.Fatal(err)
+	}
+	entries := []timetable.TimetableEntry{
+		{UserID: userID, TimetableID: table.ID, Title: "数学", Kind: "course", Weekday: 1, StartTime: "08:00", EndTime: "08:45", Location: "三班", Teacher: "李老师", Note: "带尺子"},
+		{UserID: userID, TimetableID: table.ID, Title: "机器人社团", Kind: "activity", Weekday: 3, StartTime: "15:30", EndTime: "17:00", Location: "科技楼"},
+	}
+	for i := range entries {
+		if err := appDB.Create(&entries[i]).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	// 别人的课表不该出现在这个人的快照里。
+	other := timetable.Timetable{UserID: userID + 1, Name: "别人的表", LessonMinutes: 45, BreakMinutes: 10}
+	if err := appDB.Create(&other).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := appDB.Create(&timetable.TimetableEntry{
+		UserID: userID + 1, TimetableID: other.ID, Title: "别人的数学", Kind: "course", Weekday: 1, StartTime: "09:00", EndTime: "09:45",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	digest, err := BuildWorkDigest(appDB, userID, WorkDigestOptions{Option: "week"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digest.Stats.Courses != 2 {
+		t.Fatalf("expected 2 courses, got %d", digest.Stats.Courses)
+	}
+	if len(digest.Courses) != 2 {
+		t.Fatalf("expected 2 course rows, got %d", len(digest.Courses))
+	}
+	first := digest.Courses[0]
+	if first.Day != "2026-10-12" || first.Start != "08:00" || first.Note != "带尺子" {
+		t.Fatalf("unexpected first course: %+v", first)
+	}
+	md := digest.Markdown()
+	for _, want := range []string{"课程表（2 节）", "08:00-08:45 数学", "15:30-17:00 机器人社团（活动）", "小明"} {
+		if !strings.Contains(md, want) {
+			t.Fatalf("markdown missing %q:\n%s", want, md)
+		}
+	}
+	// 「今天」这种窄口径只留当天的课：10-16 是周五，两节都在周一/周三，应该一节不剩。
+	today, err := BuildWorkDigest(appDB, userID, WorkDigestOptions{Option: "today"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if today.Stats.Courses != 0 {
+		t.Fatalf("today should not include Monday/Wednesday courses: %+v", today.Courses)
+	}
+	for _, text := range []string{"周三下午有什么课", "看一下课表", "今天几节课"} {
+		if !LooksLikeScheduleQuery(text) {
+			t.Fatalf("LooksLikeScheduleQuery(%q) = false", text)
+		}
+	}
+	if LooksLikeScheduleQuery("上周做了什么") {
+		t.Fatal("普通工作问题不该被当成课表查询")
+	}
+	if strings.Contains(md, "别人的数学") {
+		t.Fatalf("leaked another user's timetable:\n%s", md)
+	}
+	// 用 @清单名 点名时只看那一栏，不掺课表。
+	scoped, err := BuildWorkDigest(appDB, userID, WorkDigestOptions{Option: "week", ListID: 1, ListName: "工作安排"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scoped.Stats.Courses != 0 || strings.Contains(scoped.Markdown(), "本周课表") {
+		t.Fatalf("scoped digest should not include timetable: %+v", scoped.Stats)
 	}
 }

@@ -1,6 +1,7 @@
 package reminder
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -75,6 +76,22 @@ type WorkDigestList struct {
 	Open      int    `json:"open"`
 }
 
+// WorkDigestCourse 是本周课表里的一节。课程按周几固定，所以给的是本周那天的日期，
+// 让模型能说「周三下午有机器人社团」而不是只看到「weekday=3」。
+type WorkDigestCourse struct {
+	Table    string `json:"table"`
+	Day      string `json:"day"` // YYYY-MM-DD（本周那一天）
+	Weekday  int    `json:"weekday"`
+	Title    string `json:"title"`
+	Kind     string `json:"kind"` // course / activity
+	Section  string `json:"section,omitempty"` // 早课 / 上午 / 下午 / 晚课
+	Start    string `json:"start"`
+	End      string `json:"end"`
+	Location string `json:"location,omitempty"`
+	Teacher  string `json:"teacher,omitempty"`
+	Note     string `json:"note,omitempty"`
+}
+
 // WorkDigestStats 是汇总数字，草稿与模型提示词都用它。
 type WorkDigestStats struct {
 	Completed int `json:"completed"`
@@ -82,6 +99,7 @@ type WorkDigestStats struct {
 	Overdue   int `json:"overdue"`
 	Notes     int `json:"notes"`
 	Lists     int `json:"lists"`
+	Courses   int `json:"courses"`
 }
 
 // WorkDigest 是一段时间的工作数据快照。
@@ -98,6 +116,7 @@ type WorkDigest struct {
 	Open      []WorkDigestItem `json:"open"`
 	Notes     []WorkDigestItem `json:"notes"`
 	Lists     []WorkDigestList `json:"lists"`
+	Courses   []WorkDigestCourse `json:"courses,omitempty"`
 	Stats     WorkDigestStats  `json:"stats"`
 	Truncated bool             `json:"truncated"`
 	// 这次数据范围涉及的栏目的 AI 提示词（用户为清单写的分析要求）。
@@ -133,7 +152,7 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 		digest.Label = "当前未完成"
 		digest.All = true
 	} else {
-		rng, err = ParseCompletedRange(option, opts.From, opts.To)
+		rng, err = parseCompletedRangeAt(option, opts.From, opts.To, now)
 		if err != nil {
 			return WorkDigest{}, err
 		}
@@ -204,6 +223,13 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 	}
 	digest.Notes = notes
 
+	// 课表不是清单数据：用 @清单名 点名某一栏时就不掺进来（用户问的是那一栏）。
+	if digest.ListID == 0 {
+		courses, truncated := collectCourses(db, userID, keyword, rng, now)
+		digest.Courses = courses
+		digest.Truncated = digest.Truncated || truncated
+	}
+
 	digest.Lists = mergeWorkLists(digest.Completed, digest.Open, digest.Notes)
 	digest.Prompts = collectListPrompts(db, userID, digest)
 	digest.Stats = WorkDigestStats{
@@ -212,8 +238,24 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 		Overdue:   overdueCount,
 		Notes:     notesTotal,
 		Lists:     len(digest.Lists),
+		Courses:   len(digest.Courses),
 	}
 	return digest, nil
+}
+
+// LooksLikeScheduleQuery 判断这句话是不是在问课表（不带时间词时也要把课表附上，
+// 否则用户问「周三下午有什么课」会得到一份没有课表的快照）。
+func LooksLikeScheduleQuery(text string) bool {
+	t := strings.TrimSpace(text)
+	if t == "" {
+		return false
+	}
+	for _, word := range []string{"课程表", "课表", "课程", "上课", "有课", "早课", "上午课", "下午课", "晚课", "第几节", "几节课", "什么课", "哪节课"} {
+		if strings.Contains(t, word) {
+			return true
+		}
+	}
+	return false
 }
 
 // workDigestMaxListPrompts 一次最多带几条栏目提示词。
@@ -521,6 +563,153 @@ func mergeWorkLists(completed, open, notes []WorkDigestItem) []WorkDigestList {
 
 // Markdown 把快照渲染成给模型看的文本。刻意用「数据而非命令」的口吻：
 // 提示词里会再说一遍「据此作答、不要编造」，这里只负责把事实摆清楚。
+// collectCourses 取本周（周一 ~ 周日）的课表，含课外活动与备注。
+// 课表按周几重复，所以这里只需要「本周一」和用户现在所在时区。
+const workDigestMaxCourses = 80
+
+// sectionResolver 把开始时间映射到四段之一。节次表是表级 JSON，字段名固定，
+// 这里只依赖 section/start/end 三个键，所以在 reminder 包里解码即可，不用 import timetable。
+func sectionResolver(raw string) func(string) string {
+	type period struct {
+		Section string `json:"section"`
+		Start   string `json:"start"`
+		End     string `json:"end"`
+	}
+	var periods []period
+	if strings.TrimSpace(raw) == "" || json.Unmarshal([]byte(raw), &periods) != nil {
+		return nil
+	}
+	labels := map[string]string{"early": "早课", "morning": "上午", "afternoon": "下午", "evening": "晚课"}
+	return func(start string) string {
+		for _, p := range periods {
+			if p.Start == start {
+				return labels[p.Section]
+			}
+		}
+		// 手工填的怪时间：落进哪一节的区间就算哪一段。
+		for _, p := range periods {
+			if start >= p.Start && start < p.End {
+				return labels[p.Section]
+			}
+		}
+		return ""
+	}
+}
+
+func collectCourses(db *gorm.DB, userID uint, keyword string, rng CompletedRange, now time.Time) ([]WorkDigestCourse, bool) {
+	type courseRow struct {
+		TableID   uint
+		TableName string
+		Weekday   int
+		Title     string
+		Kind      string
+		StartTime string
+		EndTime   string
+		Location  string
+		Teacher   string
+		Note      string
+	}
+	q := db.Table("timetable_entries AS e").
+		Select("t.id AS table_id, t.name AS table_name, e.weekday, e.title, e.kind, e.start_time, e.end_time, e.location, e.teacher, e.note").
+		Joins("JOIN timetables AS t ON t.id = e.timetable_id").
+		Where("t.user_id = ? AND e.user_id = ?", userID, userID)
+	if keyword != "" {
+		like := "%" + keyword + "%"
+		q = q.Where("(e.title LIKE ? OR e.note LIKE ? OR e.location LIKE ?)", like, like, like)
+	}
+	var rows []courseRow
+	if err := q.Order("t.position ASC, t.id ASC, e.weekday ASC, e.start_time ASC").Scan(&rows).Error; err != nil {
+		return nil, false
+	}
+	// 每张表的节次表：用来把课归到早课/上午/下午/晚课，模型答「周三下午」时才不会串。
+	sectionOf := map[uint]func(start string) string{}
+	type periodRow struct {
+		ID      uint
+		Periods string
+	}
+	var periodRows []periodRow
+	if err := db.Table("timetables").Select("id, periods").Where("user_id = ?", userID).Scan(&periodRows).Error; err == nil {
+		for _, pr := range periodRows {
+			sectionOf[pr.ID] = sectionResolver(pr.Periods)
+		}
+	}
+
+	truncated := len(rows) > workDigestMaxCourses
+	if truncated {
+		rows = rows[:workDigestMaxCourses]
+	}
+	loc := shanghai()
+	weekday := int(now.In(loc).Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	monday := now.In(loc).AddDate(0, 0, 1-weekday)
+	out := make([]WorkDigestCourse, 0, len(rows))
+	for _, row := range rows {
+		day := monday.AddDate(0, 0, row.Weekday-1)
+		// 选了「今天 / 上周」这种窄口径时，只留落在区间里的那一天；
+		// 「全部 / 当前未完成」则整周都给，模型自己按日期挑。
+		if rng.Start != nil && (day.Before(*rng.Start) || !day.Before(*rng.End)) {
+			continue
+		}
+		section := ""
+		if resolve := sectionOf[row.TableID]; resolve != nil {
+			section = resolve(row.StartTime)
+		}
+		out = append(out, WorkDigestCourse{
+			Table: row.TableName, Section: section, Day: day.Format("2006-01-02"), Weekday: row.Weekday,
+			Title: row.Title, Kind: row.Kind, Start: row.StartTime, End: row.EndTime,
+			Location: row.Location, Teacher: row.Teacher, Note: row.Note,
+		})
+	}
+	return out, truncated
+}
+
+// writeCourseItems 按表 → 天分组，一天一行，便于模型直接复述。
+func writeCourseItems(b *strings.Builder, courses []WorkDigestCourse) {
+	weekdays := []string{"", "周一", "周二", "周三", "周四", "周五", "周六", "周日"}
+	lastTable, lastDay := "", ""
+	for _, course := range courses {
+		if course.Table != lastTable {
+			fmt.Fprintf(b, "- %s：\n", course.Table)
+			lastTable = course.Table
+			lastDay = ""
+		}
+		label := weekdays[course.Weekday] + " " + course.Day[5:]
+		if course.Section != "" {
+			label += " " + course.Section
+		}
+		if label != lastDay {
+			fmt.Fprintf(b, "  %s：", label)
+			lastDay = label
+		} else {
+			b.WriteString("；")
+		}
+		kind := ""
+		if course.Kind == "activity" {
+			kind = "（活动）"
+		}
+		fmt.Fprintf(b, "%s-%s %s%s", course.Start, course.End, course.Title, kind)
+		meta := []string{}
+		if course.Location != "" {
+			meta = append(meta, course.Location)
+		}
+		if course.Teacher != "" {
+			meta = append(meta, course.Teacher)
+		}
+		if course.Note != "" {
+			meta = append(meta, "备注："+course.Note)
+		}
+		if len(meta) > 0 {
+			fmt.Fprintf(b, "（%s）", strings.Join(meta, "·"))
+		}
+		if lastDay != "" {
+			b.WriteString("")
+		}
+	}
+	b.WriteString("\n")
+}
+
 func (d WorkDigest) Markdown() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "【工作数据】时间段：%s", d.Label)
@@ -558,6 +747,11 @@ func (d WorkDigest) Markdown() string {
 	if len(d.Notes) > 0 {
 		fmt.Fprintf(&b, "\n四、这段时间新记的记事（共 %d 条）\n", d.Stats.Notes)
 		writeWorkItems(&b, d.Notes)
+	}
+
+	if len(d.Courses) > 0 {
+		fmt.Fprintf(&b, "\n五、课程表（%d 节）\n", len(d.Courses))
+		writeCourseItems(&b, d.Courses)
 	}
 
 	if d.Truncated {
