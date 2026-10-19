@@ -251,6 +251,12 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 > - 备份：沙箱 `/tmp/staging-pre0360-20261019-095354.tgz`；201 `data` → `/tmp/prod-data-pre0360-20261019-100427.tgz`（22 MB）。
 > - 上线：沙箱 09:52 → 201 生产 10:04（备份 → 改 compose 镜像 tag → `docker compose up -d`）。
 >   两台 `/api/version` 均 `0.36.0 / da99fb3`，8906 health ok，AI 状态 ready。
+> - **指纹（2026-10-19 11:20）**：201 生产与沙箱完全一致——清单 `edffe23d32`、卡片 `7fa2c3f0cb`、
+>   提醒 `85d0ae65e7`、完成记录 `2f98973342`；条数 清单 5 / 卡片 11 / 提醒 71 / 完成 49 / 记事 10。
+>   200 未升级，暂不纳入。
+> - **推送受阻**：`git push origin main` 被 Gitea 的 `pre-receive` 钩子拒绝
+>   （`/usr/local/bin/gitea: No such file or directory`，仓库所有钩子都指着这个二进制，
+>   而本机没有 gitea 进程/服务）。tag `v0.36.0` 已在本地仓库（HEAD `9a72938`），Gitea 恢复后补推。
 > - 镜像同时推到 `192.168.3.200:3000/cyberzero/workordernote:0.36.0`，digest `sha256:58182be1bd80d3153d3ada848ed5b81c27b167c62a45d1be585771286f96addb`。
 > - **生产全量回归（8906，0.36.0，10:04–11:05）：55 套件 / 1444 项通过；首轮 5 个套件红**
 >   （`verify-print` 登录限流、`verify-112`/`verify-115` 读的是卡片旧背景层、`verify-124` 的档位默认、
