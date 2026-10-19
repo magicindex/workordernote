@@ -134,7 +134,7 @@ async function waitForCard(page, selector, timeout = 12000) {
       // ---------------- 4. 课程 / 课外活动 ----------------
       const course = await api(page, `/api/timetable/tables/${id1}/entries`, 'POST', {
         title: `${STAMP} 数学`, kind: 'course', weekday: 1, start_time: '08:00', end_time: '08:45',
-        location: '三班', teacher: '李老师', note: '', color: 'indigo',
+        location: '三班', teacher: '李老师', note: `${STAMP} 带尺子`, color: 'indigo',
       });
       const activity = await api(page, `/api/timetable/tables/${id1}/entries`, 'POST', {
         title: `${STAMP} 机器人`, kind: 'activity', weekday: 3, start_time: '15:30', end_time: '17:00',
@@ -434,8 +434,9 @@ async function waitForCard(page, selector, timeout = 12000) {
       await sleep(400);
       const printHtml = await page.evaluate(() => window.__printHtml || '');
       check(
-        '打印会生成当周页面（含课程、班级与 A4 横向设置）',
-        printHtml.includes(`${STAMP} 数学`) && printHtml.includes('三班 / 教学楼 201') && printHtml.includes('A4 landscape'),
+        '打印会生成当周页面（含课程、班级、备注与 A4 横向设置）',
+        printHtml.includes(`${STAMP} 数学`) && printHtml.includes('三班 / 教学楼 201')
+          && printHtml.includes(`${STAMP} 带尺子`) && printHtml.includes('A4 landscape'),
         `len=${printHtml.length}`,
       );
       // 打印的行数必须等于表里配的节次数：课要落在节次里，不能因为手工时间多长出一行。
