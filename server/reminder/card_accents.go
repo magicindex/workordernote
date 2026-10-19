@@ -11,6 +11,8 @@ var supportedAccents = map[string]bool{
 	"rose": true, "amber": true, "orange": true, "emerald": true,
 	"teal": true, "sky": true, "indigo": true, "violet": true,
 	"fuchsia": true, "slate": true,
+	// 金属四档（用户 2026-10-19）。
+	"silver": true, "golden": true, "bronze": true, "iron": true,
 	// 浅色系（卡面浅底深字，倒计时块仍用配套浓色）。
 	"light-sky": true, "light-violet": true, "light-rose": true,
 	"light-amber": true, "light-emerald": true, "light-teal": true,

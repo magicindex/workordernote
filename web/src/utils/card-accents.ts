@@ -21,6 +21,11 @@ export const CARD_ACCENTS: CardAccent[] = [
   // 深色系：两端都够深，白字对比度 ≥4.7（原来的中浅渐变配白字只有 2.6～3.0，看不清 ——
   // 用户 2026-10-11：「浅色背景影响字体显示，字体是白色的，自动调整字体颜色」）。
   { key: 'slate', label: '石墨', from: '#475569', to: '#1e293b', ink: '#ffffff', sheen: ['#ffffff', '#e2e8f0', '#cbd5e1'] },
+  // 金属四档（用户 2026-10-19）：白银浅底深字，黄金/青铜/黑铁按各自亮度取字色。
+  { key: 'silver', label: '白银', from: '#e2e8f0', to: '#94a3b8', ink: '#0f172a', sheen: ['#0f172a', '#475569', '#94a3b8'] },
+  { key: 'golden', label: '黄金', from: '#facc15', to: '#a16207', ink: '#0f172a', sheen: ['#0f172a', '#854d0e', '#ca8a04'] },
+  { key: 'bronze', label: '青铜', from: '#c2703a', to: '#7c2d12', ink: '#ffffff', sheen: ['#ffffff', '#fdba74', '#c2410c'] },
+  { key: 'iron', label: '黑铁', from: '#3f3f46', to: '#18181b', ink: '#ffffff', sheen: ['#ffffff', '#d4d4d8', '#a1a1aa'] },
   { key: 'rose', label: '玫红', from: '#e11d48', to: '#9f1239', ink: '#ffffff', sheen: ['#ffffff', '#ffe4e6', '#fda4af'] },
   // 浅色系（琥珀 / 鎏金）：底色浅，自动配深字（对比度 8.3 / 5.5）
   { key: 'amber', label: '琥珀', from: '#fcd34d', to: '#f59e0b', ink: '#0f172a', sheen: ['#0f172a', '#78350f', '#b45309'] },
@@ -90,7 +95,8 @@ export function heroGradient(accentKey?: string | null, id?: number | string): s
 export function heroInk(accentKey?: string | null, id?: number | string): string {
   if (!accentKey) return accentInk(defaultAccentFor(id).heroKey)
   const light = LIGHT_ACCENTS.find((a) => a.key === accentKey)
-  return accentInk(light ? light.heroKey : accentKey)
+  if (light) return light.ink
+  return accentInk(accentKey)
 }
 
 // ---- 字色自动匹配（用户 2026-10-11：「自动调整字体颜色，让字体显示清晰」）----

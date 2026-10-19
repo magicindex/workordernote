@@ -874,12 +874,18 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
   /* 卡面本身的三层渐变由 cardStyle() 内联；这里只补两样东西：
      · 顶部一道 1px 内高光 + 一层贴地的投影，卡片像一张有厚度的纸；
      · hover 时轻轻抬起，鼠标扫过能感觉到它是「一张卡」。 */
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 14px 34px -28px rgba(15, 23, 42, .75);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .24),
+    0 2px 6px rgba(15, 23, 42, .16),
+    0 18px 40px -18px rgba(15, 23, 42, .55);
   transition: box-shadow .25s ease, transform .25s ease;
 }
 .ceremony-card:hover {
   transform: translateY(-2px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .26), 0 22px 44px -26px rgba(15, 23, 42, .6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .3),
+    0 4px 10px rgba(15, 23, 42, .2),
+    0 30px 56px -20px rgba(15, 23, 42, .62);
 }
 /* 「渐变色蒙版」：一层很细的斜纹，被右上角的径向渐变吃掉边缘 ——
    卡面因此有了纸面/绸面的质感，而不是一整块纯色。

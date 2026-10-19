@@ -352,6 +352,9 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
       }, { b: BASE, t: accentTitle });
       if (accented.id) createdIds.push(accented.id);
       // 紫罗兰档的深色渐变两端（#7c3aed → #5b21b6，0.21.0 起把色板换深以保证白字对比度）
+      check('色板里有金属四档（白银/黄金/青铜/黑铁）',
+        ['silver', 'golden', 'bronze', 'iron'].every((k) => swatches.some((x) => x.key === k)),
+        JSON.stringify(swatches.map((x) => x.key)));
       check('色板里有「浅色」档（浅天蓝/浅紫/浅玫/浅金/浅绿/浅青）',
         ['light-sky', 'light-violet', 'light-rose', 'light-amber', 'light-emerald', 'light-teal']
           .every((k) => swatches.some((x) => x.key === k)),
@@ -382,6 +385,14 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
         return String(j?.data?.accent ?? '');
       }, { b: BASE, id: accented.id });
       check('选回「默认」保存后 accent 被清空', accentCleared === '', accentCleared);
+
+      const cardShadow = await page.evaluate(() => {
+        const card = document.querySelector('[data-ceremony-card]');
+        return card ? getComputedStyle(card).boxShadow : '';
+      });
+      check('卡片有投影（多层，不是 none）',
+        !!cardShadow && cardShadow !== 'none' && cardShadow.split('rgb').length >= 3,
+        cardShadow.slice(0, 120));
 
       // 浅色档：卡面是浅底，字必须自动变深（用户 2026-10-19：「倒计时卡片增加一些浅色的背景颜色」）。
       const lightTitle = `自检浅色-${STAMP}`;
