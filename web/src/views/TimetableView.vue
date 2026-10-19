@@ -122,6 +122,7 @@
                       :class="[paletteOf(item.entry).card, item.entry.kind === 'activity' ? 'timetable-card-activity' : '', editing ? 'timetable-card-draggable' : '']"
                       :data-entry-id="item.entry.id"
                       :data-entry-kind="item.entry.kind"
+                      :data-align-row="`r${item.row}`"
                       :draggable="editing"
                       @click="openEditEntry(item.entry)"
                       @dragstart="onDragStart($event, item.entry)"
@@ -146,10 +147,11 @@
                       </span>
                     </button>
                     <button
-                      v-else
+                      v-else-if="item.kind === 'slot'"
                       type="button"
                       class="timetable-slot"
                       :data-timetable-slot="item.slot.index"
+                      :data-align-row="`r${item.row}`"
                       @click="openNewEntry(day.weekday, item.slot.start)"
                       @dragover="onDragOver"
                       @dragleave="onDragLeave"
@@ -159,6 +161,7 @@
                       <span class="timetable-slot-time">{{ item.slot.start }}</span>
                       <svg viewBox="0 0 24 24" class="ml-auto h-3 w-3 opacity-50" fill="none" stroke="currentColor"><path d="M12 6v12M6 12h12" stroke-width="2" stroke-linecap="round"/></svg>
                     </button>
+                    <span v-else class="timetable-slot-filler" :data-align-row="`r${item.row}`" aria-hidden="true"></span>
                   </template>
               </div>
 
@@ -395,7 +398,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import Modal from '../components/Modal.vue'
 import {
@@ -455,7 +458,44 @@ function entryLocation(entry: TimetableEntry) {
   return (entry.location || '').trim() || activeLocation.value
 }
 const showSlots = ref(localStorage.getItem('timetable.show_slots') !== '0')
-watch(showSlots, (on) => localStorage.setItem('timetable.show_slots', on ? '1' : '0'))
+watch(showSlots, (on) => {
+  localStorage.setItem('timetable.show_slots', on ? '1' : '0')
+  void alignRows()
+})
+
+// 行对齐：同一节次在七列里高度取最大值，空位补一块同高的占位。
+// 不靠固定高度，卡片会因为备注/老师多寡长高，旧的错位就是这么来的。
+const desktopQuery = typeof window !== 'undefined' ? window.matchMedia('(min-width: 768px)') : null
+async function alignRows() {
+  await nextTick()
+  // 手机是一列一天，不存在跨列的「同一行」，强行等高只会让卡片底下空一截。
+  if (!desktopQuery?.matches) {
+    document.querySelectorAll<HTMLElement>('[data-align-row]').forEach((node) => { node.style.minHeight = '' })
+    return
+  }
+  document.body.dataset.alignPass = String(Date.now())
+  const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-align-row]'))
+  const groups = new Map<string, HTMLElement[]>()
+  for (const node of nodes) {
+    const key = node.dataset.alignRow || ''
+    const list = groups.get(key)
+    if (list) list.push(node)
+    else groups.set(key, [node])
+  }
+  let applied = 0
+  for (const list of groups.values()) {
+    list.forEach((node) => { node.style.minHeight = '' })
+    const tallest = list.reduce((max, node) => Math.max(max, node.offsetHeight), 0)
+    if (tallest > 0) {
+      list.forEach((node) => { node.style.minHeight = `${tallest}px` })
+      applied += 1
+    }
+  }
+  document.body.dataset.alignGroups = String(applied)
+}
+
+const onResize = () => { void alignRows() }
+const onLayoutChange = () => { void alignRows() }
 
 const SECTIONS = [
   { key: 'early', label: '早课' },
@@ -520,8 +560,9 @@ function sectionOfStart(start: string): PeriodKey {
 // 不会再出现「节次外多出一行」——空节次开关关掉时，排了课的那一节也不再显示空格子。
 type TimetableSlot = { index: number; section: string; sectionIndex: number; start: string; end: string }
 type PeriodItem =
-  | { kind: 'entry'; at: string; entry: TimetableEntry }
-  | { kind: 'slot'; at: string; slot: TimetableSlot }
+  | { kind: 'entry'; at: string; entry: TimetableEntry; row: number }
+  | { kind: 'slot'; at: string; slot: TimetableSlot; row: number }
+  | { kind: 'filler'; at: string; slot: TimetableSlot; row: number }
 
 function slotIndexFor(entry: TimetableEntry, sectionSlots: { start: string; end: string }[]) {
   const at = entry.start_time
@@ -532,6 +573,19 @@ function slotIndexFor(entry: TimetableEntry, sectionSlots: { start: string; end:
   }
   return sectionSlots.length ? 0 : -1
 }
+
+// 整周哪些节次上有课：别的天有课时，本天空位补一块同高的占位，
+// 这样七列的「第 3 节」永远在同一水平线上，扫一眼就知道是同一时间段。
+const rowsWithContent = computed(() => {
+  const set = new Set<number>()
+  for (const entry of entries.value) {
+    const section = sectionOfStart(entry.start_time)
+    const sectionSlots = slots.value.filter((slot) => slot.section === section)
+    const index = slotIndexFor(entry, sectionSlots)
+    if (index >= 0) set.add(sectionSlots[index].index)
+  }
+  return set
+})
 
 const days = computed(() => weekdays.map((day, i) => {
   const own = entries.value
@@ -556,10 +610,15 @@ const days = computed(() => weekdays.map((day, i) => {
         const items: PeriodItem[] = []
         sectionSlots.forEach((slot, index) => {
           const list = buckets[index].sort((a, b) => a.start_time.localeCompare(b.start_time))
-          if (list.length) list.forEach((entry) => items.push({ kind: 'entry', at: entry.start_time, entry }))
-          else if (showSlots.value) items.push({ kind: 'slot', at: slot.start, slot })
+          if (list.length) {
+            list.forEach((entry) => items.push({ kind: 'entry', at: entry.start_time, entry, row: slot.index }))
+          } else if (showSlots.value) {
+            items.push({ kind: 'slot', at: slot.start, slot, row: slot.index })
+          } else if (rowsWithContent.value.has(slot.index)) {
+            items.push({ kind: 'filler', at: slot.start, slot, row: slot.index })
+          }
         })
-        for (const entry of loose) items.push({ kind: 'entry', at: entry.start_time, entry })
+        for (const entry of loose) items.push({ kind: 'entry', at: entry.start_time, entry, row: -1 })
         return { ...period, items, count: ownInSection.length }
       })
       .filter((period) => period.items.length > 0),
@@ -616,7 +675,12 @@ async function selectTable(id: number) {
   }
 }
 
+// 等 DOM 换完再量：days 一变（切表、加课、开关空节次、周日期到位）就重新对齐一次。
+watch(days, () => { void alignRows() }, { flush: 'post' })
+
 onMounted(async () => {
+  window.addEventListener('resize', onResize)
+  desktopQuery?.addEventListener('change', onLayoutChange)
   loading.value = true
   try {
     await loadTables()
@@ -624,7 +688,14 @@ onMounted(async () => {
     errorMsg.value = err.message || '读取课程表失败'
   } finally {
     loading.value = false
+    // 板子在 loading 期间是 v-if 掉的，等它真正挂上再量一次行高。
+    void alignRows()
   }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onResize)
+  desktopQuery?.removeEventListener('change', onLayoutChange)
 })
 
 // ---------- 新建 / 改名 / 删除表 ----------
@@ -1212,6 +1283,7 @@ async function removeEntry() {
 .timetable-slot:hover { @apply border-brand-300 bg-brand-50/40 text-brand-700 dark:border-brand-400/40 dark:bg-brand-500/[0.06] dark:text-brand-300; }
 .timetable-slot-index { @apply text-[10px] font-bold tabular-nums; }
 .timetable-slot-time { @apply text-[10px] tabular-nums opacity-70; }
+.timetable-slot-filler { @apply block min-h-[1px]; }
 
 .timetable-add {
   @apply mt-auto flex items-center justify-center gap-1 rounded-lg border border-dashed border-border/80 py-1.5 text-[11px] font-semibold text-muted-foreground/70 transition;

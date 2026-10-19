@@ -227,10 +227,16 @@ async function waitForCard(page, selector, timeout = 12000) {
       // 一天四段：08:00 早课、10:00 上午、19:00 晚课；周三 15:30 落下午。
       const monPeriods = await page.$$eval('[data-day-column="1"] [data-timetable-period]', (els) => els.map((e) => e.getAttribute('data-timetable-period')));
       const monLabels = await page.$$eval('[data-day-column="1"] [data-timetable-period-label]', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
-      check('周一按早课 / 上午 / 晚课分成三段', JSON.stringify(monPeriods) === JSON.stringify(['early', 'morning', 'evening']), monPeriods.join(','));
-      check('分段的标题就是早课 / 上午 / 晚课', monLabels.every((t) => /^(早课|上午|晚课)\s*\d+$/.test(t)), monLabels.join(' | '));
+      // 2026-10-19 起四段固定占位（行要对齐），没课的段也保留标题与空白行。
+      check('周一四段固定排列：早课 / 上午 / 下午 / 晚课', JSON.stringify(monPeriods) === JSON.stringify(['early', 'morning', 'afternoon', 'evening']), monPeriods.join(','));
+      check('分段标题齐全，有课的段带节数', monLabels.length === 4 && monLabels[0].startsWith('早课') && /早课\s*\d+/.test(monLabels[0]) && monLabels[2].trim() === '下午', monLabels.join(' | '));
       const wedPeriods = await page.$$eval('[data-day-column="3"] [data-timetable-period]', (els) => els.map((e) => e.getAttribute('data-timetable-period')));
-      check('周三 15:30 的课落在下午', JSON.stringify(wedPeriods) === JSON.stringify(['afternoon']), wedPeriods.join(','));
+      const wedRobotSection = await page.$$eval('[data-day-column="3"] [data-entry-id]', (els) => els.map((e) => {
+        const period = e.closest('[data-timetable-period]');
+        return `${e.getAttribute('data-entry-id')}:${period ? period.getAttribute('data-timetable-period') : ''}`;
+      }));
+      const robotInAfternoon = wedRobotSection.some((it) => it.endsWith(':afternoon'));
+      check('周三 15:30 的课落在下午', wedPeriods.includes('afternoon') && robotInAfternoon, wedRobotSection.join(','));
 
       await page.screenshot({ path: path.join(SHOTS, 'timetable-1440.png') });
 
