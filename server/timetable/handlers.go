@@ -429,6 +429,7 @@ func handleUpdateEntry(db *gorm.DB) gin.HandlerFunc {
 		next.ID = entry.ID
 		next.UserID = userID
 		next.TimetableID = entry.TimetableID
+		next.SyncUID = entry.SyncUID
 		next.CreatedAt = entry.CreatedAt
 		if err := db.Save(&next).Error; err != nil {
 			response.ErrorInternal(c, "保存失败")

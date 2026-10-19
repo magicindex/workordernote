@@ -1,8 +1,13 @@
 package reminder
 
 import (
+	"encoding/json"
+	"strings"
 	"time"
 
+	"smallgo/server/database"
+	"smallgo/server/sysconfig"
+	"smallgo/server/timetable"
 	"smallgo/server/version"
 
 	"gorm.io/gorm"
@@ -12,12 +17,12 @@ import (
 //
 // 同步哪些、不同步哪些，是一条条权衡出来的：
 //
-//   - 同步：清单、提醒/记事、完成历史、提醒所选的渠道名。
+//   - 同步：清单、提醒/记事、完成历史、提醒所选的渠道名、信用卡与账单、
+//     课程表与条目、个人偏好（主题/字号/通知分钟/栏目开关…）、站点设置。
 //     这些是用户真正的内容资产，换一台机器应该一模一样。
-//   - 不同步：账号与密码、通知渠道绑定（邮箱/短信/机器人凭据）、管理员维护的
-//     provider 密钥、投递记录、站内通知、操作日志、系统配置、飞牛绑定关系。
-//     它们是「这台机器的运行环境」，不是内容。把对端的短信凭据搬过来会在错误的
-//     机器上发消息；把对端的令牌搬过来等于把两台机器的管理员权限混成一个。
+//   - 不同步：账号密码、API Key / 同步令牌 / JWT 密钥等凭据（syncConfigSecrets），
+//     通知渠道绑定（邮箱/短信/机器人凭据）、投递记录、站内通知、操作日志、
+//     飞牛绑定关系。把对端的短信凭据搬过来会在错误的机器上发消息。
 //
 // 顺序固定为 用户 → 清单 → 提醒 → 完成历史：应用时按同一顺序落地，
 // 提醒要靠清单、完成历史要靠提醒，先有后引用。
@@ -172,6 +177,80 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 			ScheduledFor:  c.ScheduledFor,
 			CompletedAt:   c.CompletedAt,
 			Deleted:       c.DeletedAt.Valid,
+		})
+	}
+	// ---- 课程表 ----
+	var tables []timetable.Timetable
+	if err := db.Unscoped().Find(&tables).Error; err != nil {
+		return snap, err
+	}
+	tableUID := make(map[uint]string, len(tables))
+	snap.Timetables = make([]syncTimetable, 0, len(tables))
+	for _, t := range tables {
+		tableUID[t.ID] = t.SyncUID
+		var periods []timetable.CoursePeriod
+		if t.PeriodsJSON != "" {
+			_ = json.Unmarshal([]byte(t.PeriodsJSON), &periods)
+		}
+		out := make([]syncCoursePeriod, 0, len(periods))
+		for _, p := range periods {
+			out = append(out, syncCoursePeriod{Section: p.Section, Start: p.Start, End: p.End})
+		}
+		stamp := t.UpdatedAt
+		if t.DeletedAt.Valid && t.DeletedAt.Time.After(stamp) {
+			stamp = t.DeletedAt.Time
+		}
+		snap.Timetables = append(snap.Timetables, syncTimetable{
+			UID: t.SyncUID, Owner: users[t.UserID], Name: t.Name, Location: t.Location,
+			Position: t.Position, LessonMinutes: t.LessonMinutes, BreakMinutes: t.BreakMinutes,
+			PeriodCount: t.PeriodCount, Periods: out, Deleted: t.DeletedAt.Valid,
+			CreatedAt: t.CreatedAt, UpdatedAt: stamp,
+		})
+	}
+	var entries []timetable.TimetableEntry
+	if err := db.Unscoped().Find(&entries).Error; err != nil {
+		return snap, err
+	}
+	snap.TimetableEntries = make([]syncTimetableEntry, 0, len(entries))
+	for _, e := range entries {
+		// 软删不会改 updated_at，墓碑时间就是删除时刻；不带上它，对端会一直
+		// 判成「我这边更新」而不肯删。
+		stamp := e.UpdatedAt
+		if e.DeletedAt.Valid && e.DeletedAt.Time.After(stamp) {
+			stamp = e.DeletedAt.Time
+		}
+		snap.TimetableEntries = append(snap.TimetableEntries, syncTimetableEntry{
+			UID: e.SyncUID, Owner: users[e.UserID], TimetableUID: tableUID[e.TimetableID],
+			Title: e.Title, Kind: e.Kind, Weekday: e.Weekday, StartTime: e.StartTime,
+			EndTime: e.EndTime, Location: e.Location, Teacher: e.Teacher, Note: e.Note,
+			Color: e.Color, Deleted: e.DeletedAt.Valid, CreatedAt: e.CreatedAt, UpdatedAt: stamp,
+		})
+	}
+
+	// ---- 设置：个人偏好 + 站点设置（凭据类键一律不发）----
+	var rows []database.SystemConfig
+	if err := db.Find(&rows).Error; err != nil {
+		return snap, err
+	}
+	for _, row := range rows {
+		if syncConfigSecrets[row.Key] || strings.HasPrefix(row.Key, "sync_") {
+			continue
+		}
+		if row.UserID == 0 {
+			if def, ok := sysconfig.GetConfigDef(row.Key); ok && def.Internal {
+				continue
+			}
+			snap.SystemConfigs = append(snap.SystemConfigs, syncSystemConfig{
+				Key: row.Key, Value: row.Value, UpdatedAt: row.UpdatedAt,
+			})
+			continue
+		}
+		owner, ok := users[row.UserID]
+		if !ok {
+			continue
+		}
+		snap.UserConfigs = append(snap.UserConfigs, syncUserConfig{
+			Owner: owner, Key: row.Key, Value: row.Value, UpdatedAt: row.UpdatedAt,
 		})
 	}
 	return snap, nil

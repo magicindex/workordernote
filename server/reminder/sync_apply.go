@@ -61,7 +61,20 @@ func applySyncSnapshot(db *gorm.DB, snap syncSnapshot) (syncApplyStats, error) {
 		if err := applySyncCardStatements(tx, snap, users, cardID, settings.InstanceID, &stats); err != nil {
 			return err
 		}
-		return applySyncCompletions(tx, snap, users, reminderID, &stats)
+		if err := applySyncCompletions(tx, snap, users, reminderID, &stats); err != nil {
+			return err
+		}
+		tableID, err := applySyncTimetables(tx, snap, users, settings.InstanceID, &stats)
+		if err != nil {
+			return err
+		}
+		if err := applySyncTimetableEntries(tx, snap, users, tableID, settings.InstanceID, &stats); err != nil {
+			return err
+		}
+		if err := applySyncUserConfigs(tx, snap, users, &stats); err != nil {
+			return err
+		}
+		return applySyncSystemConfigs(tx, snap, &stats)
 	})
 	if err != nil {
 		return syncApplyStats{}, err

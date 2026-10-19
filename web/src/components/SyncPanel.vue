@@ -13,10 +13,11 @@
 
     <div v-else class="space-y-5 p-4 sm:p-6">
       <p class="text-xs leading-5 text-muted-foreground">
-        在另一台装了「工作序记」的机器之间同步<strong class="text-foreground">清单、任务、记事与完成记录</strong>。
+        在另一台装了「工作序记」的机器之间同步<strong class="text-foreground">清单、任务、记事、完成记录、信用卡账单、课程表、个人偏好与站点设置</strong>。
         账号按<strong class="text-foreground">用户名</strong>配对：本机有、对端没有的账号，其数据会被跳过并在结果里列出（不会在对端自动建账号）。
         两台机器的<strong class="text-foreground">通信令牌必须填成同一个值</strong>，否则会以 401 拒绝。
-        账号密码、通知渠道绑定（邮箱/短信/机器人凭据）与系统配置<strong class="text-foreground">不会</strong>被同步。
+        <strong class="text-foreground">不同步的只有凭据</strong>：账号密码、API Key、同步令牌、JWT 密钥，
+        以及通知渠道绑定（邮箱/短信/机器人凭据）和投递记录——它们属于这台机器的运行环境。
       </p>
 
       <div class="grid gap-4 sm:grid-cols-2">

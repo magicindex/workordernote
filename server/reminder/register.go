@@ -7,6 +7,7 @@ import (
 	"smallgo/server/database"
 	"smallgo/server/scheduler"
 	"smallgo/server/sysconfig"
+	"smallgo/server/timetable"
 
 	"gorm.io/gorm"
 )
@@ -234,7 +235,7 @@ func init() {
 			if err := BackfillSyncUIDs(db); err != nil {
 				return err
 			}
-			return nil
+			return timetable.BackfillSyncUIDs(db)
 		},
 	})
 

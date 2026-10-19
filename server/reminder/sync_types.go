@@ -26,6 +26,82 @@ type syncSnapshot struct {
 	Reminders      []syncReminder      `json:"reminders"`
 	CardStatements []syncCardStatement `json:"card_statements"`
 	Completions    []syncCompletion    `json:"completions"`
+
+	// 课程表、个人偏好与系统设置（用户 2026-10-19：除密码外全部同步）。
+	Timetables       []syncTimetable      `json:"timetables"`
+	TimetableEntries []syncTimetableEntry `json:"timetable_entries"`
+	UserConfigs      []syncUserConfig     `json:"user_configs"`
+	SystemConfigs    []syncSystemConfig   `json:"system_configs"`
+}
+
+type syncCoursePeriod struct {
+	Section string `json:"section"`
+	Start   string `json:"start"`
+	End     string `json:"end"`
+}
+
+type syncTimetable struct {
+	UID           string             `json:"uid"`
+	Owner         string             `json:"owner"`
+	Name          string             `json:"name"`
+	Location      string             `json:"location"`
+	Position      int                `json:"position"`
+	LessonMinutes int                `json:"lesson_minutes"`
+	BreakMinutes  int                `json:"break_minutes"`
+	PeriodCount   int                `json:"period_count"`
+	Periods       []syncCoursePeriod `json:"periods,omitempty"`
+	Deleted       bool               `json:"deleted,omitempty"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
+type syncTimetableEntry struct {
+	UID          string    `json:"uid"`
+	Owner        string    `json:"owner"`
+	TimetableUID string    `json:"timetable_uid"`
+	Title        string    `json:"title"`
+	Kind         string    `json:"kind"`
+	Weekday      int       `json:"weekday"`
+	StartTime    string    `json:"start_time"`
+	EndTime      string    `json:"end_time"`
+	Location     string    `json:"location"`
+	Teacher      string    `json:"teacher"`
+	Note         string    `json:"note"`
+	Color        string    `json:"color"`
+	Deleted      bool      `json:"deleted,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// syncUserConfig 是一个人的偏好设置（主题、字号、通知分钟、栏目开关…）。
+// 同步的是「值 + 改动时间」，按 LWW 合并；同步自身的配置永远不在此列。
+type syncUserConfig struct {
+	Owner     string    `json:"owner"`
+	Key       string    `json:"key"`
+	Value     string    `json:"value"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// syncSystemConfig 是站点级设置（站点名、周起始日、逾期口径…）。
+// internal / 密钥类键不会出现在报文里，见 syncConfigSecrets。
+type syncSystemConfig struct {
+	Key       string    `json:"key"`
+	Value     string    `json:"value"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+var syncConfigSecrets = map[string]bool{
+	"jwt_secret":         true,
+	"sync_token":         true,
+	"sync_instance_id":   true,
+	"assistant_api_key":  true,
+	"assistant_api_key2": true,
+	"qq_bot_token":       true,
+	"smtp_password":      true,
+	"email_password":     true,
+	"sms_password":       true,
+	"feishu_secret":      true,
+	"dingtalk_secret":    true,
 }
 
 // syncCard 是一张信用卡。卡片挂在清单下，所以用 list_uid 指过去。
@@ -172,6 +248,13 @@ type syncApplyStats struct {
 	CardStatementsCreated int      `json:"card_statements_created"`
 	CardStatementsUpdated int      `json:"card_statements_updated"`
 	CardStatementsDeleted int      `json:"card_statements_deleted"`
+	TimetablesCreated     int      `json:"timetables_created"`
+	TimetablesUpdated     int      `json:"timetables_updated"`
+	TimetablesDeleted     int      `json:"timetables_deleted"`
+	EntriesCreated        int      `json:"entries_created"`
+	EntriesUpdated        int      `json:"entries_updated"`
+	EntriesDeleted        int      `json:"entries_deleted"`
+	ConfigsUpdated        int      `json:"configs_updated"`
 	Skipped               int      `json:"skipped"`
 	UnmappedUsers         []string `json:"unmapped_users,omitempty"`
 
@@ -194,6 +277,13 @@ func (s *syncApplyStats) add(other syncApplyStats) {
 	s.CardStatementsCreated += other.CardStatementsCreated
 	s.CardStatementsUpdated += other.CardStatementsUpdated
 	s.CardStatementsDeleted += other.CardStatementsDeleted
+	s.TimetablesCreated += other.TimetablesCreated
+	s.TimetablesUpdated += other.TimetablesUpdated
+	s.TimetablesDeleted += other.TimetablesDeleted
+	s.EntriesCreated += other.EntriesCreated
+	s.EntriesUpdated += other.EntriesUpdated
+	s.EntriesDeleted += other.EntriesDeleted
+	s.ConfigsUpdated += other.ConfigsUpdated
 	s.Skipped += other.Skipped
 	if len(other.UnmappedUsers) > 0 {
 		seen := make(map[string]bool, len(s.UnmappedUsers))
@@ -216,7 +306,9 @@ func (s syncApplyStats) total() int {
 		s.RemindersCreated + s.RemindersUpdated + s.RemindersDeleted +
 		s.CompletionsCreated + s.CompletionsDeleted +
 		s.CardsCreated + s.CardsUpdated + s.CardsDeleted +
-		s.CardStatementsCreated + s.CardStatementsUpdated + s.CardStatementsDeleted
+		s.CardStatementsCreated + s.CardStatementsUpdated + s.CardStatementsDeleted +
+		s.TimetablesCreated + s.TimetablesUpdated + s.TimetablesDeleted +
+		s.EntriesCreated + s.EntriesUpdated + s.EntriesDeleted + s.ConfigsUpdated
 }
 
 // syncResult 是一次同步的完整结果，序列化后存进 sync_last_detail 并返回给前端。

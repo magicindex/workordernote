@@ -1,6 +1,12 @@
 package timetable
 
-import "time"
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"time"
+
+	"gorm.io/gorm"
+)
 
 // 课程表（用户 2026-10-18）：
 //
@@ -37,8 +43,11 @@ type Timetable struct {
 	PeriodsJSON string         `gorm:"column:periods;type:text" json:"-"`
 	Periods     []CoursePeriod `gorm:"-" json:"periods"`
 
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	// SyncUID / DeletedAt 供「双机同步」认行与传墓碑，与清单、提醒同一套做法。
+	SyncUID   string         `gorm:"size:40;index" json:"-"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
 }
 
 // CoursePeriod 是一节课的骨架（不是某个学生某天的课）。
@@ -62,6 +71,25 @@ type TimetableEntry struct {
 	Teacher     string    `gorm:"size:40;not null;default:''" json:"teacher"`
 	Note        string    `gorm:"size:300;not null;default:''" json:"note"`
 	Color       string    `gorm:"size:24;not null;default:''" json:"color"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	SyncUID   string         `gorm:"size:40;index" json:"-"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+}
+
+// BeforeCreate 给同步功能上线后新建的课程表/条目分配跨实例标识；同步写入的行
+// 自带对端标识，不会被覆盖。
+func (t *Timetable) BeforeCreate(*gorm.DB) error      { return ensureSyncUID(&t.SyncUID) }
+func (e *TimetableEntry) BeforeCreate(*gorm.DB) error { return ensureSyncUID(&e.SyncUID) }
+
+func ensureSyncUID(uid *string) error {
+	if uid == nil || *uid != "" {
+		return nil
+	}
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return err
+	}
+	*uid = hex.EncodeToString(buf)
+	return nil
 }
