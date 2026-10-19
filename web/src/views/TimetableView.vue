@@ -110,7 +110,8 @@
                 class="timetable-period"
                 :data-timetable-period="period.key"
               >
-                <p class="timetable-period-label" :data-timetable-period-label="period.key">
+                <p class="timetable-period-label" :data-timetable-period-label="period.key" :data-section-color="sectionColors[period.key]">
+                    <span class="timetable-period-dot" :style="{ background: paletteOfKey(sectionColors[period.key]).tint }"></span>
                     {{ period.label }}
                     <span v-if="period.count" class="timetable-period-count">{{ period.count }}</span>
                   </p>
@@ -217,7 +218,7 @@
                 :data-entry-color-on="form.color === color.key ? '1' : '0'"
                 :aria-label="color.label"
                 :aria-pressed="form.color === color.key"
-                @click="form.color = color.key"
+                @click="form.color = color.key; colorTouched = true"
               >
                 <svg v-if="form.color === color.key" viewBox="0 0 24 24" class="h-3.5 w-3.5 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)]" fill="none" stroke="currentColor"><path d="m5 12.5 4.5 4.5L19 7.5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </button>
@@ -536,6 +537,29 @@ function minutesOf(hhmm: string) {
 // 归段：先看有没有正好对上某节；没有就按四段的「起点」落段
 // （早课从 0 点到上午第一节，上午到下午第一节，下午到晚课第一节，之后算晚课）。
 // 某一节次没排时，用 12:00 / 18:00 兜底，免得手工加的 19:30 课被塞回下午。
+// 四段各配一个颜色：按表 id 做种子随机挑四个互不相同的色，
+// 同一张表刷新前后不变；新建课程默认用所在段的色，用户仍可单独改。
+function seededColors(seed: number) {
+  // 只在这四个对比明显的色里打乱：八色里随机容易碰上翠绿/青碧这种近色，四段就分不清了。
+  const pool = ['violet', 'sky', 'emerald', 'amber']
+  let state = (seed * 2654435761) >>> 0
+  const next = () => {
+    state = (state * 1664525 + 1013904223) >>> 0
+    return state / 4294967296
+  }
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(next() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  const map: Record<string, string> = {}
+  SECTIONS.forEach((section, index) => { map[section.key] = pool[index] })
+  return map
+}
+const sectionColors = computed<Record<string, string>>(() => seededColors(activeId.value || 1))
+function sectionColorForStart(start: string) {
+  return sectionColors.value[sectionOfStart(start)] || palette[0].key
+}
+
 function sectionOfStart(start: string): PeriodKey {
   const list = slots.value
   if (!list.length) return 'morning'
@@ -634,6 +658,10 @@ const activeAccent = computed(() => {
   return current ? tableAccent(current) : palette[0]
 })
 const shellGlow = computed(() => `radial-gradient(760px 300px at 12% -20%, ${activeAccent.value.tint}1f, transparent 68%)`)
+
+function paletteOfKey(key: string) {
+  return palette.find((item) => item.key === key) || palette[0]
+}
 
 function paletteOf(entry: TimetableEntry) {
   // 没选颜色时按标题做稳定落档：同一个课程刷新后颜色不变。
@@ -1039,6 +1067,8 @@ function nextStartFor(weekday: number) {
   return last ? addMinutes(last.end_time, pacing.value.brk) : '08:00'
 }
 
+const colorTouched = ref(false)
+
 function openNewEntry(weekday: number, start?: string) {
   // 刚拖完手一松可能还带一次 click，别顺手把「添加」弹窗打开。
   if (Date.now() - lastDropAt < 400) return
@@ -1046,6 +1076,8 @@ function openNewEntry(weekday: number, start?: string) {
   const at = start || nextStartFor(weekday)
   Object.assign(form, blankEntry(at), { weekday, start_time: at })
   form.end_time = addMinutes(at, pacing.value.lesson)
+  form.color = sectionColorForStart(at)
+  colorTouched.value = false
   entryError.value = ''
   entryOpen.value = true
 }
@@ -1058,12 +1090,14 @@ function onPickSlot(event: Event) {
   if (!slot) return
   form.start_time = slot.start
   form.end_time = slot.end
+  if (!colorTouched.value) form.color = sectionColorForStart(slot.start)
 }
 
 // 改了开始时间就按「一节课」重算结束；想手动改结束仍然可以。
 function syncEndFromStart() {
   if (!form.start_time) return
   form.end_time = addMinutes(form.start_time, pacing.value.lesson)
+  if (!colorTouched.value) form.color = sectionColorForStart(form.start_time)
 }
 
 // ---------------- 拖动换课 ----------------
@@ -1182,6 +1216,7 @@ function openEditEntry(entry: TimetableEntry) {
     location: entry.location, teacher: entry.teacher,
     note: entry.note, color: entry.color || '',
   })
+  colorTouched.value = true
   entryError.value = ''
   entryOpen.value = true
 }
@@ -1276,6 +1311,7 @@ async function removeEntry() {
   @apply h-px flex-1 bg-border/70;
 }
 .timetable-period-count { @apply tabular-nums text-[9.5px] font-semibold text-muted-foreground/50; }
+.timetable-period-dot { @apply h-1.5 w-1.5 shrink-0 rounded-full; opacity: .85; }
 
 .timetable-slot {
   @apply flex items-center gap-1.5 rounded-lg border border-dashed border-border/70 px-2 py-1 text-left text-muted-foreground/70 transition;

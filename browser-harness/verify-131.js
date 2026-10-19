@@ -219,8 +219,17 @@ async function waitForCard(page, selector, timeout = 12000) {
       const slotLabel = await page.$eval('[data-day-column="1"] [data-timetable-slot="3"]', (el) => el.textContent.replace(/\s+/g, ' '));
       const slotStart = (slotLabel.match(/(\d{2}:\d{2})/) || [])[1] || '';
       check('点空节次会按该节时间预填', slotPrefill.slot === '3' && slotPrefill.start === slotStart, `${JSON.stringify(slotPrefill)} vs ${slotLabel}`);
+      // 四段各自默认色：新建时预选的颜色应当等于这一段标题上的段色。
+      const firstColor = await page.$eval('[data-entry-color-on="1"]', (el) => el.getAttribute('data-entry-color')).catch(() => '');
+      const firstSection = await page.$eval('[data-day-column="1"] [data-timetable-slot="3"]', (el) => {
+        const period = el.closest('[data-timetable-period]');
+        return period ? period.getAttribute('data-timetable-period') : '';
+      }).catch(() => '');
+      const sectionColor = await page.$eval(`[data-day-column="1"] [data-timetable-period="${firstSection}"] [data-timetable-period-label]`, (el) => el.getAttribute('data-section-color')).catch(() => '');
       await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find((x) => /取消/.test(x.textContent || '')); b && b.click(); });
       await sleep(500);
+      check('该段新建默认用本段颜色', Boolean(firstColor) && firstColor === sectionColor, `${firstSection}: ${firstColor} vs ${sectionColor}`);
+      check('段色取自四段色板（紫/蓝/绿/琥珀）', ['violet', 'sky', 'emerald', 'amber'].includes(firstColor), firstColor);
       await page.click('[data-timetable-show-slots]');
       await sleep(600);
 
