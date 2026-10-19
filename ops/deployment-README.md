@@ -256,9 +256,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 > - 沙箱 8908 / 201 / 200 均 `0.39.0`（200 走 `docker save` + `scp` + `sudo docker load`）。
 > - 生产全量回归（201）：54/55 套件、1463 项通过；`verify-print` 在回归里被登录限流，
 >   单独复跑 **24/24**，即全绿。`verify-130` 生产只跑 2 项（AI 已开启，按设计短路）。
-> - 离线包自检 **30/30**（`pkg/WorkOrderNote-0.39.0-offline-amd64.tar.gz`，45 849 951 B，
->   sha256 `075dec5358d4c7b80ea95d5ed49e8819b95dcb2eed7c0412e281e4058476923f`）。
-> - fnOS 包 `release/0.39.0/workordernote_0.39.0_amd64.fpk`（21 606 739 B，md5 `166b6f6477e9315a4b85b725d9a4264f`）。
+> - 离线包自检 **30/30**（`pkg/WorkOrderNote-0.39.0-offline-amd64.tar.gz`，45 850 186 B（含 0.37–0.39 更新日志），
+>   sha256 `5372208aac0865645808b97568394e9cee4a164ffda8d5af6ebe2a7e30db124c`）。
+> - fnOS 包 `release/0.39.0/workordernote_0.39.0_amd64.fpk`（21 606 930 B，md5 `5217daf670aacd7471bf0444331d27eb`）。
 >
 ### 2026-10-19：0.38.0（201 生产 / 200 生产 / 201 沙箱上线）—— 提醒@他并入智能清单、金属四色
 
