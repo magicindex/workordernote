@@ -102,7 +102,9 @@ const readSheet = (page) => page.evaluate(() => {
         }),
         JSON.stringify({ 弹层: sheet?.rows.map((r) => `${r.key}=${r.name}`), 侧栏: sidebar.map((r) => `${r.key}=${r.text}`) }));
       check('每一行都真的显示出来了', !!sheet && sheet.rows.every((r) => r.visible), JSON.stringify(sheet?.rows));
-      check('「全部」在最上面而且能点到', !!sheet && sheet.rows[0]?.key === 'all', JSON.stringify(sheet?.rows[0]));
+      check('弹层里不再有单独的「全部」行（已并入智能清单）',
+        !!sheet && !sheet.rows.some((r) => r.key === 'all'),
+        JSON.stringify(sheet?.rows?.map((r) => `${r.key}=${r.name}`)));
 
       // ---------- 3. 选一个自建清单 → 切过去 ----------
       const target = (sheet?.rows || []).find((r) => String(r.key).startsWith('list:'));
@@ -136,21 +138,15 @@ const readSheet = (page) => page.evaluate(() => {
         check('关闭按钮能收起弹层', (await readSheet(page)) === null);
       }
 
-      // ---------- 5. 选「全部」 → 跳到 /admin/all ----------
+      // ---------- 5. 「全部」只剩智能清单那一处：弹层行全是清单 ----------
       await page.click('[data-tab-lists]');
       await sleep(700);
-      await page.evaluate(() => {
-        const el = Array.from(document.querySelectorAll('[data-lists-sheet-row]'))
-          .find((n) => n.getAttribute('data-lists-sheet-row') === 'all');
-        el?.click();
-      });
-      await sleep(2200);
-      const allPage = await page.evaluate(() => ({
-        url: location.pathname,
-        sheet: !!document.querySelector('[data-lists-sheet]'),
-      }));
-      check('选「全部」跳到 /admin/all', allPage.url === '/admin/all', JSON.stringify(allPage));
-      check('选「全部」后弹层也收起了', allPage.sheet === false, JSON.stringify(allPage));
+      const sheetAll = await readSheet(page);
+      check('弹层里的行都是具体清单（没有重复的「全部」入口）',
+        !!sheetAll && sheetAll.rows.every((r) => String(r.key).startsWith('list:')),
+        JSON.stringify(sheetAll?.rows?.map((r) => r.key)));
+      await page.click('[data-lists-sheet-backdrop]', { offset: { x: 10, y: 10 } });
+      await sleep(600);
 
       // ---------- 6. 点遮罩也能收起 + 桌面没有这个弹层 ----------
       await page.click('[data-tab-lists]');

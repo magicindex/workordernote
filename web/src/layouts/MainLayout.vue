@@ -135,7 +135,7 @@
                 class="tiny-add"
                 :data-my-order-toggle="sortingMyLists ? 'on' : 'off'"
                 :aria-label="sortingMyLists ? '完成排序' : '调整「我的清单」顺序'"
-                :title="sortingMyLists ? '完成排序' : '调整顺序：全部、系统栏目与普通清单一起排'"
+                :title="sortingMyLists ? '完成排序' : '调整顺序：系统栏目与普通清单一起排'"
                 @click="sortingMyLists = !sortingMyLists"
               >
                 <svg v-if="sortingMyLists" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m5 12.5 4.5 4.5L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -156,9 +156,9 @@
             排序中：用 ↑ ↓ 挪位置，点标题旁的 ✓ 完成
           </div>
 
-          <!-- 「我的清单」这一段：全部 / 信用卡账单 / 随手记事本 / 人生要有仪式感 /
-               自建清单统一由 myListRows 决定先后（顺序存用户配置 sidebar_order，清单行同时写回
-               position）。改造前这几行是写死的、只有自建清单能排，用户 2026-10-15 要求整段可排。 -->
+          <!-- 「我的清单」这一段：信用卡账单 / 随手记事本 / 人生要有仪式感 / 自建清单
+               统一由 myListRows 决定先后（顺序存用户配置 sidebar_order，清单行同时写回 position）。
+               原来的「全部」入口 2026-10-19 已并入「智能清单」那一行，这里不再重复列。 -->
           <div
             v-for="row in myListRows"
             :key="row.key"
@@ -171,26 +171,12 @@
             @touchcancel="cancelListLongPress"
             @click.capture="onListRowClick"
           >
-            <RouterLink
-              v-if="row.kind === 'all'"
-              to="/admin/all"
-              class="nav-row min-w-0 flex-1"
-              :class="{ 'nav-row-active': isActive('/admin/all') }"
-              @click="mobileOpen = false"
-            >
-              <span class="h-2.5 w-2.5 rounded-full bg-violet-500 ring-4 ring-violet-500/10"></span>
-              <span class="flex-1">全部</span>
-              <span v-if="summary.all" class="nav-count">{{ summary.all }}</span>
-            </RouterLink>
-
-
             <!-- 清单行：信用卡账单 / 随手记事本 / 人生要有仪式感三个固定栏目与自建清单走同一套渲染。
                  三个栏目由偏好控制显示、图标与文案固定；自建清单可右键（桌面）或长按（触屏）重命名/
                  改色/删除，入口全收在菜单里，所以这里不摆常驻按钮，侧栏更干净。
                  信用卡账单：卡片一律归到这一栏，用户不用（也不能）自己建。
                  随手记事本 / 人生要有仪式感：与前者并列，记事与倒计时条目分别收在其中。 -->
             <RouterLink
-              v-else
               :to="`/admin/list/${row.list.id}`"
               class="nav-row min-w-0 flex-1"
               :class="{ 'nav-row-active': route.path === `/admin/list/${row.list.id}` }"
@@ -481,8 +467,7 @@
               :data-list-name="myRowLabel(row)"
               @click="pickMyRow(row)"
             >
-              <span v-if="row.kind === 'all'" class="h-2.5 w-2.5 shrink-0 rounded-full bg-violet-500 ring-4 ring-violet-500/10"></span>
-              <span v-else-if="row.list.template === 'credit_card'" class="nav-symbol h-5 w-5 bg-brand-500/12 text-brand-500">
+              <span v-if="row.list.template === 'credit_card'" class="nav-symbol h-5 w-5 bg-brand-500/12 text-brand-500">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="6" width="18" height="12" rx="2.5" stroke-width="1.7"/><path d="M3 10h18M6.5 14h4" stroke-width="1.7" stroke-linecap="round"/></svg>
               </span>
               <span v-else-if="row.list.template === 'notebook'" class="nav-symbol h-5 w-5 bg-emerald-500/12 text-emerald-500">
@@ -734,11 +719,8 @@ const cardBucket = computed(() => lists.value.find((l) => l.template === 'credit
 // token：all / list:<id>），同时把清单行的先后写回各清单的 position ——
 // 清单筛选下拉拿到的顺序才跟侧栏一致。**这里现在是排序的唯一入口**
 // （用户 2026-10-16：「前台可以调整 清单顺序，与后台偏好中 清单顺序 重复，删除后台清单顺序模块」）。
-type MyListRow =
-  | { key: 'all'; kind: 'all' }
-  | { key: string; kind: 'list'; list: ReminderList }
+type MyListRow = { key: string; kind: 'list'; list: ReminderList }
 
-const MY_ALL_KEY = 'all'
 const myListKey = (id: number) => `list:${id}`
 // 三个系统栏目的**默认**先后：沿用改造前侧栏的视觉顺序（信用卡 → 记事本 → 仪式感），
 // 它们各自的 position 是建栏目时按当时的最大值 +1 写的，不能拿来定这一段的老样子。
@@ -755,7 +737,7 @@ function myRowVisible(l: ReminderList): boolean {
 }
 // 没保存过顺序（或新清单还没进顺序）时的默认排列
 const defaultMyRows = computed<MyListRow[]>(() => {
-  const rows: MyListRow[] = [{ key: MY_ALL_KEY, kind: 'all' }]
+  const rows: MyListRow[] = []
   const buckets: ReminderList[] = []
   for (const t of MY_SYSTEM_ORDER) {
     const found = lists.value.find((l) => String(l.template || 'general') === t)
@@ -778,7 +760,6 @@ const myListRows = computed<MyListRow[]>(() => {
     .map((x) => x.row)
 })
 function myRowLabel(row: MyListRow): string {
-  if (row.kind === 'all') return '全部'
   return row.list.name
 }
 
@@ -793,19 +774,15 @@ function openListsSheet() { listsSheetOpen.value = true }
 function closeListsSheet() { listsSheetOpen.value = false }
 /** 这一行是不是当前所在页面（弹层里打勾用） */
 function isMyRowCurrent(row: MyListRow): boolean {
-  if (row.kind === 'all') return isActive('/admin/all')
   return route.path === `/admin/list/${row.list.id}`
 }
 /** 弹层右边的条数，与侧栏同一口径 */
 function myRowCount(row: MyListRow): number {
-  if (row.kind === 'all') return summary.value.all || 0
   if (row.list.template === 'credit_card') return cardBucket.value?.card_count || 0
   return row.list.open_count || 0
 }
 function pickMyRow(row: MyListRow) {
-  const to = row.kind === 'all'
-    ? '/admin/all'
-    : `/admin/list/${row.list.id}`
+  const to = `/admin/list/${row.list.id}`
   listsSheetOpen.value = false
   if (route.path !== to) void router.push(to)
 }
@@ -855,9 +832,10 @@ async function loadSidebarOrder() {
     const res = await getAllConfigs()
     const raw = String(res.data?.data?.sidebar_order ?? '')
     const parsed = raw ? JSON.parse(raw) : []
-    // 'nudge' 是旧版「提醒@他」在「我的清单」里的排序 token；2026-10-19 挪到「课程表」下面后不再参与排序，读到就丢掉。
+    // 'nudge' 是旧版「提醒@他」在「我的清单」里的排序 token；2026-10-19 挪到「课程表」下面后不再参与排序。
+    // 'all' 是旧版「我的清单 → 全部」，已并入「智能清单」的「全部」，同样丢掉。
     sidebarOrder.value = Array.isArray(parsed)
-      ? parsed.filter((k) => typeof k === 'string' && k !== 'nudge')
+      ? parsed.filter((k) => typeof k === 'string' && k !== 'nudge' && k !== 'all')
       : []
   } catch {
     sidebarOrder.value = []
@@ -865,7 +843,7 @@ async function loadSidebarOrder() {
 }
 function onMyRowMenu(row: MyListRow, event: MouseEvent) {
   if (sortingMyLists.value) return
-  if (row.kind === 'list') openListMenu(row.list, event)
+  openListMenu(row.list, event)
 }
 function onMyRowTouchStart(row: MyListRow, event: TouchEvent) {
   if (sortingMyLists.value) return
