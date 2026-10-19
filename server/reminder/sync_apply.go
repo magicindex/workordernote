@@ -99,6 +99,11 @@ func incomingWins(local, incoming time.Time, incomingInstance, myInstance string
 
 func markUnmapped(stats *syncApplyStats, username string) {
 	stats.Skipped++
+	if username == "" {
+		// 孤儿数据（早期测试留下的 user_id 指向已不存在的账号）不该被报成
+		// 「对端账号在本机不存在」，否则会误导用户去查一个空名字。
+		return
+	}
 	for _, existing := range stats.UnmappedUsers {
 		if existing == username {
 			return
@@ -176,9 +181,9 @@ func applySyncLists(tx *gorm.DB, snap syncSnapshot, users map[string]database.Us
 		}
 		out[incoming.UID] = existing.ID
 		if existing.UserID != owner.ID {
-			// 同一个标识落到了另一个账号名下，说明两边的账号对应关系变了。
-			// 这种数据不该被静默改写归属，跳过并计入未匹配。
-			markUnmapped(stats, incoming.Owner)
+			// 同一个标识落到了另一个账号名下（早期测试数据的孤儿行）。不该静默
+			// 改写归属，也不该报成「账号不存在」——账号在，是这条数据对不上。
+			stats.Skipped++
 			continue
 		}
 		if sameList(existing, incoming) {
@@ -386,7 +391,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 		}
 		out[incoming.UID] = existing.ID
 		if existing.UserID != owner.ID {
-			markUnmapped(stats, incoming.Owner)
+			stats.Skipped++
 			continue
 		}
 		if sameReminder(existing, incoming, listID, localChannels[existing.ID]) {

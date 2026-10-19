@@ -62,8 +62,9 @@ func applySyncCards(tx *gorm.DB, snap syncSnapshot, users map[string]database.Us
 		}
 		listID, ok := listIDs[incoming.ListUID]
 		if !ok || listID == 0 {
-			// 清单本身被跳过了（比如账号没匹配上）：卡片也过不来，别挂到错误的清单下
-			markUnmapped(stats, incoming.Owner)
+			// 清单本身被跳过（对端已删、或本机没有这条清单）：卡片过不来是预期，
+			// 不是账号对不上，别把 owner 报成「本机没有这个账号」。
+			stats.Skipped++
 			continue
 		}
 		existing := byUID[incoming.UID]
@@ -162,7 +163,8 @@ func applySyncCardStatements(tx *gorm.DB, snap syncSnapshot, users map[string]da
 		}
 		cardID, ok := cardIDs[incoming.CardUID]
 		if !ok || cardID == 0 {
-			markUnmapped(stats, incoming.Owner)
+			// 卡没过来（对端已删或本机没这张卡）：账单期跟着跳过即可。
+			stats.Skipped++
 			continue
 		}
 		existing := byUID[incoming.UID]
