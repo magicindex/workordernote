@@ -223,6 +223,43 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-10-19：0.39.0（201 生产 / 200 生产 / 201 沙箱上线）—— 双机同步扩到「除密码外全部」
+
+> **发版记录**（VERSION `0.39.0`，源码提交 `8a8045d`→`fb3d610`→`429d040`/`1b9d5f4`→`d3de72e`，
+> 镜像 `workordernote:0.39.0` = `sha256:f34cf08083a629f4653bea91baf3352bfc8207ee204357000e5383d6053a8a94`）
+>
+> 用户原话：「排查一下当前两个软件同步哪些内容，哪些栏目，想设定同步配置，除了密码不同步外想同步全部。」
+>
+> **原来同步什么 / 现在同步什么**
+> - 原本：用户（只同步 username + role）、清单、信用卡与账单期、提醒/记事（含完成状态）、
+>   完成记录、通知渠道名。
+> - 现在新增：**课程表与课程条目**（`timetables` / `timetable_entries`，两条升级时补 `sync_uid`，
+>   软删即墓碑，对端跟着删）、**个人偏好**（`system_configs` 中 `user_id>0` 的键）、
+>   **站点设置**（`user_id=0` 且不在凭据黑名单）。
+> - 仍不同步：**账号密码**、通知渠道凭据（邮箱/短信/机器人）、AI API Key（`ai_api_key` 等一律白名单外）、
+>   `sync_token`、JWT 密钥，以及日志与运行环境。服务端在生成快照和落库两侧都会拒绝这些键。
+>
+> **实现要点**
+> - `server/reminder/sync_apply_extra.go`：`applySyncTimetables`、`applySyncTimetableEntries`、
+>   `applySyncUserConfigs`、`applySyncSystemConfigs`；课程条目按 `(timetable_uid, weekday, start, end)`
+>   去重，`updated_at` 新的胜出。删除条目走墓碑，不再被「daily 重排」拽回来。
+> - `syncConfigSecrets` 黑名单 + 站点设置白名单（`site_title`、`allow_register` 等）。
+> - 误报修复：孤儿行（owner 为空）、清单已删导致卡片跳过、归属冲突，都只记 skipped，
+>   不再显示成「对端账号在本机不存在」。
+>
+> **验证**
+> - 单测 `go test ./...` 全绿，新增 `sync_extra_test.go`（课程表/条目/偏好增改删、幂等）。
+> - 实测：201 建条目 → 200 出现；200 删条目 → 201 跟着删；200 改 `theme_mode=dark` → 201 收到；
+>   同步结果 `unmapped_users` 为空。两台 `user_id=1` 的清单 6 条、提醒 71 条、课程表 1 张。
+>
+> **上线与回归**
+> - 沙箱 8908 / 201 / 200 均 `0.39.0`（200 走 `docker save` + `scp` + `sudo docker load`）。
+> - 生产全量回归（201）：54/55 套件、1463 项通过；`verify-print` 在回归里被登录限流，
+>   单独复跑 **24/24**，即全绿。`verify-130` 生产只跑 2 项（AI 已开启，按设计短路）。
+> - 离线包自检 **30/30**（`pkg/WorkOrderNote-0.39.0-offline-amd64.tar.gz`，45 849 951 B，
+>   sha256 `075dec5358d4c7b80ea95d5ed49e8819b95dcb2eed7c0412e281e4058476923f`）。
+> - fnOS 包 `release/0.39.0/workordernote_0.39.0_amd64.fpk`（21 606 739 B，md5 `166b6f6477e9315a4b85b725d9a4264f`）。
+>
 ### 2026-10-19：0.38.0（201 生产 / 200 生产 / 201 沙箱上线）—— 提醒@他并入智能清单、金属四色
 
 > **发版记录**（VERSION `0.38.0`，源码提交 `8a8045d`，镜像 `workordernote:0.38.0` =
