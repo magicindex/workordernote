@@ -105,6 +105,26 @@
             <span class="flex-1">课程表</span>
           </RouterLink>
 
+          <!-- 提醒@他（用户 2026-10-13）：多人之间互相推提醒的页面。开关是**后台
+             系统偏好** nudge_enabled（一个实例一份），关掉后这一行与页面一起隐藏。
+             角标 = 别人提醒我、我还没做完的条数（/summary 的 nudge_pending）。
+             2026-10-19 用户要求挪到「课程表」下面，不再跟「我的清单」一起排序。 -->
+            <RouterLink
+              v-if="authStore.nudgeEnabled"
+              to="/admin/nudges"
+              class="nav-row min-w-0 flex-1"
+              :class="{ 'nav-row-active': isActive('/admin/nudges') }"
+              :title="railActive ? '提醒@他' : '提醒@他：给别的用户推提醒，也看别人提醒我什么'"
+              data-nav-nudges
+              @click="mobileOpen = false"
+            >
+              <span class="nav-symbol h-5 w-5 bg-sky-500/12 text-sky-500">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15.5 8.5a3.5 3.5 0 1 0-7 0c0 4-2 4-2 5.5h11c0-1.5-2-1.5-2-5.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 17a1.6 1.6 0 0 0 3 0" stroke-width="1.7" stroke-linecap="round"/><circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/></svg>
+              </span>
+              <span class="flex-1">提醒@他</span>
+              <span v-if="summary.nudge_pending" class="nav-count">{{ summary.nudge_pending }}</span>
+            </RouterLink>
+
           <div class="mt-7 flex items-center justify-between px-3">
             <p class="nav-caption !px-0 !pb-0">我的清单</p>
             <span class="rail-hide flex items-center gap-0.5">
@@ -136,7 +156,7 @@
             排序中：用 ↑ ↓ 挪位置，点标题旁的 ✓ 完成
           </div>
 
-          <!-- 「我的清单」这一段：全部 / 提醒@他 / 信用卡账单 / 随手记事本 / 人生要有仪式感 /
+          <!-- 「我的清单」这一段：全部 / 信用卡账单 / 随手记事本 / 人生要有仪式感 /
                自建清单统一由 myListRows 决定先后（顺序存用户配置 sidebar_order，清单行同时写回
                position）。改造前这几行是写死的、只有自建清单能排，用户 2026-10-15 要求整段可排。 -->
           <div
@@ -163,24 +183,6 @@
               <span v-if="summary.all" class="nav-count">{{ summary.all }}</span>
             </RouterLink>
 
-            <!-- 提醒@他（用户 2026-10-13）：多人之间互相推提醒的页面。开关是**后台
-                 系统偏好** nudge_enabled（一个实例一份），关掉后这一行与页面一起隐藏。
-                 角标 = 别人提醒我、我还没做完的条数（/summary 的 nudge_pending）。 -->
-            <RouterLink
-              v-else-if="row.kind === 'nudge'"
-              to="/admin/nudges"
-              class="nav-row min-w-0 flex-1"
-              :class="{ 'nav-row-active': isActive('/admin/nudges') }"
-              :title="railActive ? '提醒@他' : '提醒@他：给别的用户推提醒，也看别人提醒我什么'"
-              data-nav-nudges
-              @click="mobileOpen = false"
-            >
-              <span class="nav-symbol h-5 w-5 bg-sky-500/12 text-sky-500">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15.5 8.5a3.5 3.5 0 1 0-7 0c0 4-2 4-2 5.5h11c0-1.5-2-1.5-2-5.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 17a1.6 1.6 0 0 0 3 0" stroke-width="1.7" stroke-linecap="round"/><circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/></svg>
-              </span>
-              <span class="flex-1">提醒@他</span>
-              <span v-if="summary.nudge_pending" class="nav-count">{{ summary.nudge_pending }}</span>
-            </RouterLink>
 
             <!-- 清单行：信用卡账单 / 随手记事本 / 人生要有仪式感三个固定栏目与自建清单走同一套渲染。
                  三个栏目由偏好控制显示、图标与文案固定；自建清单可右键（桌面）或长按（触屏）重命名/
@@ -480,9 +482,6 @@
               @click="pickMyRow(row)"
             >
               <span v-if="row.kind === 'all'" class="h-2.5 w-2.5 shrink-0 rounded-full bg-violet-500 ring-4 ring-violet-500/10"></span>
-              <span v-else-if="row.kind === 'nudge'" class="nav-symbol h-5 w-5 bg-sky-500/12 text-sky-500">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15.5 8.5a3.5 3.5 0 1 0-7 0c0 4-2 4-2 5.5h11c0-1.5-2-1.5-2-5.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 17a1.6 1.6 0 0 0 3 0" stroke-width="1.7" stroke-linecap="round"/><circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/></svg>
-              </span>
               <span v-else-if="row.list.template === 'credit_card'" class="nav-symbol h-5 w-5 bg-brand-500/12 text-brand-500">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="6" width="18" height="12" rx="2.5" stroke-width="1.7"/><path d="M3 10h18M6.5 14h4" stroke-width="1.7" stroke-linecap="round"/></svg>
               </span>
@@ -732,16 +731,14 @@ const cardBucket = computed(() => lists.value.find((l) => l.template === 'credit
 // 只有普通清单能排，而且得进「偏好设置 → 清单顺序」里排（那块 2026-10-16 已删，见下）。
 // 现在这一段整段可排：点标题旁那个小按钮进排序模式，用 ↑ ↓ 把**任意一行**（含系统内置的
 // 4 个栏目）挪位置，点 ✓ 退出。顺序存在用户配置 sidebar_order（JSON 数组，
-// token：all / nudge / list:<id>），同时把清单行的先后写回各清单的 position ——
+// token：all / list:<id>），同时把清单行的先后写回各清单的 position ——
 // 清单筛选下拉拿到的顺序才跟侧栏一致。**这里现在是排序的唯一入口**
 // （用户 2026-10-16：「前台可以调整 清单顺序，与后台偏好中 清单顺序 重复，删除后台清单顺序模块」）。
 type MyListRow =
   | { key: 'all'; kind: 'all' }
-  | { key: 'nudge'; kind: 'nudge' }
   | { key: string; kind: 'list'; list: ReminderList }
 
 const MY_ALL_KEY = 'all'
-const MY_NUDGE_KEY = 'nudge'
 const myListKey = (id: number) => `list:${id}`
 // 三个系统栏目的**默认**先后：沿用改造前侧栏的视觉顺序（信用卡 → 记事本 → 仪式感），
 // 它们各自的 position 是建栏目时按当时的最大值 +1 写的，不能拿来定这一段的老样子。
@@ -759,7 +756,6 @@ function myRowVisible(l: ReminderList): boolean {
 // 没保存过顺序（或新清单还没进顺序）时的默认排列
 const defaultMyRows = computed<MyListRow[]>(() => {
   const rows: MyListRow[] = [{ key: MY_ALL_KEY, kind: 'all' }]
-  if (authStore.nudgeEnabled) rows.push({ key: MY_NUDGE_KEY, kind: 'nudge' })
   const buckets: ReminderList[] = []
   for (const t of MY_SYSTEM_ORDER) {
     const found = lists.value.find((l) => String(l.template || 'general') === t)
@@ -783,7 +779,6 @@ const myListRows = computed<MyListRow[]>(() => {
 })
 function myRowLabel(row: MyListRow): string {
   if (row.kind === 'all') return '全部'
-  if (row.kind === 'nudge') return '提醒@他'
   return row.list.name
 }
 
@@ -799,20 +794,18 @@ function closeListsSheet() { listsSheetOpen.value = false }
 /** 这一行是不是当前所在页面（弹层里打勾用） */
 function isMyRowCurrent(row: MyListRow): boolean {
   if (row.kind === 'all') return isActive('/admin/all')
-  if (row.kind === 'nudge') return isActive('/admin/nudges')
   return route.path === `/admin/list/${row.list.id}`
 }
 /** 弹层右边的条数，与侧栏同一口径 */
 function myRowCount(row: MyListRow): number {
   if (row.kind === 'all') return summary.value.all || 0
-  if (row.kind === 'nudge') return summary.value.nudge_pending || 0
   if (row.list.template === 'credit_card') return cardBucket.value?.card_count || 0
   return row.list.open_count || 0
 }
 function pickMyRow(row: MyListRow) {
   const to = row.kind === 'all'
     ? '/admin/all'
-    : row.kind === 'nudge' ? '/admin/nudges' : `/admin/list/${row.list.id}`
+    : `/admin/list/${row.list.id}`
   listsSheetOpen.value = false
   if (route.path !== to) void router.push(to)
 }
@@ -837,7 +830,8 @@ function moveMyRow(key: string, delta: number) {
  * 把它们按原来的槽位留在顺序里（重新打开时还回到老位置）。
  */
 async function saveMyOrder(visibleKeys: string[]) {
-  const prev = sidebarOrder.value.length ? sidebarOrder.value.slice() : defaultMyRows.value.map((r) => r.key)
+  const prev = (sidebarOrder.value.length ? sidebarOrder.value.slice() : defaultMyRows.value.map((r) => r.key))
+    .filter((k) => k !== 'nudge')
   const visible = new Set(visibleKeys)
   let cursor = 0
   const next = prev.map((k) => (visible.has(k) ? visibleKeys[cursor++] : k))
@@ -861,7 +855,10 @@ async function loadSidebarOrder() {
     const res = await getAllConfigs()
     const raw = String(res.data?.data?.sidebar_order ?? '')
     const parsed = raw ? JSON.parse(raw) : []
-    sidebarOrder.value = Array.isArray(parsed) ? parsed.filter((k) => typeof k === 'string') : []
+    // 'nudge' 是旧版「提醒@他」在「我的清单」里的排序 token；2026-10-19 挪到「课程表」下面后不再参与排序，读到就丢掉。
+    sidebarOrder.value = Array.isArray(parsed)
+      ? parsed.filter((k) => typeof k === 'string' && k !== 'nudge')
+      : []
   } catch {
     sidebarOrder.value = []
   }

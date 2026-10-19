@@ -85,7 +85,7 @@ async function main() {
     if (flagOn('notebook_enabled') && listsAll.some((l) => l.template === 'notebook')) sysLabels.push('随手记事本')
     if (flagOn('ceremony_enabled') && listsAll.some((l) => l.template === 'ceremony')) sysLabels.push('人生要有仪式感')
 
-    check('这一段渲染成可排的行（全部 / 提醒@他 / 系统栏目 / 自建清单）',
+    check('这一段渲染成可排的行（全部 / 系统栏目 / 自建清单）',
       before.length >= 5, JSON.stringify(before.map((r) => `${r.key}=${r.label}`)))
     check('日常态不显示 ↑ ↓', before.every((r) => !r.up && !r.down))
     check('开着的系统栏目都在侧栏里（信用卡 / 记事本 / 仪式感）',
@@ -105,9 +105,10 @@ async function main() {
       const down = rows[rows.length - 1]?.querySelector('[data-my-move] button[aria-label*="下移"]')
       return !!(up && up.disabled && down && down.disabled)
     }))
-    check('系统内置栏目（含「全部」「提醒@他」）在排序模式下也能挪',
+    check('系统内置栏目（含「全部」）在排序模式下也能挪',
       sysLabels.every((n) => sorting.some((r) => r.label === n && r.up && r.down))
-      && sorting.some((r) => r.label === '全部' && r.up && r.down),
+      && sorting.some((r) => r.label === '全部' && r.up && r.down)
+      && !sorting.some((r) => r.label === '提醒@他'),
       JSON.stringify(sorting.map((r) => r.label)))
 
     // ---------- 2. 排序模式下点行本体不跳页 ----------

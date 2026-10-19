@@ -193,15 +193,18 @@ const readPage = (page) => page.evaluate((content) => {
       const row = document.querySelector('[data-nav-nudges]');
       if (!row) return { present: false };
       const caption = [...document.querySelectorAll('.nav-caption')].find((c) => (c.innerText || '').includes('我的清单'));
+      const timetable = document.querySelector('[data-nav-timetable]');
       return {
         present: true,
         text: (row.innerText || '').replace(/\s+/g, ' ').trim(),
-        afterCaption: caption ? !!(caption.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING) : false,
+        // 2026-10-19 起挪到「课程表」下面，在「我的清单」标题之前
+        afterTimetable: timetable ? !!(timetable.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING) : false,
+        beforeCaption: caption ? !!(caption.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_PRECEDING) : false,
         visible: row.getBoundingClientRect().width > 0,
       };
     });
-    check('侧栏「我的清单」下有「提醒@他」入口', nav.present && nav.visible, JSON.stringify(nav));
-    check('入口文字是「提醒@他」，且排在「我的清单」标题之后', nav.text.includes('提醒@他') && nav.afterCaption, JSON.stringify(nav));
+    check('侧栏有「提醒@他」入口', nav.present && nav.visible, JSON.stringify(nav));
+    check('入口文字是「提醒@他」，且排在「课程表」下面、「我的清单」之前', nav.text.includes('提醒@他') && nav.afterTimetable && nav.beforeCaption, JSON.stringify(nav));
 
     await gotoRetry(page, BASE + '/admin/nudges');
     await sleep(1800);
