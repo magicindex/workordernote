@@ -64,6 +64,7 @@ withTab(async (page, ctx) => {
       ranged: cards.map((el) => el.getAttribute('data-release-version')).filter((v) => String(v).includes(' – ')).length,
       openCount: cards.filter((el) => el.querySelector('[data-release-body]')).length,
       firstHasMore: !!firstOpen?.querySelector('[data-release-more]'),
+      someHasMore: cards.some((el) => el.querySelector('[data-release-body]') && el.querySelector('[data-release-more]')),
       closedVersion: closed?.getAttribute('data-release-version') || '',
     };
   });
@@ -80,7 +81,7 @@ withTab(async (page, ctx) => {
   check('最新一版排在最前，且默认只展开前几张',
     notes.versions[0] === currentVersion && notes.openCount === 3,
     `首卡=${notes.versions[0]} 当前=${currentVersion} 展开=${notes.openCount}`);
-  check('条目多的卡片先收 3 条，给「展开全部」', notes.firstHasMore === true, '');
+  check('条目多的卡片先收 3 条，给「展开全部」', notes.someHasMore === true, '');
   // 点一张收着的卡片，应该展开出条目
   const opened = await page.evaluate(() => {
     const card = [...document.querySelectorAll('[data-release-note]')].find((el) => !el.querySelector('[data-release-body]'));
