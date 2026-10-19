@@ -256,12 +256,15 @@ async function waitForCard(page, selector, timeout = 12000) {
         JSON.stringify(defaults),
       );
       await page.type('[data-entry-title]', `${STAMP} 家庭日`);
+      await page.type('[data-entry-note]', `${STAMP} 带泳衣`);
       await page.click('[data-entry-kind-activity]');
       await page.$eval('[data-entry-start]', (el) => { el.value = '09:00'; el.dispatchEvent(new Event('input', { bubbles: true })); });
       await page.$eval('[data-entry-end]', (el) => { el.value = '12:00'; el.dispatchEvent(new Event('input', { bubbles: true })); });
       await page.click('[data-entry-save]');
       const added = await waitForCard(page, '[data-day-column="7"] [data-entry-id]');
       check('界面上能加一节（落在周日）', added);
+      const addedText = await page.$eval('[data-day-column="7"] [data-entry-id]', (el) => el.textContent.replace(/\s+/g, ' ').trim());
+      check('备注会显示在对应卡片里', addedText.includes(`${STAMP} 带泳衣`), addedText);
 
       await sleep(700);
       await page.click('[data-day-column="7"] [data-entry-id]');

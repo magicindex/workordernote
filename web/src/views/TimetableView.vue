@@ -140,6 +140,7 @@
                         <span v-if="entryLocation(item.entry) || item.entry.teacher" class="timetable-card-meta">
                           {{ [entryLocation(item.entry), item.entry.teacher].filter(Boolean).join(' · ') }}
                         </span>
+                        <span v-if="item.entry.note" class="timetable-card-note" :title="item.entry.note">{{ item.entry.note }}</span>
                       </span>
                     </button>
                     <button
@@ -1185,6 +1186,13 @@ async function removeEntry() {
 .timetable-card-time { @apply whitespace-nowrap text-[10.5px] font-bold tabular-nums leading-4 text-foreground/60; }
 .timetable-card-title { @apply mt-0.5 truncate text-[13px] font-bold leading-5 text-foreground; }
 .timetable-card-meta { @apply truncate text-[10.5px] leading-4 text-foreground/55; }
+.timetable-card-note {
+  @apply mt-0.5 text-[10px] leading-[1.35] text-foreground/50;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .timetable-activity-tag {
   @apply shrink-0 whitespace-nowrap rounded bg-surface/70 px-1 py-px text-[9px] font-bold leading-4 text-foreground/60;
 }
