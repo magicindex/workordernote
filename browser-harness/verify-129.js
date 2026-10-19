@@ -7,8 +7,9 @@
  *   1) 顶栏铃铛**右边**多一个喇叭按钮：正常是喇叭（带声波）、开着是静音（带叉），
  *      无障碍名 / 提示跟着换；
  *   2) 点一下就是手动开关（服务端 `dnd_manual`），刷新后仍然记着；
- *   3) 后台「系统配置 → 免打扰」有三项（总开关 + 起止时间）：**总开关默认关**（打开会改掉
- *      夜里到清晨的提醒，得用户自己决定），起止先备着 22:00–07:00；
+ *   3) 「偏好设置 → 免打扰」有三项（总开关 + 起止时间）：**总开关默认关**（打开会改掉
+ *      夜里到清晨的提醒，得用户自己决定），起止先备着 22:00–07:00；2026-10-19 起这三项
+ *      是**个人级**配置（系统配置页里不再出现），每个人各设各的；
  *      手动开关是**只读**的（通用配置接口改不了，只能走 `/reminder/dnd`）；
  *   4) **只**让时间段生效时（手动关着）：接口 `in_window` / `active` 为真、原因写时间段，
  *      按钮也变静音，并多一个小黄点 —— 用户能分清「自己开的」和「时间段到了」；
@@ -18,7 +19,7 @@
  * 「免打扰真的不发提醒」那一半在 Go 用例里（`server/reminder/dnd_test.go`：逾期提醒整轮跳过、
  * 只挡自己、提醒@他照记通知中心、接口参数不对回 400）。
  *
- * 只动免打扰相关的三个系统配置 + 个人手动开关，收尾全部还原。
+ * 只动免打扰相关的三个个人偏好 + 个人手动开关，收尾全部还原。
  *
  * 用法：APP_URL=http://127.0.0.1:8920 node verify-129.js
  */
@@ -96,6 +97,8 @@ const dndButton = (page) => page.evaluate(() => {
     console.log(`  原始：开关=${originalEnabled} 时间段=${originalStart}–${originalEnd} 手动=${originalManual}`);
 
     let windowCovering = false;
+    // 前三节只看手动开关，先把自己的时间段关掉（原值可能是开的，当前又恰好在 22:00–07:00 里）。
+    await setConfig(page, 'dnd_enabled', 'false');
     try {
       // 基线：手动关着
       await api(page, '/api/reminder/dnd', 'PUT', { manual: false });
@@ -158,7 +161,8 @@ const dndButton = (page) => page.evaluate(() => {
       check('再点一下回到喇叭、恢复正常',
         !!offAgain && !offAgain.active && !offAgain.muted, JSON.stringify(offAgain));
 
-      // ---------- 3. 后台「免打扰」时间段 ----------
+      // ---------- 3. 偏好设置「免打扰」时间段 ----------
+      await setConfig(page, 'dnd_enabled', originalEnabled);
       const configs = (await api(page, '/api/configs')).body?.data || {};
       check('后台配置里有免打扰时间段三项：总开关是布尔值、起止备着 22:00 / 07:00',
         ['true', 'false'].includes(configs.dnd_enabled) && configs.dnd_start_time === '22:00' && configs.dnd_end_time === '07:00',
@@ -167,7 +171,7 @@ const dndButton = (page) => page.evaluate(() => {
       check('手动开关不能经通用配置接口改写（只读，只走 /reminder/dnd）',
         manualViaConfigs.status === 403, JSON.stringify(manualViaConfigs).slice(0, 120));
 
-      await gotoRetry(page, BASE + '/admin/configs');
+      await gotoRetry(page, BASE + '/admin/settings');
       await sleep(3000);
       const rows = await page.evaluate(() => {
         const pick = (key) => {
@@ -228,14 +232,17 @@ const dndButton = (page) => page.evaluate(() => {
       await setConfig(page, 'dnd_enabled', originalEnabled);
       windowCovering = false;
       const restored = (await api(page, '/api/reminder/dnd')).body?.data || {};
-      check('时间段还原后不再免打扰（手动也关着）',
-        restored.in_window === false && restored.active === false && restored.manual === false, JSON.stringify(restored));
+      // 原值可能是开着的（管理员升级前就设过）：还原后按「自己的原值 + 此刻是否在窗口内」判断。
+      check('时间段还原后回到自己的原值（手动关着，是否生效随原窗口）',
+        restored.window_enabled === (originalEnabled === 'true') && restored.manual === false
+          && restored.active === restored.in_window, JSON.stringify(restored));
 
       await gotoRetry(page, BASE + '/admin');
       await sleep(2600);
       const finalUi = await dndButton(page);
-      check('还原后小黄点消失、回到喇叭',
-        !!finalUi && !finalUi.active && !finalUi.muted && !finalUi.dot, JSON.stringify(finalUi));
+      check('还原后界面与接口一致（窗口生效时静音 + 小黄点，否则喇叭）',
+        !!finalUi && finalUi.active === restored.active && finalUi.muted === restored.active
+          && finalUi.dot === restored.in_window, JSON.stringify(finalUi));
 
       const readback = await page.evaluate(async (base) => {
         const token = localStorage.getItem('reminders.token') || sessionStorage.getItem('reminders.token');

@@ -78,8 +78,8 @@ func TestDNDStateFromConfigAndManual(t *testing.T) {
 		t.Fatalf("没生效时不该有原因说明，实际 %q", state.Reason)
 	}
 
-	// 后台打开时间段总开关，才轮到 22:00–07:00 说话
-	setPublicConfig(t, keyDNDEnabled, "true")
+	// 本人的偏好里打开时间段总开关，才轮到 22:00–07:00 说话
+	setUserConfig(t, keyDNDEnabled, "true", userID)
 
 	// 手动开关：开了就一直开着（不挑时间），原因说明写「手动免打扰」。
 	setUserConfig(t, keyDNDManual, "true", userID)
@@ -105,9 +105,9 @@ func TestDNDStateFromConfigAndManual(t *testing.T) {
 		t.Fatalf("关掉手动后夜里仍应免打扰，实际 %+v", state)
 	}
 
-	// 后台改时间段：起止归一化（"6:00" → "06:00"），凌晨 3 点不再安静。
-	setPublicConfig(t, keyDNDStart, "6:00")
-	setPublicConfig(t, keyDNDEnd, "7:00")
+	// 改自己的时间段：起止归一化（"6:00" → "06:00"），凌晨 3 点不再安静。
+	setUserConfig(t, keyDNDStart, "6:00", userID)
+	setUserConfig(t, keyDNDEnd, "7:00", userID)
 	state = loadDNDState(appDB, userID, time.Date(2026, 10, 16, 3, 0, 0, 0, loc))
 	if state.WindowStart != "06:00" || state.WindowEnd != "07:00" {
 		t.Fatalf("时间段应归一化成 06:00–07:00，实际 %s–%s", state.WindowStart, state.WindowEnd)
@@ -116,8 +116,8 @@ func TestDNDStateFromConfigAndManual(t *testing.T) {
 		t.Fatalf("改成 06:00–07:00 后凌晨 3 点不该免打扰，实际 %+v", state)
 	}
 
-	// 后台关掉时间段：手动也关着 → 一天里任何时刻都不安静。
-	setPublicConfig(t, keyDNDEnabled, "false")
+	// 关掉自己的时间段：手动也关着 → 一天里任何时刻都不安静。
+	setUserConfig(t, keyDNDEnabled, "false", userID)
 	state = loadDNDState(appDB, userID, time.Date(2026, 10, 16, 6, 30, 0, 0, loc))
 	if state.WindowEnabled || state.InWindow || state.Active {
 		t.Fatalf("后台关掉时间段后 06:30 不该免打扰，实际 %+v", state)
@@ -131,9 +131,9 @@ func TestDNDBlocksOverdueNotifications(t *testing.T) {
 
 	const userID = 325
 	setUserConfig(t, "task_overdue_time", "00:00", userID) // 按到期时刻算逾期（同现有用例的口径）
-	setPublicConfig(t, keyDNDEnabled, "true")
-	setPublicConfig(t, keyDNDStart, "22:00")
-	setPublicConfig(t, keyDNDEnd, "07:00")
+	setUserConfig(t, keyDNDEnabled, "true", userID)
+	setUserConfig(t, keyDNDStart, "22:00", userID)
+	setUserConfig(t, keyDNDEnd, "07:00", userID)
 
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
@@ -287,5 +287,41 @@ func TestDNDHandlers(t *testing.T) {
 	}
 	if recorder, _ := call(http.MethodPut, `{"manual":"嗯"}`, handleSetDND(appDB)); recorder.Code != http.StatusBadRequest {
 		t.Fatalf("非法 body 应回 400，实际 %d", recorder.Code)
+	}
+}
+
+// 免打扰时间段是个人偏好（2026-10-19 从系统配置迁移）：A 开了，B 不受影响。
+func TestDNDWindowIsPerUser(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const a, b = 326, 327
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	night := time.Date(2026, 10, 16, 23, 30, 0, 0, loc)
+
+	setUserConfig(t, keyDNDEnabled, "true", a)
+	setUserConfig(t, keyDNDStart, "22:00", a)
+	setUserConfig(t, keyDNDEnd, "07:00", a)
+
+	stateA := loadDNDState(appDB, a, night)
+	if !stateA.Active || !stateA.WindowEnabled {
+		t.Fatalf("A 开了时间段，23:30 应当免打扰，实际 %+v", stateA)
+	}
+	stateB := loadDNDState(appDB, b, night)
+	if stateB.Active || stateB.WindowEnabled {
+		t.Fatalf("B 没开，A 的设置不该影响 B，实际 %+v", stateB)
+	}
+	if dndBlocked(appDB, a, night) != true || dndBlocked(appDB, b, night) != false {
+		t.Fatalf("投递链路上的判断也应各按各的：A=true B=false")
+	}
+
+	// 反过来 B 设一个自己的窗口，A 的窗口不受影响。
+	setUserConfig(t, keyDNDStart, "09:00", b)
+	stateA = loadDNDState(appDB, a, night)
+	if stateA.WindowStart != "22:00" {
+		t.Fatalf("B 改开始时间不该改到 A 的，实际 A=%s", stateA.WindowStart)
 	}
 }

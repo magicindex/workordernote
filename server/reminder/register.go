@@ -36,6 +36,44 @@ func init() {
 		},
 	})
 
+	// 0.40.0：免打扰时间段从系统配置（user_id=0）改成个人偏好。老库里的系统级设置
+	// 一次性抄给每个现有用户，免得升级后「本来开着的静默时段」悄悄变成关。
+	// 之后各改各的：新用户从注册表默认值开始（默认关），互不影响。
+	database.Upgrades = append(database.Upgrades, database.Upgrade{
+		Version: "0.40.0", Name: "dnd_window_to_user_scope",
+		Upgrade: func(db *gorm.DB) error {
+			var userIDs []uint
+			if err := db.Table("users").Pluck("id", &userIDs).Error; err != nil {
+				return err
+			}
+			for _, userID := range userIDs {
+				if userID == 0 {
+					continue
+				}
+				for _, key := range []string{"dnd_enabled", "dnd_start_time", "dnd_end_time"} {
+					var exists int64
+					if err := db.Model(&database.SystemConfig{}).
+						Where("user_id = ? AND key = ?", userID, key).Count(&exists).Error; err != nil {
+						return err
+					}
+					if exists > 0 {
+						continue
+					}
+					var src database.SystemConfig
+					if err := db.Where("user_id = ? AND key = ?", 0, key).First(&src).Error; err != nil {
+						continue // 老库没有这一项：交给注册表默认值
+					}
+					if err := db.Create(&database.SystemConfig{
+						UserID: userID, Key: key, Value: src.Value, Public: true,
+					}).Error; err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		},
+	})
+
 	database.Upgrades = append(database.Upgrades, database.Upgrade{
 		Version: "0.3.2", Name: "normalize_lunar_calendar_column",
 		// The old "yearly_lunar" rule spelling becomes rule=yearly plus
@@ -49,6 +87,16 @@ func init() {
 	// 以下进入本分支（WorkOrderNote / 工作序记）自己的版本序列：从 0.0.1 起，
 	// 按 major.minor.patch 递增。继承自上游的 0.1.2 / 0.3.0 / 0.3.2 三条仍保留
 	// 原编号，它们由 database.isInheritedUpgrade 豁免版本比较（见 upgrade.go）。
+	database.Upgrades = append(database.Upgrades, database.Upgrade{
+		Version: "0.40.0", Name: "dnd_window_to_user_scope",
+		// 免打扰时间段 2026-10-19 由「系统配置」挪到「偏好设置」，改成每人一份。
+		// 上线前管理员设过的那份值（user_id = 0）复制给现有每个账号，
+		// 免得升级后所有人突然都不再免打扰；之后各改各的，互不影响。
+		Upgrade: func(db *gorm.DB) error {
+			return copySystemDNDToUsers(db)
+		},
+	})
+
 	database.Upgrades = append(database.Upgrades, database.Upgrade{
 		Version: "0.0.1", Name: "rename_default_site_title_to_workordernote",
 		// 本分支把默认站点名从「提醒事项」改为「工作序记」。只改仍是旧默认值的
@@ -192,23 +240,23 @@ func init() {
 	// 免打扰（用户 2026-10-16）：「首行铃铛（消息）旁边放一个喇叭标志，点击进入静音标志，
 	// 退出显示喇叭，点击进入免打扰模式。后台增加免打扰时间段。」
 	//
-	// 这里登记的是**时间段**那半边（系统级：管理员在「系统配置 → 免打扰」里改），
-	// 跨天写法（22:00–07:00）按跨天解释；起止写一样＝不启用时间段。
+	// 这里登记的是**时间段**那半边（个人级：每个人在「偏好设置 → 免打扰」里改，2026-10-19
+	// 从系统配置挪过来），跨天写法（22:00–07:00）按跨天解释；起止写一样＝不启用时间段。
 	// 总开关**默认关**：打开后夜里到清晨的提醒会整段不发（改变现有行为），由用户自己决定。
 	// 手动开关那半边是个人级 dnd_manual（下面那条，Internal），只走 /reminder/dnd 接口。
 	// 「权责级别优先在所有通知以上」的四个口子见 dnd.go 的文件头注释。
 	sysconfig.RegisterConfig(sysconfig.ConfigDef{
-		Key: "dnd_enabled", Scope: sysconfig.ScopeSystem, Type: sysconfig.TypeBool,
+		Key: "dnd_enabled", Scope: sysconfig.ScopeUser, Type: sysconfig.TypeBool,
 		Default: "false", Group: "dnd", Label: "免打扰时间段",
 		Description: "打开后这段时间内不发任何提醒（含逾期提醒、提醒@他、投递队列里的提醒），通知只记进通知中心，到点后照常发",
 	})
 	sysconfig.RegisterConfig(sysconfig.ConfigDef{
-		Key: "dnd_start_time", Scope: sysconfig.ScopeSystem, Type: sysconfig.TypeTime,
+		Key: "dnd_start_time", Scope: sysconfig.ScopeUser, Type: sysconfig.TypeTime,
 		Default: "22:00", Group: "dnd", Label: "免打扰开始时间",
 		Description: "从这个时间开始安静；允许晚于结束时间表示跨天，例如 22:00 到第二天 07:00",
 	})
 	sysconfig.RegisterConfig(sysconfig.ConfigDef{
-		Key: "dnd_end_time", Scope: sysconfig.ScopeSystem, Type: sysconfig.TypeTime,
+		Key: "dnd_end_time", Scope: sysconfig.ScopeUser, Type: sysconfig.TypeTime,
 		Default: "07:00", Group: "dnd", Label: "免打扰结束时间",
 		Description: "到这个时间结束；与开始时间填成一样表示不用这个时间段",
 	})
