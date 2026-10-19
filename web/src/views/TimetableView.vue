@@ -810,10 +810,13 @@ function printTimetable() {
         if (!list.length) return `<td${today}></td>`
         const inner = list.map((entry) => {
           const meta = [entryLocation(entry), entry.teacher].filter(Boolean).join(' · ')
+          // 备注不另起一行（会顶出 A4），跟页面卡片一样挤在地点·老师这行的右端。
+          const metaLine = (meta || entry.note)
+            ? `<span class="meta">${meta ? `<span class="meta-text">${esc(meta)}</span>` : ''}${entry.note ? `<span class="note">${esc(entry.note)}</span>` : ''}</span>`
+            : ''
           return `<div class="cell"><span class="e-time">${esc(entry.start_time)}–${esc(entry.end_time)}</span>` +
             `<span class="title">${esc(entry.title)}${entry.kind === 'activity' ? '<em>活动</em>' : ''}</span>` +
-            (meta ? `<span class="meta">${esc(meta)}</span>` : '') +
-            (entry.note ? `<span class="note">${esc(entry.note)}</span>` : '') + '</div>'
+            metaLine + '</div>'
         }).join('')
         return `<td${today}>${inner}</td>`
       }).join('')
@@ -843,8 +846,9 @@ th.t { width: 13%; background: ${band}; text-align: left; }
 td.today { background: #f8fafc; }
 .title { display: block; font-size: 11.5px; font-weight: 600; line-height: 1.3; }
 .title em { font-style: normal; font-size: 9px; font-weight: 500; color: #6b7280; border: 1px solid #d1d5db; border-radius: 3px; padding: 0 3px; margin-left: 3px; vertical-align: 1px; }
-.meta { display: block; font-size: 9px; color: #6b7280; margin-top: 1px; }
-.note { display: block; font-size: 8.5px; color: #4b5563; margin-top: 1px; }
+.meta { display: flex; justify-content: space-between; gap: 4px; font-size: 9px; color: #6b7280; margin-top: 1px; }
+.meta-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.note { flex: none; max-width: 52%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 8.5px; color: #4b5563; text-align: right; }
 .e-time { display: block; font-size: 8.5px; color: #6b7280; font-variant-numeric: tabular-nums; }
 .cell + .cell { margin-top: 3px; padding-top: 3px; border-top: 1px dashed #d1d5db; }
 tr.sec th { background: ${band}; font-size: 10.5px; letter-spacing: .18em; text-align: left; padding: 3px 6px; }
