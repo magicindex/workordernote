@@ -268,6 +268,15 @@ async function waitForCard(page, selector, timeout = 12000) {
       await sleep(800);
       const prefilled = await page.$eval('[data-entry-title]', (el) => el.value);
       check('点卡片打开的是这一节（表单预填）', prefilled === `${STAMP} 家庭日`, prefilled);
+      // 颜色选中态：之前只有一个很淡的 ring，看不出来（用户 2026-10-19 反馈）。
+      const colorMarked = await page.$$eval('[data-entry-color-on="1"]', (els) => els.map((e) => e.getAttribute('data-entry-color')));
+      check('编辑课程时颜色有明确的选中态', colorMarked.length === 1, colorMarked.join(','));
+      await page.click('[data-entry-color="rose"]');
+      await sleep(250);
+      const colorSwitched = await page.$$eval('[data-entry-color-on="1"]', (els) => els.map((e) => e.getAttribute('data-entry-color')));
+      check('点别的颜色会切过去', colorSwitched.length === 1 && colorSwitched[0] === 'rose', colorSwitched.join(','));
+      await page.click('[data-entry-color="indigo"]');
+      await sleep(200);
       await page.$eval('[data-entry-start]', (el) => { el.value = '10:00'; el.dispatchEvent(new Event('input', { bubbles: true })); });
       await page.click('[data-entry-save]');
       await sleep(1200);

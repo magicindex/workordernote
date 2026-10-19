@@ -196,18 +196,25 @@
             </select>
           </label>
           <label class="block">
-            <span class="text-xs font-bold text-foreground">颜色</span>
-            <span class="mt-1 flex h-[38px] items-center gap-1.5">
+            <span class="flex items-center justify-between text-xs font-bold text-foreground">
+              颜色
+              <span class="text-[10px] font-medium text-muted-foreground">{{ currentColorLabel }}</span>
+            </span>
+            <span class="mt-1 flex h-[38px] items-center gap-2">
               <button
                 v-for="color in palette"
                 :key="color.key"
                 type="button"
-                class="h-6 w-6 rounded-full ring-2 ring-transparent transition"
-                :class="[color.dot, form.color === color.key ? 'ring-offset-1 ring-foreground/40' : '']"
+                class="relative flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-transparent transition duration-150"
+                :class="[color.dot, form.color === color.key ? 'scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-surface' : '']"
                 :data-entry-color="color.key"
+                :data-entry-color-on="form.color === color.key ? '1' : '0'"
                 :aria-label="color.label"
+                :aria-pressed="form.color === color.key"
                 @click="form.color = color.key"
-              ></button>
+              >
+                <svg v-if="form.color === color.key" viewBox="0 0 24 24" class="h-3.5 w-3.5 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)]" fill="none" stroke="currentColor"><path d="m5 12.5 4.5 4.5L19 7.5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
             </span>
           </label>
         </div>
@@ -789,6 +796,7 @@ const tableLocation = ref('')
 const tableError = ref('')
 const savingTable = ref(false)
 type DraftPeriod = { section: PeriodKey; start: string; end: string }
+const currentColorLabel = computed(() => palette.find((item) => item.key === form.color)?.label || '未选')
 const tableForm = reactive({
   lesson: 45, brk: 10,
   periods: [] as DraftPeriod[],
