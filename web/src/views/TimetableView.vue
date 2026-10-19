@@ -1306,7 +1306,7 @@ async function removeEntry() {
 }
 
 .timetable-period { @apply flex flex-col gap-1.5; }
-.timetable-period + .timetable-period { @apply mt-1; }
+.timetable-period + .timetable-period { @apply mt-2 border-t border-border/60 pt-2; }
 .timetable-period-label {
   @apply flex items-center gap-1 px-0.5 text-[10px] font-bold tracking-wide text-muted-foreground/70;
 }
