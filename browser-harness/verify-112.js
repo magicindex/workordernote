@@ -352,6 +352,10 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
       }, { b: BASE, t: accentTitle });
       if (accented.id) createdIds.push(accented.id);
       // 紫罗兰档的深色渐变两端（#7c3aed → #5b21b6，0.21.0 起把色板换深以保证白字对比度）
+      check('色板里有「浅色」档（浅天蓝/浅紫/浅玫/浅金/浅绿/浅青）',
+        ['light-sky', 'light-violet', 'light-rose', 'light-amber', 'light-emerald', 'light-teal']
+          .every((k) => swatches.some((x) => x.key === k)),
+        JSON.stringify(swatches.map((x) => x.key)));
       check('选「紫罗兰」保存后：接口里 accent=violet、整张卡片换成对应渐变（倒计时同色）',
         accented.apiAccent === 'violet' && /linear-gradient/.test(accented.cardBg)
           && /124, 58, 237/.test(accented.cardBg) && /91, 33, 182/.test(accented.cardBg)
@@ -378,6 +382,34 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
         return String(j?.data?.accent ?? '');
       }, { b: BASE, id: accented.id });
       check('选回「默认」保存后 accent 被清空', accentCleared === '', accentCleared);
+
+      // 浅色档：卡面是浅底，字必须自动变深（用户 2026-10-19：「倒计时卡片增加一些浅色的背景颜色」）。
+      const lightTitle = `自检浅色-${STAMP}`;
+      const lightCreated = await page.evaluate(async ({ b, t, list }) => {
+        const tok = localStorage.getItem('reminders.token') || sessionStorage.getItem('reminders.token');
+        const res = await fetch(b + '/api/reminder/items', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ list_id: list, title: t, due_date: '2026-12-31', due_time: '23:59', accent: 'light-sky', repeat: 'yearly', repeat_mode: 'date' }),
+        });
+        const j = await res.json().catch(() => null);
+        return { status: res.status, id: j?.data?.id, accent: j?.data?.accent, message: j?.message };
+      }, { b: BASE, t: lightTitle, list: ceremonyList });
+      if (lightCreated.id) createdIds.push(lightCreated.id);
+
+      await gotoRetry(page, BASE + `/admin/list/${ceremonyList}`);
+      await sleep(2400);
+      const lightCard = await page.evaluate(({ t }) => {
+        const card = [...document.querySelectorAll('[data-ceremony-card]')].find((c) => c.textContent.includes(t));
+        if (!card) return null;
+        const color = getComputedStyle(card).color;
+        const m = color.match(/\d+/g) || [];
+        const dark = m.length >= 3 && Number(m[0]) + Number(m[1]) + Number(m[2]) < 420;
+        return { color, dark };
+      }, { t: lightTitle });
+      check('浅色档卡片自动配深字（不是白字糊在浅底上）',
+        !!lightCard && lightCard.dark && lightCreated.accent === 'light-sky',
+        JSON.stringify({ created: lightCreated, card: lightCard }));
 
       // 默认档（没挑颜色）的卡面不再是纯白：浅色按 id 稳定随机，且倒计时块比卡面更浓
       const defaultCards = await page.evaluate(() => [...document.querySelectorAll('[data-ceremony-card]')]

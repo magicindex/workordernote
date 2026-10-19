@@ -70,7 +70,11 @@ export function defaultAccentFor(id?: number | string): LightAccent {
  *   · 选了颜色的卡面只是薄薄一层同色系浅淡底（透出主题卡面），跟着主题走最自然 → 返回 null（不改）。
  */
 export function cardInk(accentKey?: string | null, id?: number | string): string | null {
-  if (accentKey) return null
+  if (accentKey) {
+    // 显式选了「浅色」档：卡面是浅底，必须强制深字，否则深色主题下白字糊在浅底上。
+    const light = LIGHT_ACCENTS.find((a) => a.key === accentKey)
+    return light ? bestInk(light.from, light.to) : null
+  }
   const a = defaultAccentFor(id)
   return bestInk(a.from, a.to)
 }
@@ -78,13 +82,15 @@ export function cardInk(accentKey?: string | null, id?: number | string): string
 /** 倒计时块：选了颜色用该色浓郁渐变；没选就用那一档配套的**浓色**（与浅色卡面拉开层次）。 */
 export function heroGradient(accentKey?: string | null, id?: number | string): string {
   if (!accentKey) return accentGradient(defaultAccentFor(id).heroKey)
-  return accentGradient(accentKey)
+  const light = LIGHT_ACCENTS.find((a) => a.key === accentKey)
+  return accentGradient(light ? light.heroKey : accentKey)
 }
 
 /** 倒计时块的文字色：与 heroGradient 用的那档配套（琥珀/鎏金这类浅底用深字）。 */
 export function heroInk(accentKey?: string | null, id?: number | string): string {
   if (!accentKey) return accentInk(defaultAccentFor(id).heroKey)
-  return accentInk(accentKey)
+  const light = LIGHT_ACCENTS.find((a) => a.key === accentKey)
+  return accentInk(light ? light.heroKey : accentKey)
 }
 
 // ---- 字色自动匹配（用户 2026-10-11：「自动调整字体颜色，让字体显示清晰」）----
@@ -122,12 +128,13 @@ export function bestInk(from: string, to: string): string {
   return dark >= light ? DARK_INK : LIGHT_INK
 }
 
-/** 浅色系的字色（浅底一律深字）。 */
+/** 浅色系的字色（浅底一律深字）；深色档传进来的可能是自定义 hex（如浅色档的 #075985）。 */
 export function softInk(ink: string) {
-  return ink === DARK_INK ? 'rgba(15, 23, 42, .72)' : 'rgba(255, 255, 255, .85)'
+  const dark = ink === DARK_INK || (ink.startsWith('#') && contrastRatio(ink, '#ffffff') > 4.5)
+  return dark ? 'rgba(15, 23, 42, .72)' : 'rgba(255, 255, 255, .85)'
 }
 
-const BY_KEY = new Map(CARD_ACCENTS.map((a) => [a.key, a]))
+const BY_KEY = new Map([...CARD_ACCENTS, ...LIGHT_ACCENTS].map((a) => [a.key, a]))
 
 /** 取某个色名对应的色板项；空值或未知色名都回落到「默认」。 */
 export function cardAccent(key?: string | null): CardAccent {
@@ -168,6 +175,12 @@ export function accentSurface(accentKey?: string | null, id?: number | string): 
 /** 倒计时数字的流光三色：贴着卡面同色系的柔光，不再是紫+青两块撞色。 */
 export function accentSheen(accentKey?: string | null, id?: number | string): [string, string, string] {
   const key = accentKey || defaultAccentFor(id).heroKey
+  // 浅色档的倒计时块是浓色，数字流光也跟着换成那一档的深色三色，否则淡色数字压在浅底上看不清。
+  const light = LIGHT_ACCENTS.find((a) => a.key === key)
+  if (light) {
+    const hero = cardAccent(light.heroKey)
+    return [light.ink, hero.from, hero.to]
+  }
   return cardAccent(key).sheen
 }
 

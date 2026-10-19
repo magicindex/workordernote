@@ -170,6 +170,19 @@
               :data-ceremony-form-accent="a.key || 'default'"
               @click="form.accent = a.key"
             ><span v-if="form.accent === a.key">✓</span></button>
+            <span class="self-center text-[10px] font-medium text-muted-foreground">浅色</span>
+            <button
+              v-for="a in LIGHT_ACCENTS"
+              :key="a.key"
+              type="button"
+              class="accent-swatch"
+              :class="{ selected: form.accent === a.key }"
+              :style="{ background: swatchGradient(a) }"
+              :title="a.label"
+              :aria-label="`卡片颜色：${a.label}`"
+              :data-ceremony-form-accent="a.key"
+              @click="form.accent = a.key"
+            ><span v-if="form.accent === a.key">✓</span></button>
           </div>
         </div>
         <!-- 背景图（用户 2026-10-13：「可以更换图片作为背景」「针对不同主题预置一些
@@ -307,7 +320,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import Modal from './Modal.vue'
-import { CARD_ACCENTS, accentSheen, accentSurface, heroInk, softInk, type CardAccent } from '../utils/card-accents'
+import { CARD_ACCENTS, LIGHT_ACCENTS, accentSheen, accentSurface, heroInk, softInk, type CardAccent } from '../utils/card-accents'
 import { CEREMONY_BACKGROUNDS, backgroundImageUrl } from '../utils/ceremony-backgrounds'
 import ConfirmDialog from './ConfirmDialog.vue'
 import ListIcon from './ListIcon.vue'
@@ -356,7 +369,11 @@ const swatchGradient = (a: CardAccent) => `linear-gradient(135deg, ${a.from} 0%,
 // 只有主题字色才稳定可读（暗色主题下 --color-foreground 是浅色，反之亦然）。
 function cardInk(entry: { accent?: string; id: number; background?: string; bgAlpha?: number }) {
   if ((entry.bgAlpha ?? 100) <= 55) return 'rgb(var(--color-foreground))'
-  return cardImage(entry) ? '#ffffff' : heroInk(entry.accent, entry.id)
+  if (cardImage(entry)) return '#ffffff'
+  // 显式选了「浅色」档：卡面是浅底，字必须用这一档配好的深字（倒计时块仍是浓色，另算）。
+  const light = LIGHT_ACCENTS.find((a) => a.key === entry.accent)
+  if (light) return light.ink
+  return heroInk(entry.accent, entry.id)
 }
 
 function heroStyle(entry: { accent?: string; id: number; background?: string; bgAlpha?: number }) {
