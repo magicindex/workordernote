@@ -198,13 +198,15 @@ const readPage = (page) => page.evaluate((content) => {
         present: true,
         text: (row.innerText || '').replace(/\s+/g, ' ').trim(),
         // 2026-10-19 起挪到「课程表」下面，在「我的清单」标题之前
-        afterTimetable: timetable ? !!(timetable.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING) : false,
+        // 没开课程表时这一项不适用（实例上 timetable_enabled 可能关着）
+        afterTimetable: timetable ? !!(timetable.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING) : null,
         beforeCaption: caption ? !!(caption.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_PRECEDING) : false,
         visible: row.getBoundingClientRect().width > 0,
       };
     });
     check('侧栏有「提醒@他」入口', nav.present && nav.visible, JSON.stringify(nav));
-    check('入口文字是「提醒@他」，且排在「课程表」下面、「我的清单」之前', nav.text.includes('提醒@他') && nav.afterTimetable && nav.beforeCaption, JSON.stringify(nav));
+    check('入口文字是「提醒@他」，且排在「课程表」下面、「我的清单」之前',
+      nav.text.includes('提醒@他') && nav.afterTimetable !== false && nav.beforeCaption, JSON.stringify(nav));
 
     await gotoRetry(page, BASE + '/admin/nudges');
     await sleep(1800);
