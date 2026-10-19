@@ -54,7 +54,6 @@ withTab(async (page, ctx) => {
   await sleep(800);
   const notes = await page.evaluate(() => {
     const cards = [...document.querySelectorAll('[data-release-note]')];
-    const firstOpen = cards.find((el) => el.querySelector('[data-release-body]'));
     const closed = cards.find((el) => !el.querySelector('[data-release-body]'));
     return {
       themes: document.querySelectorAll('[data-version-theme]').length,
@@ -63,7 +62,6 @@ withTab(async (page, ctx) => {
       versions: cards.slice(0, 3).map((el) => el.getAttribute('data-release-version')),
       ranged: cards.map((el) => el.getAttribute('data-release-version')).filter((v) => String(v).includes(' – ')).length,
       openCount: cards.filter((el) => el.querySelector('[data-release-body]')).length,
-      firstHasMore: !!firstOpen?.querySelector('[data-release-more]'),
       someHasMore: cards.some((el) => el.querySelector('[data-release-body]') && el.querySelector('[data-release-more]')),
       closedVersion: closed?.getAttribute('data-release-version') || '',
     };
