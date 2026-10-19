@@ -170,7 +170,6 @@
               :data-ceremony-form-accent="a.key || 'default'"
               @click="form.accent = a.key"
             ><span v-if="form.accent === a.key">✓</span></button>
-            <span class="self-center text-[10px] font-medium text-muted-foreground">浅色</span>
             <button
               v-for="a in LIGHT_ACCENTS"
               :key="a.key"
