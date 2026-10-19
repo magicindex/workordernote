@@ -899,8 +899,8 @@ function isActive(to: string) {
 }
 
 // 列表 / 日历 两种看法。只在提醒相关的页面上出现——系统配置、用户管理这些
-// 页面切到日历没有意义。
-const viewSwitchRoutes = ['Home', 'Planned', 'AllReminders', 'Completed', 'ReminderList', 'Calendar']
+// 页面切到日历没有意义。首页看板（Dashboard）2026-10-19 也加上了，与其他页面同一处、同一套样式。
+const viewSwitchRoutes = ['Dashboard', 'Home', 'Planned', 'AllReminders', 'Completed', 'ReminderList', 'Calendar']
 // 手机上没有日历视图（入口隐藏 + 路由守卫兜底），所以顶栏那组「列表 / 日历」切换也收起来
 const isNarrow = useIsNarrow()
 const showViewSwitch = computed(() => !isNarrow.value && viewSwitchRoutes.includes(String(route.name || '')))

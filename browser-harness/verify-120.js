@@ -160,6 +160,16 @@ const itemsOf = (res) => {
       !(board.upcoming || []).some((r) => r.text.includes(T.far)) && !(board.overdue || []).some((r) => r.text.includes(T.far)),
       JSON.stringify({ upcoming: (board.upcoming || []).some((r) => r.text.includes(T.far)), overdue: (board.overdue || []).some((r) => r.text.includes(T.far)) }));
 
+    // 用户 2026-10-19：「首页页面也增加 列表和日历切换按钮，位置样式参考其他页面」
+    const viewSwitch = await page.evaluate(() => {
+      const g = document.querySelector('[aria-label="切换列表或日历视图"]');
+      return g ? { hrefs: [...g.querySelectorAll('a')].map((a) => a.getAttribute('href')) } : null;
+    });
+    check('首页顶栏有「列表 / 日历」切换（与其他页面同一处）', !!viewSwitch, JSON.stringify(viewSwitch));
+    check('切换按钮指向列表与日历两个页面',
+      !!viewSwitch && viewSwitch.hrefs.includes('/admin/calendar') && viewSwitch.hrefs.some((h) => h === '/admin' || h.startsWith('/admin/')),
+      JSON.stringify(viewSwitch));
+
     // 栏目图标（用户 2026-10-14：「首页栏目前边不显示复选框，显示栏目图标」）
     const iconInfo = await page.evaluate((title) => {
       const row = [...document.querySelectorAll('[data-home-item]')].find((li) => (li.innerText || '').includes(title));
