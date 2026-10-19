@@ -73,6 +73,8 @@
         </div>
 
         <nav class="mt-6 flex-1 overflow-y-auto px-3 pb-5">
+          <!-- 用户 2026-10-19：「智能清单、我的清单，分别用线框框起来隔成两个区」 -->
+          <section class="nav-group" data-nav-group="smart">
           <p class="nav-caption">智能清单</p>
           <RouterLink
             v-for="item in smartNav"
@@ -124,8 +126,10 @@
               <span class="flex-1">提醒@他</span>
               <span v-if="summary.nudge_pending" class="nav-count">{{ summary.nudge_pending }}</span>
             </RouterLink>
+          </section>
 
-          <div class="mt-7 flex items-center justify-between px-3">
+          <section class="nav-group" data-nav-group="my-lists">
+          <div class="my-lists-head flex items-center justify-between px-3 pt-1">
             <p class="nav-caption !px-0 !pb-0">我的清单</p>
             <span class="rail-hide flex items-center gap-0.5">
               <!-- 排序模式开关（用户 2026-10-15）：进去后这一段每一行都能用 ↑↓ 挪位置，
@@ -265,6 +269,7 @@
               </button>
             </span>
           </div>
+          </section>
         </nav>
 
         <div class="border-t border-border/70 px-2 pb-2 pt-2">
@@ -1794,8 +1799,8 @@ onBeforeUnmount(() => {
 .sidebar-rail nav { scrollbar-width: none; }
 .sidebar-rail nav::-webkit-scrollbar { display: none; }
 /* 「我的清单」那一行在图标栏里只剩一个 + 按钮，居中放 */
-.sidebar-rail nav > div.mt-7 { @apply lg:justify-center lg:px-0; }
-.sidebar-rail .mt-7 { @apply lg:mt-3; }
+.sidebar-rail .my-lists-head { @apply lg:justify-center lg:px-0; }
+.sidebar-rail .nav-group { @apply lg:p-1; }
 .logo-mark { @apply flex h-11 w-11 items-center justify-center rounded-[15px] bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_10px_30px_-10px_rgba(59,130,246,.75)]; }
 .version-badge { @apply rounded-full border border-brand-500/25 bg-brand-500/10 px-2 py-0.5 text-[11px] font-bold leading-none text-brand-600 dark:text-brand-300; }
 /* 「呼叫小秘」：侧栏顶部的入口（「新建提醒」已挪到首页看板，见 HomeDashboardView）。
@@ -1810,6 +1815,9 @@ onBeforeUnmount(() => {
   @apply bg-brand-500/15;
 }
 .nav-caption { @apply px-3 pb-2 text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground/75; }
+/* 侧栏两个分区（用户 2026-10-19）：「智能清单」「我的清单」各用一圈细线框住，中间留一条缝 */
+.nav-group { @apply rounded-2xl border border-border/70 bg-surface/40 p-2; }
+.nav-group + .nav-group { @apply mt-3; }
 .nav-row { @apply my-0.5 flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-foreground/80 transition-all hover:bg-muted hover:text-foreground; }
 .nav-row-active { @apply bg-brand-500/10 text-brand-600 shadow-[inset_3px_0_0_rgb(var(--color-brand-500))] dark:text-brand-300; }
 .nav-symbol { @apply flex h-8 w-8 items-center justify-center rounded-[10px]; }

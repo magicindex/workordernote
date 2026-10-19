@@ -71,6 +71,16 @@ async function main() {
     const hasCaption = await page.evaluate(() => [...document.querySelectorAll('.nav-caption')]
       .some((c) => (c.textContent || '').includes('我的清单')))
     check('侧栏有「我的清单」这一段', hasCaption)
+    // 用户 2026-10-19：「智能清单、我的清单，分别用线框框起来隔成两个区」
+    const groups = await page.evaluate(() => [...document.querySelectorAll('[data-nav-group]')].map((g) => ({
+      key: g.getAttribute('data-nav-group'),
+      border: getComputedStyle(g).borderTopWidth,
+      radius: getComputedStyle(g).borderTopLeftRadius,
+    })));
+    check('两个分区各有线框（智能清单 / 我的清单）',
+      groups.length === 2 && groups.every((g) => parseFloat(g.border) >= 1) &&
+      groups.map((g) => g.key).join(',') === 'smart,my-lists',
+      JSON.stringify(groups));
     check('标题旁有排序开关', (await page.$('[data-my-order-toggle]')) !== null)
 
     const before = await rowsOf(page)
