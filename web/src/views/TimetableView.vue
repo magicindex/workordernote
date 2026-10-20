@@ -1295,13 +1295,10 @@ async function removeEntry() {
 }
 
 .timetable-period { @apply flex flex-col gap-1.5; }
-.timetable-period + .timetable-period { @apply mt-2 border-t border-border/60 pt-2; }
+/* 用户 2026-10-20：取消四段之间的间隔线，直接让「早课 / 上午 / 下午 / 晚课」自己当分隔。 */
+.timetable-period + .timetable-period { @apply mt-3; }
 .timetable-period-label {
   @apply flex items-center gap-1 px-0.5 text-[10px] font-bold tracking-wide text-muted-foreground/70;
-}
-.timetable-period-label::after {
-  content: '';
-  @apply h-px flex-1 bg-border/70;
 }
 .timetable-period-count { @apply tabular-nums text-[9.5px] font-semibold text-muted-foreground/50; }
 .timetable-period-dot { @apply h-1.5 w-1.5 shrink-0 rounded-full; opacity: .85; }

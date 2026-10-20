@@ -238,6 +238,21 @@ async function waitForCard(page, selector, timeout = 12000) {
       const monLabels = await page.$$eval('[data-day-column="1"] [data-timetable-period-label]', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
       // 2026-10-19 起四段固定占位（行要对齐），没课的段也保留标题与空白行。
       check('周一四段固定排列：早课 / 上午 / 下午 / 晚课', JSON.stringify(monPeriods) === JSON.stringify(['early', 'morning', 'afternoon', 'evening']), monPeriods.join(','));
+      // 用户 2026-10-20：「取消课程表 早课、上午、下午、晚课间隔线，直接使用它们作为间隔」
+      const periodLines = await page.evaluate(() => {
+        const groups = [...document.querySelectorAll('[data-day-column="1"] [data-timetable-period]')];
+        const second = groups[1];
+        const label = second?.querySelector('[data-timetable-period-label]');
+        const after = label ? getComputedStyle(label, '::after') : null;
+        return {
+          border: second ? getComputedStyle(second).borderTopWidth : '',
+          afterContent: after ? after.content : '',
+          afterWidth: after ? after.width : '',
+        };
+      });
+      check('四段之间没有分隔线，靠段名当间隔',
+        periodLines.border === '0px' && (periodLines.afterContent === 'none' || periodLines.afterWidth === '0px'),
+        JSON.stringify(periodLines));
       check('分段标题齐全，有课的段带节数', monLabels.length === 4 && monLabels[0].startsWith('早课') && /早课\s*\d+/.test(monLabels[0]) && monLabels[2].trim() === '下午', monLabels.join(' | '));
       const wedPeriods = await page.$$eval('[data-day-column="3"] [data-timetable-period]', (els) => els.map((e) => e.getAttribute('data-timetable-period')));
       const wedRobotSection = await page.$$eval('[data-day-column="3"] [data-entry-id]', (els) => els.map((e) => {
