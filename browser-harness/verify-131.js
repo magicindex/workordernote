@@ -202,14 +202,14 @@ async function waitForCard(page, selector, timeout = 12000) {
       check('课外活动卡片标 activity 且是虚线边', wedCards.some(([k, cls]) => k === 'activity' && /timetable-card-activity/.test(cls)), JSON.stringify(wedCards));
 
       // 按节次铺开整周骨架：每段从自己的第 1 节起算（40 项检查里的节次时间以标签为准）。
-      // 空节次开关会记住上次选择，先确保这次是开着的。
+      // 用户 2026-10-20：「编辑按钮和空节次合并成一个按钮」——进编辑态即铺出空节次。
       await page.evaluate(() => {
-        const box = document.querySelector('[data-timetable-show-slots]');
-        if (box && !box.checked) box.click();
+        const btn = document.querySelector('[data-timetable-edit]');
+        if (btn && btn.getAttribute('data-timetable-edit') !== 'on') btn.click();
       });
       await sleep(500);
       const slotsShown = await page.$$eval('[data-timetable-slot]', (els) => els.length);
-      check('打开「空节次」后整周按节次铺出骨架', slotsShown >= 40, `实际 ${slotsShown}`);
+      check('进编辑态后整周按节次铺出骨架', slotsShown >= 40, `实际 ${slotsShown}`);
       await page.click('[data-day-column="1"] [data-timetable-slot="3"]');
       await sleep(700);
       const slotPrefill = await page.evaluate(() => ({
@@ -230,7 +230,7 @@ async function waitForCard(page, selector, timeout = 12000) {
       await sleep(500);
       check('该段新建默认用本段颜色', Boolean(firstColor) && firstColor === sectionColor, `${firstSection}: ${firstColor} vs ${sectionColor}`);
       check('段色取自四段色板（紫/蓝/绿/琥珀）', ['violet', 'sky', 'emerald', 'amber'].includes(firstColor), firstColor);
-      await page.click('[data-timetable-show-slots]');
+      await page.click('[data-timetable-edit]');
       await sleep(600);
 
       // 一天四段：08:00 早课、10:00 上午、19:00 晚课；周三 15:30 落下午。
@@ -337,8 +337,8 @@ async function waitForCard(page, selector, timeout = 12000) {
       const afterPeriods = afterTable.periods || [];
       check('改完第 2 节时间段会存进这张表', afterPeriods[1]?.start === '08:30' && afterPeriods[1]?.end === '09:00', JSON.stringify(afterPeriods[1]));
       await page.evaluate(() => {
-        const box = document.querySelector('[data-timetable-show-slots]');
-        if (box && !box.checked) box.click();
+        const btn = document.querySelector('[data-timetable-edit]');
+        if (btn && btn.getAttribute('data-timetable-edit') !== 'on') btn.click();
       });
       await sleep(600);
       const slotTwo = await page.$eval('[data-timetable-slot="2"]', (el) => el.textContent.replace(/\s+/g, ' ').trim()).catch(() => '');
@@ -370,24 +370,19 @@ async function waitForCard(page, selector, timeout = 12000) {
       await dismissAlerts(page);
       await page.click(`[data-timetable-tab*="${STAMP}-拖动"]`);
       await sleep(700);
-      // 先把「空节次」关掉，验证编辑态会临时打开、退出后恢复原选择（用户 2026-10-19）。
-      await page.evaluate(() => {
-        const box = document.querySelector('[data-timetable-show-slots]');
-        if (box && box.checked) box.click();
-      });
-      await sleep(400);
+      // 「编辑」与「空节次」已合并（用户 2026-10-20）：关着时没有空节次，
+      // 点开既有落点也能拖，退出后收起。
       const slotsBefore = await page.$$eval('[data-timetable-slot]', (els) => els.length);
       await page.click('[data-timetable-edit]');
       await sleep(500);
       const editOn = await page.$eval('[data-timetable-edit]', (el) => el.getAttribute('data-timetable-edit'));
       check('点「编辑」进入拖动模式', editOn === 'on', editOn || '');
       const slotsInEdit = await page.$$eval('[data-timetable-slot]', (els) => els.length);
-      check('进编辑态默认把空节次打开（有落点可拖）', slotsBefore === 0 && slotsInEdit > 0, `${slotsBefore} -> ${slotsInEdit}`);
+      check('编辑态同时铺出空节次（有落点可拖）', slotsBefore === 0 && slotsInEdit > 0, `${slotsBefore} -> ${slotsInEdit}`);
       await page.click('[data-timetable-edit]');
       await sleep(500);
       const slotsRestored = await page.$$eval('[data-timetable-slot]', (els) => els.length);
-      const boxRestored = await page.$eval('[data-timetable-show-slots]', (el) => el.checked);
-      check('退出编辑后按原来的空节次选择恢复', slotsRestored === 0 && !boxRestored, `slots=${slotsRestored} checked=${boxRestored}`);
+      check('退出编辑后空节次一起收起', slotsRestored === 0, `slots=${slotsRestored}`);
       await page.click('[data-timetable-edit]');
       await sleep(500);
       const dragged = await page.evaluate(() => {

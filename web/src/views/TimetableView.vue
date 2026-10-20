@@ -60,21 +60,19 @@
             <span class="timetable-tab-count">{{ table.entry_count }}</span>
           </button>
         </div>
+        <!-- 用户 2026-10-20：「编辑按钮和空节次合并成一个按钮」——
+             进编辑态就铺出空节次（有落点、可点可拖），退出就收起。 -->
         <button
           type="button"
           class="timetable-edit-toggle"
           :class="editing ? 'is-on' : ''"
           :data-timetable-edit="editing ? 'on' : 'off'"
-          title="编辑时把课程拖到空节次；拖到已有课上则互换"
+          title="编辑：铺出空节次，点一格加课，拖动课程可换位置"
           @click="toggleEditing"
         >
           <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke-width="1.8" stroke-linejoin="round"/></svg>
           {{ editing ? '完成' : '编辑' }}
         </button>
-        <label class="flex shrink-0 items-center gap-1.5 rounded-xl border border-border/70 px-2 py-1 text-[11px] font-semibold text-muted-foreground" title="把整周按节次铺成空格子，点一格就能加课">
-          <input v-model="showSlots" type="checkbox" class="h-3.5 w-3.5 accent-brand-500" data-timetable-show-slots />
-          空节次
-        </label>
       </div>
 
       <div v-if="!tables.length" class="mt-6 surface rounded-2xl px-6 py-14 text-center" data-timetable-empty>
@@ -458,11 +456,9 @@ const activeLocation = computed(() => (activeTable.value?.location || '').trim()
 function entryLocation(entry: TimetableEntry) {
   return (entry.location || '').trim() || activeLocation.value
 }
-const showSlots = ref(localStorage.getItem('timetable.show_slots') !== '0')
-watch(showSlots, (on) => {
-  localStorage.setItem('timetable.show_slots', on ? '1' : '0')
-  void alignRows()
-})
+// 空节次不再是独立开关（用户 2026-10-20：与「编辑」合并成一个按钮）：
+// 编辑态铺出空节次，退出编辑收起，避免两个按钮表达同一个意图。
+const showSlots = computed(() => editing.value)
 
 // 行对齐：同一节次在七列里高度取最大值，空位补一块同高的占位。
 // 不靠固定高度，卡片会因为备注/老师多寡长高，旧的错位就是这么来的。
@@ -1109,17 +1105,10 @@ function syncEndFromStart() {
 // 拖到另一节课上 = 两节课互换位置（星期与起止对调）。只改这两条，不动同一天的其他课。
 const editing = ref(false)
 const dragId = ref<number | null>(null)
-// 进编辑态先替用户把「空节次」打开（不然没有落点），退出时恢复原来的勾选。
-let slotsBeforeEdit = true
+// 编辑态 = 可拖动 + 空白节次；两者原本是两个开关，2026-10-20 合并成一个按钮。
 function toggleEditing() {
-  if (!editing.value) {
-    slotsBeforeEdit = showSlots.value
-    showSlots.value = true
-    editing.value = true
-    return
-  }
-  editing.value = false
-  showSlots.value = slotsBeforeEdit
+  editing.value = !editing.value
+  void alignRows()
 }
 let lastDropAt = 0
 
