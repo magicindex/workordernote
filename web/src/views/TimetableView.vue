@@ -1277,9 +1277,9 @@ async function removeEntry() {
 }
 
 .timetable-edit-toggle {
-  /* 高度与左侧的课程表标签一致（用户 2026-10-20）：标签是 text-xs + py-1.5 = 28px，
-     这里用具名高度抵消边框的 2px，两边顶边与底边齐平。 */
-  @apply inline-flex h-7 shrink-0 items-center gap-1.5 rounded-xl border border-border/70 bg-surface px-3 text-xs font-bold text-muted-foreground transition duration-150;
+  /* 与左侧「课程表」标签条整体等高（用户 2026-10-20）：标签条是 28px 标签 + p-1 + 边框，
+     所以不写死高度，直接拉伸到同一行的高度，顶边与底边自然齐平。 */
+  @apply inline-flex shrink-0 items-center gap-1.5 self-stretch rounded-2xl border border-border/70 bg-surface px-3.5 text-xs font-bold text-muted-foreground transition duration-150;
 }
 .timetable-edit-toggle:hover { @apply text-foreground; }
 .timetable-edit-toggle.is-on { @apply border-brand-400/60 bg-brand-500/10 text-brand-600 dark:text-brand-300; }

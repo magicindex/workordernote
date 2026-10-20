@@ -391,11 +391,11 @@ async function waitForCard(page, selector, timeout = 12000) {
       const editLabel = await page.$eval('[data-timetable-edit]', (el) => el.textContent.replace(/\s+/g, ' ').trim());
       check('编辑按钮写「编辑课程表」', editLabel === '编辑课程表', editLabel);
       const heights = await page.evaluate(() => {
-        const t = document.querySelector('[data-timetable-tab]').getBoundingClientRect();
+        const t = document.querySelector('.timetable-tabs').getBoundingClientRect();
         const b = document.querySelector('[data-timetable-edit]').getBoundingClientRect();
         return { tab: Math.round(t.height), btn: Math.round(b.height), top: Math.round(Math.abs(t.top - b.top)) };
       });
-      check('「编辑课程表」与课程表标签等高对齐',
+      check('「编辑课程表」与课程表标签条等高对齐（整条，不是单个标签）',
         Math.abs(heights.tab - heights.btn) <= 1 && heights.top <= 1, JSON.stringify(heights));
       await page.click('[data-timetable-edit]');
       await sleep(500);
