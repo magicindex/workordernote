@@ -260,6 +260,10 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >
 > **仓库同步**：`main` 推到 `4bdf566`，tag `v0.41.0`。推送仍按 0.40 记下的办法：
 > 临时移开 Gitea 裸库的 `pre-receive.d/gitea` 与 `update.d/gitea`，推完立刻放回。
+> **注意**：`mv` 回来的副本会带上 CIFS 映射的 `1001` 组和 `711` 权限，Gitea 会因此报
+> 「Git 钩子似乎已损坏」。放回后必须在 200 上执行
+> `sudo docker exec -u git gitea gitea admin regenerate hooks --config /data/gitea/conf/app.ini`，
+> 让 Gitea 重新生成 hook（owner `git:git`、`755`）。2026-10-20 已按此修复一次。
 
 ### 2026-10-20：0.40.0（201 生产 / 200 生产 / 201 沙箱上线）—— 偏好设置与个人化
 
