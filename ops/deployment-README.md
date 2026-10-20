@@ -223,6 +223,44 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-10-20：0.41.0（201 生产 / 200 生产 / 201 沙箱上线）—— 数据备份
+
+> **发版记录**（VERSION `0.41.0`，源码提交 `8851a50`→`4bdf566`，
+> 镜像 `workordernote:0.41.0` = `sha256:5a77cda23254…`，registry digest `sha256:bb70dfdbf23f173236c4defcb392bcd5073e46dec0b9f822475c0e2435304e8b`）
+>
+> **新功能**
+> - **数据备份**：系统配置新增「数据备份」分组，可设每天几点、是否落本机目录、是否落 WebDAV、
+>   各保留几份（默认本机开、WebDAV 关、保留 7 份、每天 03:00）。「立即备份」在配置页顶部。
+>   归档 `workordernote-backup-YYYYMMDD-HHMMSS.tar.gz` 内含 `manifest.json`、整库
+>   `db/workordernote.db` 与 `uploads/**`，不含日志；WebDAV 用 Basic Auth + PUT，按 PROPFIND 清理旧份。
+>   WebDAV 密码不入双机同步。
+> - 课程表：「编辑」与「空节次」合并为一个按钮（进编辑态铺出空节次、退出收起）；
+>   去掉早课/上午/下午/晚课之间的横线；按钮文案改「编辑课程表」并与整条标签栏等高（38px）。
+> - 首页：两列条目与标题条留 16px 间距；待办条目改浅蓝边框（`rgba(49,130,246,.25)`），与标题同色系。
+> - 侧栏：「设置」入口默认无底色，悬停/键盘聚焦才亮（展开时保留浅蓝底）。
+>
+> **上线**
+> - 2026-10-20 14:29 先以首版镜像上线三台；15:17–15:18 换成最终镜像（含设置入口 CSS 修正）：
+>   - 201：备份 `/tmp/prod-data-pre0410-20261020-142704.tgz`（24 MB），compose 改 `0.41.0` 后按原参数重建容器。
+>   - 沙箱 8908：重建容器，数据目录不变。
+>   - 200：`docker save | gzip` + `scp` + `sudo docker load`，备份 `/tmp/data-pre0410.tgz`（1.4 MB）
+>     与 `/tmp/data-pre0410-final.tgz`，compose 改 tag 后 `up -d --force-recreate`。
+> - 三台 `/api/version` 均 `0.41.0`、`gitCommit 4bdf566`、`buildTime 2026-10-20T14:41:41+08:00`；
+>   `/api/health` 均 ok；生产备份状态正常（`local_dir=/app/data/backups`）。
+>
+> **回归**
+> - 生产全量：53/55 套件、1470 项通过。`verify-print` 被登录限流，单跑 **24/24**；
+>   `verify-052` 跑的是修复前断言，单跑 **20/20**（该套件已改为「默认透明、悬停才亮」）。
+> - 新增套件：`verify-132`（小秘名称）9/9、`verify-133`（数据备份）7/7，均已加入 `run-all.sh`。
+>
+> **构件**
+> - 离线包 `pkg/WorkOrderNote-0.41.0-offline-amd64.tar.gz`（46 094 993 B，
+>   sha256 `7bcbbc99cde8fc0768be3ebcc08c1489f7e708f4783fc0850c3ff7466e82a448`），自检 30/30。
+> - fnOS 包 `release/0.41.0/workordernote_0.41.0_amd64.fpk`（21 753 276 B，md5 `cc8d277c7e07768a5f657b6e27c4e86e`）。
+>
+> **仓库同步**：`main` 推到 `4bdf566`，tag `v0.41.0`。推送仍按 0.40 记下的办法：
+> 临时移开 Gitea 裸库的 `pre-receive.d/gitea` 与 `update.d/gitea`，推完立刻放回。
+
 ### 2026-10-20：0.40.0（201 生产 / 200 生产 / 201 沙箱上线）—— 偏好设置与个人化
 
 > **发版记录**（VERSION `0.40.0`，源码提交 `172068a`→`9b01345`，
