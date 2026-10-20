@@ -244,6 +244,15 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >
 > 旧路径不再存在；仓库内 `ops/` 与 `browser-harness/README.md` 的路径引用已全部同步改为新目录。
 
+> **清理（同日）**：「清理目录中无效数据及配置文件，勿动用户数据」。
+> - Docker 层：`builder prune` 清掉 69.7 GB 构建缓存；`image prune -a` 回收 12.75 GB 无引用镜像（只剩在跑的 0.41.0 / iter）。
+> - 201：删掉 43 个旧离线包、55 个旧镜像 tar、38 份 `README.md.bak-*`、39 份旧 compose 备份；`pkg/` 只留
+>   `WorkOrderNote-0.41.0-offline-amd64.tar.gz`（44 MB）作灾备。
+> - 200：删掉 0.8/0.9 时代全部旧包、旧镜像 tar、`部署说明.md.bak-*` 与多余 compose 备份；留同版本离线包。
+> - 未动：`data/`（库、uploads、logs、应用内 backups）、75 个 `data.bak-*` 升级快照、沙箱
+>   `workordernote-deploy/staging-data-local*` 快照。201 目录从 11.2 GB 降到 7.1 GB（其余为用户数据快照）。
+
+
 ### 2026-10-20：0.41.0（201 生产 / 200 生产 / 201 沙箱上线）—— 数据备份
 
 > **发版记录**（VERSION `0.41.0`，源码提交 `8851a50`→`4bdf566`，
