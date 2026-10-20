@@ -26,6 +26,12 @@ function check(name, ok, extra = '') {
   else { failed++; console.log(`  ✗ ${name}${extra ? ' — ' + extra : ''}`); }
 }
 
+/** 默认展示页可能是首页看板：落在 /admin 时会自动跳走，再进一次就能停在待办。 */
+async function gotoTodo(page) {
+  await gotoRetry(page, BASE + '/admin');
+  if (!/\/admin$/.test(new URL(page.url()).pathname)) await gotoRetry(page, BASE + '/admin');
+}
+
 async function gotoRetry(page, url, tries = 3) {
   for (let i = 0; i < tries; i += 1) {
     try { await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }); return true; }
@@ -134,7 +140,7 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
       JSON.stringify({ years: ranges.year.range }));
 
     // =============== 2. 新建按钮：实线边框 + 流光 ===============
-    await gotoRetry(page, BASE + '/admin');
+    await gotoTodo(page);
     await sleep(2200);
     const newBtn = await page.evaluate(() => {
       const el = document.querySelector('[data-quick-new]');
@@ -243,7 +249,7 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
     await mk(`自检过期口径-今天-${STAMP}`, at(0, 0, 10));
     // 剩余 > 24 小时的对照项（用户 2026-10-20：只有不足 24 小时才转红）
     await mk(`自检剩余-远-${STAMP}`, at(3, 23, 59));
-    await gotoRetry(page, BASE + '/admin');
+    await gotoTodo(page);
     await sleep(2500);
     const overdueView = await page.evaluate((ts) => {
       const rows = [...document.querySelectorAll('.reminder-row')];
