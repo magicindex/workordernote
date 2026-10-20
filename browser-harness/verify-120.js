@@ -160,6 +160,14 @@ const itemsOf = (res) => {
       !(board.upcoming || []).some((r) => r.text.includes(T.far)) && !(board.overdue || []).some((r) => r.text.includes(T.far)),
       JSON.stringify({ upcoming: (board.upcoming || []).some((r) => r.text.includes(T.far)), overdue: (board.overdue || []).some((r) => r.text.includes(T.far)) }));
 
+    // 用户 2026-10-20：「未来十四天待办内容 使用浅蓝色边框 与标题蓝保持一致颜色」
+    const itemBorder = await page.evaluate(() => {
+      const item = document.querySelector('[data-home-column="upcoming"] [data-home-item]');
+      return item ? getComputedStyle(item).borderTopColor : '';
+    });
+    check('待办条目边框是浅蓝色（与标题条同色系）',
+      /^rgba?\(49,\s*130,\s*246/.test(itemBorder), itemBorder);
+
     // 用户 2026-10-20：「待办和逾期条目与上边界线重合，增加间距」
     const headGap = await page.evaluate(() => {
       const head = document.querySelector('[data-home-head="upcoming"]');

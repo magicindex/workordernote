@@ -47,7 +47,7 @@
           <li
             v-for="row in upcoming"
             :key="row.item.id"
-            class="flex cursor-pointer items-start gap-2.5 rounded-2xl border border-border/70 bg-surface/70 p-3 transition hover:border-brand-500/40 hover:bg-brand-500/[.04]"
+            class="flex cursor-pointer items-start gap-2.5 rounded-2xl border border-brand-500/25 bg-brand-500/[.04] p-3 transition hover:border-brand-500/45 hover:bg-brand-500/[.07]"
             data-home-item
             :data-home-goto="row.item.id"
             :title="`去「${row.item.list_name || '清单'}」里看这条`"
