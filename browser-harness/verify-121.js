@@ -77,6 +77,14 @@ async function main() {
       border: getComputedStyle(g).borderTopWidth,
       radius: getComputedStyle(g).borderTopLeftRadius,
     })));
+    // 用户 2026-10-20：「设置默认不选择状态，鼠标放在按钮上显示选中状态」
+    const settingsIdle = await page.$eval('.nav-settings-toggle', (el) => getComputedStyle(el).backgroundColor);
+    await page.hover('.nav-settings-toggle');
+    await sleep(250);
+    const settingsHover = await page.$eval('.nav-settings-toggle', (el) => getComputedStyle(el).backgroundColor);
+    check('底部「设置」默认没有选中底色', settingsIdle === 'rgba(0, 0, 0, 0)', settingsIdle);
+    check('鼠标悬停「设置」才显示选中底色', settingsHover !== settingsIdle, `${settingsIdle} → ${settingsHover}`);
+
     check('两个分区各有线框（智能清单 / 我的清单）',
       groups.length === 2 && groups.every((g) => parseFloat(g.border) >= 1) &&
       groups.map((g) => g.key).join(',') === 'smart,my-lists',

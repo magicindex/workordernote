@@ -274,25 +274,25 @@
 
         <div class="border-t border-border/70 px-2 pb-2 pt-2">
           <!-- 设置区可折叠：折叠后清单列表能多显示好几项。
-               默认折叠，展开状态记在本地。
-               这一条用浅蓝底 + 齿轮图标凸显：它是侧栏里唯一的「入口」而不是「页面」，
-               以前只用一行灰色小字，扫一眼容易漏掉。 -->
+               默认折叠，展开状态记在本地。平时不带底色（用户 2026-10-20：
+               「设置默认不选择状态，鼠标放在按钮上显示选中状态」），
+               鼠标移上去才亮成选中态。 -->
           <button
             type="button"
-            class="nav-settings-toggle flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left"
+            class="nav-settings-toggle group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left"
             :aria-expanded="settingsOpen"
             :title="railActive ? '设置' : undefined"
             aria-controls="sidebar-settings"
             @click="toggleSettings"
           >
-            <span class="nav-symbol h-7 w-7 bg-brand-500/20 text-brand-600 dark:text-brand-300">
+            <span class="nav-symbol h-7 w-7 bg-transparent text-muted-foreground transition-colors group-hover:bg-brand-500/15 group-hover:text-brand-600 dark:group-hover:text-brand-300">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M10.3 3.6a2 2 0 0 1 3.4 0l.5.9a1.6 1.6 0 0 0 1.9.8l1-.3a2 2 0 0 1 2.4 2.4l-.3 1a1.6 1.6 0 0 0 .8 1.9l.9.5a2 2 0 0 1 0 3.4l-.9.5a1.6 1.6 0 0 0-.8 1.9l.3 1a2 2 0 0 1-2.4 2.4l-1-.3a1.6 1.6 0 0 0-1.9.8l-.5.9a2 2 0 0 1-3.4 0l-.5-.9a1.6 1.6 0 0 0-1.9-.8l-1 .3a2 2 0 0 1-2.4-2.4l.3-1a1.6 1.6 0 0 0-.8-1.9l-.9-.5a2 2 0 0 1 0-3.4l.9-.5a1.6 1.6 0 0 0 .8-1.9l-.3-1A2 2 0 0 1 6.9 5l1 .3a1.6 1.6 0 0 0 1.9-.8l.5-.9Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.1" stroke-width="1.7"/></svg>
             </span>
-            <span class="rail-hide text-xs font-extrabold tracking-[.08em] text-brand-700 dark:text-brand-200">设置</span>
+            <span class="rail-hide text-xs font-extrabold tracking-[.08em] text-muted-foreground transition-colors group-hover:text-brand-700 dark:group-hover:text-brand-200">设置</span>
             <span v-if="!settingsOpen && hiddenSettingCount" class="nav-count">{{ hiddenSettingCount }}</span>
             <svg
               viewBox="0 0 24 24"
-              class="rail-hide ml-auto h-4 w-4 shrink-0 text-brand-600/80 transition-transform duration-200 dark:text-brand-300/80"
+              class="rail-hide ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-all duration-200 group-hover:text-brand-600 dark:group-hover:text-brand-300"
               :class="{ 'rotate-180': settingsOpen }"
               fill="none" stroke="currentColor" aria-hidden="true"
             ><path d="m6 15 6-6 6 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1811,13 +1811,13 @@ onBeforeUnmount(() => {
 /* 「呼叫小秘」：侧栏顶部的入口（「新建提醒」已挪到首页看板，见 HomeDashboardView）。
    用品牌色低透明度底 + 描边，浅深主题都不刺眼。 */
 .assistant-button { @apply flex h-12 items-center gap-3 rounded-2xl border border-brand-500/25 bg-brand-500/10 px-3.5 text-sm font-bold text-brand-700 transition hover:bg-brand-500/15 active:scale-[0.99] dark:text-brand-200; }
-/* 折叠「设置」入口：浅蓝底 + 齿轮图标凸显。底色用品牌色低透明度叠加，
-   在浅色与深色主题下都是「浅蓝」；展开时加深一点，表示这一组正在展开。 */
+/* 折叠「设置」入口：平时不选（透明底、透明描边），鼠标移上去/键盘聚焦才亮成选中态；
+   展开时保持浅蓝底，表示这一组正在展开（用户 2026-10-20）。 */
 .nav-settings-toggle {
-  @apply border border-brand-500/25 bg-brand-500/10 transition-colors hover:bg-brand-500/15;
+  @apply border border-transparent transition-colors hover:border-brand-500/25 hover:bg-brand-500/10 focus-visible:border-brand-500/25 focus-visible:bg-brand-500/10;
 }
 .nav-settings-toggle[aria-expanded='true'] {
-  @apply bg-brand-500/15;
+  @apply border-brand-500/25 bg-brand-500/10;
 }
 .nav-caption { @apply px-3 pb-2 text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground/75; }
 /* 侧栏两个分区（用户 2026-10-19）：「智能清单」「我的清单」各用一圈细线框住，中间留一条缝 */
