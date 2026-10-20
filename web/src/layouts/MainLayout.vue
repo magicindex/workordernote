@@ -950,8 +950,19 @@ function toggleSettings() {
   // 只在内存里开合，不落 localStorage —— 刷新后回到默认（收起）。
   settingsOpen.value = !settingsOpen.value
 }
+/** 点设置菜单以外的任何地方也收起来（用户 2026-10-20「设置按钮自动回收」）。 */
+function closeSettingsOnOutsideClick(event: Event) {
+  if (!settingsOpen.value) return
+  const target = event.target as Element | null
+  if (target?.closest?.('.nav-settings-toggle') || target?.closest?.('#sidebar-settings')) return
+  settingsOpen.value = false
+}
 // 切到其它页面时把手机抽屉收起（点导航项已经处理，这里兜住路由变化）
-watch(() => route.fullPath, () => { mobileOpen.value = false })
+watch(() => route.fullPath, () => {
+  mobileOpen.value = false
+  // 用户 2026-10-20：「点击其他页面时自动收回设置菜单」。
+  settingsOpen.value = false
+})
 
 // 日历视图里侧栏基本用不上（日历要的是横向空间），进这一页自动收成图标栏；
 // 离开自动还原用户偏好。只看「路由变化」这一个事件，所以用户在日历里手动展开
@@ -1730,6 +1741,7 @@ onMounted(() => {
   document.addEventListener('pointerdown', unlockReminderSound, { once: true })
   document.addEventListener('keydown', unlockReminderSound, { once: true })
   document.addEventListener('visibilitychange', refreshWhenVisible)
+  document.addEventListener('pointerdown', closeSettingsOnOutsideClick)
   // 空闲回首页看板：任何操作都重新计时（见 armIdleTimer）
   armIdleTimer()
   for (const evt of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
@@ -1760,6 +1772,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', unlockReminderSound)
   document.removeEventListener('keydown', unlockReminderSound)
   document.removeEventListener('visibilitychange', refreshWhenVisible)
+  document.removeEventListener('pointerdown', closeSettingsOnOutsideClick)
   if (idleTimer) clearTimeout(idleTimer)
   for (const evt of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
     window.removeEventListener(evt, onUserActivity)

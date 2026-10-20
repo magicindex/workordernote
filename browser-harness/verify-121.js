@@ -186,6 +186,22 @@ async function main() {
     if (beforeLists.length) await api(page, '/api/reminder/lists/order', 'PUT', { ids: beforeLists })
     const back = (await api(page, '/api/configs')).body?.data?.sidebar_order ?? ''
     check('测试后顺序已还原', back === restoreOrder, back)
+
+    // 用户 2026-10-20：「设置按钮自动回收，点击其他页面时自动收回设置菜单」
+    const settingsOpenState = () => page.$eval('.nav-settings-toggle', (el) => el.getAttribute('aria-expanded'));
+    if ((await settingsOpenState()) === 'true') await page.click('.nav-settings-toggle');
+    await page.click('.nav-settings-toggle');
+    const opened = await settingsOpenState();
+    await page.click('a[href="/admin"]');
+    await sleep(500);
+    const afterNav = await settingsOpenState();
+    check('展开设置后点其它页面：设置菜单自动收回',
+      opened === 'true' && afterNav === 'false', `${opened} → ${afterNav}`);
+    await page.click('.nav-settings-toggle');
+    await page.click('main');
+    await sleep(300);
+    const afterOutside = await settingsOpenState();
+    check('点页面空白处也收回设置菜单', afterOutside === 'false', String(afterOutside));
   })
 }
 
