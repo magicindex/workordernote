@@ -1276,7 +1276,11 @@ async function removeEntry() {
   @apply rounded-full bg-brand-500/15 px-1.5 py-0.5 text-[9.5px] font-bold leading-none text-brand-600 dark:text-brand-300;
 }
 
-.timetable-edit-toggle { @apply inline-flex shrink-0 items-center gap-1 rounded-xl border border-border/70 bg-surface px-2.5 py-1 text-[11px] font-bold text-muted-foreground transition duration-150; }
+.timetable-edit-toggle {
+  /* 高度与左侧的课程表标签一致（用户 2026-10-20）：标签是 text-xs + py-1.5 = 28px，
+     这里用具名高度抵消边框的 2px，两边顶边与底边齐平。 */
+  @apply inline-flex h-7 shrink-0 items-center gap-1.5 rounded-xl border border-border/70 bg-surface px-3 text-xs font-bold text-muted-foreground transition duration-150;
+}
 .timetable-edit-toggle:hover { @apply text-foreground; }
 .timetable-edit-toggle.is-on { @apply border-brand-400/60 bg-brand-500/10 text-brand-600 dark:text-brand-300; }
 .timetable-card { @apply relative flex overflow-hidden rounded-xl border p-2.5 pl-3 text-left transition duration-150; }
