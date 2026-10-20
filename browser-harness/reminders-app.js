@@ -2,6 +2,7 @@
  * 「工作序记」的浏览器测试辅助：登录 + 打开某个页面。
  * 与 harness.js 配合使用，默认走商店的 fygo-browser。
  */
+const { execFileSync } = require('child_process');
 const { sleep, waitFor } = require('./harness');
 
 const APP = process.env.APP_URL || 'http://192.168.3.201:8906';
@@ -50,11 +51,31 @@ async function loginViaApi(page, base = APP) {
   const localBase = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i.test(base.replace(/\/$/, ''));
   if (localBase) {
     try {
-      await fetch(base.replace(/\/$/, '') + '/api/configs', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify({ key: 'default_view', value: 'list' }),
-      });
+      const cfg = await fetch(base.replace(/\/$/, '') + '/api/configs', {
+        headers: { Authorization: 'Bearer ' + token },
+      }).then((r) => r.json());
+      const original = String(cfg?.data?.default_view || 'home');
+      // 回归跑在用户真实库上（127.0.0.1:8906）：开跑前把原值记下来，
+      // 进程退出时（含失败）用 curl 同步写回。否则跑一轮回归就把用户的
+      // 「默认首页」永久改成列表视图 —— 2026-10-20 用户就是这么被改掉的。
+      if (!globalThis.__restoreDefaultView) {
+        globalThis.__restoreDefaultView = true;
+        process.on('exit', () => {
+          try {
+            execFileSync('curl', ['-s', '-m', '8', '-X', 'PUT', base.replace(/\/$/, '') + '/api/configs',
+              '-H', 'Authorization: Bearer ' + token, '-H', 'Content-Type: application/json',
+              '-d', JSON.stringify({ key: 'default_view', value: original })], { stdio: 'ignore' });
+          } catch (e) { if (process.env.DEBUG_DEFAULT_RESTORE) console.error('restore failed', e.message); }
+        });
+      }
+      if (process.env.DEBUG_DEFAULT_RESTORE) console.error('default_view original=', original);
+      if (original !== 'list') {
+        await fetch(base.replace(/\/$/, '') + '/api/configs', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({ key: 'default_view', value: 'list' }),
+        });
+      }
     } catch { /* 只是让回归稳定，失败不拦 */ }
   }
   // 必须先落到同源页面，才能写它的 localStorage
