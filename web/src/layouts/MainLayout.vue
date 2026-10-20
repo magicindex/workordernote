@@ -288,7 +288,7 @@
             <span class="nav-symbol h-7 w-7 bg-transparent text-muted-foreground transition-colors group-hover:bg-brand-500/15 group-hover:text-brand-600 dark:group-hover:text-brand-300">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M10.3 3.6a2 2 0 0 1 3.4 0l.5.9a1.6 1.6 0 0 0 1.9.8l1-.3a2 2 0 0 1 2.4 2.4l-.3 1a1.6 1.6 0 0 0 .8 1.9l.9.5a2 2 0 0 1 0 3.4l-.9.5a1.6 1.6 0 0 0-.8 1.9l.3 1a2 2 0 0 1-2.4 2.4l-1-.3a1.6 1.6 0 0 0-1.9.8l-.5.9a2 2 0 0 1-3.4 0l-.5-.9a1.6 1.6 0 0 0-1.9-.8l-1 .3a2 2 0 0 1-2.4-2.4l.3-1a1.6 1.6 0 0 0-.8-1.9l-.9-.5a2 2 0 0 1 0-3.4l.9-.5a1.6 1.6 0 0 0 .8-1.9l-.3-1A2 2 0 0 1 6.9 5l1 .3a1.6 1.6 0 0 0 1.9-.8l.5-.9Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.1" stroke-width="1.7"/></svg>
             </span>
-            <span class="rail-hide text-xs font-extrabold tracking-[.08em] text-muted-foreground transition-colors group-hover:text-brand-700 dark:group-hover:text-brand-200">设置</span>
+            <span class="rail-hide text-xs font-extrabold tracking-[.08em] text-foreground transition-colors group-hover:text-brand-700 dark:group-hover:text-brand-200">设置</span>
             <span v-if="!settingsOpen && hiddenSettingCount" class="nav-count">{{ hiddenSettingCount }}</span>
             <svg
               viewBox="0 0 24 24"
@@ -1817,7 +1817,7 @@ onBeforeUnmount(() => {
   @apply border border-transparent transition-colors hover:border-brand-500/25 hover:bg-brand-500/10 focus-visible:border-brand-500/25 focus-visible:bg-brand-500/10;
 }
 .nav-settings-toggle[aria-expanded='true'] {
-  @apply border-brand-500/25 bg-brand-500/10;
+  @apply border-brand-500/25 bg-brand-500/15;
 }
 .nav-caption { @apply px-3 pb-2 text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground/75; }
 /* 侧栏两个分区（用户 2026-10-19）：「智能清单」「我的清单」各用一圈细线框住，中间留一条缝 */

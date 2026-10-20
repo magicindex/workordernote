@@ -96,11 +96,17 @@ const measure = (page) => page.evaluate(() => {
     check('侧栏存在折叠「设置」入口', !!m, m ? '' : '没找到 .nav-settings-toggle');
     if (!m) return;
 
+    // 用户 2026-10-20：「设置默认不选择状态，鼠标放在按钮上显示选中状态」。
     const bg = await page.evaluate((css) => window.__lc.parseColor(css), m.bg);
-    check('底色是品牌蓝的浅色（rgba 蓝，透明度低）',
-      !!bg && bg.b > bg.r + 60 && bg.b > bg.g + 40 && bg.a > 0.04 && bg.a < 0.25,
-      `${m.bg} → ${JSON.stringify(bg)}`);
-    check('有明显边框（同色系，勾出轮廓）', !!m.border && m.border !== 'rgba(0, 0, 0, 0)', m.border);
+    check('默认没有选中底色（透明）', !!bg && bg.a === 0, `${m.bg} → ${JSON.stringify(bg)}`);
+    await page.hover('.nav-settings-toggle');
+    await sleep(250);
+    const hov = await measure(page);
+    const hbg = await page.evaluate((css) => window.__lc.parseColor(css), hov.bg);
+    check('悬停后底色是品牌蓝的浅色',
+      !!hbg && hbg.b > hbg.r + 60 && hbg.b > hbg.g + 40 && hbg.a > 0.04 && hbg.a < 0.25,
+      `${hov.bg} → ${JSON.stringify(hbg)}`);
+    check('悬停后出现同色系边框', !!hov.border && hov.border !== 'rgba(0, 0, 0, 0)', hov.border);
     check('入口里有齿轮图标（带圆心的那个 svg）', m.svgCount >= 2 && m.gearPaths >= 2,
       `svg=${m.svgCount} 齿轮图元=${m.gearPaths}`);
     check('齿轮图标跟随品牌色', !!m.gearStroke && m.gearStroke !== 'rgb(0, 0, 0)', m.gearStroke);
@@ -122,12 +128,12 @@ const measure = (page) => page.evaluate(() => {
     check('浅色主题下文字对比度 ≥ 4.5:1', light.contrast >= 4.5, `${light.contrast}:1（底 ${light.eff}）`);
 
     // ---- 3. 深色主题（临时加 class 量一次，不动用户设置）----
-    const dark = await page.evaluate(async () => {
+    await page.evaluate(() => document.documentElement.classList.add('dark'));
+    await sleep(200);
+    await page.hover('.nav-settings-toggle');
+    await sleep(300);
+    const dark = await page.evaluate(() => {
       const L = window.__lc;
-      const html = document.documentElement;
-      const had = html.classList.contains('dark');
-      html.classList.add('dark');
-      await new Promise((r) => setTimeout(r, 120));
       const btn = document.querySelector('.nav-settings-toggle');
       const label = btn.querySelector('span.text-xs');
       const btnBg = L.parseColor(getComputedStyle(btn).backgroundColor);
@@ -135,11 +141,11 @@ const measure = (page) => page.evaluate(() => {
       const eff = btnBg.a < 1 ? L.blend(btnBg, body) : btnBg;
       const fg = L.parseColor(getComputedStyle(label).color);
       const out = { contrast: Math.round(L.contrast(fg, eff) * 100) / 100, eff: `rgb(${Math.round(eff.r)}, ${Math.round(eff.g)}, ${Math.round(eff.b)})`, bg: getComputedStyle(btn).backgroundColor };
-      if (!had) html.classList.remove('dark');
       return out;
     });
     check('深色主题下文字对比度 ≥ 4.5:1', dark.contrast >= 4.5, `${dark.contrast}:1（底 ${dark.eff}）`);
-    check('深色下底色仍是蓝色系（不是被主题冲成灰）', /rgba?\(\s*\d+,\s*\d+,\s*2\d\d/.test(dark.bg), dark.bg);
+    check('深色下悬停底色仍是蓝色系（不是被主题冲成灰）', /rgba?\(\s*\d+,\s*\d+,\s*2\d\d/.test(dark.bg), dark.bg);
+    await page.evaluate(() => document.documentElement.classList.remove('dark'));
 
     // ---- 4. 展开/折叠行为 ----
     // 「设置」组的开合状态记在 localStorage（ui_settings_open），这个浏览器 profile
