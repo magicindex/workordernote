@@ -1718,7 +1718,7 @@ function onUserActivity() {
 
 onMounted(() => {
   void applyDefaultViewOnce()
-  void assistantStore.loadName()
+  void assistantStore.loadName(true)
   refreshNavigation()
   // 侧栏「我的清单」的先后顺序（用户配置 sidebar_order，没配过就用默认先后）
   void loadSidebarOrder()

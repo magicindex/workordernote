@@ -172,8 +172,12 @@ func TestFirstRemindAt(t *testing.T) {
 
 	// 建出的投递任务用的是这个时刻（而不是结束时间）
 	setUserConfig(t, "reminder_all_day_time", "06:00", userID)
+	// 用「明天」而不是固定日期：06:00 一旦已经过去，创建动作会按「现在」排程，
+	// 这条断言就会在每天 06:00 之后必红（与逻辑无关，只是用例太依赖运行时刻）。
+	tomorrowNoon := time.Now().In(loc).AddDate(0, 0, 1)
+	createdDue := time.Date(tomorrowNoon.Year(), tomorrowNoon.Month(), tomorrowNoon.Day(), 23, 59, 0, 0, loc)
 	created, err := createReminder(appDB, userID, SaveReminderInput{
-		Title: "排程检查", Kind: KindTask, DueAt: &due, RepeatRule: "none", Channels: []string{"inapp"},
+		Title: "排程检查", Kind: KindTask, DueAt: &createdDue, RepeatRule: "none", Channels: []string{"inapp"},
 	})
 	if err != nil {
 		t.Fatalf("建提醒失败：%v", err)
@@ -182,7 +186,8 @@ func TestFirstRemindAt(t *testing.T) {
 	if err := appDB.Where("reminder_id = ?", created.ID).Order("id ASC").First(&job).Error; err != nil {
 		t.Fatalf("没排到投递任务：%v", err)
 	}
-	if got := job.ScheduledFor.In(loc).Format("2006-01-02 15:04"); got != "2026-10-20 06:00" {
+	wantJob := createdDue.Format("2006-01-02") + " 06:00"
+	if got := job.ScheduledFor.In(loc).Format("2006-01-02 15:04"); got != wantJob {
 		t.Fatalf("投递任务应排在当天 06:00，实际 %s", got)
 	}
 }

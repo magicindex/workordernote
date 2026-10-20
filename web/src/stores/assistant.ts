@@ -15,8 +15,9 @@ export const useAssistantStore = defineStore('assistant', () => {
   const displayName = computed(() => customName.value.trim() || '小秘')
   const avatarText = computed(() => displayName.value.slice(0, 1))
 
-  async function loadName() {
-    if (loaded.value) return
+  /** force=true 用于登录后重新挂载布局：同一次会话里换账号时不能沿用上一个人的名字。 */
+  async function loadName(force = false) {
+    if (loaded.value && !force) return
     try {
       const res = await getPromptPrefs()
       if (res.data?.code === 0) {

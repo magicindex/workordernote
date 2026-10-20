@@ -223,6 +223,46 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-10-20：0.40.0（201 生产 / 200 生产 / 201 沙箱上线）—— 偏好设置与个人化
+
+> **发版记录**（VERSION `0.40.0`，源码提交 `172068a`→`9b01345`，
+> 镜像 `workordernote:0.40.0` = `sha256:6020ed96c21c160a018e00c64774d12834be0413dced6620ed4925d23e2a89ce`
+> = registry digest `sha256:9c1c9144411c4376bf9d17e912c134d3e69a358b23c45354f8d3132ab2b76a07`）
+>
+> **用户需求**
+> - 「系统设置页面：免打扰 迁移到 偏好设置页面；说明：系统配置仅管理员权限可设置，偏好设置是针对个人习惯设置，
+>   每个人设置都可以不一样；做好不同用户之间数据隔离」。
+> - 「偏好设置中：AI 提示词区域增加 AI 智能体名称修改功能，每个人可以定义自己的小秘名称，在对话等体现」。
+> - 另外三条界面调整：首页「列表 / 日历」切换只留图标且不要日历、首页说明文字删除、
+>   「我的清单 → 全部」并入「全部」、「智能清单 / 我的清单」各用线框分区。
+>
+> **实现要点**
+> - 免打扰三项 `dnd_enabled` / `dnd_start_time` / `dnd_end_time` 从 `ScopeSystem` 改为 `ScopeUser`；
+>   `dndWindow(db, userID)` 按个人读取，派发（逾期提醒 / 提醒窗口 / 提醒@他）都带用户 ID。
+>   升级 `0.40.0 dnd_window_to_user_scope` 把旧 `user_id=0` 的值一次性抄给每个现有用户（已有个人值则跳过）。
+> - 小秘名称 `ai_assistant_name`（个人级、Internal、上限 12 字、默认空 = 「小秘」）：
+>   侧栏入口、面板标题、头像字、问候语、输入提示共用 `web/src/stores/assistant.ts`；
+>   服务端 `personalizePrompt()` 在系统提示词里替换默认称呼并声明身份。
+>   `PUT /api/assistant/prompts` 的 `system_prompt` / `assistant_name` 均可选，只改提交的那一项。
+> - 偏好设置「AI 提示词」一节新增名称输入、保存与恢复默认；系统配置页不再出现免打扰组。
+>
+> **验证**
+> - Go：`TestDNDWindowIsPerUser`（A 开窗口不影响 B、B 改时间不影响 A）、
+>   `TestAssistantNameIsPerUser`（互不影响、只改名不清提示词、超长 400），`go test ./...` 全绿。
+> - 浏览器：`verify-129` 21/21（偏好设置三项、系统配置没有）、`verify-132` 9/9（名称全链路）、
+>   `verify-120` 29/29、`verify-121` 16/16。
+> - 生产全量回归（201）：55 个套件中 53 通过、2 红；`verify-print` 24/24（登录限流）、
+>   `verify-097` **108/108**（改了两条依赖日期的断言：按后端同一套「还款日未过的最早一期」算期望值）。
+>   即全绿。
+>
+> **上线与构件**
+> - 沙箱 8908 / 201 / 200 均 `0.40.0`（200 走 `docker save` + `scp` + `docker load`）。
+>   备份：`/tmp/staging-data-pre0400-20261020-083300.tgz`、`/tmp/prod-data-pre0400-20261020-083400.tgz`、
+>   200 `/tmp/prod200-data-pre0400-20261020-083624.tgz`。三台 `upgrade_records` 均落到 0.40.0。
+> - 离线包 `pkg/WorkOrderNote-0.40.0-offline-amd64.tar.gz`（45 867 613 B，
+>   sha256 `66622c7b359db552f359592de0197b72e320772a485478dcd99c37b0469ceda1`），自检 30/30。
+> - fnOS 包 `release/0.40.0/workordernote_0.40.0_amd64.fpk`（21 614 489 B，md5 `390e61f75391d9f74b3a6d063882a412`）。
+>
 ### 2026-10-19：0.39.0（201 生产 / 200 生产 / 201 沙箱上线）—— 双机同步扩到「除密码外全部」
 
 > **发版记录**（VERSION `0.39.0`，源码提交 `8a8045d`→`fb3d610`→`429d040`/`1b9d5f4`→`d3de72e`，

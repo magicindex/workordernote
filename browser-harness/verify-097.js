@@ -897,12 +897,29 @@ const setSelect = (page, sel, value) => page.evaluate(({ sel, value }) => {
       await sleep(2200);
       const crossCard = (await cardsOf()).find((c) => String(c.name).includes('自检跨月卡'));
       if (crossCard) createdCards.push(crossCard.id);
+      // 期望值按后端同一套规则算（currentPeriod：从上一期起找「还款日还没过的最早一期」），
+      // 这样月初跑、账单日当天跑、还款日次日跑都不会误报。
+      const pad2 = (n) => String(n).padStart(2, '0');
+      const dayOnly = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
       const crossNow = new Date();
-      const crossStatement = `${crossNow.getFullYear()}-${String(crossNow.getMonth() + 1).padStart(2, '0')}-25`;
-      check('跨月卡（25 账单 / 19 还款）当期算在上一个月',
+      const today0 = dayOnly(crossNow);
+      let expStatement = null;
+      let expDue = null;
+      for (let i = -1; i < 3; i++) {
+        const m = new Date(today0.getFullYear(), today0.getMonth() + i, 1);
+        const st = new Date(m.getFullYear(), m.getMonth(), 25);
+        const du = new Date(m.getFullYear(), m.getMonth() + 1, 19);
+        if (dayOnly(du).getTime() >= today0.getTime()) { expStatement = st; expDue = du; break; }
+      }
+      const expStatementText = `${expStatement.getFullYear()}-${pad2(expStatement.getMonth() + 1)}-25`;
+      check('跨月卡（25 账单 / 19 还款）当期算在还款日未过的最早一期',
         !!crossCard && /^\d{4}-\d{2}$/.test(crossCard.current?.period || '')
-        && crossCard.current?.statement_date?.slice(0, 10) !== crossStatement,
-        JSON.stringify({ period: crossCard?.current?.period, statement: crossCard?.current?.statement_date?.slice(0, 10) }));
+        && crossCard.current?.period === expStatementText.slice(0, 7)
+        && crossCard.current?.statement_date?.slice(0, 10) === expStatementText,
+        JSON.stringify({ period: crossCard?.current?.period, statement: crossCard?.current?.statement_date?.slice(0, 10), expected: expStatementText }));
+      const daysToDue = Math.round((dayOnly(expDue).getTime() - today0.getTime()) / 86400000);
+      const expLevel = daysToDue < 0 ? 'overdue' : daysToDue <= 3 ? 'urgent'
+        : today0.getTime() >= dayOnly(expStatement).getTime() ? 'soon' : 'normal';
       const crossFace = await page.evaluate((id) => {
         const el = document.querySelector(`[data-card-item="${id}"] [data-card-face]`);
         return el ? {
@@ -911,8 +928,10 @@ const setSelect = (page, sel, value) => page.evaluate(({ sel, value }) => {
           status: el.querySelector('[data-card-status]')?.innerText.trim() || '',
         } : null;
       }, crossCard?.id);
-      check('跨月卡过账单日后卡面变色（黄→橘，不再是默认色）',
-        ['soon', 'urgent', 'overdue'].includes(crossFace?.level || ''), JSON.stringify(crossFace));
+      check('跨月卡的卡面阶段与账期一致（账单日之后为黄→橘，还款日前 3 天转红）',
+        crossFace?.level === expLevel
+        && (expLevel !== 'soon' || !crossFace.bg.includes('rgb(100, 116, 139)')),
+        JSON.stringify({ ...crossFace, expectedLevel: expLevel, daysToDue }));
 
     } finally {
       // ---------- 清理 ----------
