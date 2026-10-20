@@ -564,7 +564,7 @@
                     <span class="h-1 w-1 rounded-full bg-border"></span>
                     <span
                       class="font-bold"
-                      :class="isOverdue(item) ? 'text-rose-500' : 'text-brand-600 dark:text-brand-300'"
+                      :class="isOverdue(item) || remainingUrgent(item) ? 'text-rose-500' : 'text-brand-600 dark:text-brand-300'"
                       data-item-remaining
                     >{{ itemRemaining(item) }}</span>
                   </template>
@@ -950,6 +950,14 @@ function cycleRemaining(item: { due_at?: string | null }): string {
 }
 
 /** 行尾倒计时：未完成、有日期的条目才有（用户 2026-10-20）。 */
+/** 剩余不足 24 小时（用户 2026-10-20：倒计时只剩小时数时变红，其余字色不变）。 */
+function remainingUrgent(item: ReminderItem): boolean {
+  const deadline = overdueDeadlineAt(item, overdueTimeParts.value)
+  if (deadline === null) return false
+  const target = deadline + overdueGraceMinutes.value * 60_000
+  return target - clockNow.value < 24 * 3_600_000
+}
+
 function itemRemaining(item: ReminderItem): string {
   // 与「已逾期」判定同一口径：截止日当天的过期时间 + 宽限才算逾期，
   // 所以倒计时也数到那个时刻，不能直接拿 due_at（否则今天 00:10 到期的一条中午就显示已逾期）。

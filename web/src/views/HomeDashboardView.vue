@@ -74,7 +74,7 @@
                 <span v-if="row.item.list_name">；</span>
                 <span v-if="row.item.list_name" data-home-list>{{ row.item.list_name }}</span>
                 <span>；</span>
-                <span data-home-remaining>{{ remainingOf(row) }}</span>
+                <span :class="{ 'text-rose-500': remainingUrgent(row.item) }" data-home-remaining>{{ remainingOf(row) }}</span>
               </p>
             </div>
           </li>
@@ -118,7 +118,7 @@
                 <span v-if="row.item.list_name">；</span>
                 <span v-if="row.item.list_name" data-home-list>{{ row.item.list_name }}</span>
                 <span>；</span>
-                <span data-home-remaining>{{ remainingOf(row) }}</span>
+                <span :class="{ 'text-rose-500': remainingUrgent(row.item) }" data-home-remaining>{{ remainingOf(row) }}</span>
               </p>
             </div>
           </li>
@@ -253,6 +253,14 @@ function remainingOf(row: Row) {
     return late > 0 ? `已逾期 ${late} 天` : '已逾期'
   }
   return remainingText(row.item.due_at, clockNow.value)
+}
+
+/** 剩余不足 24 小时：只有倒计时那段转红，整行其它字保持原色（用户 2026-10-20）。 */
+function remainingUrgent(item: ReminderItem) {
+  if (!item.due_at) return false
+  const at = new Date(item.due_at).getTime()
+  if (!Number.isFinite(at)) return false
+  return at - clockNow.value < 24 * 3_600_000
 }
 
 /** 创建时间（用户 2026-10-15 要求这一行里显示）：今天 / 昨天用相对说法，更早写 M月D日 时:分 */

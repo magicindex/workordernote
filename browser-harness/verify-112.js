@@ -241,6 +241,8 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
     // （原来用「昨天 23:00」，在凌晨 00:00–00:29 跑时宽限还没走完 → 假红，2026-10-12 00:26 踩过。）
     await mk(`自检过期口径-前天-${STAMP}`, at(-2, 23, 0));
     await mk(`自检过期口径-今天-${STAMP}`, at(0, 0, 10));
+    // 剩余 > 24 小时的对照项（用户 2026-10-20：只有不足 24 小时才转红）
+    await mk(`自检剩余-远-${STAMP}`, at(3, 23, 59));
     await gotoRetry(page, BASE + '/admin');
     await sleep(2500);
     const overdueView = await page.evaluate((ts) => {
@@ -248,12 +250,15 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
       const find = (t) => rows.find((r) => r.textContent.includes(t));
       const y = find(`自检过期口径-前天-${ts}`);
       const t = find(`自检过期口径-今天-${ts}`);
+      const f = find(`自检剩余-远-${ts}`);
       return {
         foundY: !!y, foundT: !!t,
         yOverdue: y ? y.classList.contains('reminder-overdue') : null,
         tOverdue: t ? t.classList.contains('reminder-overdue') : null,
         yRemaining: y?.querySelector('[data-item-remaining]')?.textContent?.trim() || '',
         tRemaining: t?.querySelector('[data-item-remaining]')?.textContent?.trim() || '',
+        tColor: t?.querySelector('[data-item-remaining]') ? getComputedStyle(t.querySelector('[data-item-remaining]')).color : '',
+        fColor: f?.querySelector('[data-item-remaining]') ? getComputedStyle(f.querySelector('[data-item-remaining]')).color : '',
         inOverdueCard: (t) => {
           const card = document.querySelector('[data-day-group="overdue"]');
           return card ? card.textContent.includes(t) : false;
@@ -269,6 +274,9 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
       /^已逾期 (\d+ 天 )?\d+ 小时 \d+ 分$/.test(overdueView.yRemaining), overdueView.yRemaining);
     check('未逾期条目行尾写「剩余 N 小时 …」',
       /^剩余 (\d+ 天 )?\d+ 小时 \d+ 分$/.test(overdueView.tRemaining), overdueView.tRemaining);
+    check('剩余不足 24 小时：倒计时转红（rose-500）',
+      overdueView.tColor === 'rgb(244, 63, 94)', overdueView.tColor);
+    check('剩余超过 24 小时：倒计时不转红', overdueView.fColor !== 'rgb(244, 63, 94)', overdueView.fColor);
 
     // =============== 4. 后台「周起始日」中文 ===============
     await gotoRetry(page, BASE + '/admin/configs');
