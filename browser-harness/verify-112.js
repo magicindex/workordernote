@@ -252,6 +252,8 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
         foundY: !!y, foundT: !!t,
         yOverdue: y ? y.classList.contains('reminder-overdue') : null,
         tOverdue: t ? t.classList.contains('reminder-overdue') : null,
+        yRemaining: y?.querySelector('[data-item-remaining]')?.textContent?.trim() || '',
+        tRemaining: t?.querySelector('[data-item-remaining]')?.textContent?.trim() || '',
         inOverdueCard: (t) => {
           const card = document.querySelector('[data-day-group="overdue"]');
           return card ? card.textContent.includes(t) : false;
@@ -262,6 +264,11 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
       overdueView.foundY === true && overdueView.yOverdue === true, JSON.stringify(overdueView));
     check('今天 00:10 的任务**当天不算逾期**（要等当天的「过期时间」23:59 + 宽限）',
       overdueView.foundT === true && overdueView.tOverdue === false, JSON.stringify(overdueView));
+    // 用户 2026-10-20：「已逾期项目后边增加已逾期多少时间；未逾期项目增加剩余到期时间」
+    check('已逾期条目行尾写「已逾期 N 天 …」',
+      /^已逾期 (\d+ 天 )?\d+ 小时 \d+ 分$/.test(overdueView.yRemaining), overdueView.yRemaining);
+    check('未逾期条目行尾写「剩余 N 小时 …」',
+      /^剩余 (\d+ 天 )?\d+ 小时 \d+ 分$/.test(overdueView.tRemaining), overdueView.tRemaining);
 
     // =============== 4. 后台「周起始日」中文 ===============
     await gotoRetry(page, BASE + '/admin/configs');

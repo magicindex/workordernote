@@ -554,11 +554,20 @@
                     <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7v5l3 2" stroke-width="1.8" stroke-linecap="round"/></svg>
                     {{ dueLabel(item) }}
                   </span>
-                  <span v-if="isOverdue(item)" class="tiny-badge !text-rose-500">已逾期</span>
                   <span class="h-1 w-1 rounded-full bg-border"></span>
                   <span>{{ item.list_name }}</span>
                   <span v-if="item.channels?.length" class="h-1 w-1 rounded-full bg-border"></span>
                   <span v-if="item.channels?.length">{{ item.channels.map(channelName).join(' · ') }}</span>
+                  <!-- 行尾倒计时（用户 2026-10-20）：已逾期的写「已逾期 N 天 H 小时」，
+                       未逾期的写「剩余 N 天 H 小时 M 分」；计划页的循环徽章已经带了倒计时，不重复。 -->
+                  <template v-if="itemRemaining(item) && !(isPlanned && item.cycle_index)">
+                    <span class="h-1 w-1 rounded-full bg-border"></span>
+                    <span
+                      class="font-bold"
+                      :class="isOverdue(item) ? 'text-rose-500' : 'text-brand-600 dark:text-brand-300'"
+                      data-item-remaining
+                    >{{ itemRemaining(item) }}</span>
+                  </template>
                 </div>
               </button>
               <div class="row-actions">
@@ -655,6 +664,7 @@ import { listColorHex } from '../utils/list-colors'
 import { remainingText } from '../utils/remaining'
 import {
   overdueStamp as overdueStampShared,
+  overdueDeadlineAt,
   isOverdueAt as isOverdueShared,
 } from '../utils/overdue'
 import { getPublicConfigs } from '../api/config'
@@ -919,11 +929,7 @@ const isPlanned = computed(() => view.value === 'planned')
 // 计划页循环卡片上的倒计时：当前这一轮的到期时间还剩多久。
 // 口径是页面自己的 clockNow（每分钟跳一次），不单独起定时器；
 // 用户要的是「天 / 小时 / 分」都写出来，所以不用时:分那种紧凑格式。
-function cycleRemaining(item: { due_at?: string | null }): string {
-  if (!item.due_at) return ''
-  const at = new Date(item.due_at).getTime()
-  if (!Number.isFinite(at)) return ''
-  const diff = at - clockNow.value
+function spanText(diff: number): string {
   const total = Math.abs(diff)
   const days = Math.floor(total / 86_400_000)
   const hours = Math.floor((total % 86_400_000) / 3_600_000)
@@ -932,7 +938,26 @@ function cycleRemaining(item: { due_at?: string | null }): string {
   if (days > 0) parts.push(`${days} 天`)
   if (days > 0 || hours > 0) parts.push(`${hours} 小时`)
   parts.push(`${minutes} 分`)
-  return `${diff < 0 ? '已逾期' : '剩余'} ${parts.join(' ')}`
+  return parts.join(' ')
+}
+
+function cycleRemaining(item: { due_at?: string | null }): string {
+  if (!item.due_at) return ''
+  const at = new Date(item.due_at).getTime()
+  if (!Number.isFinite(at)) return ''
+  const diff = at - clockNow.value
+  return `${diff < 0 ? '已逾期' : '剩余'} ${spanText(diff)}`
+}
+
+/** 行尾倒计时：未完成、有日期的条目才有（用户 2026-10-20）。 */
+function itemRemaining(item: ReminderItem): string {
+  // 与「已逾期」判定同一口径：截止日当天的过期时间 + 宽限才算逾期，
+  // 所以倒计时也数到那个时刻，不能直接拿 due_at（否则今天 00:10 到期的一条中午就显示已逾期）。
+  const deadline = overdueDeadlineAt(item, overdueTimeParts.value)
+  if (deadline === null) return ''
+  const target = deadline + overdueGraceMinutes.value * 60_000
+  const diff = target - clockNow.value
+  return `${diff < 0 ? '已逾期' : '剩余'} ${spanText(diff)}`
 }
 const planStartOpen = ref(false)
 const planEndOpen = ref(false)
