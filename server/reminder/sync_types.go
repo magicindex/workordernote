@@ -91,17 +91,18 @@ type syncSystemConfig struct {
 }
 
 var syncConfigSecrets = map[string]bool{
-	"jwt_secret":         true,
-	"sync_token":         true,
-	"sync_instance_id":   true,
-	"assistant_api_key":  true,
-	"assistant_api_key2": true,
-	"qq_bot_token":       true,
-	"smtp_password":      true,
-	"email_password":     true,
-	"sms_password":       true,
-	"feishu_secret":      true,
-	"dingtalk_secret":    true,
+	"jwt_secret":             true,
+	"sync_token":             true,
+	"sync_instance_id":       true,
+	"assistant_api_key":      true,
+	"assistant_api_key2":     true,
+	"qq_bot_token":           true,
+	"smtp_password":          true,
+	"backup_webdav_password": true,
+	"email_password":         true,
+	"sms_password":           true,
+	"feishu_secret":          true,
+	"dingtalk_secret":        true,
 }
 
 // syncCard 是一张信用卡。卡片挂在清单下，所以用 list_uid 指过去。
@@ -183,11 +184,11 @@ type syncReminder struct {
 	Notes    string `json:"notes"`
 	CardRole string `json:"card_role,omitempty"`
 	// 信用卡生成的提醒属于哪张卡：用 UID 指过去（对端要换成自己的卡片 ID）
-	CardUID             string     `json:"card_uid,omitempty"`
-	Kind                string     `json:"kind"`
-	Priority            int        `json:"priority"`
-	DueAt               *time.Time `json:"due_at,omitempty"`
-	AllDay              bool       `json:"all_day"`
+	CardUID  string     `json:"card_uid,omitempty"`
+	Kind     string     `json:"kind"`
+	Priority int        `json:"priority"`
+	DueAt    *time.Time `json:"due_at,omitempty"`
+	AllDay   bool       `json:"all_day"`
 	// 时间段任务的起止（计划页专用）；旧版本对端没有这两个字段，缺省即 NULL。
 	StartAt             *time.Time `json:"start_at,omitempty"`
 	EndAt               *time.Time `json:"end_at,omitempty"`
@@ -203,12 +204,12 @@ type syncReminder struct {
 	Background string `json:"background,omitempty"`
 	// BgBlur / BgMask：背景图的蒙板（虚化像素 / 蒙板浓度百分比，见 models.go）。
 	// 老版本对端不认这两个字段，忽略即可（本机保持自己的值）。
-	BgBlur int `json:"bg_blur,omitempty"`
-	BgMask int `json:"bg_mask,omitempty"`
-	CompletedAt *time.Time `json:"completed_at,omitempty"`
-	SnoozedUntil        *time.Time `json:"snoozed_until,omitempty"`
-	Position            int        `json:"position"`
-	Version             uint       `json:"version"`
+	BgBlur       int        `json:"bg_blur,omitempty"`
+	BgMask       int        `json:"bg_mask,omitempty"`
+	CompletedAt  *time.Time `json:"completed_at,omitempty"`
+	SnoozedUntil *time.Time `json:"snoozed_until,omitempty"`
+	Position     int        `json:"position"`
+	Version      uint       `json:"version"`
 	// Channels 只带渠道名（inapp/email/...），不带 Targets：Targets 存的是本机
 	// channel_bindings 的自增 ID，到了对端指向的是别人的绑定。对端按渠道名重建，
 	// 邮箱留空即「该用户在该机器上绑定的全部地址」。

@@ -18,6 +18,7 @@ import (
 	"smallgo/server/apps"
 	"smallgo/server/assistant"
 	"smallgo/server/audit"
+	"smallgo/server/backup"
 	"smallgo/server/config"
 	"smallgo/server/database"
 	"smallgo/server/logger"
@@ -144,6 +145,7 @@ func Start() {
 		return cfg.LogRetentionDays
 	})
 	audit.RegisterCleanup(db)
+	backup.Configure(db, cfg)
 
 	jwtSecret, err := sysconfig.GetConfig(db, "jwt_secret", 0)
 	if err != nil || jwtSecret == "" {
@@ -452,6 +454,9 @@ func NewRouter(cfg config.Config, db *gorm.DB, jwtSecret string) *gin.Engine {
 
 	// Admin operation log (browse + CSV export).
 	audit.RegisterRoutes(adminGroup, db)
+
+	// 数据备份：整库 + 上传文件，本机与 WebDAV 两个落点，仅管理员。
+	backup.RegisterRoutes(adminGroup, db)
 
 	// AI 助手（「呼叫小秘」）：对话给登录用户，模型参数（服务商/地址/密钥/模型名）
 	// 只给管理员，密钥读接口只回掩码。见 server/assistant 包注释。

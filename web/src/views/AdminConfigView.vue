@@ -23,6 +23,10 @@
            模型参数在这里填完即生效，前端不用跟着改版本。 -->
       <AiAssistantPanel />
 
+      <!-- 数据备份：整库 + 上传文件。分组里的键负责「备份到哪、几点、留几份」，
+           这块负责展示上次结果与「立即备份」。 -->
+      <BackupPanel />
+
       <ConfigGroupList
         ref="listRef"
         :items="items"
@@ -42,6 +46,7 @@ import PageHeader from '../components/PageHeader.vue'
 import ConfigGroupList from '../components/ConfigGroupList.vue'
 import SyncPanel from '../components/SyncPanel.vue'
 import AiAssistantPanel from '../components/AiAssistantPanel.vue'
+import BackupPanel from '../components/BackupPanel.vue'
 import SyncImportWizard from '../components/SyncImportWizard.vue'
 import AndroidApkUploader from '../components/AndroidApkUploader.vue'
 import { getSystemConfigMeta, updateConfig } from '../api/config'

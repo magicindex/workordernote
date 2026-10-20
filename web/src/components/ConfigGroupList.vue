@@ -99,10 +99,10 @@
               class="input-field !py-2 flex-1"
             />
 
-            <!-- string: text input -->
+            <!-- string: text input；密码类字段用密码框（WebDAV 密码等） -->
             <input
               v-else
-              type="text"
+              :type="isSecret(item.key) ? 'password' : 'text'"
               :value="getEditValue(item)"
               :disabled="getSaving(item)"
               @input="setEditValue(item, ($event.target as HTMLInputElement).value)"
@@ -153,6 +153,7 @@ const groupTitleMap: Record<string, string> = {
   appearance: '外观',
   system: '系统维护',
   android: '安卓客户端',
+  backup: '数据备份',
 }
 
 const selectOptionLabelMap: Record<string, Record<string, string>> = {
@@ -198,6 +199,10 @@ const selectOptionLabelMap: Record<string, Record<string, string>> = {
     monday: '周一',
     sunday: '周日',
   },
+}
+
+function isSecret(key: string): boolean {
+  return /password|secret|token/i.test(key)
 }
 
 function groupTitle(key: string): string {
