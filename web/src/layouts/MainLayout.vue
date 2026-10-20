@@ -388,21 +388,21 @@
           >
             <RouterLink
               :to="listRoute"
-              class="inline-flex items-center gap-1 rounded-[0.6rem] px-2.5 py-2 text-xs font-bold transition"
+              class="inline-flex items-center justify-center rounded-[0.6rem] p-2 text-xs font-bold transition"
               :class="!isCalendar ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
               title="列表视图"
+              aria-label="列表视图"
             >
               <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h16" stroke-width="2" stroke-linecap="round"/></svg>
-              <span class="hidden lg:inline">列表</span>
             </RouterLink>
             <RouterLink
               to="/admin/calendar"
-              class="inline-flex items-center gap-1 rounded-[0.6rem] px-2.5 py-2 text-xs font-bold transition"
+              class="inline-flex items-center justify-center rounded-[0.6rem] p-2 text-xs font-bold transition"
               :class="isCalendar ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
               title="日历视图"
+              aria-label="日历视图"
             >
               <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2.5" stroke-width="1.9"/><path d="M3 10h18M8 3v4m8-4v4" stroke-width="1.9" stroke-linecap="round"/></svg>
-              <span class="hidden lg:inline">日历</span>
             </RouterLink>
           </div>
           <UiThemeToggle />

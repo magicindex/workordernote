@@ -166,6 +166,11 @@ const itemsOf = (res) => {
       return g ? { hrefs: [...g.querySelectorAll('a')].map((a) => a.getAttribute('href')) } : null;
     });
     check('首页顶栏有「列表 / 日历」切换（与其他页面同一处）', !!viewSwitch, JSON.stringify(viewSwitch));
+    const iconOnly = await page.evaluate(() => {
+      const g = document.querySelector('[aria-label="切换列表或日历视图"]');
+      return g ? [...g.querySelectorAll('a')].every((a) => a.querySelector('svg') && !a.textContent.trim()) : false;
+    });
+    check('切换只保留图标（没有文字标签）', iconOnly === true);
     check('切换按钮指向列表与日历两个页面',
       !!viewSwitch && viewSwitch.hrefs.includes('/admin/calendar') && viewSwitch.hrefs.some((h) => h === '/admin' || h.startsWith('/admin/')),
       JSON.stringify(viewSwitch));
