@@ -5,6 +5,8 @@
 单机部署、数据全在本地；也可以两台机器自动同步。界面同时适配桌面与手机，
 支持装成 PWA 或打包安卓客户端。
 
+**下载**：[GitHub Releases](https://github.com/magicindex/workordernote/releases) · 最新版本 v0.41.0
+
 ![首页看板](docs/screenshots/features/home.png)
 
 ## 功能
