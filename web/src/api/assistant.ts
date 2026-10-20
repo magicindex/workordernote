@@ -361,3 +361,8 @@ export function getPromptPrefs() {
 export function savePromptPrefs(system_prompt: string) {
   return request.put('/api/assistant/prompts', { system_prompt })
 }
+
+/** 写自己给小秘起的名字；传空串 = 回到「小秘」。 */
+export function saveAssistantName(assistant_name: string) {
+  return request.put('/api/assistant/prompts', { assistant_name })
+}

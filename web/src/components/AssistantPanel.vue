@@ -7,7 +7,7 @@
         <aside class="relative flex h-full w-full flex-col bg-surface text-foreground shadow-2xl sm:w-[420px]">
           <!-- 头部：小秘身份 + 模型接入状态 + 清空 / 关闭 -->
           <header class="flex items-center gap-3 border-b border-border px-4 py-3">
-            <span class="assistant-avatar">秘</span>
+            <span class="assistant-avatar">{{ assistant.avatarText }}</span>
             <div class="min-w-0 flex-1">
               <!-- 接上模型叫「AI 小秘」是绿的，没配置是红的（用户 2026-10-17）；
                    状态还在查时保持正文色，不先闪一下红。 -->
@@ -16,7 +16,7 @@
                 :class="connState === 'live' ? 'text-emerald-600 dark:text-emerald-400' : connState === 'off' ? 'text-red-500 dark:text-red-400' : ''"
                 data-assistant-title
               >
-                AI 小秘
+                AI {{ assistant.displayName }}
                 <span
                   class="assistant-conn"
                   :data-assistant-conn-state="connState"
@@ -71,7 +71,7 @@
           <!-- 对话区 -->
           <div ref="listEl" class="flex-1 space-y-3 overflow-y-auto px-4 py-4" data-assistant-scroll>
             <div v-if="!messages.length" class="assistant-empty">
-              <p class="font-display text-sm font-extrabold">你好，我是小秘</p>
+              <p class="font-display text-sm font-extrabold">你好，我是{{ assistant.displayName }}</p>
               <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
                 写周报、把一句话变成待办、理清今天该先做什么——说一句就行。
               </p>
@@ -314,7 +314,7 @@
               v-model="draft"
               rows="2"
               class="assistant-input"
-              placeholder="跟小秘说点什么…（打 @ 选清单，Enter 发送，Shift + Enter 换行）"
+              :placeholder="`跟${assistant.displayName}说点什么…（打 @ 选清单，Enter 发送，Shift + Enter 换行）`"
               data-assistant-input
               @input="syncMention"
               @click="syncMention"
@@ -376,6 +376,7 @@ import { getAllConfigs, updateConfig } from '../api/config'
 import { getLists, type ReminderList } from '../api/reminder'
 import { listColorHex } from '../utils/list-colors'
 import { useRouter } from 'vue-router'
+import { useAssistantStore } from '../stores/assistant'
 
 /**
  * 气泡在 AssistantMessage 上多两个本地标记：
@@ -411,6 +412,9 @@ const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 /** 「去看」要跳到记事本那一栏，需要路由器。 */
 const router = useRouter()
+/** 小秘的名字（每个人可自定义，见偏好设置 → AI 提示词）。 */
+const assistant = useAssistantStore()
+assistant.loadName()
 
 /**
  * 预置问法。带 `option` 的会**先选好时间范围再发**——写周报这类问题必须附数据，
@@ -642,7 +646,7 @@ function placeholderReply(raw: string): string {
     ].join('\n')
   }
   return [
-    '我是小秘，现在能帮你：',
+    `我是${assistant.displayName}，现在能帮你：`,
     '· 写周报 / 月报 / 年报——按你选的时间范围，从完成记录里起草',
     '· 看「手上还有哪些没做完」，逾期、金额、清单都列出来',
     '· 按关键词查（例如「5G」「割接」），时间范围随便挑',

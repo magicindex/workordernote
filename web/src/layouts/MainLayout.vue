@@ -60,14 +60,14 @@
           <button
             type="button"
             class="assistant-button"
-            :title="railActive ? '呼叫小秘（AI 助手）' : '呼叫小秘：写周报、一句话建任务'"
+            :title="railActive ? `呼叫${assistantName}（AI 助手）` : `呼叫${assistantName}：写周报、一句话建任务`"
             data-assistant-trigger
             @click="openAssistant"
           >
             <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-600 dark:text-brand-300">
               <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m12 3.6 1.9 4.4 4.4 1.9-4.4 1.9L12 16.2l-1.9-4.4-4.4-1.9 4.4-1.9L12 3.6Z" stroke-width="1.7" stroke-linejoin="round"/><path d="M18.6 15.4l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8.8-1.9Z" stroke-width="1.5" stroke-linejoin="round"/></svg>
             </span>
-            <span class="rail-hide">呼叫小秘</span>
+            <span class="rail-hide">呼叫{{ assistantName }}</span>
             <span class="rail-hide ml-auto rounded-md bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-bold text-brand-600 dark:text-brand-300">AI</span>
           </button>
         </div>
@@ -354,8 +354,8 @@
           <button
             type="button"
             class="icon-button sm:hidden"
-            aria-label="呼叫小秘（AI 助手）"
-            title="呼叫小秘：写周报、一句话建任务"
+            :aria-label="`呼叫${assistantName}（AI 助手）`"
+            :title="`呼叫${assistantName}：写周报、一句话建任务`"
             data-assistant-mobile
             @click="openAssistant"
           >
@@ -651,6 +651,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import VersionDialog from '../components/VersionDialog.vue'
 import AssistantPanel from '../components/AssistantPanel.vue'
+import { useAssistantStore } from '../stores/assistant'
 import Modal from '../components/Modal.vue'
 import ListCreateDialog from '../components/ListCreateDialog.vue'
 import ListIcon from '../components/ListIcon.vue'
@@ -687,6 +688,9 @@ import { onFnOSGatewayOrigin } from '../utils/gateway'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+// 小秘的名字：每个人可在「偏好设置 → AI 提示词」里改，侧栏入口与面板共用。
+const assistantStore = useAssistantStore()
+const assistantName = computed(() => assistantStore.displayName)
 const mobileOpen = ref(false)
 
 // 界面折叠状态记在本地：这类偏好跟人走、跟设备走，不必上服务端。
@@ -1714,6 +1718,7 @@ function onUserActivity() {
 
 onMounted(() => {
   void applyDefaultViewOnce()
+  void assistantStore.loadName()
   refreshNavigation()
   // 侧栏「我的清单」的先后顺序（用户配置 sidebar_order，没配过就用默认先后）
   void loadSidebarOrder()

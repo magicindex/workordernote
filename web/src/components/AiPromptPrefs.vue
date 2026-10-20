@@ -6,6 +6,52 @@
       不会改到别人。以前只有管理员能在系统配置里改，现在搬到这里，每个账号都能自己写。
     </p>
 
+    <!-- 小秘名称（用户 2026-10-20）：每个人给自己的助手起名，面板与对话里都用它 -->
+    <div class="mt-4 rounded-xl border border-border bg-surface/60 p-3" data-ai-name-block>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <span class="text-xs font-bold text-foreground">小秘名称</span>
+        <span
+          class="text-[11px] font-semibold"
+          :class="nameDirty ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-300'"
+          data-ai-name-state
+        >{{ nameDirty ? '未保存' : (nameValue.trim() ? '已保存' : '默认「小秘」') }}</span>
+      </div>
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <input
+          v-model="nameValue"
+          type="text"
+          :maxlength="nameMax"
+          class="input-field !h-9 w-full max-w-[14rem] !py-1.5 text-[13px]"
+          :placeholder="nameDefault"
+          data-ai-name-input
+        />
+        <button
+          type="button"
+          class="btn-primary !h-8 !px-3 !text-xs"
+          :disabled="!nameDirty || nameSaving"
+          data-ai-name-save
+          @click="saveName"
+        >
+          {{ nameSaving ? '保存中…' : '保存' }}
+        </button>
+        <button
+          type="button"
+          class="btn-secondary !h-8 !px-3 !text-xs"
+          :disabled="nameSaving || !nameValue"
+          data-ai-name-reset
+          @click="resetName"
+        >
+          恢复默认
+        </button>
+        <span v-if="nameNotice" class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-300" data-ai-name-notice>
+          {{ nameNotice }}
+        </span>
+      </div>
+      <p class="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+        你给助手起的名字，会用在对话面板标题、问候语、输入提示和系统提示词里；最多 {{ nameMax }} 个字，留空就是「{{ nameDefault }}」。
+      </p>
+    </div>
+
     <!-- 系统提示词：每轮对话由服务端加在最前面，决定人设与边界 -->
     <div class="mt-4 rounded-xl border border-border bg-surface/60 p-3" data-ai-pref-prompt-block>
       <div class="flex flex-wrap items-center justify-between gap-2">
@@ -126,10 +172,19 @@
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { getLists, updateList, type ReminderList } from '../api/reminder'
-import { getPromptPrefs, savePromptPrefs } from '../api/assistant'
+import { getPromptPrefs, saveAssistantName, savePromptPrefs } from '../api/assistant'
+import { useAssistantStore } from '../stores/assistant'
 
+const assistant = useAssistantStore()
 const errorMsg = ref('')
 const maxLength = ref(2000)
+const nameValue = ref('')
+const nameSaved = ref('')
+const nameSaving = ref(false)
+const nameNotice = ref('')
+const nameMax = ref(12)
+const nameDefault = ref('小秘')
+const nameDirty = computed(() => nameValue.value.trim() !== nameSaved.value.trim())
 const defaultPrompt = ref('')
 const promptValue = ref('')
 const promptSaved = ref('')
@@ -161,10 +216,43 @@ async function loadPrefs() {
       promptSaved.value = data.system_prompt || ''
       defaultPrompt.value = data.default_system_prompt || ''
       maxLength.value = Number(data.max_length) || 2000
+      nameValue.value = data.assistant_name || ''
+      nameSaved.value = data.assistant_name || ''
+      nameMax.value = Number(data.max_name_length) || 12
+      nameDefault.value = data.default_assistant_name || '小秘'
+      assistant.setName(nameSaved.value)
     }
   } catch (err: any) {
     errorMsg.value = err?.response?.data?.message || err?.message || '加载提示词失败'
   }
+}
+
+async function saveName() {
+  nameSaving.value = true
+  errorMsg.value = ''
+  nameNotice.value = ''
+  try {
+    const res = await saveAssistantName(nameValue.value)
+    if (res.data?.code === 0) {
+      nameSaved.value = res.data.data?.assistant_name ?? nameValue.value.trim()
+      nameValue.value = nameSaved.value
+      assistant.setName(nameSaved.value)
+      nameNotice.value = '已保存'
+      setTimeout(() => { nameNotice.value = '' }, 2400)
+    } else {
+      errorMsg.value = res.data?.message || '保存失败'
+    }
+  } catch (err: any) {
+    errorMsg.value = err?.response?.data?.message || err?.message || '保存失败'
+  } finally {
+    nameSaving.value = false
+  }
+}
+
+/** 恢复默认 = 清空名字，面板回到「小秘」。 */
+async function resetName() {
+  nameValue.value = ''
+  await saveName()
 }
 
 async function savePrompt() {

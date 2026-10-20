@@ -84,7 +84,8 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 		}
 		started := time.Now()
 		settings := loadSettings(db)
-		systemPrompt := effectiveSystemPrompt(db, c.GetUint("userID"), settings.SystemPrompt)
+		userID := c.GetUint("userID")
+		systemPrompt := personalizePrompt(effectiveSystemPrompt(db, userID, settings.SystemPrompt), assistantName(db, userID))
 		active := settings.active()
 		thinkingMode := settings.ThinkingMode
 		if strings.TrimSpace(body.Thinking) != "" {
@@ -183,34 +184,58 @@ func handleGetPromptPrefs(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		settings := loadSettings(db)
 		response.Success(c, gin.H{
-			"system_prompt":         userSystemPrompt(db, c.GetUint("userID")),
-			"default_system_prompt": strings.TrimSpace(settings.SystemPrompt),
-			"max_length":            maxUserPromptRunes,
+			"system_prompt":          userSystemPrompt(db, c.GetUint("userID")),
+			"default_system_prompt":  strings.TrimSpace(settings.SystemPrompt),
+			"max_length":             maxUserPromptRunes,
+			"assistant_name":         assistantName(db, c.GetUint("userID")),
+			"default_assistant_name": defaultAssistantName,
+			"max_name_length":        maxAssistantNameRunes,
 		})
 	}
 }
 
-// handleSavePromptPrefs 只改调用者自己的那一行（user_id = 当前登录用户），
-// 所以没有管理员权限的人也能保存，改不到别人。
+// handleSavePromptPrefs 只改调用者自己的那两行（user_id = 当前登录用户），
+// 所以没有管理员权限的人也能保存，改不到别人。system_prompt 与 assistant_name
+// 可单独提交：只传哪个就改哪个，另一个保持原样。
 func handleSavePromptPrefs(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			SystemPrompt string `json:"system_prompt"`
+			SystemPrompt  *string `json:"system_prompt"`
+			AssistantName *string `json:"assistant_name"`
 		}
-		if err := c.ShouldBindJSON(&req); err != nil {
+		if err := c.ShouldBindJSON(&req); err != nil || (req.SystemPrompt == nil && req.AssistantName == nil) {
 			response.ErrorBadRequest(c, "请求格式不对")
 			return
 		}
-		value := strings.TrimSpace(strings.ReplaceAll(req.SystemPrompt, "\r\n", "\n"))
-		if utf8.RuneCountInString(value) > maxUserPromptRunes {
-			response.ErrorBadRequest(c, fmt.Sprintf("系统提示词最多 %d 个字符", maxUserPromptRunes))
-			return
+		userID := c.GetUint("userID")
+		if req.SystemPrompt != nil {
+			value := strings.TrimSpace(strings.ReplaceAll(*req.SystemPrompt, "\r\n", "\n"))
+			if utf8.RuneCountInString(value) > maxUserPromptRunes {
+				response.ErrorBadRequest(c, fmt.Sprintf("系统提示词最多 %d 个字符", maxUserPromptRunes))
+				return
+			}
+			if err := sysconfig.UpdateConfig(db, keyUserPrompt, value, userID); err != nil {
+				response.ErrorInternal(c, "保存失败")
+				return
+			}
 		}
-		if err := sysconfig.UpdateConfig(db, keyUserPrompt, value, c.GetUint("userID")); err != nil {
-			response.ErrorInternal(c, "保存失败")
-			return
+		if req.AssistantName != nil {
+			name := strings.TrimSpace(strings.ReplaceAll(*req.AssistantName, "\r\n", " "))
+			name = strings.ReplaceAll(strings.ReplaceAll(name, "\n", " "), "\t", " ")
+			name = strings.Join(strings.Fields(name), " ")
+			if utf8.RuneCountInString(name) > maxAssistantNameRunes {
+				response.ErrorBadRequest(c, fmt.Sprintf("小秘名称最多 %d 个字符", maxAssistantNameRunes))
+				return
+			}
+			if err := sysconfig.UpdateConfig(db, keyAssistantName, name, userID); err != nil {
+				response.ErrorInternal(c, "保存失败")
+				return
+			}
 		}
-		response.Success(c, gin.H{"system_prompt": value})
+		response.Success(c, gin.H{
+			"system_prompt":  userSystemPrompt(db, userID),
+			"assistant_name": assistantName(db, userID),
+		})
 	}
 }
 

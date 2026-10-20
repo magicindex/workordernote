@@ -54,6 +54,12 @@ func init() {
 		Default: "", Internal: true, Group: "assistant", Label: "我的系统提示词",
 		Description: "只影响你自己和小秘的对话；留空则使用管理员设的默认提示词",
 	})
+	// 小秘名称：每个人自己起（个人偏好，随账号同步）。留空就是默认的「小秘」。
+	sysconfig.RegisterConfig(sysconfig.ConfigDef{
+		Key: keyAssistantName, Scope: sysconfig.ScopeUser, Type: sysconfig.TypeString,
+		Default: "", Internal: true, Group: "assistant", Label: "小秘名称",
+		Description: "你给小秘起的名字，会用在对话面板、问候语和系统提示词里；留空就是「小秘」",
+	})
 	sysconfig.RegisterConfig(sysconfig.ConfigDef{
 		Key: keyTimeout, Scope: sysconfig.ScopeSystem, Type: sysconfig.TypeInt,
 		Default: "60", Internal: true, Group: "assistant", Label: "请求超时（秒）",

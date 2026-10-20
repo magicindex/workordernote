@@ -38,10 +38,19 @@ const (
 	// keyUserPrompt 是「每个人自己的系统提示词」。0.35.0 之前系统提示词只有
 	// 管理员能改；现在它是个人偏好：这个人写过就用他的，没写才回退到管理员
 	// 设的默认值（keySystemPrompt）。
-	keyUserPrompt   = "ai_user_prompt"
-	keyTimeout      = "ai_timeout_seconds"
-	keyThinkingMode = "ai_thinking_mode"
+	keyUserPrompt = "ai_user_prompt"
+	// keyAssistantName 是「每个人给自己的小秘起的名字」：空串 = 用默认的「小秘」。
+	// 它不是密钥，随个人偏好一起同步；对话里、面板标题与系统提示词都用它。
+	keyAssistantName = "ai_assistant_name"
+	keyTimeout       = "ai_timeout_seconds"
+	keyThinkingMode  = "ai_thinking_mode"
 )
+
+// defaultAssistantName 是没起名时的默认称呼。
+const defaultAssistantName = "小秘"
+
+// maxAssistantNameRunes 是名字长度上限：够起一个昵称，又不至于把面板标题撑开。
+const maxAssistantNameRunes = 12
 
 // maxUserPromptRunes 是个人系统提示词的长度上限。默认提示词约 230 字，2000
 // 足够写清楚人设与边界，又不至于把每一轮请求都撑成一篇长文。
@@ -206,6 +215,29 @@ func userSystemPrompt(db *gorm.DB, userID uint) string {
 
 // effectiveSystemPrompt 给出这一轮真正要用的系统提示词：本人的优先，
 // 没写就用管理员设的默认值（settings.SystemPrompt，默认值是内置文案）。
+// assistantName 读这个人给小秘起的名字；没设置或配置坏了就是空串（由界面回退到「小秘」）。
+func assistantName(db *gorm.DB, userID uint) string {
+	if userID == 0 {
+		return ""
+	}
+	v, err := sysconfig.GetConfig(db, keyAssistantName, userID)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(v)
+}
+
+// personalizePrompt 把系统提示词里的默认称呼换成用户起的名字，并先声明一次身份。
+// 自定义名字为空（或就是「小秘」）时原样返回，避免在默认提示词里重复声明。
+func personalizePrompt(prompt, name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || name == defaultAssistantName {
+		return prompt
+	}
+	prompt = strings.ReplaceAll(prompt, defaultAssistantName, name)
+	return "你的名字叫「" + name + "」，请始终用这个名字称呼自己。\n\n" + prompt
+}
+
 func effectiveSystemPrompt(db *gorm.DB, userID uint, fallback string) string {
 	if v := userSystemPrompt(db, userID); v != "" {
 		return v

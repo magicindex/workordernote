@@ -802,6 +802,70 @@ func TestSystemPromptIsPerUser(t *testing.T) {
 	}
 }
 
+// TestAssistantNameIsPerUser 锁住「小秘名称是个人偏好」：各起各的、互不影响，
+// 并且真的进了系统提示词（模型会用这个名字称呼自己）。
+func TestAssistantNameIsPerUser(t *testing.T) {
+	db := newTestDB(t)
+	saveComplete(t, db, "http://127.0.0.1:1", settingsInput{SystemPrompt: "你是小秘，帮用户记事。"})
+
+	status, parsed := callAs(t, handleSavePromptPrefs(db), http.MethodPut, "/api/assistant/prompts",
+		`{"assistant_name":"  小豆  "}`, 7)
+	if status != http.StatusOK {
+		t.Fatalf("保存名字应当 200，实际 %d（%v）", status, parsed)
+	}
+	if got := assistantName(db, 7); got != "小豆" {
+		t.Errorf("名字没保存：%q", got)
+	}
+	if got := assistantName(db, 8); got != "" {
+		t.Errorf("别人的名字不该被改到：%q", got)
+	}
+
+	status, parsed = callAs(t, handleGetPromptPrefs(db), http.MethodGet, "/api/assistant/prompts", "", 7)
+	data, _ := parsed["data"].(map[string]interface{})
+	if status != http.StatusOK || data["assistant_name"] != "小豆" || data["default_assistant_name"] != "小秘" {
+		t.Errorf("读取名字不对：%d %v", status, data)
+	}
+
+	if got := personalizePrompt("你是小秘，帮用户记事。", "小豆"); !strings.Contains(got, "小豆") || strings.Contains(got, "你是小秘") {
+		t.Errorf("系统提示词应当换成用户起的名字：%q", got)
+	}
+	if got := personalizePrompt("你是小秘。", ""); got != "你是小秘。" {
+		t.Errorf("没起名时不该动默认提示词：%q", got)
+	}
+
+	// 对话里真的带上（其余提示词里的小秘也换掉）。
+	var gotMessages []Message
+	upstream := newStubUpstream(t, func(w http.ResponseWriter, r *http.Request) {
+		var body chatRequest
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotMessages = body.Messages
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"在"}}]}`))
+	})
+	saveComplete(t, db, upstream.URL, settingsInput{SystemPrompt: "你是小秘，帮用户记事。"})
+	status, _ = callAs(t, handleChat(db), http.MethodPost, "/api/assistant/chat",
+		`{"messages":[{"role":"user","content":"你好"}]}`, 7)
+	if status != http.StatusOK || len(gotMessages) == 0 || !strings.Contains(gotMessages[0].Content, "小豆") {
+		t.Errorf("对话应当带上自定义名字，实际 %d %+v", status, gotMessages)
+	}
+
+	// 只传名字时，提示词保持原样（两个字段互不覆盖）。
+	status, _ = callAs(t, handleSavePromptPrefs(db), http.MethodPut, "/api/assistant/prompts",
+		`{"assistant_name":"阿宝"}`, 7)
+	if status != http.StatusOK || userSystemPrompt(db, 7) != "" {
+		t.Errorf("只改名字不该清空提示词：%d %q", status, userSystemPrompt(db, 7))
+	}
+	if got := assistantName(db, 7); got != "阿宝" {
+		t.Errorf("名字应改成阿宝：%q", got)
+	}
+
+	long := strings.Repeat("名", maxAssistantNameRunes+1)
+	status, parsed = callAs(t, handleSavePromptPrefs(db), http.MethodPut, "/api/assistant/prompts",
+		`{"assistant_name":"`+long+`"}`, 7)
+	if status != http.StatusBadRequest || !strings.Contains(asString(parsed["message"]), "12") {
+		t.Errorf("超长名字应当 400 并说明上限，实际 %d %v", status, parsed)
+	}
+}
+
 func asString(v interface{}) string {
 	s, _ := v.(string)
 	return s
