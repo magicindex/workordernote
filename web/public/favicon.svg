@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  工作序记 · 方案 2「序记本」（清爽耐看）
+
+  对应项目名与用途
+  ────────────────
+  · 一本记录本（书脊 + 书签带）= 名字里的「记」：事情办完要留档；
+  · 本面上的勾 = 已办结，下面两条线 = 待办条目，从上往下一行行走（「序」）；
+  · 书签带用琥珀色：值班交接、翻到哪一页接着办，这个动作本身就很像日常值班。
+
+  风格
+  ────
+  · 深青 → 天蓝的渐变底：比靛蓝更清爽，也和原项目的紫色距离更远；
+  · 纯扁平，只有「白本 + 蓝勾 + 琥珀书签」三块颜色，16px 下依然干净。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="工作序记">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f766e"/>
+      <stop offset="1" stop-color="#0ea5e9"/>
+    </linearGradient>
+    <linearGradient id="ribbon" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fcd34d"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="tick" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#0f766e"/>
+    </linearGradient>
+    <clipPath id="tileClip">
+      <rect x="0" y="0" width="512" height="512" rx="112"/>
+    </clipPath>
+  </defs>
+
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#tile)"/>
+  <g clip-path="url(#tileClip)">
+    <ellipse cx="132" cy="52" rx="330" ry="240" fill="#ffffff" opacity="0.10"/>
+  </g>
+
+  <!-- 记录本：白本面 + 左侧书脊 -->
+  <rect x="136" y="112" width="240" height="288" rx="30" fill="#ffffff"/>
+  <path d="M188 112 H166 A30 30 0 0 0 136 142 V370 A30 30 0 0 0 166 400 H188 Z" fill="#0e7490" opacity="0.92"/>
+
+  <!-- 书签带 -->
+  <rect x="296" y="100" width="42" height="112" rx="10" fill="url(#ribbon)"/>
+
+  <!-- 已办结 -->
+  <path d="M214 252 L250 288 L338 202" fill="none" stroke="url(#tick)" stroke-width="42"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- 待办条目 -->
+  <rect x="214" y="332" width="124" height="18" rx="9" fill="#a5b4fc"/>
+  <rect x="214" y="366" width="88" height="18" rx="9" fill="#c7d2fe"/>
+</svg>

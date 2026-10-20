@@ -1,0 +1,82 @@
+# Binaries and build output
+server/smallgo
+server/smallgo-*
+*.exe
+*.dll
+*.so
+*.dylib
+*.fpk
+
+# Data files (local dev data, DB, uploads, logs)
+server/data/
+# 只忽略仓库根目录的 data/：写成 data/ 会连 web/src/data/（迭代说明）一起忽略，
+# 那份源码必须入库，否则新克隆的仓库前端直接构建失败。
+/data/
+dev/data/
+*.db
+*.db-journal
+
+# Frontend dependencies and build output
+web/node_modules/
+web/dist/
+
+# Compiled frontend served by the backend
+server/static/dist/
+
+# Build and release directories
+dev/
+build/
+release/
+pkg/
+dist/
+*.tar.gz
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.opencode/
+
+# Agent tools
+.omo/
+.playwright-mcp/
+memory/
+.claude/*
+!.claude/skills/
+.mimocode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Python 工具（web/scripts/*.py）跑出来的字节码缓存
+__pycache__/
+*.pyc
+
+# Packaging artifacts
+app.tgz
+
+# ---------- 本地临时目录 ----------
+# 临时测试与调试文件统一放这里，目录内内容不入库（仅保留 .gitkeep 占位）
+tmp/*
+!tmp/.gitkeep
+# 迭代容器用的本地后端二进制（挂进临时容器 /app/reminder，见 browser-harness/README.md）
+tmp-iter-bin/
+
+# AI 工具本地目录
+.zcode/
+
+# 回归测试套件（browser-harness/）：依赖与截图不入库，跑之前 npm install
+browser-harness/node_modules/
+browser-harness/shots/
+browser-harness/*.log

@@ -1,0 +1,18 @@
+.git
+.trae
+data/
+# 宿主的 web/node_modules 是 pnpm 风格的软链农场；`node_modules/` 只命中上下文根目录，
+# 于是 `COPY web/ ./` 会把软链一起带进镜像，撞上 npm ci 建好的真目录：
+# "cannot replace to directory .../app/web/node_modules/@vitejs/plugin-vue with file"。
+# 前端阶段本来就在镜像里自己 npm ci，这里必须把任意层级的 node_modules 都挡掉。
+node_modules/
+**/node_modules
+build/
+*.tar.gz
+*.zip
+*.fpk
+reminders-deploy/
+tmp/
+pkg/
+release/
+ops/

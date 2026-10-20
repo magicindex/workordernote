@@ -1,0 +1,465 @@
+@import './styles/themes.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------- 流光边框（登录页那一套，应用内共用） ----------------
+   登录卡片上那条绕圈走的彩色光带就在下面这个 .flow-frame：
+   用 conic-gradient + mask 只留 1px 边框，再用 @property 让角度能补间动画。
+   抽成全局类是因为「新建任务窗口」要跟登录页一致（用户要求），
+   两处共用一份实现，改一处两边同时变。
+
+   浏览器不支持 @property（老内核）时角度不会动，但边框仍会静态显示 —— 可接受的降级。 */
+@property --bd-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.flow-frame {
+  position: relative;
+  isolation: isolate;
+}
+.flow-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--bd-angle),
+    transparent 0%,
+    rgba(99, 102, 241, 0) 18%,
+    #6366f1 32%,
+    #a855f7 44%,
+    #22d3ee 56%,
+    rgba(34, 211, 238, 0) 70%,
+    transparent 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: flow-frame-rotate 7s linear infinite;
+  pointer-events: none;
+}
+@keyframes flow-frame-rotate {
+  to { --bd-angle: 360deg; }
+}
+/* 卡片背后那团柔光：给窗口一点「浮起来」的层次 */
+.flow-glow {
+  position: relative;
+}
+.flow-glow::after {
+  content: '';
+  position: absolute;
+  inset: -18px;
+  z-index: -1;
+  border-radius: 40px;
+  background: radial-gradient(60% 55% at 50% 0%, rgba(124, 92, 255, 0.32), transparent 72%);
+  filter: blur(38px);
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-frame::before { animation: none; }
+}
+
+/* 流光**文字**（用户 2026-10-10 要求：日历「月 / 周」切换里，选中那个字要有流光效果）：
+   与 .flow-frame 同一套配色（靛蓝 → 紫 → 青），做成跑动的渐变文字。
+   只挂在 <span> 上，按钮自己的选中底色与尺寸都不受影响。 */
+.flow-text {
+  background-image: linear-gradient(90deg, #6366f1, #a855f7, #22d3ee, #a855f7, #6366f1);
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  /* 兜底：不支持 background-clip: text 的内核至少还能看见字（否则透明=看不见） */
+  -webkit-text-fill-color: transparent;
+  animation: flow-text-move 3.5s linear infinite;
+}
+@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+  .flow-text { color: inherit; -webkit-text-fill-color: inherit; background-image: none; animation: none; }
+}
+@keyframes flow-text-move {
+  from { background-position: 0% 50%; }
+  to { background-position: 300% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-text { animation: none; }
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 安卓 Chrome 会把系统"大字体"缩放套到网页文字上，布局按 CSS 像素验证
+     的结果在真机上会被撑大折行；钉住 100% 让真机渲染与设计一致。 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Tailwind preflight 默认 1.5，中文界面下显得松散；收到 1.45 接近原生 App。 */
+  line-height: 1.45;
+  /* 让浏览器用对应配色渲染「原生控件」——尤其是 <select> 的下拉弹层。
+     不写这条时：页面是深色（浅色文字 + 深色底），而弹层由系统按浅色画成白底，
+     结果是「白底浅字」，偏好设置里的主题模式下拉根本看不清。 */
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* 双保险：个别桌面环境/浏览器版本的下拉弹层不吃 color-scheme，会忽略上面的
+   设置继续用系统底色。直接把 option 的前景/背景钉成本应用的配色，
+   深浅两种模式下都不会出现「看不清」。 */
+select option,
+select optgroup {
+  background-color: rgb(var(--color-surface));
+  color: rgb(var(--color-foreground));
+}
+
+body {
+  @apply text-foreground;
+  min-width: 320px;
+  background-color: rgb(var(--color-background));
+  background-image:
+    radial-gradient(at 0% 0%, rgb(var(--color-brand-500) / 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgb(var(--color-accent) / 0.06) 0px, transparent 50%);
+  background-attachment: fixed;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dark body {
+  background-image:
+    radial-gradient(at 0% 0%, rgb(var(--color-brand-500) / 0.14) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgb(var(--color-accent) / 0.1) 0px, transparent 50%);
+}
+
+@media (hover: none) and (pointer: coarse) {
+  body {
+    background-attachment: scroll;
+  }
+}
+
+@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+  .backdrop-blur,
+  .backdrop-blur-sm,
+  .backdrop-blur-md,
+  .backdrop-blur-lg,
+  .backdrop-blur-xl,
+  .backdrop-blur-2xl {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/30 rounded-full border-2 border-transparent bg-clip-content;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/50;
+}
+
+@layer components {
+  /* Glassy surface used for cards and panels — consumes semantic tokens so
+     it follows the active theme/brand automatically. */
+  .surface {
+    @apply bg-surface/90 dark:bg-surface/70 backdrop-blur-xl border border-border shadow-card;
+  }
+
+  /* 弹窗专用不透明表面：移动端禁用了 backdrop-blur（见上方媒体查询），
+     半透明表面叠在明亮内容（如收款码）上会直接透底、无法阅读，
+     因此浮层弹窗必须用不透明背景。 */
+  .surface-modal {
+    @apply bg-surface border border-border shadow-card;
+  }
+
+  /* Primary brand button — `bg-brand-gradient` is already var-driven in
+     tailwind.config so swapping the brand CSS variables reskins this.
+     移动端先收紧内边距，sm 起恢复桌面尺寸。 */
+  .btn-brand {
+    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-brand-gradient text-white text-sm font-semibold shadow-glow hover:brightness-110 active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none transition-all sm:px-4 sm:py-2.5;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium text-foreground bg-surface/70 dark:bg-surface/5 border border-border hover:bg-surface dark:hover:bg-surface/10 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all sm:px-4 sm:py-2.5;
+  }
+
+  .input-field {
+    @apply w-full px-3 py-2 rounded-xl border border-input bg-surface/80 dark:bg-surface/5 text-foreground placeholder-muted-foreground focus:ring-4 focus:ring-brand-500/15 focus:border-brand-500 outline-none transition-all sm:px-4 sm:py-2.5;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full sm:px-2.5 sm:py-1;
+  }
+
+  /* Page-level container — uses the full available width so authenticated
+     views (especially tables) don't waste space once a sidebar is present. */
+  .page-container {
+    @apply w-full space-y-4 sm:space-y-6;
+  }
+
+  /* Premium gradient button with a light sweep on hover */
+  .btn-premium {
+    @apply relative overflow-hidden w-full py-2.5 sm:py-3 px-4 rounded-xl bg-brand-gradient text-white font-semibold shadow-glow active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none transition-all flex items-center justify-center gap-2;
+  }
+  .btn-premium::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -120%;
+    width: 80%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+    transform: skewX(-18deg);
+    transition: left 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-premium:hover::after {
+    left: 130%;
+  }
+
+  /* ---- 共用 UI 原子类 ----
+     原先这些类定义在 HomeView / MainLayout 的 <style scoped> 里，只有本组件能用；
+     而 LunarDatePicker（btn-primary）、ChannelsView（icon-button）、CalendarView
+     （quick-chip / compact-input / tiny-badge / row-action / btn-secondary）以及
+     SettingsView（compact-input）都在别的组件里用它们，结果样式全部没生效。
+     这里是应用级设计原子，统一放到全局，与 btn-brand / btn-ghost / input-field 一致。 */
+
+  .btn-primary {
+    @apply inline-flex h-10 items-center justify-center rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-500 px-5 text-sm font-bold text-white shadow-[0_12px_25px_-12px_rgba(59,130,246,.75)] transition hover:-translate-y-0.5 hover:brightness-105 disabled:opacity-50 sm:h-11;
+  }
+
+  .btn-secondary {
+    @apply inline-flex h-10 items-center justify-center rounded-2xl border border-border bg-surface px-5 text-sm font-bold text-foreground transition hover:bg-muted sm:h-11;
+  }
+
+  .icon-button {
+    @apply flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-muted hover:text-foreground sm:h-10 sm:w-10;
+  }
+
+  /* 弹窗表单原子类（modal-label / modal-field / modal-help）。
+     原先只写在 ChannelsView 的 <style scoped> 里 —— scoped 只对那个组件的元素生效，
+     别的页面（例如 0.24.0 的「提醒@他」新建弹窗）照着写同样的类名时**一点样式都没有**：
+     输入框没有边框、没有高度，看起来跟页面其它地方完全不是一套。
+     和上面这批一样，提升为应用级原子类，谁都能用。 */
+  .modal-label {
+    @apply block text-sm font-bold text-foreground;
+  }
+  .modal-label span {
+    @apply text-rose-500;
+  }
+  .modal-label small {
+    @apply ml-1 text-xs font-medium text-muted-foreground;
+  }
+  .modal-field {
+    @apply h-11 w-full rounded-xl border border-border bg-surface px-3.5 text-sm font-normal outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 sm:h-12 sm:rounded-2xl sm:px-4;
+  }
+  .modal-help {
+    @apply mt-1 text-[11px] leading-4 text-muted-foreground;
+  }
+
+  .quick-chip {
+    @apply inline-flex h-7 items-center gap-1.5 rounded-lg border border-border/70 bg-surface px-2.5 text-[11px] font-semibold text-muted-foreground transition hover:border-brand-500/30 hover:text-brand-600 disabled:opacity-40 sm:h-8 sm:rounded-xl sm:px-3 sm:text-xs;
+  }
+  .quick-chip.active {
+    @apply border-brand-500/25 bg-brand-500/10 text-brand-600 dark:text-brand-300;
+  }
+
+  /* 分段开关（如列表页的「未完成 / 全部」）：两个按钮共享一个胶囊底，选中项高亮。
+     用 aria-pressed 表达状态，键盘与读屏都能识别。 */
+  .seg-btn {
+    @apply h-7 rounded-lg px-2.5 text-[11px] font-bold text-muted-foreground transition hover:text-foreground;
+  }
+  /* 日历里「记事」的标记：一个很小的圆角方块，与任务前的清单圆点区分开。 */
+  .cal-note-mark {
+    @apply inline-flex items-center justify-center rounded bg-slate-500/85 text-[9px] font-black leading-none text-white;
+    min-width: 0.95rem;
+    height: 0.95rem;
+  }
+  /* 信用卡标记：和「记」字标记同一套底色样式，底色由角色色内联给（账单日/还款日/提前提醒） */
+  .cal-card-mark {
+    @apply inline-flex items-center justify-center rounded text-white;
+    min-width: 0.95rem;
+    height: 0.95rem;
+  }
+  .cal-card-mark.h-5 {
+    min-width: 1.25rem;
+    height: 1.25rem;
+  }
+  .cal-note-mark.h-5 {
+    min-width: 1.25rem;
+    height: 1.25rem;
+    font-size: 11px;
+  }
+
+  .seg-btn-on {
+    @apply bg-brand-500/10 text-brand-600 dark:text-brand-300;
+  }
+
+  .compact-input {
+    @apply mt-1.5 h-9 w-full rounded-xl border border-border bg-surface px-3 text-xs font-medium text-foreground outline-none focus:border-brand-500/50;
+  }
+
+  .channel-pill {
+    @apply rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-muted-foreground transition disabled:cursor-not-allowed disabled:opacity-35;
+  }
+  .channel-pill.selected {
+    @apply border-brand-500/30 bg-brand-500/10 text-brand-600 dark:text-brand-300;
+  }
+
+  .tiny-badge {
+    @apply rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-extrabold text-violet-500;
+  }
+
+  .row-actions {
+    @apply flex shrink-0 items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100;
+  }
+  .row-action {
+    @apply flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-muted hover:text-foreground;
+  }
+}
+
+/* ---------------- 打印（已完成记录） ----------------
+   打印时只显示 #print-root（由 PrintDialog 里渲染的整页表格），其余全部隐藏。
+   @page 的纸张方向与页边距由 PrintDialog 在打印前动态注入，用户选「自动」时
+   会按列数横排/纵排放。
+   表格用 table-layout:auto 让浏览器按内容分配列宽，长标题折行、时间列不折行，
+   这样列多列少都不会挤出纸外。 */
+#print-root { display: none; }
+
+@media print {
+  body > *:not(#print-root) { display: none !important; }
+  #print-root { display: block !important; }
+  html, body { background: #fff !important; }
+}
+
+.print-doc { color: #111827; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+.print-doc h1 { margin: 0 0 6px; font-size: 16px; font-weight: 800; }
+.print-doc .meta { margin: 0 0 10px; font-size: 11px; color: #4b5563; }
+.print-doc table { width: 100%; table-layout: auto; border-collapse: collapse; }
+.print-doc thead { display: table-header-group; }   /* 跨页时每页都带表头 */
+.print-doc tr { break-inside: avoid; }
+.print-doc th, .print-doc td {
+  border: 1px solid #9ca3af;
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.print-doc th { background: #f3f4f6; font-weight: 700; }
+.print-doc .col-num { width: 1%; text-align: right; white-space: nowrap; }
+.print-doc .col-time { white-space: nowrap; }
+.print-doc .col-tight { white-space: nowrap; }
+.print-doc.size-small { font-size: 10.5px; }
+.print-doc.size-medium { font-size: 12px; }
+.print-doc.size-large { font-size: 13.5px; }
+
+/* ---------------- 打印（日历） ----------------
+   与「已完成记录」共用 #print-root 与 .print-doc 的机制，这里只补月历版式：
+   一周一行（break-inside: avoid，不让一行被撕到两页），格子等宽平分，
+   每条安排左侧一条清单色条——用户把浏览器的「打印背景图形」关掉时，
+   色条和文字颜色仍然能区分清单。 */
+.print-cal { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+.print-cal .cal-print-weekdays { display: flex; }
+.print-cal .cal-print-weekdays span {
+  flex: 1 1 0;
+  padding: 3px 0;
+  text-align: center;
+  font-size: 0.92em;
+  font-weight: 700;
+  border-bottom: 1px solid #9ca3af;
+}
+.print-cal .cal-print-weekdays span.weekend { color: #b91c1c; }
+.print-cal .cal-print-grid { border-top: 1px solid #9ca3af; border-left: 1px solid #9ca3af; }
+.print-cal .cal-print-row { display: flex; break-inside: avoid; }
+.print-cal .cal-print-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 64px;
+  padding: 3px 4px;
+  border-right: 1px solid #9ca3af;
+  border-bottom: 1px solid #9ca3af;
+}
+.print-cal.size-small .cal-print-cell { min-height: 56px; }
+.print-cal.size-large .cal-print-cell { min-height: 74px; }
+.print-cal .cal-print-cell.out { background: #f9fafb; color: #9ca3af; }
+.print-cal .cal-print-head { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; }
+.print-cal .cal-print-head .d { font-weight: 700; }
+.print-cal .cal-print-head .l { font-size: 0.85em; color: #6b7280; }
+.print-cal .cal-print-cell.out .cal-print-head .l { color: #9ca3af; }
+.print-cal .cal-print-tasks { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 0; padding: 0; list-style: none; }
+.print-cal .cal-print-tasks li {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 0 3px;
+  border-left: 3px solid transparent;
+  border-radius: 3px;
+  font-size: 0.95em;
+  line-height: 1.3;
+}
+.print-cal .cal-print-tasks li .mark { font-size: 0.8em; font-weight: 700; opacity: 0.75; }
+.print-cal .cal-print-tasks li .t { font-variant-numeric: tabular-nums; opacity: 0.8; }
+.print-cal .cal-print-tasks li .ti { min-width: 0; overflow-wrap: anywhere; }
+.print-cal .cal-print-tasks li.done { text-decoration: line-through; opacity: 0.5; }
+
+/* ---------------- 标题工具栏（列表页） ----------------
+   一条轻量卡片：左边是条数与过期提示，右边是显示范围与操作。
+   手机上会自动换行，按钮只留图标语义（刷新带旋转反馈），不留多余边框。 */
+.list-toolbar {
+  @apply mb-3 mt-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-2xl border border-border/60 bg-surface/70 px-3 py-2 shadow-sm backdrop-blur-sm sm:px-4 sm:py-2.5;
+}
+.list-toolbar-count { @apply flex flex-wrap items-baseline gap-x-1.5 gap-y-1; }
+.count-number { @apply font-display text-xl font-extrabold leading-none tracking-tight tabular-nums sm:text-2xl; }
+.count-unit { @apply text-[11px] font-bold text-muted-foreground sm:text-xs; }
+.count-overdue {
+  @apply ml-1 inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold leading-none text-rose-500;
+}
+.count-overdue svg { @apply h-3 w-3; }
+.list-toolbar-actions { @apply flex flex-wrap items-center gap-2; }
+.seg-group {
+  @apply inline-flex h-8 items-center gap-0.5 rounded-xl border border-border/70 bg-muted/50 p-0.5;
+}
+.toolbar-btn {
+  /* 刻意不写 display：由使用处给 inline-flex / hidden sm:inline-flex。
+     写在类里优先级高于 Tailwind 的 hidden，手机上藏不住（踩过）。 */
+  @apply h-8 items-center gap-1.5 rounded-xl border border-border/70 bg-surface px-2.5 text-[11px] font-bold text-muted-foreground transition-colors hover:border-brand-500/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60 sm:text-xs;
+}
+.toolbar-btn svg { @apply h-3.5 w-3.5; }
+.toolbar-btn.is-spinning svg { animation: toolbar-spin 0.9s linear infinite; }
+@keyframes toolbar-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .toolbar-btn.is-spinning svg { animation: none; }
+}
+
+/* ---------------- 手机端渲染开销（全局卡片与点击反馈） ----------------
+   .surface 用的大半径柔和阴影在滚动时每帧都要重绘，小屏上换成一层极浅的投影；
+   可点元素的 tap 高亮块与 300ms 双击缩放等待也一并去掉，点起来更跟手。 */
+@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+  .surface {
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+  }
+  button,
+  a,
+  [role='button'],
+  .seg-btn,
+  .toolbar-btn {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
