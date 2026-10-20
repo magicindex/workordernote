@@ -80,3 +80,6 @@ tmp-iter-bin/
 browser-harness/node_modules/
 browser-harness/shots/
 browser-harness/*.log
+
+# 发行附件：飞牛安装包需要随仓库提供给 Release 工作流
+!assets/fnpack/*.fpk

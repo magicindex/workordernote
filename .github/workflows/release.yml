@@ -28,3 +28,5 @@ jobs:
             workordernote-*-source.tar.gz
             workordernote-*.bundle
             workordernote-*-SHA256SUMS.txt
+            assets/fnpack/*.fpk
+            assets/fnpack/screenshots-*.zip
