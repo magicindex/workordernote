@@ -1,0 +1,30 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build assets
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          git archive --format=tar.gz --prefix="workordernote-$V/" -o "workordernote-$V-source.tar.gz" HEAD
+          git bundle create "workordernote-$V.bundle" --all
+          sha256sum workordernote-$V-source.tar.gz workordernote-$V.bundle > "workordernote-$V-SHA256SUMS.txt"
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: 工作序记 ${{ github.ref_name }}
+          body_path: docs/release-notes/${{ github.ref_name }}.md
+          files: |
+            workordernote-*-source.tar.gz
+            workordernote-*.bundle
+            workordernote-*-SHA256SUMS.txt
