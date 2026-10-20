@@ -5,7 +5,7 @@
 单机部署、数据全在本地；也可以两台机器自动同步。界面同时适配桌面与手机，
 支持装成 PWA 或打包安卓客户端。
 
-![首页看板](docs/screenshots/home.png)
+![首页看板](docs/screenshots/features/home.png)
 
 ## 功能
 
@@ -24,22 +24,83 @@
 | **双机同步** | 清单、任务、记事、完成记录、账单、课程表、个人偏好、站点设置；账号密码与渠道凭据不同步 |
 | **AI 小秘** | 接 Ollama 或任意 OpenAI 兼容接口；可查日程、写周报、把一句话变成待办 |
 
-### 更多界面
+## 界面一览
 
-| 列表与倒计时 | 课程表 |
+### 待办与计划
+
+列表按日期分组，行尾直接显示「剩余 1 天 2 小时」或「已逾期 22 小时」；
+进入 24 小时内自动转红，逾期与今天分成不同色带。
+
+| 待办 | 计划 |
 | --- | --- |
-| ![列表](docs/screenshots/list.png) | ![课程表](docs/screenshots/timetable.png) |
+| ![待办](docs/screenshots/features/todo.png) | ![计划](docs/screenshots/features/planned.png) |
 
-<p align="center">
-  <img src="docs/screenshots/mobile.png" width="320" alt="手机端首页">
-</p>
+| 全部 | 已完成 |
+| --- | --- |
+| ![全部](docs/screenshots/features/all.png) | ![已完成](docs/screenshots/features/completed.png) |
+
+### 日历与课程表
+
+月历格子同时标注农历、节气与节日，可切换周视图；课程表按周几铺课，
+课程与课外活动分开标色，支持打印。
+
+| 日历 | 课程表 |
+| --- | --- |
+| ![日历](docs/screenshots/features/calendar.png) | ![课程表](docs/screenshots/features/timetable.png) |
+
+### 记事与仪式感
+
+随手记事本只记录、不需要完成；「人生要有仪式感」把生日、纪念日、考试
+做成倒计时卡片，支持每年循环与农历。
+
+| 随手记事本 | 人生要有仪式感 |
+| --- | --- |
+| ![随手记事本](docs/screenshots/features/notebook.png) | ![人生要有仪式感](docs/screenshots/features/ceremony.png) |
+
+### 新建与编辑提醒
+
+快速面板支持「任务 / 记事」、今天 / 明天 / 本周末、重复规则、优先级与清单；
+点开任意一条可改日期、农历循环、过期提醒频率和通知方式。
+
+| 新建提醒 | 提醒详情 |
+| --- | --- |
+| ![新建提醒](docs/screenshots/features/new-reminder.png) | ![提醒详情](docs/screenshots/features/detail.png) |
+
+### 搜索与通知
+
+顶栏搜索直接过滤当前视图；通知中心汇总到期、逾期、渠道失败与「提醒@他」
+回执；通知方式里分别配置站内、邮件、短信、飞书、QQ、钉钉。
+
+| 搜索 | 通知中心 |
+| --- | --- |
+| ![搜索](docs/screenshots/features/search.png) | ![通知中心](docs/screenshots/features/notifications.png) |
+
+| 通知方式 | 提醒@他 |
+| --- | --- |
+| ![通知方式](docs/screenshots/features/channels.png) | ![提醒@他](docs/screenshots/features/nudges.png) |
+
+### 偏好设置
+
+默认首页、任务过期时间与宽限、免打扰时段、提醒频率、主题与各栏目开关，
+都按账号保存；系统级配置在「系统配置」里，仅管理员可改。
+
+![偏好设置](docs/screenshots/features/settings.png)
+
+### 手机端
+
+手机浏览器直接可用，底部为待办 / 计划 / 清单 / 通知 / 方式五个入口，
+也支持添加到主屏当 PWA 使用。
+
+| 手机首页 | 手机待办 |
+| --- | --- |
+| ![手机首页](docs/screenshots/features/mobile.png) | ![手机待办](docs/screenshots/features/mobile-todo.png) |
 
 ## 快速开始
 
 ### Docker Compose
 
 ```bash
-git clone https://github.com/wyh19851207/workordernote.git
+git clone https://github.com/magicindex/workordernote.git
 cd workordernote
 docker compose up -d --build
 ```
@@ -47,7 +108,7 @@ docker compose up -d --build
 打开 <http://localhost:8906>，首次启动后注册第一个账号（即管理员）。
 
 数据落在命名卷 `workordernote-data`；如需指定宿主机目录，改成
-`- ./data:/app/data` 并确保容器用户对目录可写。
+`- ./data:/app/data` 并确保容器用户对目录可写（镜像内以 uid 1000 运行）。
 
 ### 直接运行二进制
 
