@@ -160,6 +160,15 @@ const itemsOf = (res) => {
       !(board.upcoming || []).some((r) => r.text.includes(T.far)) && !(board.overdue || []).some((r) => r.text.includes(T.far)),
       JSON.stringify({ upcoming: (board.upcoming || []).some((r) => r.text.includes(T.far)), overdue: (board.overdue || []).some((r) => r.text.includes(T.far)) }));
 
+    // 用户 2026-10-20：「待办和逾期条目与上边界线重合，增加间距」
+    const headGap = await page.evaluate(() => {
+      const head = document.querySelector('[data-home-head="upcoming"]');
+      const item = document.querySelector('[data-home-column="upcoming"] [data-home-item]');
+      if (!head || !item) return -1;
+      return Math.round(item.getBoundingClientRect().top - head.getBoundingClientRect().bottom);
+    });
+    check('第一条与标题条下边线留出间距（≥10px）', headGap >= 10, `${headGap}px`);
+
     // 用户 2026-10-19：「首页页面也增加 列表和日历切换按钮，位置样式参考其他页面」
     const viewSwitch = await page.evaluate(() => {
       const g = document.querySelector('[aria-label="切换列表或日历视图"]');

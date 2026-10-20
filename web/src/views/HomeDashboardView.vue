@@ -302,7 +302,7 @@ onBeforeUnmount(() => {
 .home-col-head { @apply flex items-center gap-2 border-b border-border/60 bg-brand-500/10 px-4 py-2.5 sm:px-5; }
 .home-col-label { @apply text-[13px] font-extrabold tracking-tight text-brand-700 sm:text-sm dark:text-brand-300; }
 .home-col-count { @apply ml-auto text-[11px] font-bold text-brand-600/80 dark:text-brand-300/80; }
-.home-col-body { @apply px-4 pb-4 sm:px-5 sm:pb-5; }
+.home-col-body { @apply px-4 pb-4 pt-3 sm:px-5 sm:pb-5 sm:pt-4; }
 /* 逾期那一列：标题条与计数都染红，跟行里的「急」呼应 */
 .home-col[data-home-column='overdue'] .home-col-head { @apply bg-rose-500/10; }
 .home-col[data-home-column='overdue'] .home-col-label { @apply text-rose-600 dark:text-rose-400; }
