@@ -7,7 +7,7 @@
 
 | 文件 | 说明 |
 | --- | --- |
-| `deployment-README.md` | **201（本机生产）** 的部署记录：目录结构、compose、备份/升级步骤、**逐版本变更记录**（每版做了什么、怎么验证的、指纹与构件 md5）。这份文件就是 201 上 `/vol1/1000/Docker/reminders/README.md` 的源文件。 |
+| `deployment-README.md` | **201（本机生产）** 的部署记录：目录结构、compose、备份/升级步骤、**逐版本变更记录**（每版做了什么、怎么验证的、指纹与构件 md5）。这份文件就是 201 上 `/vol1/1000/Docker/workordernote/README.md` 的源文件。 |
 | `200-新NAS部署说明.md` | **200（第二台飞牛，远端生产）** 的部署记录与升级历史；对应 200 上的 `部署说明.md`。 |
 | `待发布改动.md` | **发版节奏台账**：日常改动先攒在这里（只改代码、用临时容器自检），用户说「发版」时合成一版走完整流程；每次发版的记录也留在里面。 |
 | `功能实施说明.md` | 功能清单与实现口径（做什么、口径怎么定、对应哪些用例）。 |
@@ -23,7 +23,7 @@
 工作区/
 ├── reminders-upstream/     ← 本仓库
 ├── browser-harness/        ← 回归套件
-└── reminders-deploy/       ← 部署脚本与产物（本目录的来源）
+└── workordernote-deploy/       ← 部署脚本与产物（本目录的来源）
 ```
 
 本仓库里它们分别位于 `browser-harness/` 与 `ops/`。`build-offline-package.sh`、
@@ -43,7 +43,7 @@ bash browser-harness/verify-offline-package.sh
 APP_URL=http://127.0.0.1:8908 bash browser-harness/run-all.sh
 
 # 数据体检（把数据目录挂进容器跑，NAS 上 data 属主是 1000:1001）
-docker run --rm -v /vol1/1000/Docker/reminders/data:/data alpine:latest sh /dev/stdin < ops/verify-data.sh
+docker run --rm -v /vol1/1000/Docker/workordernote/data:/data alpine:latest sh /dev/stdin < ops/verify-data.sh
 ```
 
 ## 临时迭代容器（跑回归用）
@@ -55,7 +55,7 @@ docker run --rm -v /vol1/1000/Docker/reminders/data:/data alpine:latest sh /dev/
 
 ```bash
 # ① 用 sqlite backup API 做一致性拷贝（正在写的库不要直接 cp），并删掉同步配置
-docker run --rm -v "$PWD/tmp:/t" -v /vol1/1000/Docker/reminders/data:/src:ro python:3.12-alpine python -c "
+docker run --rm -v "$PWD/tmp:/t" -v /vol1/1000/Docker/workordernote/data:/src:ro python:3.12-alpine python -c "
 import sqlite3, glob, os, shutil
 src = glob.glob('/src/db/*.db')[0]
 os.makedirs('/t/feature-data/db', exist_ok=True)

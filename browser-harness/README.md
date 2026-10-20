@@ -537,7 +537,7 @@ change 刚派发完保存按钮还是 `disabled`，点击静默失败 —— 结
 - **改代码 / 调试**：只改 `reminders-upstream` 工作区，跑 `npm run build`（前端）即可。
 - **自检**：起一个**挂载本地 dist 的临时容器**，用真实镜像的二进制 + 最新前端验证，不碰三台实例：
   ```bash
-  cp -a reminders-deploy/staging-data-local tmp/iter-data
+  cp -a workordernote-deploy/staging-data-local tmp/iter-data
   docker run -d --name wsn-iter -p 8918:8906 --user 1000:1000 \
     -v "$PWD/reminders-upstream/web/dist:/app/static/dist:ro" \
     -v "$PWD/tmp/iter-data:/app/data" -v /etc/localtime:/etc/localtime:ro \

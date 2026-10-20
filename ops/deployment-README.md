@@ -14,7 +14,7 @@
 ## 目录
 
 ```
-/vol1/1000/Docker/reminders/
+/vol1/1000/Docker/workordernote/
 ├── docker-compose.yml
 ├── data/                 ← 应用数据（700，属主 王耀辉）
 │   ├── db/workordernote.db   账号、清单、提醒、记事、渠道配置（0.1.1 起由 reminder.db 改名）
@@ -30,7 +30,7 @@
 ## 管理
 
 ```bash
-cd /vol1/1000/Docker/reminders
+cd /vol1/1000/Docker/workordernote
 docker compose ps
 docker compose logs -f
 docker compose restart
@@ -42,7 +42,7 @@ docker compose down                              # 停止（数据保留）
 升级前建议用 SQLite 在线备份而不是直接 `cp`：
 
 ```bash
-docker run --rm -v /vol1/1000/Docker/reminders:/w python:3.12-alpine python -c "
+docker run --rm -v /vol1/1000/Docker/workordernote:/w python:3.12-alpine python -c "
 import sqlite3
 s = sqlite3.connect('file:/w/data/db/reminder.db?mode=ro', uri=True)
 o = sqlite3.connect('/w/data.bak-$(date +%Y%m%d-%H%M%S)/db/reminder.db')
@@ -135,10 +135,10 @@ docker compose logs -f
 
 | 位置 | 说明 |
 | --- | --- |
-| `/vol1/1000/Docker/reminders/images/WorkOrderNote-0.12.0-offline-amd64.tar.gz` | 当前分发包，见该目录 `manifest.json`（sha256 也在安装包的 `SHA256SUMS` 里） |
+| `/vol1/1000/Docker/workordernote/images/WorkOrderNote-0.12.0-offline-amd64.tar.gz` | 当前分发包，见该目录 `manifest.json`（sha256 也在安装包的 `SHA256SUMS` 里） |
 | `…/WorkOrderNote-0.11.0-…` 及更早（0.8.x / 0.7.x / 0.6.x / 0.5.x / 0.4.0 / 0.3.0） | 历史版本（保留，便于回退） |
-| `reminders-deploy/pkg/WorkOrderNote-0.12.0-offline/` | 解压后的目录包（可直接拷进 U 盘/共享目录使用） |
-| `reminders-deploy/build-offline-package.sh` | 打包脚本（换版本重跑即可） |
+| `workordernote-deploy/pkg/WorkOrderNote-0.12.0-offline/` | 解压后的目录包（可直接拷进 U 盘/共享目录使用） |
+| `workordernote-deploy/build-offline-package.sh` | 打包脚本（换版本重跑即可） |
 | `browser-harness/verify-offline-package.sh` | 安装包验证脚本（30 项，见下） |
 
 包内：`install.sh`（一键安装/升级）、`uninstall.sh`、`docker-compose.yml`（`pull_policy: never`，
@@ -222,6 +222,27 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 应用内「侧栏 → 关于 → 版本信息」可查看迭代说明与原项目信息。
 
 ## 变更记录
+
+### 2026-10-20 晚：Docker 目录改名 `reminders` → `workordernote`（数据原样迁移）
+
+> 用户要求：「所有 docker 迁移重建，原目录 reminders 改成 workordernote，注意数据迁移」。
+>
+> **201 生产**
+> - 迁移前先跑一次应用内备份：`workordernote-backup-20261020-175920.tar.gz`（1,205,947 B），状态 ok。
+> - 停容器 → `mv /vol1/1000/Docker/reminders /vol1/1000/Docker/workordernote`（同一文件系统，原子改名，
+>   `data/` 与 75 个 `data.bak-*` 原样保留、属主仍是 `1000:1001`）→ compose 内数据路径同步改成
+>   `/vol1/1000/Docker/workordernote/data` → `docker compose up -d` 重建。
+> - 验证：`/api/version` 0.41.0（`4bdf566`），登录正常，清单 5 条、提醒 46 条，与迁移前一致。
+>
+> **201 沙箱**
+> - 数据目录 `reminders-deploy/staging-data-local` → `workordernote-deploy/staging-data-local`（同名搬迁），
+>   容器用同一镜像、8908 端口、同一套 env/cmd 重建；版本与数据条数同生产。
+>
+> **200 生产**
+> - 目录本来就是 `workordernote`；先 `docker exec` 打包 `/app/data` 到 `/tmp/data-pre-dirmigrate-20261020.tgz`，
+>   再 `docker compose up -d --force-recreate` 重建，0.41.0 正常。
+>
+> 旧路径不再存在；仓库内 `ops/` 与 `browser-harness/README.md` 的路径引用已全部同步改为新目录。
 
 ### 2026-10-20：0.41.0（201 生产 / 200 生产 / 201 沙箱上线）—— 数据备份
 
@@ -407,7 +428,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   md5 `7c943d388c9e472ac5260d477b5192dd`。
 > - 备份：沙箱 `/tmp/staging-data-pre0370-20261019-113534.tgz`（2.6 MB，容器内 tar）；
 >   201 生产 `/tmp/prod-data-pre0370-20261019-113942.tgz`（23 MB）。
-> - 上线：沙箱 11:35（备份 → 重建 `workordernote-sandbox` 容器，挂回 `reminders-deploy/staging-data-local`）→
+> - 上线：沙箱 11:35（备份 → 重建 `workordernote-sandbox` 容器，挂回 `workordernote-deploy/staging-data-local`）→
 >   201 生产 11:40（备份 → 改 compose 镜像 tag → `docker compose up -d`）。
 >   两台 `/api/version` 均 `0.37.0`，`/api/health` ok。
 > - **指纹**：201 生产与沙箱一致——清单 `edffe23d32`、卡片 `7fa2c3f0cb`、提醒 `85d0ae65e7`、
@@ -812,8 +833,8 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   node `11cedc39e663` / golang `5075a351671c` / python `979e5a8a5684` / alpine `320994c3b997`）打出；
 >   本地那个 `golang:1.26-alpine` 标签本来是 arm64（早先 arm64 fpk 尝试留下的），直接用它会在
 >   `apk add gcc musl-dev` 处报 `exec /bin/sh: exec format error`，已用 amd64 的 golang 镜像重新打标签。
->   另外 `.dockerignore` 补掉了 `reminders-deploy/ tmp/ pkg/ release/ ops/` —— 经典构建器无法 `stat`
->   CIFS 上的生产数据目录（`reminders-deploy/staging-data-local`），不排除就建不了镜像。
+>   另外 `.dockerignore` 补掉了 `workordernote-deploy/ tmp/ pkg/ release/ ops/` —— 经典构建器无法 `stat`
+>   CIFS 上的生产数据目录（`workordernote-deploy/staging-data-local`），不排除就建不了镜像。
 
 ### 2026-10-15：0.29.0（201 生产 / 200 生产 / 沙箱 8908 上线）—— 首页看板每条加倒计时；两个栏目卡片加标题底色；版权合规整改
 
@@ -1069,12 +1090,12 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   第一次直接 push 报 `unauthorized: reqPackageAccess`，**先 login 就正常了**。
 > - **一条仓库侧的坑**：`reminders-upstream/ops/offline/` 少了 `.env.example`（镜像进仓库时漏了
 >   隐藏文件），在仓库里直接跑 `ops/build-offline-package.sh` 会在第 2 步报 `cp: cannot stat`。
->   已把文件补进仓库；本轮实际用的是 `reminders-deploy/build-offline-package.sh`（模板完整）。
+>   已把文件补进仓库；本轮实际用的是 `workordernote-deploy/build-offline-package.sh`（模板完整）。
 > - **一条流程自省（我的失误，已恢复）**：收尾清理 skopeo 临时容器时我图省事写了
 >   `docker rm -f $(docker ps -q --filter ancestor=alpine:latest)` —— `ancestor` 过滤器会匹配
 >   **从这个镜像派生出来的所有镜像**，而 `workordernote` 正是 `FROM alpine:latest`，于是
 >   **201 生产 8906 与沙箱 8908 两个容器被一起删掉了**（数据目录没动，所以没丢数据）。
->   发现后立刻用 compose（`/vol1/1000/Docker/reminders/docker-compose.yml`）与原来的
+>   发现后立刻用 compose（`/vol1/1000/Docker/workordernote/docker-compose.yml`）与原来的
 >   `docker run` 参数把两个容器原样恢复：镜像、端口、`user 1000:1001`、restart 策略、
 >   volume、watchtower 标签逐项核对，健康检查通过，**201 == 200 指纹与删之前完全一致**
 >   （清单 `edffe23d32`、卡片 `50c58560da`、提醒 `709adfca07`、完成 `cb31f20787`；5/9/61/23/5）。
@@ -2585,7 +2606,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 安卓客户端发布状态：三台（201 / 沙箱 / 200）都已上传 `WorkOrderNote-android-0.1.0.apk`
   （sha256 `5f41da7950ff9f6b…`，24KB），卡片上的「内网地址」留空＝自动取当前访问地址；
   **外网地址尚未填**——要外网下载的话，在「系统配置 → 安卓客户端 → 外网下载地址」里填上反代域名即可。
-  APK 另存了一份在 201 的 `/vol1/1000/Docker/reminders/android/` 与 200 的
+  APK 另存了一份在 201 的 `/vol1/1000/Docker/workordernote/android/` 与 200 的
   `/vol1/1000/Docker/workordernote/android/`，便于回退。
 
 ### 2026-10-05：0.9.1 → 0.10.0
@@ -2636,7 +2657,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   201→200 的自动同步已跟过去，而沙箱是手动同步所以停在旧颜色。**结论：不是脚本改的**
   （脚本的请求来自 `10.200.20.1`，与用户设备不同 IP）。随后在沙箱点一次「立即同步」追平
   （拉取更新 3 条 / 推送 0 条），三台指纹恢复一致 `1e072883324e86c0`。
-  排查手法：`docker run --rm -v /vol1/1000/Docker/reminders/data:/d:ro python:3.12-alpine python -c "...sqlite3..."`
+  排查手法：`docker run --rm -v /vol1/1000/Docker/workordernote/data:/d:ro python:3.12-alpine python -c "...sqlite3..."`
   读 `lists`（含 `updated_at`）与 `audit_logs`（含 `ip`）。
 - 部署：三台均升到 `workordernote:0.9.1`（镜像 ID `sha256:aa84bfc69163…`，提交 `09a4cfb`）。
   200 这次按 0.9.0 的教训**先 `docker load`、再改 compose 标签、最后 `up -d`**，全程没有中断。

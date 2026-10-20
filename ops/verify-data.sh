@@ -9,7 +9,7 @@
 #
 # 用法: ./verify-data.sh [数据目录]
 set -u
-DIR="${1:-/vol1/1000/Docker/reminders/data}"
+DIR="${1:-/vol1/1000/Docker/workordernote/data}"
 docker run --rm -i --user root -v "$DIR":/d:ro python:3.12-alpine python - <<'PY'
 import sqlite3, os, glob
 

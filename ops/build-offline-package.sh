@@ -2,7 +2,7 @@
 # 打「工作序记（WorkOrderNote）」Docker 离线一键安装包。
 #
 #   bash build-offline-package.sh              # 用仓库 VERSION 与 workordernote:<VERSION>
-#   VERSION=0.3.0 OUT=/vol1/1000/Docker/reminders/images bash build-offline-package.sh
+#   VERSION=0.3.0 OUT=/vol1/1000/Docker/workordernote/images bash build-offline-package.sh
 #
 # 产物：
 #   <OUT>/WorkOrderNote-<版本>-offline/            解压后的目录（可直接用）
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-# 兼容两种存放方式：① 工作区里 reminders-deploy 与 reminders-upstream 并排；
+# 兼容两种存放方式：① 工作区里 workordernote-deploy 与 reminders-upstream 并排；
 # ② 本目录是仓库里的 ops/（源码在上一级，产物默认打到 <仓库>/pkg）。
 if [ -d "$HERE/../reminders-upstream" ]; then
   REPO=${REPO:-$(cd "$HERE/../reminders-upstream" && pwd)}
@@ -20,8 +20,8 @@ else
   REPO=${REPO:-$(cd "$HERE/.." && pwd)}
 fi
 TPL="$HERE/offline"
-if [ -d "$HERE/../reminders-deploy/pkg" ]; then
-  OUT=${OUT:-$(cd "$HERE/../reminders-deploy" && pwd)/pkg}
+if [ -d "$HERE/../workordernote-deploy/pkg" ]; then
+  OUT=${OUT:-$(cd "$HERE/../workordernote-deploy" && pwd)/pkg}
 else
   OUT=${OUT:-$REPO/pkg}
 fi
