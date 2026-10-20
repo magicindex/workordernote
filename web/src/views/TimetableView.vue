@@ -71,7 +71,7 @@
           @click="toggleEditing"
         >
           <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke-width="1.8" stroke-linejoin="round"/></svg>
-          {{ editing ? '完成' : '编辑' }}
+          {{ editing ? '完成' : '编辑课程表' }}
         </button>
       </div>
 

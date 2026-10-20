@@ -388,6 +388,8 @@ async function waitForCard(page, selector, timeout = 12000) {
       // 「编辑」与「空节次」已合并（用户 2026-10-20）：关着时没有空节次，
       // 点开既有落点也能拖，退出后收起。
       const slotsBefore = await page.$$eval('[data-timetable-slot]', (els) => els.length);
+      const editLabel = await page.$eval('[data-timetable-edit]', (el) => el.textContent.replace(/\s+/g, ' ').trim());
+      check('编辑按钮写「编辑课程表」', editLabel === '编辑课程表', editLabel);
       await page.click('[data-timetable-edit]');
       await sleep(500);
       const editOn = await page.$eval('[data-timetable-edit]', (el) => el.getAttribute('data-timetable-edit'));
