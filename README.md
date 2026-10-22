@@ -3,28 +3,35 @@
 任务、记事与日历一体的提醒应用。清单管理、定时提醒、记事归档、月历总览，
 支持站内消息、电子邮件、短信、飞书机器人和 QQ 机器人通知。
 
+- 仓库：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
+- 发布与安装包：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote/releases>
+- GitHub 镜像：<https://github.com/magicindex/workordernote>
+- 当前版本：`0.41.0`
+
 > **本项目是衍生作品。** 基于开源项目
 > [TechFunWay/reminders](https://github.com/TechFunWay/reminders)（MIT 许可）衍生开发，
 > 原项目的著作权与出处均予保留。详见文末「原项目信息」。
->
-> 版本：`0.0.1`（版本号规则：主版本号.小版本号.修正号，本分支从 0.0.1 起）
 
 ---
 
-## 与上游的差异
+## 功能
 
-本分支在上游 `v0.3.0` 的基础上做以下改造：
-
-| 功能 | 说明 |
+| 模块 | 说明 |
 | --- | --- |
-| **任务 / 记事** | 任务需要确认完成；记事只作记录，保存即归入「已完成」，且不会发出任何通知 |
-| **已完成按时间段查看** | 全部 / 今天 / 一周 / 一月 / 一年 / 自定义起止日期；并接入重复提醒的完整完成历史 |
-| **全屏日历** | 顶栏主题按钮旁可切换「列表 / 日历」；月历同时显示公历、农历、节气与节日 |
-| **默认清单设定** | 「偏好设置」里可指定默认清单，侧栏对应清单带星标 |
-| **版本信息入口** | 侧栏「系统管理」下方，点开是迭代说明与原项目信息 |
-| **移除赞赏/付费提示** | 上游的赞赏弹窗、顶部横幅与设置页入口全部移除，保留原项目信息与 MIT 许可声明 |
+| **任务 / 记事** | 任务需确认完成；记事只作记录，保存即归档、不发送通知 |
+| **清单与提醒** | 多清单、优先级、重复提醒（含农历）、逾期提醒、提醒@他 |
+| **视图** | 列表、全屏日历（公历/农历/节气/节日）、首页看板、倒计时卡片 |
+| **课程表** | 按周排课，课程与课外活动分色；支持打印 |
+| **随手记事本** | 随手记录，按时间倒序归档，可搜索 |
+| **人生要有仪式感** | 生日、纪念日、节日、考试倒计时卡片 |
+| **信用卡账单** | 多卡管理，账单日/还款日/额度/本期金额，临近还款日变色提醒 |
+| **通知渠道** | 站内消息、电子邮件、短信、飞书机器人、QQ 机器人；支持免打扰 |
+| **AI 小秘** | 接入多家模型服务商，可选模型；基于工作数据回答问题，支持改名 |
+| **数据与同步** | 本机/WebDAV 每日自动备份、导入导出、双机同步（除密码外全部） |
+| **打印** | 日历整月打印，或切换列表按行打印；可调方向、字号、标题与打印列 |
+| **多端** | 桌面与手机自适应，支持 PWA 安装 |
 
-上游自带的能力（跨设备自动同步、到点催办、农历重复、多邮箱通知、飞牛一键登录等）全部保留。
+上游自带的能力（到点催办、重复提醒、多邮箱通知、飞牛一键登录等）全部保留。
 
 ---
 
@@ -33,6 +40,48 @@
 - 后端：Go 1.26 + Gin + GORM + SQLite（CGO）
 - 前端：Vue 3 + TypeScript + Vite + Tailwind CSS
 - 部署：单二进制或 Docker；数据全部落在本地数据目录
+
+## 快速开始（Docker）
+
+镜像发布在仓库自带的容器仓库，可直接拉取：
+
+```bash
+docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.41.0
+```
+
+仓库里的 `docker-compose.yml` 已指向该镜像：
+
+```yaml
+services:
+  workordernote:
+    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.41.0
+    container_name: workordernote
+    # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
+    user: "1000:1001"
+    ports:
+      - "8906:8906"
+    volumes:
+      - workordernote-data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - ENV=release
+      - DATA_DIR=/app/data
+      - TZ=Asia/Shanghai
+    command: ["-data-dir", "/app/data", "-web-dir", "./static/dist", "-log-console"]
+    restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+
+volumes:
+  workordernote-data:
+```
+
+启动后访问 `http://<主机>:8906`。首次打开按页面提示注册管理员账号。
+
+- 数据在命名卷 `workordernote-data`；想改用本机目录，把挂载改成 `./data:/app/data`。
+- `user` 要与数据目录属主一致（常见为 `1000:1001`），否则 SQLite 写入会静默失败。
+- 若本机运行 watchtower，`watchtower.enable=false` 可避免被上游镜像覆盖。
+- 飞牛 NAS 也可用 Release 里的 `*.fpk` 或离线包安装，无需联网拉镜像。
 
 ## 本地开发
 
@@ -60,44 +109,18 @@ docker build -f Dockerfile.custom \
   --build-arg VERSION=$(cat VERSION) \
   --build-arg BUILD_TIME=$(date +%Y-%m-%dT%H:%M:%S) \
   --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) \
-  -t workordernote:$(cat VERSION) .
+  -t gitea.topzero.cn:10241/cyberzero/workordernote:$(cat VERSION) .
 ```
 
 > tzdata 不是可选项：服务端多处调用 `time.LoadLocation("Asia/Shanghai")`，
 > 缺失时返回 `nil`，紧接着的 `now.In(loc)` 会 panic。
 
-## docker compose 部署
-
-```yaml
-services:
-  workordernote:
-    image: workordernote:0.0.1
-    container_name: workordernote
-    # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
-    user: "1000:1001"
-    ports:
-      - "8906:8906"
-    volumes:
-      - ./data:/app/data
-      # 镜像内时区数据齐全，但挂上本机 localtime 更稳妥
-      - /etc/localtime:/etc/localtime:ro
-    environment:
-      - ENV=release
-      - DATA_DIR=/app/data
-      - TZ=Asia/Shanghai
-    command: ["-data-dir", "/app/data", "-web-dir", "./static/dist", "-log-console"]
-    restart: unless-stopped
-    # 若本机跑着 watchtower，建议加这一条，避免自建镜像被上游原版覆盖
-    labels:
-      com.centurylinklabs.watchtower.enable: "false"
-```
-
 ## 版本号规则
 
-- **软件版本**：根目录 `VERSION` 文件，格式 `主版本号.小版本号.修正号`，本分支从 `0.0.1` 起。
+- **软件版本**：根目录 `VERSION` 文件，格式 `主版本号.小版本号.修正号`。
   对外展示与 `web/src/data/release-notes.ts` 里的迭代说明保持同步。
 - **数据库结构版本**：`server/database/Upgrades` 与 `server/reminder/register.go` 里注册的升级条目，
-  同样从 `0.0.1` 起递增，**只增不改**。继承自上游的 `0.1.2 / 0.3.0 / 0.3.2` 三条保留原编号，
+  **只增不改**。继承自上游的 `0.1.2 / 0.3.0 / 0.3.2` 三条保留原编号，
   由 `database.inheritedUpstreamUpgrades` 豁免版本比较——否则切换到本分支后，
   启动时会因「数据库 schema 比程序新」而拒绝服务。
 
@@ -118,7 +141,7 @@ docker compose logs -f          # 需要 -log-console（compose 示例里已带�
 | 目录 | 说明 |
 | --- | --- |
 | `browser-harness/` | **浏览器回归套件**（39 个套件 / 1000+ 项断言）：登录、列表与日历、信用卡账单、记事本、仪式感卡片、通知弹窗、清单排序、免打扰与逾期提醒、卡片背景图、双机同步、离线包安装……跑之前先 `cd browser-harness && npm install`，用法见该目录的 `README.md` 与 `run-all.sh`。 |
-| `ops/` | **部署与发版**：201 / 200 两台飞牛的部署记录与逐版本变更、发版台账（`待发布改动.md`）、离线包打包脚本与模板、数据体检脚本。入口见 `ops/README.md`。 |
+| `ops/` | **部署与发版**：部署记录与逐版本变更、发版台账（`待发布改动.md`）、离线包打包脚本与模板、数据体检脚本。入口见 `ops/README.md`。 |
 
 常用的两条：
 

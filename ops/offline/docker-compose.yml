@@ -5,7 +5,7 @@
 # 而是让安装脚本从包内 tar 加载，报错时提示清晰。
 services:
   workordernote:
-    image: ${IMAGE:-workordernote:0.3.0}
+    image: ${IMAGE:-workordernote:0.41.0}
     pull_policy: never
     container_name: ${CONTAINER_NAME:-workordernote}
     labels:
