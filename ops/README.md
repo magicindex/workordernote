@@ -115,9 +115,12 @@ docker run --rm -v "$PWD/pkg/WorkOrderNote-$VERSION-offline/image":/src:ro alpin
 
 本仓库的默认远端就是 Gitea（`origin`），上游 GitHub 是 `upstream`；本机已用 Gitea 访问令牌
 （`workordernote-push`，只有仓库读写权限）配好免密，`git fetch/push` 不用输密码。
-镜像仓库与 Gitea 同址，走 **HTTPS**（`https://gitea.topzero.cn:10241`）；证书由私有 CA 签发，
-公共信任链验不过。本机需把 `gitea.topzero.cn:10241` 加进 docker 的 `insecure-registries`
-（或导入该 CA），之后可以直接 `docker pull gitea.topzero.cn:10241/cyberzero/workordernote:<版本>`。
+镜像仓库与 Gitea 同址，走 **HTTPS**（`https://gitea.topzero.cn:10241`）。站点证书是 Certum DV
+（`*.topzero.cn`），但反代目前只下发叶子证书、没带中间证书，命令行与 docker 会报
+`unable to get local issuer certificate`（浏览器能正常打开）。推荐让反代补发完整证书链；
+临时办法是把中间证书导入信任，或把该地址加进 docker 的 `insecure-registries`。
+之后可以 `docker pull gitea.topzero.cn:10241/cyberzero/workordernote:<版本>`——私有镜像还需要
+带 `read:package` 权限的访问令牌。
 
 > **不要直推 CIFS 路径（2026-10-21 修订）**：裸库虽然能从
 > `/vol02/1000-0-aea4b1f9/gitea/data/git/repositories/cyberzero/workordernote.git` 直接写，
