@@ -15,9 +15,9 @@
 
 - Gitea：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
 - 容器仓库：`gitea.topzero.cn:10241/cyberzero/workordernote:<版本>`
-- 仓库走 HTTPS；证书是 Certum DV，但反代只发叶子证书、缺中间证书，命令行/docker 默认验不过。
-  推荐让反代补发完整证书链；临时可导入中间证书，或把 `gitea.topzero.cn:10241` 加入 docker 的
-  `insecure-registries`。拉私有镜像还需带 `read:package` 权限的令牌。
+- 仓库走 HTTPS，证书链完整（Certum DV `*.topzero.cn`，反代已带中间证书），
+  可直接 `docker pull gitea.topzero.cn:10241/cyberzero/workordernote:<版本>`；
+  推送新镜像需带 `write:package` 权限的令牌。
 - 下文历史记录中的旧内网地址已统一替换；日期与 digest 仍是当时的记录。
 
 ## 目录
