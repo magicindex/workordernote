@@ -11,6 +11,14 @@
 - 容器 `workordernote`，镜像 `workordernote:0.33.0`（本地自建）
 - 对比实例：<http://192.168.3.201:8907/> 官方原版 v0.3.0；<http://192.168.3.201:8908/> 沙盒
 
+## 仓库与镜像地址（2026-10-22 起）
+
+- Gitea：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
+- 容器仓库：`gitea.topzero.cn:10241/cyberzero/workordernote:<版本>`
+- 仓库走 HTTPS，证书由私有 CA 签发；拉取前需把 `gitea.topzero.cn:10241` 加入 docker 的
+  `insecure-registries`，或把该 CA 导入系统信任链。
+- 下文历史记录中的旧内网地址已统一替换；日期与 digest 仍是当时的记录。
+
 ## 目录
 
 ```
@@ -1095,7 +1103,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   回来的镜像 ID 同为 `sha256:acec90fcadc3…`）。
 >   **推镜像的方式换了**：原来用的「alpine 里 `apk add skopeo` + skopeo copy」这轮卡住
 >   （apk 拉依赖太慢，10 分钟没动静），改成 `docker login gitea.topzero.cn:10241` 后直接
->   `docker push`（本机 daemon 早就把 `gitea.topzero.cn:10241` 当 insecure registry）——
+>   `docker push`（该地址是自签证书，daemon 需按 insecure registry 处理）——
 >   第一次直接 push 报 `unauthorized: reqPackageAccess`，**先 login 就正常了**。
 > - **一条仓库侧的坑**：`reminders-upstream/ops/offline/` 少了 `.env.example`（镜像进仓库时漏了
 >   隐藏文件），在仓库里直接跑 `ops/build-offline-package.sh` 会在第 2 步报 `cp: cannot stat`。
@@ -1311,11 +1319,10 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >     （离线包，44MB）、`SHA256SUMS-0.23.0.txt`；
 >   · **容器仓库** `gitea.topzero.cn:10241/cyberzero/workordernote:0.23.0`（skopeo 直推，回读校验
 >     digest `sha256:a01ffb2d6e9b…`，labels 里 version `0.23.0` / revision `fa4543b`）。
->     本机 docker 已经能直接拉：`gitea.topzero.cn:10241` 已加进 `/etc/docker/daemon.json` 的
->     `insecure-registries`（备份 `daemon.json.bak-20261013-104051`），重启 dockerd 后**现有 72 个
->     容器一个没重启**（`live-restore` 生效），`docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.23.0`
->     实测成功（digest `sha256:a01ffb2d6e9b…`）。注意：飞牛 Docker 应用以后若重写 daemon.json，
->     这一项要再加一次。
+>     本机要直接拉：先把 `gitea.topzero.cn:10241` 加进 `/etc/docker/daemon.json` 的
+>     `insecure-registries`（或导入其 CA），再重启 dockerd（`live-restore` 生效，现有容器不会重启），
+>     之后即可 `docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.23.0`。
+>     注意：飞牛 Docker 应用以后若重写 daemon.json，这一项要再加一次。
 > - **Git 默认远端已切到 Gitea**：`origin` = Gitea（`remote.pushDefault=origin`），上游 GitHub 改名
 >   `upstream`；工作分支从 `feat-note` 改回 `main` 并跟踪 `origin/main`（旧的浅克隆 main 留作
 >   `main-github-shallow`）。免密走 **Gitea 访问令牌**（`workordernote-push`，仅仓库读写权限，
