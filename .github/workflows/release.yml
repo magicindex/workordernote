@@ -49,6 +49,12 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             ghcr.io/${{ github.repository }}:latest
+      - name: Tag bare version
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          docker buildx imagetools create \
+            --tag "ghcr.io/${GITHUB_REPOSITORY}:${V}" \
+            "ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_REF_NAME}"
       - name: Make package public
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
