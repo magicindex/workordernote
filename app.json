@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "desc": "任务、记事与日历一体的提醒应用",
   "author": "WorkOrderNote（工作序记）",
-  "website": "http://192.168.3.200:3000/cyberzero/workordernote",
+  "website": "https://gitea.topzero.cn:10241/cyberzero/workordernote",
   "port": 8906,
   "docker": {
     "image": "workordernote",

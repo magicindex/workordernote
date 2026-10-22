@@ -89,7 +89,7 @@ APP_URL=http://127.0.0.1:8920 bash browser-harness/run-all.sh
 
 ## 发版时把构件也放进仓库（Gitea）
 
-代码推到 Gitea（`origin` = <http://192.168.3.200:3000/cyberzero/WorkOrderNote>），构件走**两条路**：
+代码推到 Gitea（`origin` = <https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>），构件走**两条路**：
 
 ```bash
 VERSION=0.23.0
@@ -100,9 +100,9 @@ git tag -a v$VERSION -m "工作序记 $VERSION" && git push origin v$VERSION
 # ② 建 Release 并挂附件（镜像 + 离线包 + 校验和）
 curl -u cyberzero:*** -H 'Content-Type: application/json' \
   -d "{\"tag_name\":\"v$VERSION\",\"name\":\"工作序记 $VERSION\"}" \
-  http://192.168.3.200:3000/api/v1/repos/cyberzero/WorkOrderNote/releases
+  https://gitea.topzero.cn:10241/api/v1/repos/cyberzero/WorkOrderNote/releases
 curl -u cyberzero:*** -F "attachment=@pkg/WorkOrderNote-$VERSION-offline/image/workordernote-$VERSION-amd64.tar.gz" \
-  "http://192.168.3.200:3000/api/v1/repos/cyberzero/WorkOrderNote/releases/<id>/assets?name=workordernote-$VERSION-amd64.tar.gz"
+  "https://gitea.topzero.cn:10241/api/v1/repos/cyberzero/WorkOrderNote/releases/<id>/assets?name=workordernote-$VERSION-amd64.tar.gz"
 
 # ③ 镜像推进 Gitea 的容器仓库（用 alpine 里的 skopeo，不依赖本机 docker 的 insecure 配置）
 docker run --rm -v "$PWD/pkg/WorkOrderNote-$VERSION-offline/image":/src:ro alpine:latest sh -c "
@@ -110,13 +110,14 @@ docker run --rm -v "$PWD/pkg/WorkOrderNote-$VERSION-offline/image":/src:ro alpin
   gunzip -c /src/workordernote-$VERSION-amd64.tar.gz > /tmp/img.tar
   skopeo copy --dest-tls-verify=false --dest-creds 'cyberzero:***' \
     docker-archive:/tmp/img.tar:workordernote:$VERSION \
-    docker://192.168.3.200:3000/cyberzero/workordernote:$VERSION"
+    docker://gitea.topzero.cn:10241/cyberzero/workordernote:$VERSION"
 ```
 
 本仓库的默认远端就是 Gitea（`origin`），上游 GitHub 是 `upstream`；本机已用 Gitea 访问令牌
 （`workordernote-push`，只有仓库读写权限）配好免密，`git fetch/push` 不用输密码。
-镜像仓库是 **HTTP**，本机已把 `192.168.3.200:3000` 写进 docker 的 `insecure-registries`，
-可以直接 `docker pull 192.168.3.200:3000/cyberzero/workordernote:<版本>`。
+镜像仓库与 Gitea 同址，走 **HTTPS**（`https://gitea.topzero.cn:10241`）；证书由私有 CA 签发，
+公共信任链验不过。本机需把 `gitea.topzero.cn:10241` 加进 docker 的 `insecure-registries`
+（或导入该 CA），之后可以直接 `docker pull gitea.topzero.cn:10241/cyberzero/workordernote:<版本>`。
 
 > **不要直推 CIFS 路径（2026-10-21 修订）**：裸库虽然能从
 > `/vol02/1000-0-aea4b1f9/gitea/data/git/repositories/cyberzero/workordernote.git` 直接写，
@@ -124,7 +125,8 @@ docker run --rm -v "$PWD/pkg/WorkOrderNote-$VERSION-offline/image":/src:ro alpin
 > 静默写进去。后者会让 Gitea 的 `branch` 表停在旧提交，页面随即报「Git 钩子似乎已损坏」——
 > 这不是钩子文件坏了，是 DB 分支指针与裸库 HEAD 不一致。
 >
-> `origin` 现已改为 HTTP 端点 `http://192.168.3.200:3000/cyberzero/workordernote.git`，
+> 仓库地址统一为 HTTPS 端点 `https://gitea.topzero.cn:10241/cyberzero/workordernote.git`
+> （本机出网若被 WAF 拦成 403，推送可继续走内网端点）；
 > 令牌存在仓库私有的 `.git/gitea-credentials`（0600，只对本仓库生效）：
 >
 > ```bash
@@ -135,8 +137,8 @@ docker run --rm -v "$PWD/pkg/WorkOrderNote-$VERSION-offline/image":/src:ro alpin
 > 该账号已启用 2FA，密码只能读不能写；写操作必须用「设置 → 应用」里带
 > `write:repository` 的令牌。若页面仍提示钩子损坏，推一个新提交让钩子重跑即可刷新 DB。
 
-推完可以回读校验：`skopeo inspect --tls-verify=false --creds ... docker://192.168.3.200:3000/cyberzero/workordernote:$VERSION`。
-本机要直接 `docker pull` 这个仓库，得先把 `192.168.3.200:3000` 加进 daemon 的 `insecure-registries`（HTTP）。
+推完可以回读校验：`skopeo inspect --tls-verify=false --creds ... docker://gitea.topzero.cn:10241/cyberzero/workordernote:$VERSION`。
+本机要直接 `docker pull` 这个仓库，得先把 `gitea.topzero.cn:10241` 加进 daemon 的 `insecure-registries`（自签证书）。
 
 ## 注意
 
