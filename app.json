@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "desc": "任务、记事与日历一体的提醒应用",
   "author": "WorkOrderNote（工作序记）",
-  "website": "https://github.com/wyh19851207/workordernote",
+  "website": "https://github.com/magicindex/workordernote",
   "port": 8906,
   "docker": {
     "image": "workordernote",

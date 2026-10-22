@@ -7,6 +7,8 @@
 
 **下载**：[GitHub Releases](https://github.com/magicindex/workordernote/releases) · 最新版本 v0.41.0
 
+**国内仓库（Gitea）**：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
+
 ![首页看板](docs/screenshots/features/home.png)
 
 ## 功能
