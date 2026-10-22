@@ -485,6 +485,17 @@
                 <span>提醒已删除</span>
               </template>
             </div>
+            <!-- 完成时段（用户 2026-10-22）：录入时间 → 完成时间，并给出一共多久。
+                 记事创建即完成，没有「做完」的过程，所以只给任务显示。 -->
+            <div
+              v-if="entry.kind !== 'note' && completionSpanRange(entry)"
+              class="mt-1.5 inline-flex max-w-full flex-wrap items-center gap-1 rounded-lg bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+              data-completion-span
+            >
+              <span class="font-extrabold">完成时段</span>
+              <span class="break-words">{{ completionSpanRange(entry) }}</span>
+              <span class="whitespace-nowrap rounded-md bg-amber-400/20 px-1.5 py-0.5 font-extrabold text-amber-600 dark:bg-amber-400/10 dark:text-amber-300">{{ completionSpanDuration(entry) }}</span>
+            </div>
           </button>
           <div class="row-actions">
             <button v-if="entry.reminder_exists" class="row-action hover:!text-rose-500" title="删除提醒" @click="removeCompleted(entry)">
@@ -568,6 +579,17 @@
                       data-item-remaining
                     >{{ itemRemaining(item) }}</span>
                   </template>
+                </div>
+                <!-- 完成时段（用户 2026-10-22）：接口连已完成的条目一起返回时，
+                     已完成任务后边同样补上「录入 → 完成 · 共多久」。 -->
+                <div
+                  v-if="item.completed_at && item.kind !== 'note' && completionSpanRange(item)"
+                  class="mt-1.5 inline-flex max-w-full flex-wrap items-center gap-1 rounded-lg bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+                  data-completion-span
+                >
+                  <span class="font-extrabold">完成时段</span>
+                  <span class="break-words">{{ completionSpanRange(item) }}</span>
+                  <span class="whitespace-nowrap rounded-md bg-amber-400/20 px-1.5 py-0.5 font-extrabold text-amber-600 dark:bg-amber-400/10 dark:text-amber-300">{{ completionSpanDuration(item) }}</span>
                 </div>
               </button>
               <div class="row-actions">
@@ -1374,6 +1396,46 @@ function setCompletedRange(option: CompletedRangeOption) {
 function formatCompletedAt(value: string | null | undefined) {
   if (!value) return ''
   return formatFullDue(value)
+}
+type CompletionSpanEntry = { created_at?: string | null; completed_at?: string | null }
+/** 「完成时段」的原始数据；缺任一端或时间非法时返回 null，那一行不显示。 */
+function completionSpanInfo(entry: CompletionSpanEntry) {
+  if (!entry.created_at || !entry.completed_at) return null
+  const start = new Date(entry.created_at)
+  const end = new Date(entry.completed_at)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null
+  // 同步过来的数据可能有时钟差：结束早于开始时按 0 算，不显示负数。
+  return { start, end, span: Math.max(0, end.getTime() - start.getTime()) }
+}
+/** 起止时间：录入 → 完成。 */
+function completionSpanRange(entry: CompletionSpanEntry) {
+  const info = completionSpanInfo(entry)
+  return info ? `${formatSpanStamp(info.start)} – ${formatSpanStamp(info.end)}` : ''
+}
+/** 总时长单独拿出来，模板里用明亮色显示，和起止时间区分开。 */
+function completionSpanDuration(entry: CompletionSpanEntry) {
+  const info = completionSpanInfo(entry)
+  return info ? `共 ${formatSpanDuration(info.span)}` : ''
+}
+/** 时段两端：同年不写年份，跨年才补上，避免一行太长。 */
+function formatSpanStamp(d: Date) {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const date = d.getFullYear() === now.getFullYear()
+    ? `${d.getMonth() + 1}月${d.getDate()}日`
+    : `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+  return `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+/** 总时长按「天 / 小时 / 分钟」给到能看懂的最大两级；不足一分钟单独说。 */
+function formatSpanDuration(ms: number) {
+  const minutes = Math.floor(ms / 60000)
+  if (minutes < 1) return '不足 1 分钟'
+  const days = Math.floor(minutes / 1440)
+  const hours = Math.floor((minutes % 1440) / 60)
+  const mins = minutes % 60
+  if (days) return hours ? `${days} 天 ${hours} 小时` : `${days} 天`
+  if (hours) return mins ? `${hours} 小时 ${mins} 分钟` : `${hours} 小时`
+  return `${mins} 分钟`
 }
 async function openCompletedEntry(entry: CompletedItem) {
   if (!entry.reminder_exists) return

@@ -19,6 +19,8 @@ export interface CompletedItem {
   reminder_id: number
   title: string
   completed_at: string
+  /** 底层提醒的录入时间：用来显示「完成时段（录入 → 完成）· 共多久」 */
+  created_at?: string | null
   scheduled_for?: string | null
   list_id: number
   list_name: string

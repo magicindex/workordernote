@@ -6,7 +6,7 @@
 - 仓库：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
 - 发布与安装包：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote/releases>
 - GitHub 镜像：<https://github.com/magicindex/workordernote>
-- 当前版本：`0.41.0`
+- 当前版本：`0.42.1`
 
 > **本项目是衍生作品。** 基于开源项目
 > [TechFunWay/reminders](https://github.com/TechFunWay/reminders)（MIT 许可）衍生开发，
@@ -41,20 +41,38 @@
 - 前端：Vue 3 + TypeScript + Vite + Tailwind CSS
 - 部署：单二进制或 Docker；数据全部落在本地数据目录
 
-## 快速开始（Docker）
+## 快速开始（Docker Compose）
 
 镜像发布在仓库自带的容器仓库，可直接拉取：
 
 ```bash
-docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.41.0
+docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.42.1
 ```
 
-仓库里的 `docker-compose.yml` 已指向该镜像：
+### 用仓库里的 compose 文件安装
+
+```bash
+mkdir -p ~/workordernote && cd ~/workordernote
+curl -fsSLO https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote/raw/branch/main/docker-compose.yml
+docker compose up -d
+```
+
+从 GitHub 镜像下载同款文件：
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/magicindex/workordernote/main/docker-compose.yml
+```
+
+启动后访问 `http://<主机>:8906`，首次打开按页面提示注册管理员账号。
+
+### compose 内容
+
+仓库根目录的 `docker-compose.yml` 已指向当前版本镜像：
 
 ```yaml
 services:
   workordernote:
-    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.41.0
+    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.42.1
     container_name: workordernote
     # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
     user: "1000:1001"
@@ -76,12 +94,25 @@ volumes:
   workordernote-data:
 ```
 
-启动后访问 `http://<主机>:8906`。首次打开按页面提示注册管理员账号。
+- **数据**：默认存命名卷 `workordernote-data`；想改用本机目录，把 `workordernote-data:/app/data` 换成 `./data:/app/data`，并确保 `user` 与目录属主一致。
+- **属主**：`user` 要与数据目录属主一致（常见为 `1000:1001`），否则 SQLite 写入会静默失败。
+- **端口**：宿主 8906 被占用时，改 `"8906:8906"` 左侧的端口。
+- **watchtower**：若本机运行 watchtower，`watchtower.enable=false` 可避免被上游镜像覆盖。
+- **飞牛 NAS**：也可用 Release 里的 `*.fpk` 或离线包安装，无需联网拉镜像。
 
-- 数据在命名卷 `workordernote-data`；想改用本机目录，把挂载改成 `./data:/app/data`。
-- `user` 要与数据目录属主一致（常见为 `1000:1001`），否则 SQLite 写入会静默失败。
-- 若本机运行 watchtower，`watchtower.enable=false` 可避免被上游镜像覆盖。
-- 飞牛 NAS 也可用 Release 里的 `*.fpk` 或离线包安装，无需联网拉镜像。
+### 日常操作
+
+```bash
+docker compose logs -f        # 查看日志（compose 里已带 -log-console）
+docker compose ps             # 查看状态
+docker compose down           # 停止并删除容器，数据卷保留
+```
+
+升级时，把 compose 里的镜像 tag 改成新版本，再执行：
+
+```bash
+docker compose pull && docker compose up -d
+```
 
 ## 本地开发
 

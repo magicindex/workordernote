@@ -94,6 +94,13 @@ func TestCompletedHistoryUnionsReminderAndHistorySources(t *testing.T) {
 	if got := byTitle["一条记事"]; got.Source != "reminder" || got.Kind != KindNote {
 		t.Fatalf("记事应来自 reminder 且 kind=note，实际 %+v", got)
 	}
+	// 「完成时段」要靠录入时间算：两个来源都必须回填，历史行（重复提醒）也一样。
+	if got := byTitle["每天还款提醒"]; got.CreatedAt == nil || !got.CreatedAt.Equal(repeating.CreatedAt) {
+		t.Fatalf("历史行的录入时间应从底层提醒回填，实际 %+v", got.CreatedAt)
+	}
+	if got := byTitle["一次性任务"]; got.CreatedAt == nil || !got.CreatedAt.Equal(once.CreatedAt) {
+		t.Fatalf("提醒来源的录入时间应回填，实际 %+v", got.CreatedAt)
+	}
 
 	// 角标口径必须和列表一致，否则侧栏数字和页面条数对不上。
 	if got := summaryCompleted(t, userID); got != int64(len(all)) {

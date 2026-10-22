@@ -284,7 +284,7 @@ function formatDue(item: ReminderItem) {
   if (days === 0) return `今天 ${time}`
   if (days === 1) return `明天 ${time}`
   if (days === 2) return `后天 ${time}`
-  if (days !== null && days < 0) return `${date}（已过 ${-days} 天）`
+  // 逾期条目行尾已经写了「已逾期 N 天」，日期栏不再重复「（已过 N 天）」。
   return `${date} ${time}`
 }
 
