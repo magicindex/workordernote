@@ -1292,6 +1292,12 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 			item.Kind = owner.Kind
 			item.RepeatRule = owner.RepeatRule
 			item.ReminderExists = owner.DeletedAt == nil
+			// 完成时段从这条提醒的录入时间算起（用户 2026-10-22 的示例：
+			// 2 号录入、5 号完成，就要能看到 2 号 → 5 号这一整段）。
+			if !owner.CreatedAt.IsZero() {
+				created := owner.CreatedAt
+				item.CreatedAt = &created
+			}
 		}
 		// 历史行本身不带清单归属，只能回查后在这里按清单过滤
 		if len(listIDs) > 0 && !containsID(listIDs, item.ListID) {
@@ -1303,10 +1309,12 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 		if r.CompletedAt == nil {
 			continue
 		}
+		created := r.CreatedAt
 		result = append(result, CompletedItemDTO{
 			ID: r.ID, Source: "reminder", ReminderID: r.ID,
 			Title: r.Title, CompletedAt: *r.CompletedAt, Kind: r.Kind,
-			ListID: r.ListID, ListName: listNames[r.ListID],
+			CreatedAt: &created,
+			ListID:    r.ListID, ListName: listNames[r.ListID],
 			RepeatRule: r.RepeatRule, ReminderExists: true,
 		})
 	}

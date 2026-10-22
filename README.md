@@ -5,7 +5,7 @@
 单机部署、数据全在本地；也可以两台机器自动同步。界面同时适配桌面与手机，
 支持装成 PWA 或打包安卓客户端。
 
-**下载**：[GitHub Releases](https://github.com/magicindex/workordernote/releases) · 最新版本 v0.41.0
+**下载**：[GitHub Releases](https://github.com/magicindex/workordernote/releases) · 最新版本 v0.42.1
 
 **国内仓库（Gitea）**：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
 
@@ -123,16 +123,29 @@
 
 ### Docker Compose
 
+使用预构建镜像，无需克隆源码：
+
 ```bash
-git clone https://github.com/magicindex/workordernote.git
-cd workordernote
-docker compose up -d --build
+mkdir -p workordernote && cd workordernote
+curl -fsSLO https://raw.githubusercontent.com/magicindex/workordernote/main/docker-compose.yml
+docker compose up -d
 ```
 
 打开 <http://localhost:8906>，首次启动后注册第一个账号（即管理员）。
 
+也可以克隆仓库、从源码构建：
+
+```bash
+git clone https://github.com/magicindex/workordernote.git
+cd workordernote
+docker build -t ghcr.io/magicindex/workordernote:0.42.1 .
+docker compose up -d
+```
+
 数据落在命名卷 `workordernote-data`；如需指定宿主机目录，改成
 `- ./data:/app/data` 并确保容器用户对目录可写（镜像内以 uid 1000 运行）。
+
+升级：修改 compose 里的镜像 tag 后执行 `docker compose pull && docker compose up -d`。
 
 ### 直接运行二进制
 

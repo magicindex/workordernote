@@ -305,11 +305,15 @@ type ListDTO struct {
 // 往 completions 插一条历史，所以只读 completed_at 的「已完成」会漏掉绝大部分记录
 // （本机实测只读 completed_at 得到 2 条，而历史表里有 14 条）。
 type CompletedItemDTO struct {
-	ID           uint       `json:"id"`
-	Source       string     `json:"source"` // history | reminder
-	ReminderID   uint       `json:"reminder_id"`
-	Title        string     `json:"title"`
-	CompletedAt  time.Time  `json:"completed_at"`
+	ID          uint      `json:"id"`
+	Source      string    `json:"source"` // history | reminder
+	ReminderID  uint      `json:"reminder_id"`
+	Title       string    `json:"title"`
+	CompletedAt time.Time `json:"completed_at"`
+	// CreatedAt 是底层提醒的**录入时间**，前端据此在完成记录后显示
+	// 「完成时段：录入 → 完成 · 共多久」（用户 2026-10-22 要求）。
+	// 历史行靠回查提醒取得；提醒即使已软删除也还能取到，取不到时为空。
+	CreatedAt    *time.Time `json:"created_at,omitempty"`
 	ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
 	ListID       uint       `json:"list_id"`
 	ListName     string     `json:"list_name"`
