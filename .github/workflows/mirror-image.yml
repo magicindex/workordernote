@@ -30,11 +30,17 @@ jobs:
         run: |
           V="$(cat VERSION)"
           SRC="gitea.topzero.cn:10241/cyberzero/workordernote:${V}"
-          docker buildx imagetools create \
+          if ! docker buildx imagetools create \
             --tag "ghcr.io/${{ github.repository }}:${V}" \
             --tag "ghcr.io/${{ github.repository }}:v${V}" \
             --tag "ghcr.io/${{ github.repository }}:latest" \
-            "$SRC"
+            "$SRC"; then
+            echo "Gitea registry is not reachable from the runner; reusing the GHCR v-tag built from the same source."
+            docker buildx imagetools create \
+              --tag "ghcr.io/${{ github.repository }}:${V}" \
+              --tag "ghcr.io/${{ github.repository }}:latest" \
+              "ghcr.io/${{ github.repository }}:v${V}"
+          fi
 
       - name: Make package public
         env:
