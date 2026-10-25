@@ -165,6 +165,7 @@
               </div>
 
               <button
+                v-if="editing"
                 type="button"
                 class="timetable-add"
                 :data-timetable-add-entry="day.weekday"

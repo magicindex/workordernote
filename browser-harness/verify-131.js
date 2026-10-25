@@ -273,6 +273,8 @@ async function waitForCard(page, selector, timeout = 12000) {
       // ---------------- 7. 界面上加一节、改一节、删一节 ----------------
       await page.click(`[data-timetable-tab*="${STAMP}-哥哥"]`);
       await sleep(700);
+      await page.click('[data-timetable-edit]');
+      await sleep(500);
       await page.click('[data-timetable-add-entry="7"]');
       await sleep(600);
       const defaults = await page.evaluate(() => ({
@@ -388,6 +390,8 @@ async function waitForCard(page, selector, timeout = 12000) {
       // 「编辑」与「空节次」已合并（用户 2026-10-20）：关着时没有空节次，
       // 点开既有落点也能拖，退出后收起。
       const slotsBefore = await page.$$eval('[data-timetable-slot]', (els) => els.length);
+      const addBefore = await page.$$eval('[data-timetable-add-entry]', (els) => els.length);
+      check('非编辑态不显示「添加」按钮', addBefore === 0, `add=${addBefore}`);
       const editLabel = await page.$eval('[data-timetable-edit]', (el) => el.textContent.replace(/\s+/g, ' ').trim());
       check('编辑按钮写「编辑课程表」', editLabel === '编辑课程表', editLabel);
       const heights = await page.evaluate(() => {
@@ -403,10 +407,14 @@ async function waitForCard(page, selector, timeout = 12000) {
       check('点「编辑」进入拖动模式', editOn === 'on', editOn || '');
       const slotsInEdit = await page.$$eval('[data-timetable-slot]', (els) => els.length);
       check('编辑态同时铺出空节次（有落点可拖）', slotsBefore === 0 && slotsInEdit > 0, `${slotsBefore} -> ${slotsInEdit}`);
+      const addInEdit = await page.$$eval('[data-timetable-add-entry]', (els) => els.length);
+      check('编辑态显示「添加」按钮', addInEdit > 0, `add=${addInEdit}`);
       await page.click('[data-timetable-edit]');
       await sleep(500);
       const slotsRestored = await page.$$eval('[data-timetable-slot]', (els) => els.length);
+      const addRestored = await page.$$eval('[data-timetable-add-entry]', (els) => els.length);
       check('退出编辑后空节次一起收起', slotsRestored === 0, `slots=${slotsRestored}`);
+      check('退出编辑后「添加」按钮一起收起', addRestored === 0, `add=${addRestored}`);
       await page.click('[data-timetable-edit]');
       await sleep(500);
       const dragged = await page.evaluate(() => {
