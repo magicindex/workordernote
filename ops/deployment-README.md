@@ -257,8 +257,10 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   compose 备份 `docker-compose.yml.bak-pre0430-20261025-0905`，镜像 tag 改 `0.43.0` 后
   `docker compose up -d --force-recreate`。09:05 容器 healthy，`/api/version` = `0.43.0` / `d23d7e5`；
   库 `users 1 / lists 229 / reminders 2167 / timetables 39 / system_configs 77`，`integrity_check=ok`。
-- 200 生产仍为 `0.42.1`：本机到 `192.168.3.200:9527` 无可用 SSH key/密码，未能远程升级；
-  离线包与镜像已备好，待有凭据时按「传镜像 → `docker load` → 改 tag → `up -d --force-recreate`」补升。
+- 200 生产已升级 `0.43.0`：11:15 应用内备份 `workordernote-backup-20261025-111527.tar.gz`，
+  compose 备份 `docker-compose.yml.bak-pre0430-20261025-1118`；上传镜像 tar 并 `docker load` 后
+  改 tag、`up -d --force-recreate`。11:22 healthy，`/api/version` = `0.43.0` / `d23d7e5`；
+  手机清单弹层 `verify-128` 26/26。
 
 **回归**
 - 沙箱全量：`run-all.sh` 57 套件 **54 通过 / 3 失败**，**1503 项通过**。
