@@ -268,6 +268,13 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   md5 `93d59c48777292ff9dc360e47a591879`，
   sha256 `f4feeb7691af9b54b91c06b54d2e841fda6405b3b1ed336d56451a662e384817`）。
 
+**仓库同步**
+- Gitea：主仓库 `main` 与 tag `v0.43.2` 已推送（`cyberzero/workordernote`）；README 同步为 0.43.2。
+- GitHub：发布快照仓 `publish-workordernote` 提交 `e5ca9af`、tag `v0.43.2`；Actions `release` 成功，
+  Release `v0.43.2`（源码包、bundle、离线镜像、fpk、截图）与
+  `ghcr.io/magicindex/workordernote:0.43.2` 已发布。
+- Gitea 容器仓库仍缺可用 `write:package` 推送通道，`0.43.2` 镜像未补推；源码、tag 与 README 已同步。
+
 ### 2026-10-25：0.43.1（201 生产 / 201 沙箱 / 200 生产上线）—— 课程表非编辑态收起「添加」
 
 > **发版记录**（VERSION `0.43.1`，源码提交 `93c5042`，镜像 `workordernote:0.43.1` =
