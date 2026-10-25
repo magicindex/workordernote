@@ -263,6 +263,13 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - fnOS 包 `release/0.43.1/workordernote_0.43.1_amd64.fpk`（21,826,925 B，
   md5 `51105d983e8ebfd2de26217255cc1739`，sha256 `525920f09814b0e68210681d600846cc63efe3715a2ce8981a14a6f8c90868fc`）。
 
+**仓库同步**
+- Gitea：主仓库 `main` 与 tag `v0.43.1` 已通过 SSH 密钥推送（`cyberzero/workordernote`）；README 同步为 0.43.1。
+- GitHub：发布快照仓 `publish-workordernote` 提交 `5177bcd`、tag `v0.43.1` 已推送；
+  Actions `release` 成功，Release `v0.43.1`（源码包、bundle、离线镜像、fpk、截图）与
+  `ghcr.io/magicindex/workordernote:0.43.1` 已发布。
+- Gitea 容器仓库仍缺可用 `write:package` 推送通道，`0.43.1` 镜像未补推；源码、tag 与 README 已同步。
+
 ### 2026-10-25：0.43.0（201 生产 / 201 沙箱 / 200 生产上线）—— 数据恢复、双历日期、手机课程表
 
 > **发版记录**（VERSION `0.43.0`，源码提交 `d23d7e5`，镜像 `workordernote:0.43.0` =
