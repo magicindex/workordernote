@@ -49,6 +49,8 @@
 docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.43.1
 ```
 
+同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.43.1`；Gitea 容器仓库不可用时可直接改用。
+
 ### 用仓库里的 compose 文件安装
 
 ```bash
