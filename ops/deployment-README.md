@@ -217,7 +217,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 ## 版本与迭代
 
 - 软件版本见根目录 `VERSION`，当前 `0.43.1`，规则为 `主版本号.小版本号.修正号`。
-  **部署状态（2026-10-25 12:08）**：**201 生产 8906 / 201 沙箱 8908 / 200 生产均已升级到 `0.43.1`**
+  **部署状态（2026-10-25 12:32）**：**201 生产 8906 / 201 沙箱 8908 / 200 生产均已升级到 `0.43.1`**
   （提交 `93c5042`，镜像 `workordernote:0.43.1` = `sha256:10128a2d1bf3…`）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
@@ -250,7 +250,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   compose 备份 `docker-compose.yml.bak-pre0431-20261025-1204`；12:04 重建，healthy，`/api/version` 0.43.1 / 93c5042。
 - 200 生产：升级前应用内备份 `workordernote-backup-20261025-120603.tar.gz`（289,391 B），
   compose 备份 `docker-compose.yml.bak-pre0431-20261025-1206`；上传并 `docker load`
-  `pkg/workordernote-0.43.1-amd64.tar.gz`，compose 标签改 `0.43.1` 后 12:08 重建，healthy，
+  `pkg/workordernote-0.43.1-amd64.tar.gz`，compose 标签改 `0.43.1` 后 12:32 通过 Compose（项目 `workordernote`）重建，healthy，
   `/api/version` 0.43.1 / 93c5042。
 - 后端 `go vet ./... && go test ./...` 全过；前端 `npm run build` 成功。
 - 回归：沙箱 / 201 生产 / 200 生产 `verify-131` 均 57/57；课程表非编辑态已无「添加」按钮。
