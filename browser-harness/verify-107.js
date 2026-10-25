@@ -180,6 +180,9 @@ const madeIds = [];
     check('中秋卡片同时显示公历和农历（八月十五）、不再单独标「农历」，并且每年重复',
       !!midAutumn && midAutumn.meta.includes('八月十五') && !midAutumn.meta.includes('农历') && midAutumn.meta.includes('每年'),
       JSON.stringify(midAutumn));
+    check('农历年份用干支写法（如丙午年/丁未年），不用「二〇二六年」',
+      !!midAutumn && /[甲乙丙丁戊己庚辛壬癸][子丑寅卯辰巳午未申酉戌亥]年八月十五/.test(midAutumn.lunar) && !midAutumn.lunar.includes('二〇'),
+      JSON.stringify(midAutumn?.lunar));
     // 中秋的日期必须是农历八月十五换算出来的那一天（用接口独立验一次）
     const nowYear = new Date().getFullYear();
     let lunarDay = null;
