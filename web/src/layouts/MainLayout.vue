@@ -449,8 +449,11 @@
     </nav>
 
     <!-- 「清单」标签弹出的清单列表（用户 2026-10-16）：手机底部弹层，列的就是侧栏「我的清单」
-         那一段（全部 / 提醒@他 / 信用卡账单 / 随手记事本 / 人生要有仪式感 / 自建清单，
-         顺序与显示条件完全一致），点一行切过去、弹层关闭。 -->
+         那一段（信用卡账单 / 随手记事本 / 人生要有仪式感 / 自建清单，顺序与显示条件完全一致），
+         点一行切过去、弹层关闭。
+         课程表（用户 2026-10-23）：「手机页面 中间清单 显示不全，没有看到课程表」——它和
+         「智能清单」一起排在侧栏，手机上原来只能从抽屉进，这里补在最上面，开关沿用
+         authStore.timetableEnabled（默认关）。 -->
     <Transition name="sheet">
       <div v-if="listsSheetOpen" class="lg:hidden">
         <div class="sheet-backdrop" data-lists-sheet-backdrop @click="closeListsSheet"></div>
@@ -462,6 +465,22 @@
             </button>
           </div>
           <div class="lists-sheet-body">
+            <button
+              v-if="authStore.timetableEnabled"
+              type="button"
+              class="lists-sheet-row"
+              :class="{ 'lists-sheet-row-active': route.path === '/admin/timetable' }"
+              data-lists-sheet-row="timetable"
+              @click="pickTimetable"
+            >
+              <span class="nav-symbol h-5 w-5 bg-violet-500/12 text-violet-500">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="5" width="16" height="15" rx="2.5" stroke-width="1.7"/><path d="M4 10h16M9 3.5v3M15 3.5v3M8.5 14h2M13.5 14h2M8.5 17h2" stroke-width="1.7" stroke-linecap="round"/></svg>
+              </span>
+              <span class="min-w-0 flex-1 truncate">课程表</span>
+              <span v-if="route.path === '/admin/timetable'" class="shrink-0 text-brand-500" data-lists-sheet-current aria-label="当前页面">
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m5 12.5 4.5 4.5L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
             <button
               v-for="row in myListRows"
               :key="row.key"
@@ -778,9 +797,14 @@ function myRowLabel(row: MyListRow): string {
 // 选一行 → 切到那一页并收起弹层。原来那个标签是信用卡账单的直达入口，现在也还在弹层里
 // （点一下就进去）——只是多了「所有清单」这一层。
 const listsSheetOpen = ref(false)
-const isListTabActive = computed(() => route.path.startsWith('/admin/list/'))
+const isListTabActive = computed(() => route.path.startsWith('/admin/list/') || route.path === '/admin/timetable')
 function openListsSheet() { listsSheetOpen.value = true }
 function closeListsSheet() { listsSheetOpen.value = false }
+/** 课程表（用户 2026-10-23）：这一页现在也从「清单」弹层进，切过去就收起弹层 */
+function pickTimetable() {
+  listsSheetOpen.value = false
+  if (route.path !== '/admin/timetable') void router.push('/admin/timetable')
+}
 /** 这一行是不是当前所在页面（弹层里打勾用） */
 function isMyRowCurrent(row: MyListRow): boolean {
   return route.path === `/admin/list/${row.list.id}`

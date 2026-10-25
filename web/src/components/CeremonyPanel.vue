@@ -78,9 +78,11 @@
           <div class="min-w-0 text-left">
             <h3 class="ceremony-title" :data-ceremony-title="entry.id">{{ entry.title }}</h3>
             <p class="ceremony-date">
-              {{ entry.dateLabel }}
-              <span v-if="entry.lunar" class="tiny-badge ml-1">农历</span>
-              <span v-if="entry.repeatLabel" class="tiny-badge ml-1">{{ entry.repeatLabel }}</span>
+              <span class="block" data-ceremony-solar>
+                {{ entry.dateLabel }}
+                <span v-if="entry.repeatLabel" class="tiny-badge ml-1">{{ entry.repeatLabel }}</span>
+              </span>
+              <span v-if="entry.lunarLabel" class="block" data-ceremony-lunar>{{ entry.lunarLabel }}</span>
             </p>
             <p v-if="entry.passLabel || entry.cycle > 0 || entry.notes" class="ceremony-extra">
               <span v-if="entry.passLabel" class="tiny-badge" :data-ceremony-cycle="entry.id" data-ceremony-pass>{{ entry.passLabel }}</span>
@@ -325,6 +327,7 @@ import ConfirmDialog from './ConfirmDialog.vue'
 import ListIcon from './ListIcon.vue'
 import LunarDatePicker from './LunarDatePicker.vue'
 import { createReminder, deleteReminder, updateReminder, convertLunarDate, getReminders, uploadImage, type ReminderItem, type SaveReminderInput } from '../api/reminder'
+import { formatLunarDate } from '../utils/lunar'
 
 const props = defineProps<{ list: { id: number; name: string } }>()
 const emit = defineEmits<{ (e: 'changed'): void; (e: 'toast', message: string, type?: 'success' | 'error'): void }>()
@@ -555,6 +558,36 @@ function anniversaryLabel(title: string, passed: number, isToday: boolean) {
   return isToday ? `第 ${passed + 1} 次${noun}` : `已过 ${passed} 次${noun}`
 }
 
+/** 公历日期 -> 农历中文写法（同一天只请求一次，切清单时复用）。 */
+const lunarLabels = ref<Record<string, string>>({})
+const lunarInFlight = new Set<string>()
+function dayKey(d: Date) {
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+}
+async function loadLunarLabels() {
+  const pending = new Map<string, { year: number; month: number; day: number }>()
+  for (const item of items.value) {
+    if (!item.due_at) continue
+    const d = new Date(item.due_at)
+    if (Number.isNaN(d.getTime())) continue
+    const key = dayKey(d)
+    if (!lunarLabels.value[key] && !lunarInFlight.has(key)) {
+      pending.set(key, { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() })
+    }
+  }
+  await Promise.all([...pending].map(async ([key, date]) => {
+    lunarInFlight.add(key)
+    try {
+      const res = await convertLunarDate(date)
+      const c = res.data?.data
+      if (c) lunarLabels.value = { ...lunarLabels.value, [key]: formatLunarDate(c.lunar_year, c.lunar_month, c.lunar_day) }
+    } catch { /* 换算失败就不显示第二行，公历日期照常 */ }
+    finally {
+      lunarInFlight.delete(key)
+    }
+  }))
+}
+
 const cards = computed(() => items.value
   .map((item) => {
     const lunar = item.calendar === 'lunar'
@@ -581,8 +614,8 @@ const cards = computed(() => items.value
       days: days ?? 9999,
       undated: days === null,
       daysClass: days === null ? '' : days < 0 ? 'ceremony-days-past' : days <= 7 ? 'ceremony-days-soon' : '',
-      lunar,
       dateLabel: d ? `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日` : '未设日期',
+      lunarLabel: d ? lunarLabels.value[dayKey(d)] || '' : '',
       repeatLabel: repeatLabelOf(item.repeat_rule),
       cycle: item.cycle_index || 0,
       accent: item.accent || '',
@@ -608,6 +641,7 @@ async function load() {
     const res = await getReminders({ view: 'all', status: 'all', list_id: props.list.id, sort: 'created_desc' })
     items.value = res.data?.data || []
     void loadLunarAnnual()
+    void loadLunarLabels()
   } catch {
     items.value = []
   } finally {

@@ -163,14 +163,9 @@
           <button class="btn-secondary !h-8 !px-3 !text-[11px]" :data-card-set-amount="card.id" @click="openAmount(card)">
             {{ card.current?.amount_cents ? '改本期金额' : '填本期金额' }}
           </button>
-          <!-- 次要操作收进抽屉：桌面鼠标移上去自动展开、移开自动收缩；触屏点一下展开
-               （用户要求：解决手机端按钮太多换行占空间的问题）。 -->
-          <div
-            class="relative ml-auto"
-            data-card-actions
-            @mouseenter="drawerOpen = card.id"
-            @mouseleave="drawerOpen = null"
-          >
+          <!-- 次要操作收进抽屉：点「⋯ 更多」打开，点页面任意其他地方收起
+               （用户 2026-10-24：不再用鼠标悬停展开）。 -->
+          <div class="relative ml-auto" data-card-actions>
             <button
               class="btn-secondary !h-8 !px-3 !text-[11px]"
               :data-card-more="card.id"
@@ -247,7 +242,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import Modal from './Modal.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import CardEditorDialog from './CardEditorDialog.vue'
@@ -470,6 +465,15 @@ const SORT_KEY = 'ui_card_sort'
 const sortMode = ref<SortMode>((localStorage.getItem(SORT_KEY) as SortMode) || 'smart')
 // 卡片次要操作的抽屉：桌面靠悬停、手机靠点击（见模板里的 @mouseenter/@click）
 const drawerOpen = ref<number | null>(null)
+
+// 点「⋯ 更多」自己交给按钮的 click 切换；点页面其他任何位置都收起抽屉。
+function closeDrawerOnClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (target?.closest('[data-card-more]')) return
+  if (drawerOpen.value !== null) drawerOpen.value = null
+}
+onMounted(() => document.addEventListener('click', closeDrawerOnClick))
+onBeforeUnmount(() => document.removeEventListener('click', closeDrawerOnClick))
 const sortMenu = reactive({ open: false, x: 0, y: 0 })
 const sortItems: { key: SortMode; label: string; hint: string }[] = [
   { key: 'smart', label: '智能排序（默认）', hint: '还款日近的在前（逾期 / ≤3 天最前），再按账单日' },

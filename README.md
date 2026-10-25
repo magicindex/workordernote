@@ -5,7 +5,7 @@
 单机部署、数据全在本地；也可以两台机器自动同步。界面同时适配桌面与手机，
 支持装成 PWA 或打包安卓客户端。
 
-**下载**：[GitHub Releases](https://github.com/magicindex/workordernote/releases) · 最新版本 v0.42.1
+**下载**：[GitHub Releases](https://github.com/magicindex/workordernote/releases) · 最新版本 v0.43.0
 
 **国内仓库（Gitea）**：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
 
@@ -22,10 +22,10 @@
 | **首页看板** | 「接下来 14 天」与「已逾期」两列，打开即知轻重缓急 |
 | **日历** | 月历同时显示公历、农历、节气与节日 |
 | **打印** | 日历整月打印，或切换列表按行打印；可调方向、字号、标题与打印列 |
-| **课程表** | 按周几排课，一张表一个人；编辑态可铺出空节次直接点格添加 |
-| **人生要有仪式感** | 生日、纪念日、考试倒计时卡片；多种配色、金属色与背景图 |
-| **信用卡账单** | 账单日、还款日、免息期与本期金额，接近还款日自动变色 |
-| **数据备份** | 每天定时备份整库与上传文件到本机目录和/或 WebDAV，可保留 N 份 |
+| **课程表** | 按周几排课，一张表一个人；编辑态可铺出空节次直接点格添加；手机「清单」弹层可直达 |
+| **人生要有仪式感** | 生日、纪念日、考试倒计时卡片；公历、农历分两行同显；多种配色、金属色与背景图 |
+| **信用卡账单** | 账单日、还款日、免息期与本期金额，接近还款日自动变色；「更多」点击展开菜单 |
+| **数据备份** | 每天定时备份整库与上传文件到本机目录和/或 WebDAV，可保留 N 份；支持一键恢复 |
 | **双机同步** | 清单、任务、记事、完成记录、账单、课程表、个人偏好、站点设置；账号密码与渠道凭据不同步 |
 | **AI 小秘** | 接 Ollama 或任意 OpenAI 兼容接口；可查日程、写周报、把一句话变成待办 |
 
@@ -138,7 +138,7 @@ docker compose up -d
 ```bash
 git clone https://github.com/magicindex/workordernote.git
 cd workordernote
-docker build -t ghcr.io/magicindex/workordernote:0.42.1 .
+docker build -t ghcr.io/magicindex/workordernote:0.43.0 .
 docker compose up -d
 ```
 
@@ -174,6 +174,8 @@ OpenAI 兼容服务的 Base URL、模型与密钥。不配置时应用完全可�
 
 「系统配置 → 数据备份」可设每天几点、落本机目录与 WebDAV、保留份数；
 「立即备份」可随时手动打一份。备份包含数据库与上传文件，不包含日志。
+「数据恢复」可列出本机备份，或上传别处保存的 `.tar.gz`；恢复前会自动生成
+一份 `...-before-restore.tar.gz` 安全备份，确认后覆盖整库与上传文件。
 
 ### 双机同步
 

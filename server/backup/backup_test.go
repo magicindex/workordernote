@@ -194,3 +194,183 @@ func keys(m map[string]string) []string {
 	}
 	return out
 }
+
+func TestRestoreReplacesDatabaseAndUploads(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+	appCfg = config.Config{
+		DataDir:   dir,
+		DBPath:    filepath.Join(dir, "db", "workordernote.db"),
+		UploadDir: filepath.Join(dir, "uploads"),
+	}
+	if err := db.Create(&database.User{Username: "admin", Password: "x", Role: "admin", Status: 1}).Error; err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	if err := db.Exec("CREATE TABLE demo (id INTEGER PRIMARY KEY, name TEXT)").Error; err != nil {
+		t.Fatal(err)
+	}
+	db.Exec("INSERT INTO demo (name) VALUES ('恢复前数据')")
+	os.MkdirAll(filepath.Join(appCfg.UploadDir, "ceremony"), 0o755)
+	os.WriteFile(filepath.Join(appCfg.UploadDir, "ceremony", "keep.png"), []byte("KEEP"), 0o644)
+
+	if err := os.MkdirAll(localDir(db), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	name := filePrefix + "20261020-030000.tar.gz"
+	archive := filepath.Join(localDir(db), name)
+	if _, err := createArchive(db, archive, time.Date(2026, 10, 20, 3, 0, 0, 0, time.Local)); err != nil {
+		t.Fatalf("createArchive: %v", err)
+	}
+
+	// 弄乱当前数据：表没了、图片也换掉，恢复后应回到备份里的状态。
+	if err := db.Exec("DROP TABLE demo").Error; err != nil {
+		t.Fatal(err)
+	}
+	os.RemoveAll(appCfg.UploadDir)
+	os.MkdirAll(appCfg.UploadDir, 0o755)
+	os.WriteFile(filepath.Join(appCfg.UploadDir, "old.txt"), []byte("OLD"), 0o644)
+
+	res, err := RestoreLocal(db, name, time.Date(2026, 10, 21, 4, 0, 0, 0, time.Local))
+	if err != nil {
+		t.Fatalf("RestoreLocal: %v", err)
+	}
+	if res.Users != 1 || res.Uploads != 1 {
+		t.Fatalf("result users/uploads = %d/%d", res.Users, res.Uploads)
+	}
+	if !strings.Contains(res.SafetyFile, "before-restore") {
+		t.Fatalf("safety = %q", res.SafetyFile)
+	}
+
+	var got string
+	if err := db.Raw("SELECT name FROM demo WHERE id = 1").Scan(&got).Error; err != nil {
+		t.Fatalf("restored demo row: %v", err)
+	}
+	if got != "恢复前数据" {
+		t.Fatalf("demo name = %q", got)
+	}
+	raw, err := os.ReadFile(filepath.Join(appCfg.UploadDir, "ceremony", "keep.png"))
+	if err != nil || string(raw) != "KEEP" {
+		t.Fatalf("restored upload = %q, %v", raw, err)
+	}
+	if _, err := os.Stat(filepath.Join(appCfg.UploadDir, "old.txt")); !os.IsNotExist(err) {
+		t.Fatalf("old upload should be gone, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(localDir(db), res.SafetyFile)); err != nil {
+		t.Fatalf("safety backup missing: %v", err)
+	}
+}
+
+func TestRestoreRejectsPathTraversal(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+	appCfg = config.Config{DataDir: dir, DBPath: filepath.Join(dir, "db", "workordernote.db"), UploadDir: filepath.Join(dir, "uploads")}
+
+	archive := filepath.Join(dir, "evil.tar.gz")
+	f, err := os.Create(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := gzip.NewWriter(f)
+	tw := tar.NewWriter(gz)
+	body := []byte("EVIL")
+	tw.WriteHeader(&tar.Header{Name: "../evil.txt", Mode: 0o644, Size: int64(len(body)), Typeflag: tar.TypeReg})
+	tw.Write(body)
+	tw.Close()
+	gz.Close()
+	f.Close()
+
+	if _, err := restoreArchive(db, archive, "evil.tar.gz", time.Now()); err == nil {
+		t.Fatal("path traversal archive should be rejected")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "evil.txt")); !os.IsNotExist(err) {
+		t.Fatalf("evil file escaped staging: %v", err)
+	}
+}
+
+func TestRestoreRejectsDatabaseWithoutUsers(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+	appCfg = config.Config{DataDir: dir, DBPath: filepath.Join(dir, "db", "workordernote.db"), UploadDir: filepath.Join(dir, "uploads")}
+	snapshot := filepath.Join(dir, "snapshot.db")
+	if err := vacuumInto(db, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err := inspectSnapshot(snapshot); err == nil {
+		t.Fatal("empty user table should be rejected")
+	}
+}
+
+func TestListLocalFiltersAndSorts(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+	appCfg = config.Config{DataDir: dir}
+	os.MkdirAll(localDir(db), 0o755)
+	for _, name := range []string{
+		filePrefix + "20261018-030000.tar.gz",
+		filePrefix + "20261020-030000.tar.gz",
+		"notes.txt",
+		"other.tar.gz",
+	} {
+		os.WriteFile(filepath.Join(localDir(db), name), []byte("x"), 0o644)
+	}
+	files, err := ListLocal(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 2 || files[0].Name != filePrefix+"20261020-030000.tar.gz" {
+		t.Fatalf("files = %+v", files)
+	}
+}
+
+func TestRestoreSurvivesReopen(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "db", "app.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.InitDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(db); err != nil {
+		t.Fatal(err)
+	}
+	appCfg = config.Config{DataDir: dir, DBPath: dbPath, UploadDir: filepath.Join(dir, "uploads")}
+	if err := db.Create(&database.User{Username: "admin", Password: "x", Role: "admin", Status: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("CREATE TABLE demo (id INTEGER PRIMARY KEY, name TEXT)").Error; err != nil {
+		t.Fatal(err)
+	}
+	db.Exec("INSERT INTO demo (name) VALUES ('落盘测试')")
+	os.MkdirAll(localDir(db), 0o755)
+	name := filePrefix + "20261020-040000.tar.gz"
+	if _, err := createArchive(db, filepath.Join(localDir(db), name), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	db.Exec("DELETE FROM demo")
+
+	if _, err := RestoreLocal(db, name, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.CloseDB(db); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := database.InitDB(dbPath)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer database.CloseDB(reopened)
+	var got string
+	if err := reopened.Raw("SELECT name FROM demo WHERE id = 1").Scan(&got).Error; err != nil {
+		t.Fatalf("query after reopen: %v", err)
+	}
+	if got != "落盘测试" {
+		t.Fatalf("after reopen name = %q", got)
+	}
+	var integrity string
+	if err := reopened.Raw("PRAGMA integrity_check").Scan(&integrity).Error; err != nil || integrity != "ok" {
+		t.Fatalf("integrity after reopen = %q, %v", integrity, err)
+	}
+}
