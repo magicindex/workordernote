@@ -32,6 +32,14 @@ export const UPSTREAM = {
 
 const versionHistory: ReleaseNote[] = [
   {
+    version: '0.43.1',
+    date: '2026-10-25',
+    title: '浏览课程表时不再误触「添加」',
+    items: [
+      '**课程表更清爽**：非编辑态不再显示每列底部的「添加」按钮；点「编辑课程表」后按钮随空节次一起出现，点「完成」后一起收起。',
+    ],
+  },
+  {
     version: '0.43.0',
     date: '2026-10-25',
     title: '备份能恢复，课程表手机也能进',
