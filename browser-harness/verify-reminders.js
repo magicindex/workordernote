@@ -76,8 +76,11 @@ withTab(async (page, ctx) => {
   check('版本卡片按小版本合并，只差修正号的并成一张（带「起 – 止」）',
     notes.cards > 10 && notes.cards < 45 && notes.ranged >= 8, `卡片=${notes.cards} 合并=${notes.ranged}`);
   // 最新一版要跟当前版本对得上（以前写死 0.33.0，0.34.0 一发版就红）
+  // 同一小版本的修正版会合并成「0.43.0 – 0.43.2」这种范围，所以比对范围的右端。
+  const firstRange = String(notes.versions[0] || '').split(' – ')
+  const firstLatest = firstRange[firstRange.length - 1]
   check('最新一版排在最前，且默认只展开前几张',
-    notes.versions[0] === currentVersion && notes.openCount === 3,
+    firstLatest === currentVersion && notes.openCount === 3,
     `首卡=${notes.versions[0]} 当前=${currentVersion} 展开=${notes.openCount}`);
   check('条目多的卡片先收 3 条，给「展开全部」', notes.someHasMore === true, '');
   // 点一张收着的卡片，应该展开出条目
