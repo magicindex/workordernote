@@ -232,7 +232,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
-### 2026-10-25：0.43.0（201 生产 / 201 沙箱上线；200 待升级）—— 数据恢复、双历日期、手机课程表
+### 2026-10-25：0.43.0（201 生产 / 201 沙箱 / 200 生产上线）—— 数据恢复、双历日期、手机课程表
 
 > **发版记录**（VERSION `0.43.0`，源码提交 `d23d7e5`，镜像 `workordernote:0.43.0` =
 > `sha256:fe29be51f8d3541c17014a87e69c628a70a1bca239d2f8146e5c960a70b44c1e`，92,302,628 B，
@@ -283,8 +283,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - GitHub 发布快照仓 `publish-workordernote` 已提交 `99f145a` 并推送 `main` 与 tag `v0.43.0`；
   Actions `release` 成功，Release 附件含源码包、bundle、离线镜像、fpk 与截图，
   `ghcr.io/magicindex/workordernote:0.43.0` 已发布。
-- Gitea 因本机凭据失效（HTTPS 密码与 API 均 401）暂未推送，容器仓库亦因缺
-  `write:package` 令牌未推送 `0.43.0`，待补令牌后重试。
+- Gitea 已通过专用 SSH key（`workordernote-gitea-20261025`，
+  `SHA256:wmS2GTYqqXc4FdEUpOmmT1deCFCiWQ0seuqMyi3ZAkI`）推送 `main`（`55aff8c`）与
+  tag `v0.43.0`；Gitea 容器仓库仍缺 `write:package` 令牌，`0.43.0` 镜像待补推。
 
 ### 2026-10-20 晚：Docker 目录改名 `reminders` → `workordernote`（数据原样迁移）
 
