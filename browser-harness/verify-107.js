@@ -142,12 +142,18 @@ const madeIds = [];
         days: Number(card.getAttribute('data-ceremony-days')),
         countdown: card.querySelector('[data-ceremony-countdown]')?.textContent.replace(/\s+/g, ' ').trim(),
         meta: card.querySelector('.ceremony-date')?.textContent.replace(/\s+/g, ' ').trim(),
+        lunar: card.querySelector('[data-ceremony-lunar]')?.textContent.trim() || '',
+        lunarBelow: (() => {
+          const solar = card.querySelector('[data-ceremony-solar]')?.getBoundingClientRect();
+          const lunar = card.querySelector('[data-ceremony-lunar]')?.getBoundingClientRect();
+          return !!(solar && lunar && lunar.top >= solar.bottom - 1);
+        })(),
         cycle: card.querySelector('[data-ceremony-cycle]')?.textContent.trim() || '',
       };
     }, titlePart);
     const national = await cardOf('国庆');
-    check('国庆节卡片出现，倒计时是天数、日期落在 10 月 1 日',
-      !!national && /还有 \d+ 天|今天|明天/.test(national.countdown) && /10月1日/.test(national.meta),
+    check('国庆节卡片出现，倒计时是天数、公历日期落在 10 月 1 日、另一行是农历',
+      !!national && /还有 \d+ 天|今天|明天/.test(national.countdown) && /10月1日/.test(national.meta) && !!national.lunar && national.lunarBelow,
       JSON.stringify(national));
     // 情人节改成「填第一次」（用户 2026-10-15：情人节：第一次情人节；七夕：第一次七夕）：
     // 点模板先出表单（日期栏写「第一次情人节」、默认每年重复），填完保存才见卡片。
@@ -171,8 +177,8 @@ const madeIds = [];
     check('保存后情人节卡片出现，标了「每年」',
       !!valentine && valentine.meta.includes('每年'), JSON.stringify(valentine));
     const midAutumn = await cardOf('中秋');
-    check('中秋卡片出现，标了「农历」并且每年重复',
-      !!midAutumn && midAutumn.meta.includes('农历') && midAutumn.meta.includes('每年'),
+    check('中秋卡片同时显示公历和农历（八月十五）、不再单独标「农历」，并且每年重复',
+      !!midAutumn && midAutumn.meta.includes('八月十五') && !midAutumn.meta.includes('农历') && midAutumn.meta.includes('每年'),
       JSON.stringify(midAutumn));
     // 中秋的日期必须是农历八月十五换算出来的那一天（用接口独立验一次）
     const nowYear = new Date().getFullYear();
@@ -297,16 +303,19 @@ const madeIds = [];
       await gotoRetry(page, BASE + `/admin/list/${cardList.id}`);
       await waitSel(page, '[data-card-face]', 20000);
       await sleep(1200);
-      const periodBadges = await page.evaluate(() => [...document.querySelectorAll('[data-card-period-index]')].map((e) => e.textContent.trim()));
+      const periodBadges = await page.evaluate(() => [...document.querySelectorAll('[data-card-item]')].map((el) => ({
+        id: Number(el.getAttribute('data-card-item')),
+        badge: el.querySelector('[data-card-period-index]')?.textContent.trim() || '',
+      })));
       const cards = (await api(page, '/api/reminder/cards')).body?.data || [];
-      const first = cards[0] || {};
-      const expected = first.current?.period && first.created_at
-        ? (Number(first.current.period.slice(0, 4)) - Number(first.created_at.slice(0, 4))) * 12
-          + (Number(first.current.period.slice(5, 7)) - Number(first.created_at.slice(5, 7))) + 1
-        : 0;
+      const expectedById = new Map(cards.map((c) => [c.id, c.current?.period && c.created_at
+        ? (Number(c.current.period.slice(0, 4)) - Number(c.created_at.slice(0, 4))) * 12
+          + (Number(c.current.period.slice(5, 7)) - Number(c.created_at.slice(5, 7))) + 1
+        : 0]));
+      const shown = periodBadges.filter((x) => x.badge);
       check('信用卡卡面显示「第 x 期」（按开卡月份算）',
-        periodBadges.length > 0 && periodBadges[0] === `第 ${expected} 期`,
-        JSON.stringify({ periodBadges: periodBadges.slice(0, 3), expected }));
+        shown.length > 0 && shown.every((x) => x.badge === `第 ${expectedById.get(x.id)} 期`),
+        JSON.stringify({ shown: shown.slice(0, 3), expected: [...expectedById].slice(0, 3) }));
     } else {
       check('信用卡栏目存在（跳过期数断言）', false, '没有信用卡栏目');
     }

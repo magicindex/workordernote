@@ -65,6 +65,35 @@ function check(name, ok, detail = '') {
     });
     check('备份状态里记录了本机目录与详情',
       !!status.local_dir && /\.tar\.gz/.test(status.last_detail || ''), JSON.stringify(status));
+
+    // 数据恢复：本机备份列表、上传入口、危险确认框；这里只取消，不真的覆盖测试数据。
+    await page.waitForSelector('[data-backup-file]', { timeout: 15000 });
+    const restoreUI = await page.evaluate(() => ({
+      hasList: !!document.querySelector('[data-backup-restore-list]'),
+      files: document.querySelectorAll('[data-backup-file]').length,
+      hasUpload: !!document.querySelector('[data-backup-upload]'),
+      uploadAccept: document.querySelector('[data-backup-upload]')?.parentElement?.querySelector('input[type=file]')?.getAttribute('accept') || '',
+    }));
+    check('数据恢复区列出本机备份并提供上传入口',
+      restoreUI.hasList && restoreUI.files > 0 && restoreUI.hasUpload, JSON.stringify(restoreUI));
+    check('上传恢复只接受 tar.gz 备份', /\.tar\.gz/.test(restoreUI.uploadAccept), restoreUI.uploadAccept);
+
+    await page.click('[data-backup-restore]');
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+    const dialog = await page.evaluate(() => ({
+      text: (document.querySelector('[role="dialog"]')?.innerText || '').replace(/\s+/g, ' '),
+    }));
+    check('点恢复先弹危险确认框并说明覆盖范围',
+      /从备份恢复/.test(dialog.text) && /覆盖当前所有账号/.test(dialog.text), dialog.text.slice(0, 160));
+    const cancelled = await page.evaluate(() => {
+      const buttons = [...document.querySelectorAll('[role="dialog"] button')];
+      const cancel = buttons.find((b) => b.textContent.trim() === '取消');
+      if (cancel) cancel.click();
+      return !!cancel;
+    });
+    check('确认框可取消', cancelled);
+    await sleep(300);
+    check('取消后没有执行恢复', !(await page.$('[data-backup-restore-notice]')));
   });
   console.log(`\n结果：${pass} 项通过，${fail} 项失败`);
   process.exit(fail ? 1 : 0);

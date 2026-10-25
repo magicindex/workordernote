@@ -349,7 +349,7 @@ const setSelect = (page, sel, value) => page.evaluate(({ sel, value }) => {
       check('写清了账单日→还款日的卡面配色规则',
         /账单日/.test(legend) && /黄/.test(legend) && /橘/.test(legend) && /3 天/.test(legend) && /红/.test(legend), legend);
       check('卡片默认不是「每张一个颜色」：默认档是同一套配色',
-        ['normal', 'soon', 'paid'].includes(face?.urgency || ''), String(face?.urgency));
+        ['normal', 'soon', 'urgent', 'overdue', 'paid'].includes(face?.urgency || ''), String(face?.urgency));
       await page.screenshot({ path: path.join(SHOTS, 'credit-card-face.png') });
 
       // ---------- 5b. 卡片列数与真卡比例 ----------
@@ -664,23 +664,29 @@ const setSelect = (page, sel, value) => page.evaluate(({ sel, value }) => {
       check('卡名不再被截断（窄屏自动换行）', layout?.titleWraps === true, JSON.stringify(layout));
       check('还款计划/编辑/删除默认收在「⋯ 更多」抽屉里', layout?.drawerHidden === true, String(layout?.drawerHidden));
       await page.evaluate((id) => document
-        .querySelector(`[data-card-item="${id}"] [data-card-actions]`)
-        ?.dispatchEvent(new MouseEvent('mouseenter')), card1.id);
-      await sleep(500);
-      const drawerHover = await page.evaluate((id) => {
+        .querySelector(`[data-card-more="${id}"]`)?.click(), card1.id);
+      await sleep(400);
+      const drawerClick = await page.evaluate((id) => {
         const d = document.querySelector(`[data-card-item="${id}"] [data-card-drawer]`);
         return d ? getComputedStyle(d).display !== 'none' : null;
       }, card1.id);
-      check('鼠标移到「⋯ 更多」上抽屉自动展开', drawerHover === true, String(drawerHover));
-      await page.evaluate((id) => document
-        .querySelector(`[data-card-item="${id}"] [data-card-actions]`)
-        ?.dispatchEvent(new MouseEvent('mouseleave')), card1.id);
-      await sleep(500);
-      const drawerLeave = await page.evaluate((id) => {
+      check('点「⋯ 更多」抽屉展开', drawerClick === true, String(drawerClick));
+      await page.mouse.click(4, 4);
+      await sleep(400);
+      const drawerOutside = await page.evaluate((id) => {
         const d = document.querySelector(`[data-card-item="${id}"] [data-card-drawer]`);
         return d ? getComputedStyle(d).display === 'none' : null;
       }, card1.id);
-      check('鼠标移开后抽屉自动收缩', drawerLeave === true, String(drawerLeave));
+      check('点页面其他位置抽屉收起', drawerOutside === true, String(drawerOutside));
+      await openCardDrawer(page, card1.id);
+      await page.evaluate((id) => document
+        .querySelector(`[data-card-more="${id}"]`)?.click(), card1.id);
+      await sleep(400);
+      const drawerToggle = await page.evaluate((id) => {
+        const d = document.querySelector(`[data-card-item="${id}"] [data-card-drawer]`);
+        return d ? getComputedStyle(d).display === 'none' : null;
+      }, card1.id);
+      check('再点一次「⋯ 更多」收起抽屉', drawerToggle === true, String(drawerToggle));
 
       // ---------- 9c. 头部卡片口径：账单已出就进来（不再按「本周」），红色排最前 ----------
       // card1 在「还款闭环」那一段为了截图被重新标记成已还——已还的不该出现在待还里，

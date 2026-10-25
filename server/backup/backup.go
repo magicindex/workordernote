@@ -176,7 +176,14 @@ func vacuumInto(db *gorm.DB, path string) error {
 }
 
 // Run 立即执行一次备份：本机与 WebDAV 按配置各落一份。
+// 与恢复共用一把锁：恢复期间不能再生成快照，避免把恢复中的半截数据写进备份。
 func Run(db *gorm.DB, now time.Time) (Result, error) {
+	opMu.Lock()
+	defer opMu.Unlock()
+	return run(db, now)
+}
+
+func run(db *gorm.DB, now time.Time) (Result, error) {
 	var res Result
 	dir := localDir(db)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
