@@ -279,8 +279,11 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   md5 `62089dbf5c922ddf976a1132feeaab86`，sha256 `fd45ee35c24ec66fb3c0bbe92887a1eb73eebe7cba9060ca957367606ca91525`）。
 
 **仓库同步**
-- GitHub `main` 已推送（见本轮提交/tag）；Gitea 因本机凭据失效（HTTPS 密码与 API 均 401）暂未推送，
-  容器仓库亦因缺 `write:package` 令牌未推送 `0.43.0`，待补令牌后重试。
+- GitHub 发布快照仓 `publish-workordernote` 已提交 `99f145a` 并推送 `main` 与 tag `v0.43.0`；
+  Actions `release` 成功，Release 附件含源码包、bundle、离线镜像、fpk 与截图，
+  `ghcr.io/magicindex/workordernote:0.43.0` 已发布。
+- Gitea 因本机凭据失效（HTTPS 密码与 API 均 401）暂未推送，容器仓库亦因缺
+  `write:package` 令牌未推送 `0.43.0`，待补令牌后重试。
 
 ### 2026-10-20 晚：Docker 目录改名 `reminders` → `workordernote`（数据原样迁移）
 
