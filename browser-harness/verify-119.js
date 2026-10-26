@@ -6,7 +6,7 @@
  *      —— 新建的提醒**不再立刻弹窗**：首次提醒至少等到「创建 + 10 分钟」；
  *         如果连「逾期提醒时间」都在那 10 分钟之内，普通提醒一条都不发（交给逾期提醒）。
  *
- *   ②「人生要有仪式感：新建生日卡片：我填写了1989年9月17日，结果倒计时显示 已过13540天；
+ *   ②「人生要有仪式感：新建生日卡片：我填写了1989年 9月17日，结果倒计时显示 已过13540天；
  *      生日这个地方应该按年循环，可以又已过多少次生日，下一次生日倒计时，不是累积。
  *      选择生日模板日期模板改成 出生年月日会不会更好理解」
  *      —— 年度循环事项（生日/纪念日…）的倒计时改成**下一次**的天数 + 「已过 N 次生日」；
@@ -151,10 +151,10 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     check(`倒计时天数等于「到下一次生日的自然日差」（期望 ${wantDays} 天）`,
       !!card && Number(card.days) === wantDays, JSON.stringify({ card, wantDays }));
     check(`徽标是「已过 ${wantPassed} 次生日」或「第 ${wantPassed + 1} 次生日」`,
-      !!card && (card.pass === `已过 ${wantPassed} 次生日` || card.pass === `第 ${wantPassed + 1} 次生日`),
+      !!card && card.pass === `与你共度第 ${wantPassed} 次生日`,
       JSON.stringify({ pass: card?.pass, wantPassed }));
-    check('卡片上仍然显示出生日期 1989年9月17日',
-      !!card && /1989年9月17日/.test(card.date), JSON.stringify(card?.date));
+    check('卡片上仍然显示出生日期 1989年 9月17日',
+      !!card && /1989年 9月17日/.test(card.date), JSON.stringify(card?.date));
 
     // 农历生日也要按年循环：锚点是「农历月:日」，得问服务端今年的公历日期
     // （纯前端算不了农历），算出来之前会先回落到老口径 —— 所以这里等它算完。

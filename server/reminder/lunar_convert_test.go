@@ -156,30 +156,18 @@ func TestValidateReminderInputRejectsUnknownCalendar(t *testing.T) {
 	}
 }
 
-func TestCompleteLunarMonthlyAdvancesOneLunarMonth(t *testing.T) {
-	cleanup := testDB(t)
-	defer cleanup()
-
+func TestNextOccurrenceAfterLunarMonthlyAdvancesOneLunarMonth(t *testing.T) {
 	loc := shanghai()
-	// 农历 2026-08-15（公历 2026-09-25），完成后应推进到农历 2026-09-15。
+	// 农历 2026-08-15（公历 2026-09-25），第二天看下一次，应推进到农历 2026-09-15。
 	due := time.Date(2026, time.September, 25, 9, 0, 0, 0, loc)
-	created, err := createReminder(appDB, 41, SaveReminderInput{
-		Title: "农历十五", DueAt: &due, RepeatRule: "monthly", Calendar: "lunar",
-		LunarAnchor: "8:15", Channels: []string{ChannelInApp},
-	})
+	now := time.Date(2026, time.September, 26, 9, 0, 0, 0, loc)
+	next, err := nextOccurrenceAfter(due, "monthly", "lunar", "8:15", now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	next, err := completeReminder(appDB, 41, created.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if next.DueAt == nil {
-		t.Fatal("expected the next occurrence")
-	}
-	got := lunar.FromTime(next.DueAt.In(loc))
+	got := lunar.FromTime(next.In(loc))
 	if got.Year != 2026 || got.Month != 9 || got.Day != 15 {
-		t.Fatalf("expected lunar 2026-9-15, got %d-%d-%d (%s)", got.Year, got.Month, got.Day, next.DueAt.Format("2006-01-02"))
+		t.Fatalf("expected lunar 2026-9-15, got %d-%d-%d (%s)", got.Year, got.Month, got.Day, next.Format("2006-01-02"))
 	}
 }
 

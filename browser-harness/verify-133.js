@@ -40,7 +40,9 @@ function check(name, ok, detail = '') {
         keys: [...document.querySelectorAll('[data-config-key]')].map((n) => n.getAttribute('data-config-key')).filter((k) => k.startsWith('backup_')),
       };
     });
-    const needed = ['backup_enabled', 'backup_time', 'backup_local_enabled', 'backup_local_dir', 'backup_webdav_enabled', 'backup_webdav_url', 'backup_webdav_username', 'backup_webdav_password', 'backup_webdav_dir', 'backup_keep'];
+    // backup_webdav_insecure：自建 NAS 自签名证书 / 用 IP 访问没有 IP SAN 时必须能跳过校验，
+    // 否则备份只会在「上次结果」里留下 x509 报错（用户 2026-10-26 报的失败）。
+    const needed = ['backup_enabled', 'backup_time', 'backup_local_enabled', 'backup_local_dir', 'backup_webdav_enabled', 'backup_webdav_url', 'backup_webdav_username', 'backup_webdav_password', 'backup_webdav_dir', 'backup_webdav_insecure', 'backup_keep'];
     check('「数据备份」分组含本机与 WebDAV 的全部必填项',
       !!group && needed.every((k) => group.keys.includes(k)), JSON.stringify(group));
     const secretType = await page.evaluate(() => {

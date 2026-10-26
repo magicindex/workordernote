@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"smallgo/server/database"
+	"smallgo/server/lunar"
 
 	"gorm.io/gorm"
 )
@@ -68,7 +69,9 @@ func TestCompleteRecurringReminderAdvancesFromScheduledTime(t *testing.T) {
 	defer cleanup()
 
 	loc := shanghai()
-	due := time.Date(2026, time.January, 31, 9, 0, 0, 0, loc)
+	// 用「刚过去」的一个到期日，避免把 2026-01-31 这种陈旧日期拖到当前周期之后；
+	// 确认一次应当只前进到下一个周期。
+	due := time.Now().In(loc).Add(-time.Minute)
 	created, err := createReminder(appDB, 7, SaveReminderInput{
 		Title: "月末提醒", DueAt: &due, RepeatRule: "monthly", Channels: []string{ChannelInApp},
 	})
@@ -79,7 +82,7 @@ func TestCompleteRecurringReminderAdvancesFromScheduledTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := time.Date(2026, time.February, 28, 9, 0, 0, 0, loc)
+	want := nextOccurrence(due, "monthly")
 	if next.DueAt == nil || !next.DueAt.Equal(want) {
 		t.Fatalf("expected %v, got %v", want, next.DueAt)
 	}
@@ -101,6 +104,34 @@ func TestYearlyLeapDayUsesEndOfFebruary(t *testing.T) {
 	start := time.Date(2024, time.February, 29, 8, 30, 0, 0, loc)
 	got := nextOccurrence(start, "yearly")
 	want := time.Date(2025, time.February, 28, 8, 30, 0, 0, loc)
+	if !got.Equal(want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestNextOccurrenceAfterSkipsStaleLunarYears(t *testing.T) {
+	loc := shanghai()
+	from := time.Date(2011, time.October, 13, 12, 0, 0, 0, loc)
+	now := time.Date(2026, time.October, 26, 18, 0, 0, 0, loc)
+	got, err := nextOccurrenceAfter(from, "yearly", "lunar", "9:17", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ld := lunar.FromTime(got.In(loc))
+	if ld.Year != 2027 || ld.Month != 9 || ld.Day != 17 {
+		t.Fatalf("expected lunar 2027-9-17, got %d-%d-%d (%s)", ld.Year, ld.Month, ld.Day, got.Format("2006-01-02"))
+	}
+}
+
+func TestNextOccurrenceAfterSkipsStaleCycles(t *testing.T) {
+	loc := shanghai()
+	from := time.Date(2011, time.October, 13, 12, 0, 0, 0, loc)
+	now := time.Date(2026, time.October, 26, 18, 0, 0, 0, loc)
+	got, err := nextOccurrenceAfter(from, "yearly", "solar", "", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2027, time.October, 13, 12, 0, 0, 0, loc)
 	if !got.Equal(want) {
 		t.Fatalf("expected %v, got %v", want, got)
 	}

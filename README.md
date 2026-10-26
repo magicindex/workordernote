@@ -6,7 +6,7 @@
 - 仓库：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
 - 发布与安装包：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote/releases>
 - GitHub 镜像：<https://github.com/magicindex/workordernote>
-- 当前版本：`0.43.3`
+- 当前版本：`0.43.4`
 
 > **本项目是衍生作品。** 基于开源项目
 > [TechFunWay/reminders](https://github.com/TechFunWay/reminders)（MIT 许可）衍生开发，
@@ -27,7 +27,7 @@
 | **信用卡账单** | 多卡管理，账单日/还款日/额度/本期金额，临近还款日变色提醒；更多菜单点按展开 |
 | **通知渠道** | 站内消息、电子邮件、短信、飞书机器人、QQ 机器人；支持免打扰 |
 | **AI 小秘** | 接入多家模型服务商，可选模型；基于工作数据回答问题，支持改名 |
-| **数据与同步** | 本机/WebDAV 每日自动备份、整库与上传文件恢复、导入导出、双机同步（除密码外全部） |
+| **数据与同步** | 本机/WebDAV 每日自动备份（自签名证书可跳过校验）、整库与上传文件恢复、导入导出、双机同步（除密码外全部） |
 | **打印** | 日历整月打印，或切换列表按行打印；可调方向、字号、标题与打印列 |
 | **多端** | 桌面与手机自适应，支持 PWA 安装 |
 
@@ -46,10 +46,10 @@
 镜像发布在仓库自带的容器仓库，可直接拉取：
 
 ```bash
-docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.43.3
+docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.43.4
 ```
 
-同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.43.3`；Gitea 容器仓库不可用时可直接改用。
+同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.43.4`；Gitea 容器仓库不可用时可直接改用。
 
 ### 用仓库里的 compose 文件安装
 
@@ -74,7 +74,7 @@ curl -fsSLO https://raw.githubusercontent.com/magicindex/workordernote/main/dock
 ```yaml
 services:
   workordernote:
-    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.43.3
+    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.43.4
     container_name: workordernote
     # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
     user: "1000:1001"

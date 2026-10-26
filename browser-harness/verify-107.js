@@ -146,6 +146,8 @@ const madeIds = [];
         solarRepeat: (card.querySelector('[data-ceremony-solar]')?.textContent || '').includes('每年'),
         lunarRepeat: (card.querySelector('[data-ceremony-lunar]')?.textContent || '').includes('每年'),
         solarPrimary: !!card.querySelector('[data-ceremony-solar-md]')?.classList.contains('is-primary'),
+        solarBadgeOutside: !!card.querySelector('[data-ceremony-solar] > .ceremony-repeat-badge') && !card.querySelector('[data-ceremony-solar-md] .tiny-badge'),
+        lunarBadgeOutside: !!card.querySelector('[data-ceremony-lunar] > .ceremony-repeat-badge') && !card.querySelector('[data-ceremony-lunar-md] .tiny-badge'),
         lunarPrimary: !!card.querySelector('[data-ceremony-lunar-md]')?.classList.contains('is-primary'),
         solarBg: (() => { const el = card.querySelector('[data-ceremony-solar-md]'); if (!el) return ''; const cs = getComputedStyle(el); return cs.backgroundImage !== 'none' ? cs.backgroundImage : cs.backgroundColor; })(),
         lunarBg: (() => { const el = card.querySelector('[data-ceremony-lunar-md]'); if (!el) return ''; const cs = getComputedStyle(el); return cs.backgroundImage !== 'none' ? cs.backgroundImage : cs.backgroundColor; })(),
@@ -203,6 +205,8 @@ const madeIds = [];
     check('农历建卡时「每年」跟在农历日期后，并突出农历那一枚',
       !!midAutumn && midAutumn.lunarRepeat && !midAutumn.solarRepeat && midAutumn.lunarPrimary && !midAutumn.solarPrimary,
       JSON.stringify({ solarRepeat: midAutumn?.solarRepeat, lunarRepeat: midAutumn?.lunarRepeat }));
+    check('「每年」徽标独立于日期底色（不塞进同一个胶囊）',
+      !!midAutumn && midAutumn.lunarBadgeOutside, JSON.stringify({ lunarBadgeOutside: midAutumn?.lunarBadgeOutside }));
     check('农历年份用干支写法（如丙午年/丁未年），不用「二〇二六年」',
       !!midAutumn && /[甲乙丙丁戊己庚辛壬癸][子丑寅卯辰巳午未申酉戌亥]年\s*八月十五/.test(midAutumn.lunar) && !midAutumn.lunar.includes('二〇'),
       JSON.stringify(midAutumn?.lunar));
@@ -259,12 +263,13 @@ const madeIds = [];
         calendarFirst: !!(date && cal && repeat && date.left < cal.left && cal.left < repeat.left),
         widths: [date?.width || 0, cal?.width || 0, repeat?.width || 0],
         value: document.querySelector('[data-ceremony-form-calendar]')?.value || '',
+        label: document.querySelector('[data-ceremony-form-calendar]')?.getAttribute('aria-label') || '',
       };
     });
     const ws = formLayout.widths;
-    check('日期、历法、重复同一行且三列等宽',
+    check('日期、倒计时历法、重复同一行且三列等宽',
       formLayout.threeSameRow && formLayout.calendarFirst && formLayout.value === 'solar' &&
-        Math.max(...ws) - Math.min(...ws) <= 2,
+        formLayout.label === '倒计时历法' && Math.max(...ws) - Math.min(...ws) <= 2,
       JSON.stringify(formLayout));
     await page.select('[data-ceremony-form-calendar]', 'lunar');
     await sleep(250);

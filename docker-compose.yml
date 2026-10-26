@@ -1,6 +1,6 @@
 services:
   workordernote:
-    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.43.3
+    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.43.4
     container_name: workordernote
     # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
     user: "1000:1001"
