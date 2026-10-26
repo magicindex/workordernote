@@ -271,7 +271,11 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   md5 `5e51ed0885cc84bd6acf74f32d397b97`，sha256 `01b39d13ba869048b594b4a4779562ac1b93278af6a568a50da3a95878d6babf`）。
 
 **仓库同步**
-- Gitea `main` 与 tag `v0.43.4`、GitHub 快照与 Release 均见提交后的同步记录。
+- 主仓库：代码 `5751c43` → 上线文档 `6ce45b4`；tag `v0.43.4`。Gitea `cyberzero/workordernote` 的 main/tag 已推送。
+- GitHub 快照 `publish-workordernote`：`7421559`，tag `v0.43.4`；Actions `release` 成功，
+  Release v0.43.4 已发布（source / bundle / image / SHA256SUMS / fpk / screenshots），
+  `ghcr.io/magicindex/workordernote:0.43.4` 已推送。
+- Gitea 容器仓库仍受历史 `unexpected EOF` 影响，未推 0.43.4；README 保留 GHCR 备用拉取地址。
 
 ### 2026-10-26：0.43.3（201 生产 / 201 沙箱 / 200 生产 / 演示 8920 上线）—— 农历建卡修复、日期胶囊与底部文字
 
