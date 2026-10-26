@@ -56,9 +56,10 @@ export const useAuthStore = defineStore('auth', () => {
   const notebookEnabled = ref(true)
   // 「人生要有仪式感」栏目（生日/纪念日/节日/考试的倒计时卡片）——与记事本同样的个人偏好
   const ceremonyEnabled = ref(true)
-  // 「课程表」栏目（用户 2026-10-18）：与前面几个同样的个人偏好，但**默认关**——
-  // 只有家里有学生的场景才用得上；打开后侧栏出现入口，关掉只隐藏、不删数据。
-  const timetableEnabled = ref(false)
+  // 「课程表」栏目（用户 2026-10-18）：与前面几个同样的个人偏好。
+  // 2026-10-26 起**默认开**（用户：「系统内置的几个频道 默认全部开启」）；
+  // 关掉只隐藏、不删数据。
+  const timetableEnabled = ref(true)
   // 「提醒@他」页面（用户 2026-10-13）：多人之间互相推提醒。
   // **这个不是个人偏好，是管理员的后台系统偏好**（nudge_enabled，一个实例一份）：
   // 关掉后侧栏入口与页面一起隐藏，已经发出去的提醒数据保留。

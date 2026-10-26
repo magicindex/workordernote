@@ -98,6 +98,9 @@ async function handleSave(key: string, value: string) {
       if (key === 'credit_card_enabled') {
         authStore.setCreditCardEnabled(value !== 'false')
       }
+      if (key === 'ceremony_enabled') {
+        authStore.setCeremonyEnabled(value !== 'false')
+      }
       listRef.value?.markSaved(key)
     } else {
       errorMsg.value = res.data?.message || '保存失败'

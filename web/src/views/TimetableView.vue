@@ -7,7 +7,7 @@
           新建表
         </button>
         <button
-          v-if="tables.length"
+          v-if="tables.length && isOwner"
           type="button"
           class="btn-secondary !h-9 !px-3 !text-xs"
           title="改这张表的名称、班级、课时与各段节次"
@@ -16,6 +16,17 @@
         >
           <svg viewBox="0 0 24 24" class="mr-1 h-4 w-4" fill="none" stroke="currentColor"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06A2 2 0 1 1 7.03 4.14l.06.06A1.7 1.7 0 0 0 8.96 4.6 1.7 1.7 0 0 0 10 3.05V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.04 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.12.38.44.66.84.76H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.24Z" stroke-width="1.6" stroke-linejoin="round"/></svg>
           设置
+        </button>
+        <button
+          v-if="tables.length && isOwner"
+          type="button"
+          class="btn-secondary !h-9 !px-3 !text-xs"
+          title="把这张表共享给另一个账号（只读或读写）"
+          data-timetable-share
+          @click="openShareDialog"
+        >
+          <svg viewBox="0 0 24 24" class="mr-1 h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5"/><path d="M17 8h5M19.5 5.5v5"/></svg>
+          共享
         </button>
         <button
           v-if="tables.length"
@@ -57,12 +68,19 @@
           >
             <span class="timetable-tab-dot" :class="tableAccent(table).barBg"></span>
             {{ table.name }}
+            <span
+              v-if="table.is_shared"
+              class="timetable-share-chip"
+              :class="table.permission === 'read' ? 'is-readonly' : 'is-write'"
+              :title="`由 ${table.owner_name || '对方'} 共享`"
+            >{{ table.permission === 'read' ? '只读' : '可编辑' }}</span>
             <span class="timetable-tab-count">{{ table.entry_count }}</span>
           </button>
         </div>
         <!-- 用户 2026-10-20：「编辑按钮和空节次合并成一个按钮」——
              进编辑态就铺出空节次（有落点、可点可拖），退出就收起。 -->
         <button
+          v-if="canWrite"
           type="button"
           class="timetable-edit-toggle"
           :class="editing ? 'is-on' : ''"
@@ -73,6 +91,11 @@
           <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke-width="1.8" stroke-linejoin="round"/></svg>
           {{ editing ? '完成' : '编辑课程表' }}
         </button>
+      </div>
+
+      <div v-if="activeSummary && !isOwner" class="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground" data-timetable-shared-note>
+        <span class="rounded-full bg-brand-500/10 px-2 py-0.5 font-bold text-brand-600 dark:text-brand-300">共享表</span>
+        <span>由 <b class="font-bold text-foreground">{{ activeSummary.owner_name || '对方' }}</b> 共享给你 · {{ activePermission === 'read' ? '只读，只能查看' : '可编辑课程，不能改表设置' }}</span>
       </div>
 
       <div v-if="!tables.length" class="mt-6 surface rounded-2xl px-6 py-14 text-center" data-timetable-empty>
@@ -123,7 +146,7 @@
                       :data-entry-kind="item.entry.kind"
                       :data-align-row="`r${item.row}`"
                       :draggable="editing"
-                      @click="openEditEntry(item.entry)"
+                      @click="openEntry(item.entry)"
                       @dragstart="onDragStart($event, item.entry)"
                       @dragend="onDragEnd"
                       @dragover="onDragOver"
@@ -281,6 +304,74 @@
       </form>
     </Modal>
 
+    <!-- 只读共享：点课程看详情，不进入编辑表单 -->
+    <Modal v-model="viewOpen" title="课程详情">
+      <div v-if="viewEntry" class="space-y-2.5 text-sm" data-entry-view>
+        <div class="flex items-center gap-2">
+          <span class="timetable-card-bar relative !inset-y-0 !left-0 !h-8" :class="paletteOf(viewEntry).barBg"></span>
+          <p class="text-base font-bold text-foreground" data-entry-view-title>{{ viewEntry.title }}</p>
+          <span v-if="viewEntry.kind === 'activity'" class="timetable-activity-tag">活动</span>
+        </div>
+        <p class="text-xs text-muted-foreground" data-entry-view-time>{{ viewWeekday }} · {{ viewEntry.start_time }}–{{ viewEntry.end_time }}</p>
+        <p v-if="viewEntry.location || viewEntry.teacher" class="text-xs text-muted-foreground">
+          {{ [viewEntry.location, viewEntry.teacher].filter(Boolean).join(' · ') }}
+        </p>
+        <p v-if="viewEntry.note" class="whitespace-pre-wrap rounded-xl bg-muted/50 px-3 py-2 text-xs leading-5 text-foreground/80">{{ viewEntry.note }}</p>
+        <p class="text-[11px] text-muted-foreground">这张表由对方共享给你，当前权限为只读。</p>
+      </div>
+      <div class="mt-4 flex justify-end">
+        <button type="button" class="btn-secondary !h-9 !px-4 !text-xs" data-entry-view-close @click="viewOpen = false">关闭</button>
+      </div>
+    </Modal>
+
+    <!-- 共享：只允许表主管理；接收方按 read/write 权限使用 -->
+    <Modal v-model="shareOpen" title="共享课程表">
+      <div class="space-y-3" data-share-dialog>
+        <p class="text-xs leading-5 text-muted-foreground">
+          把「<b class="font-bold text-foreground">{{ activeSummary?.name }}</b>」共享给另一个账号。
+          只读只能查看；读写可以增删改课程，不能改表设置、删表或再共享。
+        </p>
+        <form class="flex flex-wrap items-center gap-2" @submit.prevent="addShare">
+          <input
+            v-model="shareUsername"
+            class="input-field !h-9 min-w-0 flex-1 !text-xs"
+            maxlength="40"
+            placeholder="对方登录用户名"
+            data-share-username
+          />
+          <select v-model="sharePermission" class="input-field !h-9 !w-[92px] !px-2 !text-xs" data-share-permission>
+            <option value="read">只读</option>
+            <option value="write">读写</option>
+          </select>
+          <button type="submit" class="btn-primary !h-9 !px-3 !text-xs" :disabled="shareBusy" data-share-add>
+            {{ shareBusy ? '共享中…' : '共享' }}
+          </button>
+        </form>
+        <p v-if="shareError" class="text-xs font-semibold text-destructive" data-share-error>{{ shareError }}</p>
+
+        <div v-if="sharesLoading" class="rounded-xl border border-border/70 px-3 py-4 text-center text-xs text-muted-foreground">读取共享名单…</div>
+        <div v-else-if="!shares.length" class="rounded-xl border border-dashed border-border/70 px-3 py-4 text-center text-xs text-muted-foreground" data-share-empty>还没有共享给任何人</div>
+        <ul v-else class="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70" data-share-list>
+          <li v-for="share in shares" :key="share.id" class="flex items-center gap-2 px-3 py-2" data-share-row>
+            <span class="min-w-0 flex-1 truncate text-xs font-semibold text-foreground" data-share-row-name>{{ share.username }}</span>
+            <select
+              class="input-field !h-8 !w-[86px] !px-2 !text-[11px]"
+              :value="share.permission"
+              data-share-row-permission
+              @change="changeSharePermission(share, $event)"
+            >
+              <option value="read">只读</option>
+              <option value="write">读写</option>
+            </select>
+            <button type="button" class="shrink-0 text-[11px] font-semibold text-destructive" data-share-remove @click="removeShare(share)">移除</button>
+          </li>
+        </ul>
+        <p class="text-[11px] leading-4 text-muted-foreground">
+          对方需要在偏好设置里开启「课程表栏目」才能从侧栏进入；共享按登录用户名精确匹配。
+        </p>
+      </div>
+    </Modal>
+
     <!-- 表设置：改名 / 删除 -->
     <Modal v-model="tableOpen" title="课程表设置" size="lg">
       <form class="space-y-3" @submit.prevent="saveTableSettings">
@@ -402,9 +493,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import PageHeader from '../components/PageHeader.vue'
 import Modal from '../components/Modal.vue'
 import {
-  createEntry, createTimetable, deleteEntry, deleteTimetable,
-  getTimetable, getTimetables, updateEntry, updateTimetable,
-  type EntryInput, type TimetableEntry, type TimetableSummary,
+  addTimetableShare, createEntry, createTimetable, deleteEntry, deleteTimetable,
+  getTimetable, getTimetableShares, getTimetables, removeTimetableShare,
+  updateEntry, updateTimetable, updateTimetableShare,
+  type EntryInput, type TimetableEntry, type TimetablePermission, type TimetableShare, type TimetableSummary,
 } from '../api/timetable'
 
 const weekdays = [
@@ -451,6 +543,10 @@ const weekDates = computed(() => {
 // 每节次的时间段是表设置里自己排的（用户 2026-10-19：「允许设置每节次时间段」），
 // 所以换学校作息不用改代码；卡片落在哪一段看它离哪一节最近。
 const activeTable = ref<TimetableSummary | null>(null)
+const activeSummary = computed(() => tables.value.find((t) => t.id === activeId.value) || null)
+const activePermission = computed<TimetablePermission>(() => activeSummary.value?.permission || 'owner')
+const isOwner = computed(() => activePermission.value === 'owner')
+const canWrite = computed(() => activePermission.value !== 'read')
 
 // 表级「班级 / 地点」：课程条目自己不填地点时，卡片与弹窗都退回用它（用户 2026-10-19）。
 const activeLocation = computed(() => (activeTable.value?.location || '').trim())
@@ -687,11 +783,15 @@ async function loadEntries(id: number) {
   if (res.data?.code !== 0) throw new Error(res.data?.message || '读取课程表失败')
   entries.value = res.data.data?.entries || []
   activeTable.value = res.data.data?.table || null
+  if (!canWrite.value) editing.value = false
 }
 
 async function selectTable(id: number) {
   if (id === activeId.value) return
   activeId.value = id
+  shareOpen.value = false
+  viewOpen.value = false
+  if (!canWrite.value) editing.value = false
   errorMsg.value = ''
   try {
     await loadEntries(id)
@@ -1108,6 +1208,7 @@ const editing = ref(false)
 const dragId = ref<number | null>(null)
 // 编辑态 = 可拖动 + 空白节次；两者原本是两个开关，2026-10-20 合并成一个按钮。
 function toggleEditing() {
+  if (!canWrite.value) return
   editing.value = !editing.value
   void alignRows()
 }
@@ -1203,6 +1304,7 @@ async function onDropOnEntry(event: DragEvent, target: TimetableEntry) {
 }
 
 function openEditEntry(entry: TimetableEntry) {
+  if (!canWrite.value) return
   entryEditing.value = entry
   Object.assign(form, {
     title: entry.title, kind: entry.kind, weekday: entry.weekday,
@@ -1213,6 +1315,97 @@ function openEditEntry(entry: TimetableEntry) {
   colorTouched.value = true
   entryError.value = ''
   entryOpen.value = true
+}
+
+// 只读详情与共享管理
+const viewOpen = ref(false)
+const viewEntry = ref<TimetableEntry | null>(null)
+const viewWeekday = computed(() => weekdays.find((d) => d.value === viewEntry.value?.weekday)?.label || '')
+function openEntry(entry: TimetableEntry) {
+  if (canWrite.value) openEditEntry(entry)
+  else {
+    viewEntry.value = entry
+    viewOpen.value = true
+  }
+}
+
+const shareOpen = ref(false)
+const shares = ref<TimetableShare[]>([])
+const sharesLoading = ref(false)
+const shareUsername = ref('')
+const sharePermission = ref<'read' | 'write'>('read')
+const shareBusy = ref(false)
+const shareError = ref('')
+
+async function loadShares() {
+  if (!activeId.value) return
+  sharesLoading.value = true
+  shareError.value = ''
+  try {
+    const res = await getTimetableShares(activeId.value)
+    if (res.data?.code !== 0) throw new Error(res.data?.message || '读取共享名单失败')
+    shares.value = res.data.data?.shares || []
+  } catch (err: any) {
+    shareError.value = err.message || '读取共享名单失败'
+    shares.value = []
+  } finally {
+    sharesLoading.value = false
+  }
+}
+
+async function openShareDialog() {
+  if (!isOwner.value) return
+  shareUsername.value = ''
+  sharePermission.value = 'read'
+  shareError.value = ''
+  shareOpen.value = true
+  await loadShares()
+}
+
+async function addShare() {
+  const username = shareUsername.value.trim()
+  if (!username) { shareError.value = '请输入对方的登录用户名'; return }
+  if (!activeId.value || shareBusy.value) return
+  shareBusy.value = true
+  shareError.value = ''
+  try {
+    const res = await addTimetableShare(activeId.value, username, sharePermission.value)
+    if (res.data?.code !== 0) throw new Error(res.data?.message || '共享失败')
+    shareUsername.value = ''
+    await loadShares()
+  } catch (err: any) {
+    shareError.value = err.message || '共享失败'
+  } finally {
+    shareBusy.value = false
+  }
+}
+
+async function changeSharePermission(share: TimetableShare, event: Event) {
+  const select = event.target as HTMLSelectElement
+  const next = select.value === 'write' ? 'write' : 'read'
+  const previous = share.permission
+  if (next === previous) return
+  try {
+    const res = await updateTimetableShare(share.id, next)
+    if (res.data?.code !== 0) throw new Error(res.data?.message || '修改权限失败')
+    share.permission = next
+    shareError.value = ''
+  } catch (err: any) {
+    select.value = previous
+    shareError.value = err.message || '修改权限失败'
+  }
+}
+
+async function removeShare(share: TimetableShare) {
+  if (!window.confirm(`不再把课程表共享给「${share.username}」？`)) return
+  shareError.value = ''
+  try {
+    const res = await removeTimetableShare(share.id)
+    if (res.data?.code !== 0) throw new Error(res.data?.message || '移除失败')
+    await loadShares()
+  } catch (err: any) {
+    shareError.value = err.message || '移除失败'
+  }
 }
 
 async function saveEntry() {
@@ -1263,6 +1456,11 @@ async function removeEntry() {
 .timetable-tab-count {
   @apply rounded-md bg-foreground/[0.07] px-1 py-0.5 text-[10px] font-semibold leading-none opacity-80;
 }
+.timetable-share-chip {
+  @apply rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none;
+}
+.timetable-share-chip.is-readonly { @apply bg-slate-500/15 text-slate-600 dark:text-slate-300; }
+.timetable-share-chip.is-write { @apply bg-emerald-500/15 text-emerald-700 dark:text-emerald-300; }
 
 /* 七天共用一块底板：列间只留 1px 细线，整块像一张纸上的周历 */
 .timetable-shell { @apply overflow-hidden rounded-[22px] border border-border bg-surface bg-no-repeat shadow-sm; }

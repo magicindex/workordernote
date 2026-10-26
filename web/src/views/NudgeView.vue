@@ -181,9 +181,8 @@
                 >已存到「{{ item.list_name || '清单' }}」{{ item.saved_done ? '（已完成）' : '' }}</span>
               </template>
               <!-- 完成之后（不管是本页点的「已完成」，还是在清单里勾完同步过来的 done_at）
-                   这一行只剩「删除」，状态由右上角那个「已完成」标出来。
-                   没保存到清单的那种连卡片一起消失（receivedRows 过滤掉），
-                   只在通知中心留一条回执 —— 用户 2026-10-15 的口径。 -->
+                   整张卡片从「别人提醒我」里消失（receivedRows 过滤掉），
+                   只在通知中心留一条回执 —— 用户 2026-10-26 的口径。 -->
               <button
                 type="button"
                 class="rounded-xl border border-border bg-surface px-3 py-1.5 text-[11px] font-bold text-muted-foreground transition hover:bg-muted"
@@ -319,13 +318,12 @@ function describe(error: unknown, fallback: string) {
 }
 
 /**
- * 「别人提醒我」这一列实际渲染的行（用户 2026-10-15）：
- * 点完「已完成」、又**没保存到自己的清单**的那条就从这里消失 —— 它只是别人发来的一条
- * 消息，做完就完了，本地不留任务、也不进任何本地统计（通知中心里那条回执还在）。
- * 保存过的（reminder_id 有值）继续留着：它已经变成自己清单里的一条待办，
- * 完成状态显示在这儿是有用的（「已存到『X』（已完成）」）。
+ * 「别人提醒我」这一列实际渲染的行（用户 2026-10-26：「别人提醒我的 完成后没有自动删除」）：
+ * 只要点了「已完成」（或在清单里勾完同步过来 done_at），这条就从这一列消失 ——
+ * 不论有没有保存到清单。它只是别人发来的一条消息，做完就完了；通知中心仍留回执，
+ * 接口数据也保留，不会影响对方那一侧的「已完成」状态。
  */
-const receivedRows = computed(() => box.value.received.filter((i) => !(i.done_at && !i.reminder_id)))
+const receivedRows = computed(() => box.value.received.filter((i) => !i.done_at))
 
 /** 「已逾期」：期望完成时间过了、又还没点「已完成」。两列都标，发起人也能一眼看到对方超时了。 */
 function isOverdue(item: Nudge): boolean {
