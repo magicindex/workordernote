@@ -62,6 +62,8 @@ export interface ReminderItem {
   cycle_index?: number
   title: string
   notes: string
+  /** 仪式感卡片底部自定义文案（空＝自动显示次数） */
+  bottom_text?: string
   kind: ReminderKind
   priority: number
   due_at: string | null
@@ -120,6 +122,8 @@ export interface SaveReminderInput {
   bg_mask?: number
   /** 整卡背景透明度：100 = 不透明，0 = 只剩文字（见 server/reminder/models.go） */
   bg_alpha?: number
+  /** 仪式感卡片底部自定义文案；传空串恢复自动次数文案 */
+  bottom_text?: string
   version?: number
 }
 

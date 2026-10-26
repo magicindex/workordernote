@@ -180,9 +180,10 @@ type syncReminder struct {
 	UID      string `json:"uid"`
 	Owner    string `json:"owner"`
 	ListUID  string `json:"list_uid"`
-	Title    string `json:"title"`
-	Notes    string `json:"notes"`
-	CardRole string `json:"card_role,omitempty"`
+	Title      string `json:"title"`
+	Notes      string `json:"notes"`
+	BottomText string `json:"bottom_text,omitempty"`
+	CardRole   string `json:"card_role,omitempty"`
 	// 信用卡生成的提醒属于哪张卡：用 UID 指过去（对端要换成自己的卡片 ID）
 	CardUID  string     `json:"card_uid,omitempty"`
 	Kind     string     `json:"kind"`

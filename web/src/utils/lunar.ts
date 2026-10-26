@@ -23,5 +23,5 @@ export function lunarYearName(year: number) {
 }
 
 export function formatLunarDate(year: number, month: number, day: number) {
-  return `${lunarYearName(year)}${lunarMonthName(month)}${lunarDayName(day)}`
+  return `${lunarYearName(year)} ${lunarMonthName(month)}${lunarDayName(day)}`
 }

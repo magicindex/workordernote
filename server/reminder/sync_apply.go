@@ -359,7 +359,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 			}
 			row := Reminder{
 				SyncUID: incoming.UID, UserID: owner.ID, ListID: listID,
-				Title: incoming.Title, Notes: incoming.Notes, CardRole: incoming.CardRole,
+				Title: incoming.Title, Notes: incoming.Notes, BottomText: incoming.BottomText, CardRole: incoming.CardRole,
 				CardID:   cardIDs[incoming.CardUID],
 				Kind:     normalizeKind(incoming.Kind),
 				Priority: incoming.Priority, DueAt: incoming.DueAt, AllDay: incoming.AllDay,
@@ -448,6 +448,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 		if err := tx.Model(&Reminder{}).Where("id = ?", existing.ID).
 			Updates(map[string]interface{}{
 				"list_id": listID, "title": incoming.Title, "notes": incoming.Notes,
+				"bottom_text": incoming.BottomText,
 				"card_role": incoming.CardRole, "card_id": cardIDs[incoming.CardUID],
 				"kind": normalizeKind(incoming.Kind), "priority": incoming.Priority,
 				"due_at": incoming.DueAt, "all_day": incoming.AllDay,
@@ -628,6 +629,7 @@ func sameReminder(local *Reminder, incoming syncReminder, listID uint, channels 
 	return local.ListID == listID &&
 		local.Title == incoming.Title &&
 		local.Notes == incoming.Notes &&
+		local.BottomText == incoming.BottomText &&
 		local.Kind == normalizeKind(incoming.Kind) &&
 		local.Priority == incoming.Priority &&
 		equalTimePtr(local.DueAt, incoming.DueAt) &&

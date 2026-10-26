@@ -78,15 +78,33 @@
           <div class="min-w-0 text-left">
             <h3 class="ceremony-title" :data-ceremony-title="entry.id">{{ entry.title }}</h3>
             <p class="ceremony-date">
-              <span class="block" data-ceremony-solar>
-                {{ entry.dateLabel }}
-                <span v-if="entry.repeatLabel" class="tiny-badge ml-1">{{ entry.repeatLabel }}</span>
+              <span class="ceremony-date-line" data-ceremony-solar>
+                <span class="ceremony-date-year" data-ceremony-solar-year>{{ entry.solarYear }}</span>
+                <span
+                  class="ceremony-date-md"
+                  :class="!entry.undated && entry.calendar !== 'lunar' ? 'ceremony-date-chip ceremony-date-chip-solar is-primary' : ''"
+                  data-ceremony-solar-md
+                >
+                  {{ entry.solarMonthDay }}
+                  <span v-if="entry.repeatLabel && entry.calendar !== 'lunar'" class="tiny-badge">{{ entry.repeatLabel }}</span>
+                </span>
               </span>
-              <span v-if="entry.lunarLabel" class="block" data-ceremony-lunar>{{ entry.lunarLabel }}</span>
+              <span v-if="entry.lunarMonthDay" class="ceremony-date-line" data-ceremony-lunar>
+                <span class="ceremony-date-year" data-ceremony-lunar-year>{{ entry.lunarYear }}</span>
+                <span
+                  class="ceremony-date-md"
+                  :class="entry.calendar === 'lunar' ? 'ceremony-date-chip ceremony-date-chip-lunar is-primary' : ''"
+                  data-ceremony-lunar-md
+                >
+                  {{ entry.lunarMonthDay }}
+                  <span v-if="entry.repeatLabel && entry.calendar === 'lunar'" class="tiny-badge">{{ entry.repeatLabel }}</span>
+                </span>
+              </span>
             </p>
-            <p v-if="entry.passLabel || entry.cycle > 0 || entry.notes" class="ceremony-extra">
-              <span v-if="entry.passLabel" class="tiny-badge" :data-ceremony-cycle="entry.id" data-ceremony-pass>{{ entry.passLabel }}</span>
-              <span v-else-if="entry.cycle > 0" class="tiny-badge" :data-ceremony-cycle="entry.id">与你共度 {{ entry.cycle }} 次</span>
+            <p v-if="entry.bottomText || entry.passLabel || entry.cycle > 0 || entry.notes" class="ceremony-extra">
+              <span v-if="entry.bottomText" class="tiny-badge" :data-ceremony-cycle="entry.id" data-ceremony-bottom>{{ entry.bottomText }}</span>
+              <span v-else-if="entry.passLabel" class="tiny-badge" :data-ceremony-cycle="entry.id" data-ceremony-pass>{{ entry.passLabel }}</span>
+              <span v-else-if="entry.cycle > 0" class="tiny-badge" :data-ceremony-cycle="entry.id">与你共度第 {{ entry.cycle }} 次</span>
               <span v-if="entry.notes" class="truncate">{{ entry.notes }}</span>
             </p>
           </div>
@@ -133,26 +151,48 @@
         <label class="field-label">名称
           <input v-model="form.title" class="compact-input mt-1" maxlength="100" data-ceremony-form-title placeholder="例如：妈妈生日" />
         </label>
-        <div class="field-label relative">
-          {{ form.dateField }}
-          <button ref="dateAnchor" type="button" class="compact-input mt-1 flex h-9 w-full items-center justify-between px-3 text-left text-xs" data-ceremony-form-date @click="dateOpen = !dateOpen">
-            <span>{{ form.dueAt ? formatFull(form.dueAt) : '选择日期' }}</span>
-            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-muted-foreground" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2" stroke-width="1.8"/><path d="M8 3v4m8-4v4M3 10h18" stroke-width="1.8" stroke-linecap="round"/></svg>
-          </button>
-          <LunarDatePicker v-if="dateOpen" v-model="datePicked" with-time :anchor-el="dateAnchor" @commit="dateOpen = false" />
+        <!-- 日期 / 历法 / 重复：同一行、三列等宽（用户 2026-10-26 要求）。 -->
+        <div class="grid grid-cols-3 items-end gap-2">
+          <label class="field-label min-w-0">
+            <span class="block truncate">{{ form.dateField }}</span>
+            <div class="relative mt-1">
+              <button ref="dateAnchor" type="button" class="compact-input flex h-9 w-full items-center justify-between gap-1 px-2 text-left text-[11px]" data-ceremony-form-date @click="dateOpen = !dateOpen">
+                <span class="truncate">
+                  <template v-if="form.dueAt">
+                    <span class="sm:hidden">{{ formatCompact(form.dueAt) }}</span>
+                    <span class="hidden sm:inline">{{ formatFull(form.dueAt) }}</span>
+                  </template>
+                  <template v-else>选择日期</template>
+                </span>
+                <svg viewBox="0 0 24 24" class="hidden h-3 w-3 shrink-0 text-muted-foreground sm:block" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2" stroke-width="1.8"/><path d="M8 3v4m8-4v4M3 10h18" stroke-width="1.8" stroke-linecap="round"/></svg>
+              </button>
+              <LunarDatePicker
+                v-if="dateOpen"
+                v-model="datePicked"
+                :calendar="form.calendar === 'lunar' ? 'lunar' : 'solar'"
+                with-time
+                @update:calendar="form.calendar = $event"
+                :anchor-el="dateAnchor"
+                @commit="dateOpen = false"
+              />
+            </div>
+          </label>
+          <label class="field-label min-w-0">历法
+            <select v-model="form.calendar" class="compact-input mt-1 h-9 px-1 text-[11px]" aria-label="历法" data-ceremony-form-calendar>
+              <option value="solar">公历</option>
+              <option value="lunar">农历</option>
+            </select>
+          </label>
+          <label class="field-label min-w-0">重复
+            <select v-model="form.repeat" class="compact-input mt-1 h-9 px-1 text-[11px]" data-ceremony-form-repeat>
+              <option value="yearly">每年</option>
+              <option value="monthly">每月</option>
+              <option value="none">不重复</option>
+            </select>
+          </label>
         </div>
-        <label class="field-label">重复
-          <select v-model="form.repeat" class="compact-input mt-1" data-ceremony-form-repeat>
-            <option value="yearly">每年</option>
-            <option value="monthly">每月</option>
-            <option value="none">不重复</option>
-          </select>
-        </label>
-        <label class="field-label">按农历
-          <select v-model="form.calendar" class="compact-input mt-1" data-ceremony-form-calendar>
-            <option value="solar">公历</option>
-            <option value="lunar">农历</option>
-          </select>
+        <label class="field-label">卡片底部文字
+          <input v-model="form.bottomText" class="compact-input mt-1" maxlength="120" data-ceremony-form-bottom placeholder="留空自动显示「与你共度第 N 次…」" />
         </label>
         <!-- 卡片配色（用户 2026-10-11 要求：多种过渡色、可自行选择）。
              2026-10-13 起这一档颜色**同时**决定整张卡面与倒计时的底色（原来是两块色），
@@ -301,7 +341,7 @@
         </p>
       </div>
       <div class="mt-4 flex items-center justify-end gap-2">
-        <button class="btn-secondary !h-9 !px-4 !text-xs" @click="createOpen = false">取消</button>
+        <button class="btn-secondary !h-9 !px-4 !text-xs" data-ceremony-form-cancel @click="createOpen = false">取消</button>
         <button class="btn-primary !h-9 !px-4 !text-xs" :disabled="saving || !form.title.trim() || !form.dueAt" data-ceremony-form-save @click="save">保存</button>
       </div>
     </Modal>
@@ -351,6 +391,7 @@ const form = reactive({
   title: '', dueAt: '' as string, repeat: 'yearly', calendar: 'solar', accent: '', background: '',
   bgBlur: 0, bgMask: 45, // 背景蒙板：虚化像素 / 蒙板透明度百分比（见 server/reminder/models.go）
   bgAlpha: 100, // 整卡背景透明度：100 = 不透明，0 = 只剩文字
+  bottomText: '', // 卡片底部自定义文案；空 = 自动次数文案
   // 日期这一栏的标题：生日模板写「第一次生日时间」、结婚纪念日/金婚写「结婚日期」、
   // 情人节/七夕写「第一次情人节 / 第一次七夕」，其余（含「新建事项」）还是「日期」
   // ——用户 2026-10-13：「选择生日模板日期模板改成 出生年月日会不会更好理解」，
@@ -482,6 +523,12 @@ function formatFull(v: string) {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
+/** 手机窄屏三列时用短日期，避免「2011年10月13日」被截成省略号。 */
+function formatCompact(v: string) {
+  const d = new Date(v)
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
+}
+
 function repeatLabelOf(rule: string) {
   return ({ yearly: '每年', monthly: '每月', daily: '每天', weekly: '每周' } as Record<string, string>)[rule] || ''
 }
@@ -548,14 +595,14 @@ async function loadLunarAnnual() {
 
 /**
  * 年度循环事项的「第几次 / 已过几次」文案（用户 2026-10-15 要求各模板都按「第一次」的日期来数）。
- *   - 生日：已过 37 次生日 / 第 38 次生日
- *   - 节日（情人节、七夕、中秋…）：已过 10 次情人节 / 第 11 次情人节
- *   - 婚龄（结婚纪念日、银婚、金婚、钻石婚）：已过 12 年 / 第 13 周年
+ *   - 生日：与你共度第 15 次生日
+ *   - 节日（情人节、七夕、中秋…）：与你共度第 11 次情人节
+ *   - 婚龄（结婚纪念日、银婚、金婚、钻石婚）：与你共度第 13 周年 / 第 12 年
  */
 function anniversaryLabel(title: string, passed: number, isToday: boolean) {
-  if (/银婚|金婚|钻石婚|纪念日|结婚/.test(title)) return isToday ? `第 ${passed + 1} 周年` : `已过 ${passed} 年`
+  if (/银婚|金婚|钻石婚|纪念日|结婚/.test(title)) return isToday ? `与你共度第 ${passed + 1} 周年` : `与你共度第 ${passed} 年`
   const noun = /生日/.test(title) ? '生日' : title
-  return isToday ? `第 ${passed + 1} 次${noun}` : `已过 ${passed} 次${noun}`
+  return `与你共度第 ${isToday ? passed + 1 : passed} 次${noun}`
 }
 
 /** 公历日期 -> 农历中文写法（同一天只请求一次，切清单时复用）。 */
@@ -602,7 +649,7 @@ const cards = computed(() => items.value
         })())
       : null
     const days = progress ? progress.days : daysUntil(item.due_at)
-    // 「已过 N 次生日」/「第 N 次生日」（今天正是那一次）；婚龄类写「已过 N 年」/「第 N 周年」
+    // 「与你共度第 N 次生日」；婚龄类写「与你共度第 N 周年 / 第 N 年」
     const passLabel = !progress || progress.passed <= 0
       ? ''
       : anniversaryLabel(item.title, progress.passed, days === 0)
@@ -615,7 +662,12 @@ const cards = computed(() => items.value
       undated: days === null,
       daysClass: days === null ? '' : days < 0 ? 'ceremony-days-past' : days <= 7 ? 'ceremony-days-soon' : '',
       dateLabel: d ? `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日` : '未设日期',
+      solarYear: d ? `${d.getFullYear()}年` : '',
+      solarMonthDay: d ? `${d.getMonth() + 1}月${d.getDate()}日` : '未设日期',
+      lunarYear: d ? (lunarLabels.value[dayKey(d)] || '').split(' ')[0] : '',
+      lunarMonthDay: d ? (lunarLabels.value[dayKey(d)] || '').split(' ')[1] || '' : '',
       lunarLabel: d ? lunarLabels.value[dayKey(d)] || '' : '',
+      bottomText: item.bottom_text || '',
       repeatLabel: repeatLabelOf(item.repeat_rule),
       cycle: item.cycle_index || 0,
       accent: item.accent || '',
@@ -663,7 +715,7 @@ function resetForm(overrides: Partial<typeof form> = {}) {
   milestoneYears.value = 0
   Object.assign(form, {
     title: '', dueAt: '', repeat: 'yearly', calendar: 'solar',
-    accent: '', background: '', bgBlur: 0, bgMask: 45, dateField: '日期',
+    accent: '', background: '', bgBlur: 0, bgMask: 45, bottomText: '', dateField: '日期',
     ...overrides,
   })
 }
@@ -698,6 +750,7 @@ function edit(entry: ReminderItem) {
     bgBlur: entry.bg_blur ?? 0,
     bgMask: entry.bg_mask ?? 45,
     bgAlpha: entry.bg_alpha ?? 100,
+    bottomText: entry.bottom_text || '',
     dateField: dateFieldForTitle(entry.title),
   })
   createOpen.value = true
@@ -743,6 +796,7 @@ async function save() {
       bg_blur: form.bgBlur,
       bg_mask: form.bgMask,
       bg_alpha: form.bgAlpha,
+      bottom_text: form.bottomText.trim(),
       channels: ['inapp'],
     }
     // 婚庆里程碑模板（银婚 25 / 金婚 50 / 钻石婚 60、75）：用户填的是**结婚日期**，
@@ -952,7 +1006,39 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 @media (hover: none) { .ceremony-actions { @apply opacity-100; } }
 /* 名称 / 时间 / 次数都放大（用户 2026-10-12：「所有内容均放大」） */
 .ceremony-title { @apply truncate text-[19px] font-extrabold leading-6 tracking-tight; }
-.ceremony-date { @apply mt-1 text-[13.5px] font-semibold leading-5 text-muted-foreground; }
+.ceremony-date { @apply mt-1 space-y-1 text-[13.5px] font-semibold leading-5 text-muted-foreground; }
+/* 年与月日分开：年始终不加底色；只有创建时选中的那种日历，给「月日 + 每年」套彩色药丸。
+   未选中的日期整行透明，没有边框（用户 2026-10-26 要求）。 */
+.ceremony-date-line { @apply flex flex-wrap items-baseline gap-1.5; }
+.ceremony-date-year { @apply opacity-75; }
+.ceremony-date-md { @apply inline-flex items-center gap-1; }
+.ceremony-date-chip {
+  @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5;
+}
+.ceremony-date-chip-solar { background: rgba(59, 130, 246, .24); border-color: rgba(96, 165, 250, .45); }
+.ceremony-date-chip-lunar { background: rgba(245, 158, 11, .24); border-color: rgba(251, 191, 36, .48); }
+/* 选中/创建时用的那种日历用高饱和实色，保证在深浅、彩色卡面上都一眼能认出来。 */
+.ceremony-date-chip-solar.is-primary {
+  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+  border-color: #93c5fd;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, .28);
+}
+.ceremony-date-chip-lunar.is-primary {
+  background: linear-gradient(135deg, #d97706, #fbbf24);
+  border-color: #fde68a;
+  color: #3b1d02;
+}
+.ceremony-date-chip.is-primary .tiny-badge {
+  background: rgba(255, 255, 255, .24);
+  border-color: rgba(255, 255, 255, .44);
+  color: inherit;
+}
+.ceremony-date-chip-lunar.is-primary .tiny-badge {
+  background: rgba(59, 29, 2, .12);
+  border-color: rgba(59, 29, 2, .22);
+  color: #3b1d02;
+}
 .ceremony-extra { @apply mt-1.5 flex flex-wrap items-center gap-1.5 text-[13px] font-semibold text-muted-foreground; }
 /* 卡面上的小徽标（农历 / 每年 / 第 N 次）改成半透明药丸：比裸文字更像标签，
    又不会像实色块那样跳出来抢倒计时的视线。 */
