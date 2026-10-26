@@ -271,8 +271,10 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   sha256 `3e12cf90ec3f7554408ed919a0a0574338d13c5e8c8fa0759e18b7f72bd9cb78`）。
 
 **仓库同步**
-- Gitea：`cyberzero/workordernote` main 与 tag `v0.43.3` 待推送。
-- GitHub：发布快照与 tag `v0.43.3` 待推送（Release 与 GHCR 由 Actions 生成）。
+- Gitea：`cyberzero/workordernote` main（含 tag `v0.43.3`）已推送。
+- GitHub：发布快照仓 `publish-workordernote` 提交 `fbaa2c5`、tag `v0.43.3`；Actions `release` 成功，
+  Release `v0.43.3`（源码包、bundle、离线镜像、fpk、截图）与
+  `ghcr.io/magicindex/workordernote:0.43.3` 已发布。
 
 ### 2026-10-26：0.43.2（201 生产 / 201 沙箱 / 200 生产 / 演示 8920 上线）—— 农历年份改用干支
 
