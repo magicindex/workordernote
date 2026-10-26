@@ -195,6 +195,46 @@ func keys(m map[string]string) []string {
 	return out
 }
 
+// 自建 NAS 常见：证书是自签的，或用 IP 访问而证书只有 DNS SAN。
+// 默认必须校验失败，并给出「跳过 HTTPS 证书校验」的提示；开启后才放行。
+func TestWebDAVSkipVerifyForSelfSigned(t *testing.T) {
+	db := testDB(t)
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "MKCOL", http.MethodPut:
+			w.WriteHeader(http.StatusCreated)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	defer srv.Close()
+
+	sysconfig.UpdateConfig(db, "backup_webdav_url", srv.URL+"/dav", 0)
+	sysconfig.UpdateConfig(db, "backup_webdav_dir", "wb", 0)
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "x.tar.gz")
+	if err := os.WriteFile(file, []byte("ARCHIVE"), 0o644); err != nil {
+		t.Fatalf("write archive: %v", err)
+	}
+	name := "workordernote-backup-20261026-164601.tar.gz"
+
+	_, err := uploadWebDAV(db, file, name)
+	if err == nil {
+		t.Fatal("自签名证书在没有开启跳过校验时应当失败")
+	}
+	if !strings.Contains(err.Error(), "跳过 HTTPS 证书校验") {
+		t.Fatalf("证书错误应带可操作提示，got %v", err)
+	}
+
+	if err := sysconfig.UpdateConfig(db, "backup_webdav_insecure", "true", 0); err != nil {
+		t.Fatalf("enable insecure: %v", err)
+	}
+	if _, err := uploadWebDAV(db, file, name); err != nil {
+		t.Fatalf("开启跳过校验后上传失败: %v", err)
+	}
+}
+
 func TestRestoreReplacesDatabaseAndUploads(t *testing.T) {
 	db := testDB(t)
 	dir := t.TempDir()

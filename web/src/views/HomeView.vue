@@ -551,7 +551,7 @@
                   <h3 class="min-w-0 break-words text-sm font-bold leading-5 sm:truncate sm:text-[15px]" :style="{ color: listColor(item.list_color) }">{{ item.title }}</h3>
                   <span v-if="item.kind === 'note'" class="tiny-badge">记事</span>
                   <span v-if="item.priority" class="priority-mark" :class="`priority-${item.priority}`">{{ '!'.repeat(item.priority) }}</span>
-                  <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ item.calendar === 'lunar' ? `农历${ruleLabel(item.repeat_rule)}` : ruleLabel(item.repeat_rule) }}</span>
+                  <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ repeatBadge(item) }}</span>
                   <span v-if="item.repeat_notify_minutes" class="tiny-badge">过期提醒</span>
                   <!-- 循环周期：计划页看成「这一轮到什么时候」，其余页面仍显示第几次。
                        倒计时跟着页面每分钟的 E 走（下面 setInterval 已经在跳）。 -->
@@ -693,7 +693,7 @@ import { getPublicConfigs } from '../api/config'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import {
   completeReminder, createReminder, deleteReminder, exportReminders, getChannelStatuses, getCompletedHistory, getLists,
-  getReminder, getReminderMonths, getReminders, listIdsParam, restoreReminder, snoozeReminder, updateReminder,
+  convertLunarDate, getReminder, getReminderMonths, getReminders, listIdsParam, restoreReminder, snoozeReminder, updateReminder,
   type ChannelStatus, type CompletedItem, type CompletedRangeOption, type ReminderChannel,
   type ReminderItem, type ReminderKind, type ReminderList, type SaveReminderInput
 } from '../api/reminder'
@@ -705,6 +705,59 @@ const router = useRouter()
 // 这里把那条滚进视野 + 闪一下底色，用户一眼能找到（用户 2026-10-14：「首页点击提醒定位到对应清单」）。
 const highlightedId = ref(0)
 const items = ref<ReminderItem[]>([])
+// 年度循环条目（生日、纪念日）的 due_at 是「第一次」的日期。列表行如果直接拿它算逾期，
+// 2011 年的生日会显示「已逾期 5000 多天」；这里按当前年份补出这一轮的到期日再展示。
+// 原始 due_at 仍保留在 items 里，编辑时不会被改成今年。
+const cycleDue = ref<Record<number, string>>({})
+let cycleDueToken = 0
+
+function solarYearlyDue(due: Date, now: Date) {
+  const lastDay = new Date(now.getFullYear(), due.getMonth() + 1, 0).getDate()
+  return new Date(now.getFullYear(), due.getMonth(), Math.min(due.getDate(), lastDay),
+    due.getHours(), due.getMinutes(), due.getSeconds(), due.getMilliseconds())
+}
+
+async function loadCycleDue() {
+  const token = ++cycleDueToken
+  const now = new Date(clockNow.value)
+  const out: Record<number, string> = {}
+  const lunarItems = items.value.filter((item) => item.repeat_rule === 'yearly'
+    && item.calendar === 'lunar' && item.lunar_anchor && item.due_at
+    && new Date(item.due_at) <= now)
+  if (!lunarItems.length) { cycleDue.value = out; return }
+  let lunarYear = now.getFullYear()
+  try {
+    const today = await convertLunarDate({ year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() })
+    if (today.data?.data?.lunar_year) lunarYear = today.data.data.lunar_year
+  } catch { /* 换算失败就退回公历年份 */ }
+  const cache: Record<string, { year: number; month: number; day: number } | null> = {}
+  for (const item of lunarItems) {
+    const rawDue = item.due_at
+    if (!rawDue) continue
+    const [month, day] = String(item.lunar_anchor).split(':').map(Number)
+    if (!month || !day) continue
+    const key = `${lunarYear}:${month}:${day}`
+    if (!(key in cache)) {
+      try {
+        const res = await convertLunarDate({ lunar_year: lunarYear, lunar_month: month, lunar_day: day })
+        cache[key] = res.data?.data || null
+      } catch { cache[key] = null }
+    }
+    const c = cache[key]
+    if (!c) continue
+    const due = new Date(rawDue)
+    out[item.id] = new Date(c.year, c.month - 1, c.day, due.getHours(), due.getMinutes(), due.getSeconds()).toISOString()
+  }
+  if (token === cycleDueToken) cycleDue.value = out
+}
+
+const displayItems = computed(() => items.value.map((item) => {
+  if (item.repeat_rule !== 'yearly' || !item.due_at) return item
+  const due = new Date(item.due_at)
+  if (Number.isNaN(due.getTime()) || due > new Date(clockNow.value)) return item
+  const iso = item.calendar === 'lunar' ? cycleDue.value[item.id] : solarYearlyDue(due, new Date(clockNow.value)).toISOString()
+  return iso ? { ...item, due_at: iso } : item
+}))
 // 「已完成」的数据源与普通列表不同（历史表 ∪ 完成记录），单独存一份。
 const completedItems = ref<CompletedItem[]>([])
 // 后端算出来的实际区间文案（含当天），显示在筛选器下方供核对。
@@ -1099,7 +1152,7 @@ const subtitle = computed(() => {
   if (view.value === 'completed') return '每一个勾选，都是向前一步'
   return '所有未完成的提醒都在这里'
 })
-const overdueCount = computed(() => items.value.filter(isOverdue).length)
+const overdueCount = computed(() => displayItems.value.filter(isOverdue).length)
 const emptyTitle = computed(() => view.value === 'completed'
   ? (completedRange.value === 'all' ? '还没有完成记录' : '这个时间段没有记录')
   : view.value === 'today' ? '近 7 天都清空了' : '这里还没有提醒')
@@ -1251,6 +1304,7 @@ async function loadItems() {
     sort: isNoteBucketPage.value ? 'created_desc' : undefined,
   })
   items.value = res.data.data || []
+  void loadCycleDue()
 }
 // 导出对话框：选清单（默认全选，含信用卡/记事本系统栏目）与列（默认全选）。
 // 导出永远是**所有数据**：不带页面上的月份与时间范围（用户要求）。
@@ -1671,7 +1725,7 @@ const dayGroups = computed(() => {
   const byKey = new Map<string, (typeof groups)[number]>()
   const overdue: (typeof groups)[number] = { key: 'overdue', label: '已逾期', weekday: '', items: [] }
   // 逾期的判断与行里的「已逾期」标记同一套口径（overdueStamp）。
-  for (const item of items.value) {
+  for (const item of displayItems.value) {
     if (isOverdue(item)) {
       overdue.items.push(item)
       continue
@@ -1706,6 +1760,22 @@ const dayGroups = computed(() => {
 })
 function channelName(ch: ReminderChannel) { return ({ inapp: '站内', email: '邮件', sms: '短信', feishu: '飞书', qq: 'QQ', dingtalk: '钉钉' } as Record<string, string>)[ch] || ch }
 function ruleLabel(rule: string) { return ({ daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年' } as Record<string, string>)[rule] || '循环' }
+
+/** 循环徽标：年度循环写清「农历9月17日 每年 / 公历10月13日 每年」，其余沿用原口径。 */
+function repeatBadge(item: ReminderItem) {
+  const suffix = ruleLabel(item.repeat_rule)
+  if (item.repeat_rule === 'yearly') {
+    if (item.calendar === 'lunar' && item.lunar_anchor) {
+      const [month, day] = String(item.lunar_anchor).split(':').map(Number)
+      if (month && day) return `农历${month < 0 ? '闰' : ''}${Math.abs(month)}月${day}日 ${suffix}`
+    }
+    if (item.calendar !== 'lunar' && item.due_at) {
+      const due = new Date(item.due_at)
+      if (!Number.isNaN(due.getTime())) return `公历${due.getFullYear()}年${due.getMonth() + 1}月${due.getDate()}日 ${suffix}`
+    }
+  }
+  return item.calendar === 'lunar' ? `农历${suffix}` : suffix
+}
 // 清单色表在 utils/list-colors.ts（侧栏/筛选/标题/日历共用一份，改一处不会走样）。
 function listColor(color: string) { return listColorHex(color) }
 

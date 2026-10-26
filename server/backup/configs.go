@@ -53,6 +53,11 @@ func init() {
 			Description: "在 WebDAV 地址下再建一层目录存放备份，不存在会自动创建；留空表示直接用地址目录",
 		},
 		{
+			Key: "backup_webdav_insecure", Scope: sysconfig.ScopeSystem, Type: sysconfig.TypeBool, Default: "false",
+			Group: "backup", Label: "跳过 HTTPS 证书校验",
+			Description: "WebDAV 用自签名证书、或用 IP 访问而证书里没有对应 IP 时打开；会失去中间人防护，只在可信内网开启",
+		},
+		{
 			Key: "backup_keep", Scope: sysconfig.ScopeSystem, Type: sysconfig.TypeInt, Default: "7",
 			Group: "backup", Label: "保留份数",
 			Description: "本机与 WebDAV 各保留最近几份，超出的自动删除；0 表示不删",

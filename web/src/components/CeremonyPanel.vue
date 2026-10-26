@@ -86,8 +86,8 @@
                   data-ceremony-solar-md
                 >
                   {{ entry.solarMonthDay }}
-                  <span v-if="entry.repeatLabel && entry.calendar !== 'lunar'" class="tiny-badge">{{ entry.repeatLabel }}</span>
                 </span>
+                <span v-if="entry.repeatLabel && entry.calendar !== 'lunar'" class="tiny-badge ceremony-repeat-badge">{{ entry.repeatLabel }}</span>
               </span>
               <span v-if="entry.lunarMonthDay" class="ceremony-date-line" data-ceremony-lunar>
                 <span class="ceremony-date-year" data-ceremony-lunar-year>{{ entry.lunarYear }}</span>
@@ -97,8 +97,8 @@
                   data-ceremony-lunar-md
                 >
                   {{ entry.lunarMonthDay }}
-                  <span v-if="entry.repeatLabel && entry.calendar === 'lunar'" class="tiny-badge">{{ entry.repeatLabel }}</span>
                 </span>
+                <span v-if="entry.repeatLabel && entry.calendar === 'lunar'" class="tiny-badge ceremony-repeat-badge">{{ entry.repeatLabel }}</span>
               </span>
             </p>
             <p v-if="entry.bottomText || entry.passLabel || entry.cycle > 0 || entry.notes" class="ceremony-extra">
@@ -177,8 +177,8 @@
               />
             </div>
           </label>
-          <label class="field-label min-w-0">历法
-            <select v-model="form.calendar" class="compact-input mt-1 h-9 px-1 text-[11px]" aria-label="历法" data-ceremony-form-calendar>
+          <label class="field-label min-w-0">倒计时历法
+            <select v-model="form.calendar" class="compact-input mt-1 h-9 px-1 text-[11px]" aria-label="倒计时历法" data-ceremony-form-calendar>
               <option value="solar">公历</option>
               <option value="lunar">农历</option>
             </select>
@@ -1027,16 +1027,6 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 .ceremony-date-chip-lunar.is-primary {
   background: linear-gradient(135deg, #d97706, #fbbf24);
   border-color: #fde68a;
-  color: #3b1d02;
-}
-.ceremony-date-chip.is-primary .tiny-badge {
-  background: rgba(255, 255, 255, .24);
-  border-color: rgba(255, 255, 255, .44);
-  color: inherit;
-}
-.ceremony-date-chip-lunar.is-primary .tiny-badge {
-  background: rgba(59, 29, 2, .12);
-  border-color: rgba(59, 29, 2, .22);
   color: #3b1d02;
 }
 .ceremony-extra { @apply mt-1.5 flex flex-wrap items-center gap-1.5 text-[13px] font-semibold text-muted-foreground; }

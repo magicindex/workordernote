@@ -13,5 +13,5 @@ export function remainingText(target: number | string | null | undefined, now: n
   const minutes = Math.floor((total % 3600000) / 60000)
   const hm = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
   const body = days > 0 ? `${days} 天 ${hm}` : hm
-  return diff < 0 ? `已过 ${body}` : `剩余 ${body}`
+  return diff < 0 ? `已逾期 ${body}` : `剩余 ${body}`
 }
