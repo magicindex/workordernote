@@ -276,9 +276,11 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   sha256 `fd68f19b60b6941a82f145ae38fa43765e28fd27fcd48a4fc64365bb11b262bd`）。
 
 **仓库同步**
-- 主仓库：代码 `07dd74f`；Gitea `cyberzero/workordernote` 的 main/tag 随后推送。
-- GitHub 快照 `publish-workordernote`：tag `v0.43.5`；Actions `release` 发布 source / bundle / image / SHA256SUMS / fpk / screenshots，
-  `ghcr.io/magicindex/workordernote:0.43.5` 同步推送。
+- 主仓库：代码 `07dd74f`，上线文档 `7e458b1`；tag `v0.43.5` 指向 `7e458b1`；
+  Gitea `cyberzero/workordernote` 的 main/tag 已推送。
+- GitHub 快照 `publish-workordernote`：`3a8daae`，tag `v0.43.5`；Actions `release` 成功，
+  Release v0.43.5 已发布（source / bundle / image / SHA256SUMS / fpk / screenshots），
+  `ghcr.io/magicindex/workordernote:0.43.5` 已推送（manifest 含 amd64 与 attestation）。
 - Gitea 容器仓库仍受历史 `unexpected EOF` 影响；README 保留 GHCR 备用拉取地址。
 
 ### 2026-10-26：0.43.4（201 生产 / 201 沙箱 / 200 生产 / 演示 8920 上线）—— 循环逾期、日期徽标与 WebDAV 证书
