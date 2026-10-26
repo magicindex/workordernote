@@ -272,7 +272,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 **仓库同步**
 - 主仓库：代码 `5751c43` → 上线文档 `6ce45b4`；tag `v0.43.4`。Gitea `cyberzero/workordernote` 的 main/tag 已推送。
-- GitHub 快照 `publish-workordernote`：`7421559`，tag `v0.43.4`；Actions `release` 成功，
+- GitHub 快照 `publish-workordernote`：`5204c62`，tag `v0.43.4`；Actions `release` 成功，
   Release v0.43.4 已发布（source / bundle / image / SHA256SUMS / fpk / screenshots），
   `ghcr.io/magicindex/workordernote:0.43.4` 已推送。
 - Gitea 容器仓库仍受历史 `unexpected EOF` 影响，未推 0.43.4；README 保留 GHCR 备用拉取地址。
