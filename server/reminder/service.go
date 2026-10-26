@@ -24,6 +24,8 @@ var repeatRules = map[string]bool{
 type SaveReminderInput struct {
 	Title string `json:"title"`
 	Notes string `json:"notes"`
+	// BottomText 是仪式感卡片底部自定义文案；指针区分「没传（不改）」与「传空串（恢复自动）」。
+	BottomText *string `json:"bottom_text"`
 	// Kind is "task" (default) or "note". A note ignores every scheduling
 	// field and is stored as already completed.
 	Kind   string `json:"kind"`
@@ -93,6 +95,13 @@ func ensureDefaultList(tx *gorm.DB, userID uint) (List, error) {
 func validateReminderInput(in *SaveReminderInput) error {
 	in.Title = strings.TrimSpace(in.Title)
 	in.Notes = strings.TrimSpace(in.Notes)
+	if in.BottomText != nil {
+		v := strings.TrimSpace(*in.BottomText)
+		if len([]rune(v)) > 120 {
+			return errors.New("卡片底部文字最多 120 个字")
+		}
+		in.BottomText = &v
+	}
 	if in.Title == "" {
 		return errors.New("请输入提醒标题")
 	}
@@ -295,8 +304,12 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 		if in.BgAlpha != nil {
 			bgAlpha = *in.BgAlpha
 		}
+		bottomText := ""
+		if in.BottomText != nil {
+			bottomText = *in.BottomText
+		}
 		created = Reminder{
-			UserID: userID, ListID: in.ListID, Title: in.Title, Notes: in.Notes,
+			UserID: userID, ListID: in.ListID, Title: in.Title, Notes: in.Notes, BottomText: bottomText,
 			Accent:     accent,
 			Background: background,
 			BgBlur:     bgBlur,
@@ -380,6 +393,9 @@ func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) 
 		}
 		existing.Title = in.Title
 		existing.Notes = in.Notes
+		if in.BottomText != nil {
+			existing.BottomText = *in.BottomText
+		}
 		// Switching type has to move the row between the open and completed
 		// views: task -> note stamps CompletedAt (and never touches it again
 		// on later edits, so the note keeps its place in the completed log),

@@ -12,8 +12,8 @@
       <div v-if="isMobile" class="mx-auto mb-2 h-1 w-10 rounded-full bg-border" aria-hidden="true"></div>
       <div class="flex items-center justify-between px-1 pb-2">
         <div class="tab-group" role="tablist">
-          <button type="button" class="tab-btn" :class="{ active: mode === 'solar' }" role="tab" :aria-selected="mode === 'solar'" @click="switchMode('solar')">公历</button>
-          <button type="button" class="tab-btn" :class="{ active: mode === 'lunar' }" role="tab" :aria-selected="mode === 'lunar'" @click="switchMode('lunar')">农历</button>
+          <button type="button" class="tab-btn" :class="{ active: mode === 'solar' }" role="tab" :aria-selected="mode === 'solar'" data-picker-mode="solar" @click="switchMode('solar')">公历</button>
+          <button type="button" class="tab-btn" :class="{ active: mode === 'lunar' }" role="tab" :aria-selected="mode === 'lunar'" data-picker-mode="lunar" @click="switchMode('lunar')">农历</button>
         </div>
         <button type="button" class="today-btn" @click="goToday">今天</button>
       </div>
@@ -114,6 +114,7 @@
             type="button"
             class="day-cell"
             :class="{ today: isLunarToday(d), selected: isLunarSelected(d) }"
+            :data-picker-lunar-day="d"
             :title="lunarCellTitle(d)"
             @click="pickLunar(d)"
           >
@@ -170,10 +171,13 @@ const props = withDefaults(defineProps<{
   /** 触发弹层的锚点元素：弹层 fixed 定位挂到 body，避免被
       overflow:hidden 的祖先（如快速添加卡片）裁剪 */
   anchorEl?: HTMLElement | null
-}>(), { withTime: false })
+  /** 打开时默认的历法页签；与父级的公历/农历选择保持同步 */
+  calendar?: 'solar' | 'lunar'
+}>(), { withTime: false, calendar: 'solar' })
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: Date | null): void
+  (e: 'update:calendar', value: 'solar' | 'lunar'): void
   (e: 'commit'): void
 }>()
 
@@ -198,7 +202,7 @@ function cancelSheet() {
 const weekdays = ['一', '二', '三', '四', '五', '六', '日']
 const loading = ref(false)
 const cells = ref<LunarDayInfo[]>([])
-const mode = ref<'solar' | 'lunar'>('solar')
+const mode = ref<'solar' | 'lunar'>(props.calendar)
 const viewYear = ref(0)
 const viewMonth = ref(1) // 1-12
 const timeValue = ref('09:00')
@@ -331,11 +335,17 @@ async function probeLeapMonth(year: number): Promise<number> {
 function switchMode(next: 'solar' | 'lunar') {
   if (mode.value === next) return
   mode.value = next
+  emit('update:calendar', next)
   quickOpen.value = false // 换页签时收起「快速选年月」面板
   if (next === 'lunar') {
     syncLunarFromSolar()
   }
 }
+
+// 父级下拉改了历法时，弹层里的页签跟着切换；两边始终是同一个选择。
+watch(() => props.calendar, next => {
+  if (next !== mode.value) switchMode(next)
+})
 
 // 把当前公历视图（或选中日期）映射到农历视图
 function syncLunarFromSolar() {
@@ -489,19 +499,24 @@ function goToday() {
   const now = new Date()
   viewYear.value = now.getFullYear()
   viewMonth.value = now.getMonth() + 1
-  mode.value = 'solar'
+  if (mode.value !== 'solar') {
+    mode.value = 'solar'
+    emit('update:calendar', 'solar')
+  }
   pickSolar({ year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() } as LunarDayInfo)
   // 手机端抽屉保持打开，让用户按“确定”收起
   if (!isMobile.value) emit('commit')
 }
 
 function pickSolar(cell: LunarDayInfo) {
+  if (props.calendar !== 'solar') emit('update:calendar', 'solar')
   const [h, m] = timeValue.value.split(':').map(Number)
   const picked = new Date(cell.year, cell.month - 1, cell.day, h || 0, m || 0, 0, 0)
   emit('update:modelValue', picked)
 }
 
 function pickLunar(day: number) {
+  if (props.calendar !== 'lunar') emit('update:calendar', 'lunar')
   lunarView.day = day
   const [h, m] = timeValue.value.split(':').map(Number)
   convertLunarDate({ lunar_year: lunarView.year, lunar_month: lunarView.month, lunar_day: day })
@@ -608,6 +623,9 @@ watch([viewYear, viewMonth], loadMonth, { immediate: false })
 watch([lunarView.year, lunarView.month], () => void probeLunarMonth())
 
 syncView()
+// 直接以农历页签打开时，农历视图还没有初值（year=0），先按当前选中日期映射一次；
+// 否则会拿 year=0 去换算，接口 400，用户点了农历日期也不生效。
+if (mode.value === 'lunar') syncLunarFromSolar()
 void loadMonth()
 // 等首轮渲染完成后再定位，否则 offsetHeight 还是 0。
 void Promise.resolve().then(place)

@@ -130,6 +130,7 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 			ListUID:             listUID[r.ListID],
 			Title:               r.Title,
 			Notes:               r.Notes,
+			BottomText:          r.BottomText,
 			CardRole:            r.CardRole,
 			CardUID:             cardUID[r.CardID],
 			Kind:                r.Kind,

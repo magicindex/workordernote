@@ -143,12 +143,21 @@ const madeIds = [];
         countdown: card.querySelector('[data-ceremony-countdown]')?.textContent.replace(/\s+/g, ' ').trim(),
         meta: card.querySelector('.ceremony-date')?.textContent.replace(/\s+/g, ' ').trim(),
         lunar: card.querySelector('[data-ceremony-lunar]')?.textContent.trim() || '',
+        solarRepeat: (card.querySelector('[data-ceremony-solar]')?.textContent || '').includes('每年'),
+        lunarRepeat: (card.querySelector('[data-ceremony-lunar]')?.textContent || '').includes('每年'),
+        solarPrimary: !!card.querySelector('[data-ceremony-solar-md]')?.classList.contains('is-primary'),
+        lunarPrimary: !!card.querySelector('[data-ceremony-lunar-md]')?.classList.contains('is-primary'),
+        solarBg: (() => { const el = card.querySelector('[data-ceremony-solar-md]'); if (!el) return ''; const cs = getComputedStyle(el); return cs.backgroundImage !== 'none' ? cs.backgroundImage : cs.backgroundColor; })(),
+        lunarBg: (() => { const el = card.querySelector('[data-ceremony-lunar-md]'); if (!el) return ''; const cs = getComputedStyle(el); return cs.backgroundImage !== 'none' ? cs.backgroundImage : cs.backgroundColor; })(),
+        solarYearBg: (() => { const el = card.querySelector('[data-ceremony-solar-year]'); if (!el) return ''; const cs = getComputedStyle(el); return cs.backgroundImage !== 'none' ? cs.backgroundImage : cs.backgroundColor; })(),
+        lunarYearBg: (() => { const el = card.querySelector('[data-ceremony-lunar-year]'); if (!el) return ''; const cs = getComputedStyle(el); return cs.backgroundImage !== 'none' ? cs.backgroundImage : cs.backgroundColor; })(),
         lunarBelow: (() => {
           const solar = card.querySelector('[data-ceremony-solar]')?.getBoundingClientRect();
           const lunar = card.querySelector('[data-ceremony-lunar]')?.getBoundingClientRect();
           return !!(solar && lunar && lunar.top >= solar.bottom - 1);
         })(),
         cycle: card.querySelector('[data-ceremony-cycle]')?.textContent.trim() || '',
+        bottom: card.querySelector('[data-ceremony-bottom]')?.textContent.trim() || '',
       };
     }, titlePart);
     const national = await cardOf('国庆');
@@ -180,8 +189,22 @@ const madeIds = [];
     check('中秋卡片同时显示公历和农历（八月十五）、不再单独标「农历」，并且每年重复',
       !!midAutumn && midAutumn.meta.includes('八月十五') && !midAutumn.meta.includes('农历') && midAutumn.meta.includes('每年'),
       JSON.stringify(midAutumn));
+    const noneBg = (v) => !v || v === 'rgba(0, 0, 0, 0)' || v === 'transparent';
+    check('只有创建日历的「月日 + 每年」有彩色背景；未选中的日期和年份都不加底色/边框',
+      !!national && !!midAutumn &&
+        !noneBg(national.solarBg) && noneBg(national.lunarBg) && national.solarPrimary && !national.lunarPrimary &&
+        !noneBg(midAutumn.lunarBg) && noneBg(midAutumn.solarBg) && midAutumn.lunarPrimary && !midAutumn.solarPrimary &&
+        noneBg(national.solarYearBg) && noneBg(national.lunarYearBg) &&
+        noneBg(midAutumn.solarYearBg) && noneBg(midAutumn.lunarYearBg),
+      JSON.stringify({ national: { solarBg: national?.solarBg, lunarBg: national?.lunarBg, sy: national?.solarYearBg, ly: national?.lunarYearBg }, midAutumn: { solarBg: midAutumn?.solarBg, lunarBg: midAutumn?.lunarBg, sy: midAutumn?.solarYearBg, ly: midAutumn?.lunarYearBg } }));
+    check('「每年」跟在创建时选择的日历日期后面（公历建卡在公历后）',
+      !!national && national.solarRepeat && !national.lunarRepeat,
+      JSON.stringify({ solarRepeat: national?.solarRepeat, lunarRepeat: national?.lunarRepeat }));
+    check('农历建卡时「每年」跟在农历日期后，并突出农历那一枚',
+      !!midAutumn && midAutumn.lunarRepeat && !midAutumn.solarRepeat && midAutumn.lunarPrimary && !midAutumn.solarPrimary,
+      JSON.stringify({ solarRepeat: midAutumn?.solarRepeat, lunarRepeat: midAutumn?.lunarRepeat }));
     check('农历年份用干支写法（如丙午年/丁未年），不用「二〇二六年」',
-      !!midAutumn && /[甲乙丙丁戊己庚辛壬癸][子丑寅卯辰巳午未申酉戌亥]年八月十五/.test(midAutumn.lunar) && !midAutumn.lunar.includes('二〇'),
+      !!midAutumn && /[甲乙丙丁戊己庚辛壬癸][子丑寅卯辰巳午未申酉戌亥]年\s*八月十五/.test(midAutumn.lunar) && !midAutumn.lunar.includes('二〇'),
       JSON.stringify(midAutumn?.lunar));
     // 中秋的日期必须是农历八月十五换算出来的那一天（用接口独立验一次）
     const nowYear = new Date().getFullYear();
@@ -210,6 +233,7 @@ const madeIds = [];
       const title = document.querySelector('[data-ceremony-form-title]');
       if (!title) return { ok: false, why: '没有表单' };
       setVal(title, t);
+      setVal(document.querySelector('[data-ceremony-form-bottom]'), '自检底部文案');
       await new Promise((r) => setTimeout(r, 300));
       const btn = document.querySelector('[data-ceremony-form-save]');
       if (!btn || btn.disabled) return { ok: false, why: '保存按钮不可用（默认日期没填上？）' };
@@ -220,6 +244,94 @@ const madeIds = [];
     check('自己新建事项能保存（表单默认带日期）', saved.ok === true, JSON.stringify(saved));
     const custom = await cardOf(customTitle);
     check('新建的事项在倒计时卡片里', !!custom, JSON.stringify(custom));
+    check('卡片底部可以自定义文字', custom?.bottom === '自检底部文案', JSON.stringify({ bottom: custom?.bottom }));
+
+    // ---------- 4b. 农历建卡 ----------
+    const lunarTitle = `自检农历-${STAMP}`;
+    await page.click('[data-ceremony-add]');
+    await sleep(600);
+    const formLayout = await page.evaluate(() => {
+      const date = document.querySelector('[data-ceremony-form-date]')?.getBoundingClientRect();
+      const cal = document.querySelector('[data-ceremony-form-calendar]')?.getBoundingClientRect();
+      const repeat = document.querySelector('[data-ceremony-form-repeat]')?.getBoundingClientRect();
+      return {
+        threeSameRow: !!(date && cal && repeat && Math.abs(date.top - cal.top) < 2 && Math.abs(cal.top - repeat.top) < 2),
+        calendarFirst: !!(date && cal && repeat && date.left < cal.left && cal.left < repeat.left),
+        widths: [date?.width || 0, cal?.width || 0, repeat?.width || 0],
+        value: document.querySelector('[data-ceremony-form-calendar]')?.value || '',
+      };
+    });
+    const ws = formLayout.widths;
+    check('日期、历法、重复同一行且三列等宽',
+      formLayout.threeSameRow && formLayout.calendarFirst && formLayout.value === 'solar' &&
+        Math.max(...ws) - Math.min(...ws) <= 2,
+      JSON.stringify(formLayout));
+    await page.select('[data-ceremony-form-calendar]', 'lunar');
+    await sleep(250);
+    await page.click('[data-ceremony-form-date]');
+    await sleep(1000);
+    const pickerState = await page.evaluate(() => ({
+      mode: document.querySelector('[data-picker-mode].active')?.getAttribute('data-picker-mode') || '',
+      month: Number(document.querySelector('select[aria-label="农历月份"]')?.value || 0),
+      days: document.querySelectorAll('[data-picker-lunar-day]').length,
+    }));
+    check('选农历后打开日期，默认就是农历页签', pickerState.mode === 'lunar' && pickerState.month > 0 && pickerState.days >= 29,
+      JSON.stringify(pickerState));
+    await page.click('[data-picker-lunar-day="15"]');
+    await sleep(1000);
+    await page.evaluate((t) => {
+      const el = document.querySelector('[data-ceremony-form-title]');
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      set.call(el, t);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, lunarTitle);
+    await page.click('[data-ceremony-form-save]');
+    await sleep(2200);
+    const lunarItems = (await api(page, `/api/reminder/items?view=all&status=all&list_id=${bucket.id}`)).body?.data || [];
+    const lunarCreated = lunarItems.find((i) => i.title === lunarTitle);
+    check('农历建卡保存为 lunar，anchor 就是选中的农历月日',
+      !!lunarCreated && lunarCreated.calendar === 'lunar' && lunarCreated.lunar_anchor === `${pickerState.month}:15`,
+      JSON.stringify(lunarCreated && { calendar: lunarCreated.calendar, anchor: lunarCreated.lunar_anchor }));
+    const lunarCard = await cardOf(lunarTitle);
+    check('农历建卡卡片显示选中的农历日期（十五）', !!lunarCard && /十五/.test(lunarCard.lunar), JSON.stringify(lunarCard?.lunar));
+    // 编辑这张农历卡：表单要带着 lunar，日期弹层也要直接落在农历页签。
+    await page.evaluate((t) => {
+      const card = [...document.querySelectorAll('[data-ceremony-card]')].find((c) => c.textContent.includes(t));
+      card?.querySelector('[data-ceremony-edit]')?.click();
+    }, lunarTitle);
+    await sleep(800);
+    const editCalendar = await page.evaluate(() => document.querySelector('[data-ceremony-form-calendar]')?.value || '');
+    await page.click('[data-ceremony-form-date]');
+    await sleep(900);
+    const editMode = await page.evaluate(() => document.querySelector('[data-picker-mode].active')?.getAttribute('data-picker-mode') || '');
+    check('编辑农历卡时历法仍是农历，日期弹层也直接落在农历页签',
+      editCalendar === 'lunar' && editMode === 'lunar', JSON.stringify({ editCalendar, editMode }));
+    await page.evaluate(() => document.querySelector('[data-ceremony-form-cancel]')?.click());
+    await sleep(500);
+
+    // ---------- 4c. 特殊农历日期写法 ----------
+    const specials = [
+      { title: `特殊-正月初一-${STAMP}`, due: '2026-02-17T09:00:00+08:00', anchor: '1:1', expect: '丙午年正月初一' },
+      { title: `特殊-闰六月廿三-${STAMP}`, due: '2025-08-16T09:00:00+08:00', anchor: '-6:23', expect: '乙巳年闰六月廿三' },
+      { title: `特殊-腊月初八-${STAMP}`, due: '2027-01-15T09:00:00+08:00', anchor: '12:8', expect: '丙午年腊月初八' },
+    ];
+    const specialIds = [];
+    for (const sp of specials) {
+      const res = await api(page, '/api/reminder/items', 'POST', {
+        title: sp.title, list_id: bucket.id, due_at: sp.due,
+        repeat_rule: 'yearly', calendar: 'lunar', lunar_anchor: sp.anchor,
+      });
+      if (res.body?.data?.id) specialIds.push(res.body.data.id);
+    }
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await sleep(1800);
+    const specialLabels = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-ceremony-lunar]')].map((e) => e.textContent.replace(/\s+/g, '')));
+    check('特殊农历写法：正月初一、闰六月廿三、腊月初八',
+      specials.every((sp) => specialLabels.some((label) => label.startsWith(sp.expect))), JSON.stringify(specialLabels));
+    for (const id of specialIds) {
+      await api(page, `/api/reminder/items/${id}`, 'DELETE');
+    }
 
     // ---------- 5. 循环项目「第 x 次」 ----------
     const ceremonyItems = (await api(page, `/api/reminder/items?view=all&status=all&list_id=${bucket.id}`)).body?.data || [];
@@ -229,7 +341,7 @@ const madeIds = [];
     const repeating = ceremonyItems.find((i) => i.title.includes('情人节')) || null;
     check('循环项目带 cycle_index（第一年就是第 1 次）',
       !!repeating && repeating.cycle_index === 1, JSON.stringify({ title: repeating?.title, cycle: repeating?.cycle_index }));
-    check('仪式感卡片上写「与你共度 1 次」', !!valentine?.cycle.includes('与你共度 1 次'), JSON.stringify({ cycle: valentine?.cycle }));
+    check('仪式感卡片上写「与你共度第 1 次」', !!valentine?.cycle.includes('与你共度第 1 次'), JSON.stringify({ cycle: valentine?.cycle }));
 
     // 卡片透明度（用户 2026-10-19：「可以把整个卡片调整为透明（不含文字）」）
     const hasAlpha = await page.evaluate(() => {
