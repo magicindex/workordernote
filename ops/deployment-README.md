@@ -271,7 +271,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   md5 `5e51ed0885cc84bd6acf74f32d397b97`，sha256 `01b39d13ba869048b594b4a4779562ac1b93278af6a568a50da3a95878d6babf`）。
 
 **仓库同步**
-- 主仓库：代码 `5751c43` → 上线文档 `6ce45b4`；tag `v0.43.4`。Gitea `cyberzero/workordernote` 的 main/tag 已推送。
+- 主仓库：代码 `5751c43` → 上线文档 `6ce45b4` → 同步记录 `828d77a`；tag `v0.43.4`。Gitea `cyberzero/workordernote` 的 main/tag 已推送。
 - GitHub 快照 `publish-workordernote`：`5204c62`，tag `v0.43.4`；Actions `release` 成功，
   Release v0.43.4 已发布（source / bundle / image / SHA256SUMS / fpk / screenshots），
   `ghcr.io/magicindex/workordernote:0.43.4` 已推送。
