@@ -898,7 +898,7 @@ func completeReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error)
 			if err := tx.Create(&history).Error; err != nil {
 				return err
 			}
-			next, err := nextOccurrenceWithCalendar(*item.DueAt, item.RepeatRule, item.Calendar, item.LunarAnchor)
+			next, err := nextOccurrenceAfter(*item.DueAt, item.RepeatRule, item.Calendar, item.LunarAnchor, now)
 			if err != nil {
 				return err
 			}
@@ -998,6 +998,26 @@ func snoozeReminder(db *gorm.DB, userID, reminderID uint, until time.Time) (Remi
 		return ReminderDTO{}, err
 	}
 	return getReminder(db, userID, reminderID)
+}
+
+// nextOccurrenceAfter 从 t 开始按规则往后走，直到落在 now 之后。
+// 循环事项可能很久没确认（例如 2011 年的生日一直拖到今天），只走一步会把 due_at
+// 留在 2012 年；这里跳过已经过去的周期，确认后倒计时从当前这一轮重新开始。
+func nextOccurrenceAfter(t time.Time, rule, calendar, anchor string, now time.Time) (time.Time, error) {
+	for i := 0; i < 10000; i++ {
+		next, err := nextOccurrenceWithCalendar(t, rule, calendar, anchor)
+		if err != nil {
+			return t, err
+		}
+		if !next.After(t) {
+			return t, nil
+		}
+		t = next
+		if t.After(now) {
+			return t, nil
+		}
+	}
+	return t, nil
 }
 
 // nextOccurrenceWithCalendar dispatches to the lunar calendar when the
