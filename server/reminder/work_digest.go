@@ -24,7 +24,7 @@ import (
 // 左闭右开、上海时区），这样小秘说的「上周」和页面上筛的「上周」是同一批数据。
 //
 // 放在 reminder 包里是为了复用同一套时间与查询口径（tsUTC / sqlTimeArg /
-// hiddenCardListIDs / listCompletedHistory）：复制一份到 assistant 包迟早会漂。
+// hiddenFeatureListIDs / listCompletedHistory）：复制一份到 assistant 包迟早会漂。
 
 // WorkDigestOptions 描述一次工作数据汇总请求。Option 空值等同于 "all"。
 type WorkDigestOptions struct {
@@ -342,7 +342,7 @@ func workRangeLabel(option string, span CompletedRangeSpan) string {
 // 不算进来（那是下周的事）。
 func listOpenWork(db *gorm.DB, userID uint, rng CompletedRange, keyword string, listID uint, now time.Time, loc *time.Location) ([]WorkDigestItem, int, error) {
 	q := db.Where("user_id = ? AND deleted_at IS NULL AND completed_at IS NULL AND kind = ?", userID, KindTask)
-	q = excludeHiddenCardReminders(q, hiddenCardListIDs(db, userID))
+	q = excludeHiddenCardReminders(q, hiddenFeatureListIDs(db, userID))
 	if listID > 0 {
 		q = q.Where("list_id = ?", listID)
 	}
@@ -423,7 +423,7 @@ func overdueDays(due, now time.Time) int {
 // （记事没有到期时间，保存时会被清空），这与日历里记事的落位口径一致。
 func listWorkNotes(db *gorm.DB, userID uint, rng CompletedRange, keyword string, listID uint, loc *time.Location) ([]WorkDigestItem, int, error) {
 	q := db.Where("user_id = ? AND deleted_at IS NULL AND kind = ? AND completed_at IS NOT NULL", userID, KindNote)
-	q = excludeHiddenCardReminders(q, hiddenCardListIDs(db, userID))
+	q = excludeHiddenCardReminders(q, hiddenFeatureListIDs(db, userID))
 	if listID > 0 {
 		q = q.Where("list_id = ?", listID)
 	}

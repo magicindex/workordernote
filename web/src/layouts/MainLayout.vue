@@ -91,7 +91,7 @@
           </RouterLink>
 
           <!-- 课程表（用户 2026-10-18）：给家里人各排一张，课程与课外活动分开标色。
-               入口跟信用卡/记事本一样由个人偏好 timetable_enabled 控制，默认关。 -->
+               入口跟信用卡/记事本一样由个人偏好 timetable_enabled 控制，默认开。 -->
           <RouterLink
             v-if="authStore.timetableEnabled"
             to="/admin/timetable"
@@ -445,7 +445,17 @@
         <small>清单</small>
       </button>
       <RouterLink to="/admin/notifications" class="mobile-tab" :class="{ active: route.path === '/admin/notifications' }"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke-width="1.8" stroke-linecap="round"/></svg></span><small>通知</small></RouterLink>
-      <RouterLink to="/admin/channels" class="mobile-tab" :class="{ active: route.path === '/admin/channels' }"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 12h8m-8 4h5m6-11H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4l3 3 3-3h4a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z" stroke-width="1.8"/></svg></span><small>方式</small></RouterLink>
+      <RouterLink
+        v-if="authStore.nudgeEnabled"
+        to="/admin/nudges"
+        class="mobile-tab"
+        :class="{ active: route.path === '/admin/nudges' }"
+        data-tab-nudges
+        aria-label="提醒"
+      >
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15.5 8.5a3.5 3.5 0 1 0-7 0c0 4-2 4-2 5.5h11c0-1.5-2-1.5-2-5.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 17a1.6 1.6 0 0 0 3 0" stroke-width="1.7" stroke-linecap="round"/><circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/></svg></span>
+        <small>提醒</small>
+      </RouterLink>
     </nav>
 
     <!-- 「清单」标签弹出的清单列表（用户 2026-10-16）：手机底部弹层，列的就是侧栏「我的清单」
@@ -453,7 +463,7 @@
          点一行切过去、弹层关闭。
          课程表（用户 2026-10-23）：「手机页面 中间清单 显示不全，没有看到课程表」——它和
          「智能清单」一起排在侧栏，手机上原来只能从抽屉进，这里补在最上面，开关沿用
-         authStore.timetableEnabled（默认关）。 -->
+         authStore.timetableEnabled（默认开）。 -->
     <Transition name="sheet">
       <div v-if="listsSheetOpen" class="lg:hidden">
         <div class="sheet-backdrop" data-lists-sheet-backdrop @click="closeListsSheet"></div>
@@ -478,6 +488,23 @@
               </span>
               <span class="min-w-0 flex-1 truncate">课程表</span>
               <span v-if="route.path === '/admin/timetable'" class="shrink-0 text-brand-500" data-lists-sheet-current aria-label="当前页面">
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m5 12.5 4.5 4.5L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
+            <button
+              v-if="authStore.nudgeEnabled"
+              type="button"
+              class="lists-sheet-row"
+              :class="{ 'lists-sheet-row-active': route.path === '/admin/nudges' }"
+              data-lists-sheet-row="nudge"
+              @click="pickNudge"
+            >
+              <span class="nav-symbol h-5 w-5 bg-sky-500/12 text-sky-500">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3.4" stroke-width="1.7"/><path d="M15.4 12v1.6a2.2 2.2 0 0 0 4.4 0V12a7.8 7.8 0 1 0-3.1 6.2" stroke-width="1.7" stroke-linecap="round"/></svg>
+              </span>
+              <span class="min-w-0 flex-1 truncate">提醒@他</span>
+              <span v-if="summary.nudge_pending" class="nav-count">{{ summary.nudge_pending }}</span>
+              <span v-if="route.path === '/admin/nudges'" class="shrink-0 text-brand-500" data-lists-sheet-current aria-label="当前页面">
                 <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m5 12.5 4.5 4.5L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </span>
             </button>
@@ -523,9 +550,11 @@
       v-if="canCreate"
       class="mobile-fab"
       :class="{ 'mobile-fab-hidden': keyboardOpen }"
-      aria-label="新建提醒"
+      :aria-label="fabLabel"
+      :title="fabLabel"
+      :data-mobile-fab-action="fabAction"
       data-mobile-fab
-      @click="openQuickAdd"
+      @click="onMobileFab"
     >
       <svg viewBox="0 0 24 24" class="h-7 w-7" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2.4" stroke-linecap="round"/></svg>
     </button>
@@ -805,6 +834,11 @@ function pickTimetable() {
   listsSheetOpen.value = false
   if (route.path !== '/admin/timetable') void router.push('/admin/timetable')
 }
+/** 提醒@他：与课程表一样，内置栏目统一排在手机清单弹层最前面 */
+function pickNudge() {
+  listsSheetOpen.value = false
+  if (route.path !== '/admin/nudges') void router.push('/admin/nudges')
+}
 /** 这一行是不是当前所在页面（弹层里打勾用） */
 function isMyRowCurrent(row: MyListRow): boolean {
   return route.path === `/admin/list/${row.list.id}`
@@ -1007,6 +1041,36 @@ const listColor = listColorHex
 // 现在叫它的有三处：手机悬浮 +、这里挂的 window 事件 open-quick-add（首页看板标题行右侧
 // 那个「新建提醒」派发的），以及 HomeView 自己的快捷键 N。
 const QUICK_ADD_HOSTS = ['Home', 'Planned', 'AllReminders', 'Completed', 'ReminderList']
+/** 手机悬浮按钮按频道决定动作：提醒@他/信用卡/仪式感打开各自的“新建”，其余进待办新建卡。 */
+type FabAction = 'nudge' | 'credit' | 'ceremony' | 'reminder'
+const fabAction = computed<FabAction>(() => {
+  if (route.name === 'Nudges') return 'nudge'
+  if (route.name === 'ReminderList') {
+    const list = lists.value.find((l) => String(l.id) === String(route.params.id))
+    if (list?.template === 'credit_card') return 'credit'
+    if (list?.template === 'ceremony') return 'ceremony'
+  }
+  return 'reminder'
+})
+const fabLabel = computed(() => ({
+  nudge: '新建提醒',
+  credit: '新建卡片',
+  ceremony: '新建事项',
+  reminder: '新建待办',
+}[fabAction.value]))
+async function onMobileFab() {
+  const selectors: Partial<Record<FabAction, string>> = {
+    nudge: '[data-nudge-new]',
+    credit: '[data-card-add]',
+    ceremony: '[data-ceremony-add]',
+  }
+  const selector = selectors[fabAction.value]
+  if (selector) {
+    document.querySelector<HTMLElement>(selector)?.click()
+    return
+  }
+  await openQuickAdd()
+}
 async function openQuickAdd() {
   mobileOpen.value = false
   if (!QUICK_ADD_HOSTS.includes(String(route.name || ''))) await router.push(listRoute.value)

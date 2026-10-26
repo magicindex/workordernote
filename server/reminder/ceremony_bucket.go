@@ -51,6 +51,24 @@ func ceremonyFeatureEnabled(db *gorm.DB, userID uint) bool {
 	return on
 }
 
+// hiddenCeremonyListIDs 在栏目被后台关掉时返回要摘掉的清单 id。
+// 与信用卡同一口径：关掉只影响展示与统计，清单行和条目一条都不删。
+func hiddenCeremonyListIDs(db *gorm.DB, userID uint) []uint {
+	if ceremonyFeatureEnabled(db, userID) {
+		return nil
+	}
+	var lists []List
+	if err := db.Where("user_id = ? AND template = ? AND deleted_at IS NULL", userID, listTemplateCeremony).
+		Find(&lists).Error; err != nil {
+		return nil
+	}
+	ids := make([]uint, 0, len(lists))
+	for _, l := range lists {
+		ids = append(ids, l.ID)
+	}
+	return ids
+}
+
 // resetCeremonyFeatureCache 让下一次读取重新查库（测试与「刚改完配置」的路径用）。
 func resetCeremonyFeatureCache() {
 	ceremonyFeatureMu.Lock()

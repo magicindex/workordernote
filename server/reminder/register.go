@@ -294,6 +294,15 @@ func init() {
 		if key == "reminder_all_day_time" || key == "reminder_advance_days" {
 			resetWindowCache(userID)
 		}
+		// 栏目开关是 2 秒进程内缓存；改完设置要立刻按新值过滤，不能等缓存过期。
+		switch key {
+		case "credit_card_enabled":
+			resetCardFeatureCache()
+		case "ceremony_enabled":
+			resetCeremonyFeatureCache()
+		case "notebook_enabled":
+			resetNoteFeatureCache()
+		}
 	})
 	scheduler.Register(scheduler.Job{
 		Name:       "reminder-delivery",

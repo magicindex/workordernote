@@ -822,8 +822,8 @@ const setSelect = (page, sel, value) => page.evaluate(({ sel, value }) => {
       const navGone = await page.evaluate(() => !document.querySelector('[data-nav-cards]'));
       check('关掉后侧栏不再有「信用卡账单」入口', navGone);
       const layoutLists = ((await api(page, '/api/reminder/lists')).body?.data || []);
-      check('栏目清单本身没被删掉（只是不显示）',
-        layoutLists.some((l) => l.template === 'credit_card'), String(layoutLists.length));
+      check('关掉后 lists 不再返回该栏目（重新打开会回来）',
+        !layoutLists.some((l) => l.template === 'credit_card'), JSON.stringify(layoutLists.map((l) => l.template)));
 
       // 注意：这里要恢复成 **true** 而不是 originalFeature —— 用例后面还要用栏目。
       // originalFeature（用户原本的设置）留到最后的清理里还原。

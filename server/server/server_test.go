@@ -221,6 +221,9 @@ func TestBootstrapReturnsStartupState(t *testing.T) {
 	if got := configs["notebook_enabled"]; got != "true" {
 		t.Fatalf("匿名 bootstrap 的记事本开关应为注册表默认 true，实际 %v", got)
 	}
+	if got := configs["timetable_enabled"]; got != "true" {
+		t.Fatalf("匿名 bootstrap 的课程表开关应为注册表默认 true，实际 %v", got)
+	}
 	auth := data["auth"].(map[string]interface{})
 	if auth["authenticated"] != false {
 		t.Fatalf("anonymous bootstrap must not be authenticated")

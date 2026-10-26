@@ -231,6 +231,13 @@ func hiddenCardListIDs(db *gorm.DB, userID uint) []uint {
 	return hidden
 }
 
+// hiddenFeatureListIDs 汇总当前用户关掉的内置栏目清单 id。
+// 信用卡与仪式感都走这一处，列表/日历/统计/摘要把它们一起从展示里摘掉。
+func hiddenFeatureListIDs(db *gorm.DB, userID uint) []uint {
+	hidden := append([]uint(nil), hiddenCardListIDs(db, userID)...)
+	return append(hidden, hiddenCeremonyListIDs(db, userID)...)
+}
+
 // excludeHiddenCardReminders 把卡片生成的提醒从查询里摘掉（只在栏目关闭时生效）。
 func excludeHiddenCardReminders(q *gorm.DB, hidden []uint) *gorm.DB {
 	if len(hidden) == 0 {

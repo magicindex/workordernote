@@ -1,6 +1,7 @@
 import request from './request'
 
 export type TimetableKind = 'course' | 'activity'
+export type TimetablePermission = 'owner' | 'read' | 'write'
 
 export interface TimetableSummary {
   id: number
@@ -14,6 +15,10 @@ export interface TimetableSummary {
   break_minutes?: number
   period_count?: number
   periods?: CoursePeriod[]
+  // 共享：owner = 自己的表；read/write = 别人共享给我的表。
+  permission?: TimetablePermission
+  is_shared?: boolean
+  owner_name?: string
 }
 
 // 一节课的骨架：属于哪一段 + 起止时间（用户 2026-10-19：每节次时间段可自己设）。
@@ -79,3 +84,23 @@ export const updateEntry = (id: number, payload: Partial<EntryInput>) =>
   request.patch(`/api/timetable/entries/${id}`, payload)
 
 export const deleteEntry = (id: number) => request.delete(`/api/timetable/entries/${id}`)
+
+export interface TimetableShare {
+  id: number
+  user_id: number
+  username: string
+  permission: 'read' | 'write'
+  created_at?: string
+}
+
+export const getTimetableShares = (tableId: number) =>
+  request.get(`/api/timetable/tables/${tableId}/shares`)
+
+export const addTimetableShare = (tableId: number, username: string, permission: 'read' | 'write') =>
+  request.post(`/api/timetable/tables/${tableId}/shares`, { username, permission })
+
+export const updateTimetableShare = (shareId: number, permission: 'read' | 'write') =>
+  request.patch(`/api/timetable/shares/${shareId}`, { permission })
+
+export const removeTimetableShare = (shareId: number) =>
+  request.delete(`/api/timetable/shares/${shareId}`)

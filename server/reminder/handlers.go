@@ -201,6 +201,21 @@ func handleListLists(db *gorm.DB) gin.HandlerFunc {
 		if ceremonyFeatureEnabled(db, userID) {
 			ensureFixedBucket(listTemplateCeremony, ceremonyBucketListName, ceremonyBucketIcon, ensureCeremonyBucket)
 		}
+		// 关掉的内置栏目不应再出现在清单列表里（用户 2026-10-26：后台开关没有效果）。
+		// 只影响返回结果，清单行与条目一条不删；重新打开立即恢复。
+		cardOn := creditCardFeatureEnabled(db, userID)
+		ceremonyOn := ceremonyFeatureEnabled(db, userID)
+		kept := lists[:0]
+		for _, l := range lists {
+			if l.Template == listTemplateCard && !cardOn {
+				continue
+			}
+			if l.Template == listTemplateCeremony && !ceremonyOn {
+				continue
+			}
+			kept = append(kept, l)
+		}
+		lists = kept
 		type openCountRow struct {
 			ListID    uint
 			OpenCount int64
@@ -1012,7 +1027,7 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		// 否则重复提醒的完成记录会让侧栏数字和页面条数对不上。这里把历史计数作为
 		// 子查询并进同一条聚合语句，保持 /summary 仍然只有 2 条查询
 		// （见 performance_test.go 的 TestSummaryUsesTwoAggregateQueries）。
-		hiddenCards := hiddenCardListIDs(db, userID)
+		hiddenCards := hiddenFeatureListIDs(db, userID)
 		completedExpr := `COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
 					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND deleted_at IS NULL)`
 		// 参数顺序必须与 SQL 里的占位符顺序一致：today → completed 子查询 → overdue。

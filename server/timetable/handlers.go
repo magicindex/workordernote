@@ -32,29 +32,55 @@ const (
 
 var clockPattern = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 
-// listTables 只回当前账号自己的表，顺带给出每张表的条目数（标签上要显示）。
+// handleListTables 返回「自己的表 + 别人共享给我的表」。
+// 自己的表排前面；共享表带 owner_name / permission，前端据此隐藏写操作。
 func handleListTables(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetUint("userID")
-		var tables []Timetable
+		var own []Timetable
 		if err := db.Where("user_id = ?", userID).
-			Order("position asc, id asc").Find(&tables).Error; err != nil {
+			Order("position asc, id asc").Find(&own).Error; err != nil {
 			response.ErrorInternal(c, "读取课程表失败")
 			return
 		}
-		counts := make(map[uint]int64, len(tables))
-		if len(tables) > 0 {
-			ids := make([]uint, 0, len(tables))
-			for _, t := range tables {
-				ids = append(ids, t.ID)
+
+		var shares []TimetableShare
+		if err := db.Where("user_id = ?", userID).Order("id asc").Find(&shares).Error; err != nil {
+			response.ErrorInternal(c, "读取课程表失败")
+			return
+		}
+		sharedIDs := make([]uint, 0, len(shares))
+		for _, s := range shares {
+			sharedIDs = append(sharedIDs, s.TimetableID)
+		}
+		var shared []Timetable
+		if len(sharedIDs) > 0 {
+			if err := db.Where("id IN ?", sharedIDs).Find(&shared).Error; err != nil {
+				response.ErrorInternal(c, "读取课程表失败")
+				return
 			}
+		}
+		sharedByID := make(map[uint]Timetable, len(shared))
+		for _, t := range shared {
+			sharedByID[t.ID] = t
+		}
+
+		ids := make([]uint, 0, len(own)+len(shared))
+		for _, t := range own {
+			ids = append(ids, t.ID)
+		}
+		for _, t := range shared {
+			ids = append(ids, t.ID)
+		}
+		counts := make(map[uint]int64, len(ids))
+		if len(ids) > 0 {
 			var rows []struct {
 				TimetableID uint
 				N           int64
 			}
 			if err := db.Model(&TimetableEntry{}).
 				Select("timetable_id, count(*) as n").
-				Where("user_id = ? AND timetable_id IN ?", userID, ids).
+				Where("timetable_id IN ?", ids).
 				Group("timetable_id").Scan(&rows).Error; err != nil {
 				response.ErrorInternal(c, "读取课程表失败")
 				return
@@ -63,11 +89,34 @@ func handleListTables(db *gorm.DB) gin.HandlerFunc {
 				counts[r.TimetableID] = r.N
 			}
 		}
-		out := make([]gin.H, 0, len(tables))
-		for _, t := range tables {
+
+		out := make([]gin.H, 0, len(own)+len(shares))
+		for _, t := range own {
 			out = append(out, gin.H{
 				"id": t.ID, "name": t.Name, "position": t.Position,
 				"entry_count": counts[t.ID],
+				"permission":  PermissionOwner, "is_shared": false, "owner_name": "",
+			})
+		}
+		ownerNames := make(map[uint]string)
+		for _, s := range shares {
+			t, ok := sharedByID[s.TimetableID]
+			if !ok {
+				continue
+			}
+			name, seen := ownerNames[t.UserID]
+			if !seen {
+				name = userDisplayName(db, t.UserID)
+				ownerNames[t.UserID] = name
+			}
+			permission := s.Permission
+			if permission != PermissionWrite {
+				permission = PermissionRead
+			}
+			out = append(out, gin.H{
+				"id": t.ID, "name": t.Name, "position": t.Position,
+				"entry_count": counts[t.ID],
+				"permission":  permission, "is_shared": true, "owner_name": name,
 			})
 		}
 		response.Success(c, gin.H{"tables": out})
@@ -135,21 +184,28 @@ func handleCreateTable(db *gorm.DB) gin.HandlerFunc {
 
 // handleGetTable 返回表本身与全部条目；条目按星期与开始时间排好，
 // 前端直接按天分组即可。
+// handleGetTable 允许 owner 与共享接收者读取；共享表的条目按 timetable_id 查，
+// 不再按 user_id 查（条目始终归表的所有者）。
 func handleGetTable(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetUint("userID")
-		table, ok := ownedTable(db, userID, c.Param("id"))
+		table, permission, ok := accessibleTable(db, userID, c.Param("id"))
 		if !ok {
 			response.Error(c, http.StatusNotFound, response.CodeNotFound, "课程表不存在")
 			return
 		}
 		var entries []TimetableEntry
-		if err := db.Where("user_id = ? AND timetable_id = ?", userID, table.ID).
+		if err := db.Where("timetable_id = ?", table.ID).
 			Order("weekday asc, start_time asc, id asc").Find(&entries).Error; err != nil {
 			response.ErrorInternal(c, "读取课程表失败")
 			return
 		}
-		response.Success(c, gin.H{"table": table, "entries": entries})
+		response.Success(c, gin.H{
+			"table": table, "entries": entries,
+			"permission": permission,
+			"owner_name": userDisplayName(db, table.UserID),
+			"is_owner":   permission == PermissionOwner,
+		})
 	}
 }
 
@@ -167,8 +223,8 @@ func handleUpdateTable(db *gorm.DB) gin.HandlerFunc {
 			Position      *int            `json:"position"`
 			LessonMinutes *int            `json:"lesson_minutes"`
 			BreakMinutes  *int            `json:"break_minutes"`
-			PeriodCount *int            `json:"period_count"`
-			Periods     *[]CoursePeriod `json:"periods"`
+			PeriodCount   *int            `json:"period_count"`
+			Periods       *[]CoursePeriod `json:"periods"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			response.ErrorBadRequest(c, "请求格式不对")
@@ -252,8 +308,12 @@ func handleDeleteTable(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		err := db.Transaction(func(tx *gorm.DB) error {
-			if err := tx.Where("timetable_id = ? AND user_id = ?", table.ID, userID).
+			if err := tx.Where("timetable_id = ?", table.ID).
 				Delete(&TimetableEntry{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("timetable_id = ?", table.ID).
+				Delete(&TimetableShare{}).Error; err != nil {
 				return err
 			}
 			return tx.Where("id = ? AND user_id = ?", table.ID, userID).
@@ -331,9 +391,13 @@ func entryFromInput(in entryInput) (TimetableEntry, error) {
 func handleCreateEntry(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetUint("userID")
-		table, ok := ownedTable(db, userID, c.Param("id"))
+		table, permission, ok := accessibleTable(db, userID, c.Param("id"))
 		if !ok {
 			response.Error(c, http.StatusNotFound, response.CodeNotFound, "课程表不存在")
+			return
+		}
+		if permission == PermissionRead {
+			response.ErrorForbidden(c, "这张课程表是只读共享，不能修改")
 			return
 		}
 		var in entryInput
@@ -352,7 +416,7 @@ func handleCreateEntry(db *gorm.DB) gin.HandlerFunc {
 			response.ErrorBadRequest(c, "一张表最多 200 条")
 			return
 		}
-		entry.UserID = userID
+		entry.UserID = table.UserID
 		entry.TimetableID = table.ID
 		if err := db.Create(&entry).Error; err != nil {
 			response.ErrorInternal(c, "保存失败")
@@ -368,9 +432,17 @@ func handleUpdateEntry(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetUint("userID")
 		var entry TimetableEntry
-		if err := db.Where("id = ? AND user_id = ?", c.Param("id"), userID).
-			First(&entry).Error; err != nil {
+		if err := db.Where("id = ?", c.Param("id")).First(&entry).Error; err != nil {
 			response.Error(c, http.StatusNotFound, response.CodeNotFound, "这条课程不存在")
+			return
+		}
+		table, permission, ok := accessibleTable(db, userID, fmt.Sprint(entry.TimetableID))
+		if !ok {
+			response.Error(c, http.StatusNotFound, response.CodeNotFound, "这条课程不存在")
+			return
+		}
+		if permission == PermissionRead {
+			response.ErrorForbidden(c, "这张课程表是只读共享，不能修改")
 			return
 		}
 		var req struct {
@@ -427,7 +499,7 @@ func handleUpdateEntry(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		next.ID = entry.ID
-		next.UserID = userID
+		next.UserID = table.UserID
 		next.TimetableID = entry.TimetableID
 		next.SyncUID = entry.SyncUID
 		next.CreatedAt = entry.CreatedAt
@@ -442,14 +514,22 @@ func handleUpdateEntry(db *gorm.DB) gin.HandlerFunc {
 func handleDeleteEntry(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetUint("userID")
-		res := db.Where("id = ? AND user_id = ?", c.Param("id"), userID).
-			Delete(&TimetableEntry{})
-		if res.Error != nil {
-			response.ErrorInternal(c, "删除失败")
+		var entry TimetableEntry
+		if err := db.Where("id = ?", c.Param("id")).First(&entry).Error; err != nil {
+			response.Error(c, http.StatusNotFound, response.CodeNotFound, "这条课程不存在")
 			return
 		}
-		if res.RowsAffected == 0 {
+		_, permission, ok := accessibleTable(db, userID, fmt.Sprint(entry.TimetableID))
+		if !ok {
 			response.Error(c, http.StatusNotFound, response.CodeNotFound, "这条课程不存在")
+			return
+		}
+		if permission == PermissionRead {
+			response.ErrorForbidden(c, "这张课程表是只读共享，不能修改")
+			return
+		}
+		if err := db.Delete(&TimetableEntry{}, entry.ID).Error; err != nil {
+			response.ErrorInternal(c, "删除失败")
 			return
 		}
 		response.Success(c, gin.H{"deleted": true})
@@ -457,16 +537,8 @@ func handleDeleteEntry(db *gorm.DB) gin.HandlerFunc {
 }
 
 func ownedTable(db *gorm.DB, userID uint, rawID string) (Timetable, bool) {
-	var table Timetable
-	if err := db.Where("id = ? AND user_id = ?", rawID, userID).First(&table).Error; err != nil {
-		return Timetable{}, false
-	}
-	// periods 是 JSON 文本列：老表没写过就按课时/课间/起点补一份骨架。
-	table.Periods = parsePeriods(table.PeriodsJSON)
-	if len(table.Periods) == 0 {
-		table.Periods = defaultPeriods()
-	}
-	return table, true
+	table, permission, ok := accessibleTable(db, userID, rawID)
+	return table, ok && permission == PermissionOwner
 }
 
 const (

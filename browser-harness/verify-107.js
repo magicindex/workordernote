@@ -450,12 +450,14 @@ const madeIds = [];
       return !document.querySelector('[data-nav-ceremony]') && !anyRow;
     });
     const stillThere = ((await api(page, `/api/reminder/items?view=all&status=all&list_id=${bucket.id}`)).body?.data || []).length;
-    check('关掉偏好后侧栏入口消失，但条目一条都没删',
-      hidden === true && stillThere >= 2, JSON.stringify({ hidden, stillThere }));
+    check('关掉偏好后侧栏入口和条目都隐藏',
+      hidden === true && stillThere === 0, JSON.stringify({ hidden, stillThere }));
     await api(page, '/api/configs', 'PUT', { key: 'ceremony_enabled', value: prefOriginal });
     await gotoRetry(page, BASE + '/admin');
     await sleep(1800);
-    check('重新打开后入口回来', await waitSel(page, '[data-nav-ceremony]', 15000));
+    const back = ((await api(page, `/api/reminder/items?view=all&status=all&list_id=${bucket.id}`)).body?.data || []).length;
+    check('重新打开后入口回来，条目一条都没删',
+      (await waitSel(page, '[data-nav-ceremony]', 15000)) && back >= 2, JSON.stringify({ back }));
 
     // ---------- 清理 ----------
     let cleaned = 0;

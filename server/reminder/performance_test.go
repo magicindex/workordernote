@@ -128,6 +128,7 @@ func TestSummaryUsesTwoAggregateQueries(t *testing.T) {
 	// 缓存的：刚启动时第一次读会各查一次配置，之后不再查。先把它们读热**再清零计数**，
 	// 统计的才是稳定态（线上绝大多数请求都是）。
 	creditCardFeatureEnabled(appDB, uint(userID))
+	ceremonyFeatureEnabled(appDB, uint(userID))
 	overdueGrace(appDB, uint(userID))
 	queryCount.Store(0)
 

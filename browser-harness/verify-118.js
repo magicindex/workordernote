@@ -510,8 +510,9 @@ const readPage = (page) => page.evaluate((content) => {
           actions: ['[data-nudge-read]', '[data-nudge-done]', '[data-nudge-save]'].filter((sel) => !!row.querySelector(sel)),
         };
       }, `${CONTENT}-待办`);
-      check('清单里勾完后，这张卡片也变成「已完成」（动作按钮收起来）',
-        !!syncedCard && syncedCard.hasDone && syncedCard.actions.length === 0, JSON.stringify(syncedCard));
+      // 用户 2026-10-26：别人提醒我的事项，完成之后不管有没有保存到清单，都从这一列消失。
+      check('清单里勾完后，这张卡片从「别人提醒我」里消失',
+        !syncedCard, JSON.stringify(syncedCard));
 
       const afterComplete = await api(page, '/api/reminder/nudges');
       const row = [...(afterComplete.body?.data?.sent || []), ...(afterComplete.body?.data?.received || [])]
@@ -601,6 +602,42 @@ const readPage = (page) => page.evaluate((content) => {
     check('「别人提醒我」这列：逾期的那条也标「已逾期」',
       !!gotOverdue && /^已逾期/.test(gotOverdue.chipText) && /2\s*天/.test(gotOverdue.chipText) && roseish(gotOverdue.border),
       JSON.stringify(gotOverdue));
+
+    // ---------------- 10. 手机端：完成后卡片立刻消失 ----------------
+    // 用户 2026-10-26：「手机版别人提醒我的 完成后没有自动删除，电脑版本正常」。
+    // 用同一个探针账号，在 390px 下完成一条新的提醒，确认卡片即时消失。
+    // 先把登录态切回主账号，否则下面这条会变成「探针提醒自己」，服务端直接 400。
+    await loginAs(page, process.env.APP_USER || '王耀辉', process.env.APP_PASS || 'Wyh!1984yelq.');
+    const mobileNudge = await api(page, '/api/reminder/nudges', 'POST', {
+      to_user_id: probeId, content: `${CONTENT}-手机完成`,
+    });
+    const mobileNudgeId = mobileNudge.body?.data?.id ?? null;
+    if (mobileNudgeId) nudgeIds.push(mobileNudgeId);
+    await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    await loginAs(page, PROBE_USER, PROBE_PASS);
+    await gotoRetry(page, BASE + '/admin/nudges');
+    await sleep(1800);
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').includes('知道了'));
+      if (b && b.getBoundingClientRect().width > 0) b.click();
+    }).catch(() => {});
+    await sleep(500);
+    const mBefore = await page.evaluate((content) => [...document.querySelectorAll('[data-nudge-item]')]
+      .some((li) => (li.innerText || '').includes(content)), `${CONTENT}-手机完成`);
+    const mClicked = await page.evaluate((content) => {
+      const row = [...document.querySelectorAll('[data-nudge-item]')].find((li) => (li.innerText || '').includes(content));
+      const btn = row?.querySelector('[data-nudge-done]');
+      if (!btn) return false;
+      btn.click();
+      return true;
+    }, `${CONTENT}-手机完成`);
+    await sleep(1600);
+    const mAfter = await page.evaluate((content) => [...document.querySelectorAll('[data-nudge-item]')]
+      .some((li) => (li.innerText || '').includes(content)), `${CONTENT}-手机完成`);
+    check('手机端：别人提醒我的卡片，点完「已完成」立即消失', mBefore && mClicked && !mAfter,
+      JSON.stringify({ before: mBefore, clicked: mClicked, after: mAfter }));
+    await page.setViewport({ width: 1440, height: 1000 });
+    await loginAs(page, process.env.APP_USER || '王耀辉', process.env.APP_PASS || 'Wyh!1984yelq.');
 
     // ---------------- 清理 ----------------
     for (const id of nudgeIds) {

@@ -3,13 +3,13 @@
  * 「手机页面 中间 信用卡 改成 清单，点击清单弹出 所有清单列表，根据选择切换清单列表」）。
  *
  * 钉住这几条：
- *   1. 手机底部标签栏是 待办 / 计划 / **清单** / 通知 / 方式，中间那个不再叫「信用卡」；
+ *   1. 手机底部标签栏是 待办 / 计划 / **清单** / 通知 / **提醒**，中间那个不再叫「信用卡」；
  *   2. 点「清单」弹出底部弹层（`[data-lists-sheet]`），标题「全部清单」；
  *   3. 弹层里「我的清单」那一段 —— **名字与顺序完全一致**（同一份数据）；
- *      开了课程表时，弹层最上面还要多一行「课程表」（用户 2026-10-23「手机页面 中间清单
- *      显示不全，没有看到课程表」），点它进 `/admin/timetable`、弹层收起；
+ *      内置频道（课程表 / 提醒@他）按开关显示，并统一排在弹层最前面（用户 2026-10-26
+ *      「系统内置的几个频道 默认全部开启 默认在手机里面全部显示在最前面」）；
+ *      点课程表进 `/admin/timetable`、点提醒@他进 `/admin/nudges`，弹层收起；
  *   4. 选一个自建清单 → 跳到 `/admin/list/<id>`、弹层自动收起、页面标题变成该清单名；
- *   5. 选「全部」→ 跳到 `/admin/all`；
  *   6. 当前所在的那一行有打勾标记；
  *   7. 关闭按钮 / 点遮罩都能收起，收起后弹层不在 DOM 里；
  *   8. 桌面宽度（1280）不显示这个弹层（手机专用）。
@@ -83,6 +83,7 @@ const readSheet = (page) => page.evaluate(() => {
       const sidebar = await readSidebarRows(page);
       check('侧栏「我的清单」这一段读得到（作为对照）', sidebar.length >= 2, JSON.stringify(sidebar));
       const timetableEnabled = String(await readConfig(page, 'timetable_enabled')) === 'true';
+      const nudgeEnabled = String(await readConfig(page, 'nudge_enabled')) !== 'false';
 
       // ---------- 1. 手机标签栏 ----------
       await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
@@ -91,10 +92,22 @@ const readSheet = (page) => page.evaluate(() => {
       const tabs = await readTabs(page);
       check('手机底部标签里有「清单」', tabs.includes('清单'), JSON.stringify(tabs));
       check('中间那个不再叫「信用卡」', !tabs.includes('信用卡'), JSON.stringify(tabs));
-      check('原来的其它标签都还在（待办 / 计划 / 通知 / 方式）',
-        ['待办', '计划', '通知', '方式'].every((t) => tabs.includes(t)), JSON.stringify(tabs));
-      check('标签顺序是 待办 / 计划 / 清单 / 通知 / 方式',
-        tabs.slice(0, 5).join('/') === '待办/计划/清单/通知/方式', JSON.stringify(tabs));
+      check('原来的其它标签都还在（待办 / 计划 / 通知 / 提醒）',
+        ['待办', '计划', '通知', '提醒'].every((t) => tabs.includes(t)), JSON.stringify(tabs));
+      check('标签顺序是 待办 / 计划 / 清单 / 通知 / 提醒',
+        tabs.slice(0, 5).join('/') === '待办/计划/清单/通知/提醒', JSON.stringify(tabs));
+      if (nudgeEnabled) {
+        await page.click('[data-tab-nudges]');
+        await sleep(1200);
+        const nudged = await page.evaluate(() => ({
+          path: location.pathname,
+          active: (document.querySelector('.mobile-tab.active small')?.textContent || '').trim(),
+        }));
+        check('点底部「提醒」进提醒@他页面，标签保持选中',
+          nudged.path === '/admin/nudges' && nudged.active === '提醒', JSON.stringify(nudged));
+        await gotoRetry(page, BASE + '/admin');
+        await sleep(1200);
+      }
 
       // ---------- 2. 点「清单」→ 弹出全部清单 ----------
       check('点之前弹层不在 DOM 里', (await readSheet(page)) === null);
@@ -117,12 +130,21 @@ const readSheet = (page) => page.evaluate(() => {
       check('弹层里不再有单独的「全部」行（已并入智能清单）',
         !!sheet && !sheet.rows.some((r) => r.key === 'all'),
         JSON.stringify(sheet?.rows?.map((r) => `${r.key}=${r.name}`)));
-      // 课程表（用户 2026-10-23）：开关打开时排在弹层最上面，关着时不应出现。
-      check(timetableEnabled ? '开了课程表时，弹层最上面有「课程表」' : '没开课程表时，弹层里没有「课程表」',
+      // 内置频道（用户 2026-10-26）：课程表、提醒@他默认都开，统一排在弹层最前面。
+      check(timetableEnabled ? '开了课程表时，弹层里能看到「课程表」' : '没开课程表时，弹层里没有「课程表」',
         timetableEnabled
-          ? sheet?.rows?.[0]?.key === 'timetable' && sheet.rows[0].text.startsWith('课程表')
+          ? !!sheet?.rows?.some((r) => r.key === 'timetable' && r.text.startsWith('课程表'))
           : !!sheet && !sheet.rows.some((r) => r.key === 'timetable'),
         JSON.stringify({ timetableEnabled, rows: sheet?.rows?.map((r) => `${r.key}=${r.text}`) }));
+      const builtinKeys = [...(timetableEnabled ? ['timetable'] : []), ...(nudgeEnabled ? ['nudge'] : [])];
+      check('内置频道（课程表 / 提醒@他）排在弹层最前面',
+        !!sheet && builtinKeys.every((k, i) => sheet.rows[i]?.key === k),
+        JSON.stringify({ expected: builtinKeys, rows: sheet?.rows?.map((r) => r.key) }));
+      check(nudgeEnabled ? '开了提醒@他时，弹层里有「提醒@他」' : '关掉提醒@他时，弹层里没有它',
+        nudgeEnabled
+          ? !!sheet?.rows?.some((r) => r.key === 'nudge' && r.text.startsWith('提醒@他'))
+          : !!sheet && !sheet.rows.some((r) => r.key === 'nudge'),
+        JSON.stringify(sheet?.rows?.map((r) => `${r.key}=${r.text}`)));
 
       // ---------- 3. 选一个自建清单 → 切过去 ----------
       const target = (sheet?.rows || []).find((r) => String(r.key).startsWith('list:'));
@@ -156,12 +178,12 @@ const readSheet = (page) => page.evaluate(() => {
         check('关闭按钮能收起弹层', (await readSheet(page)) === null);
       }
 
-      // ---------- 5. 「全部」只剩智能清单那一处：除课程表外都是具体清单 ----------
+      // ---------- 5. 「全部」只剩智能清单那一处：除内置频道外都是具体清单 ----------
       await page.click('[data-tab-lists]');
       await sleep(700);
       const sheetAll = await readSheet(page);
-      check('除课程表外，弹层里的行都是具体清单（没有重复的「全部」入口）',
-        !!sheetAll && sheetAll.rows.filter((r) => r.key !== 'timetable').every((r) => String(r.key).startsWith('list:')),
+      check('除内置频道外，弹层里的行都是具体清单（没有重复的「全部」入口）',
+        !!sheetAll && sheetAll.rows.filter((r) => r.key !== 'timetable' && r.key !== 'nudge').every((r) => String(r.key).startsWith('list:')),
         JSON.stringify(sheetAll?.rows?.map((r) => r.key)));
       if (timetableEnabled) {
         // ---------- 5b. 课程表行：能进、弹层收起、标签保持选中、回来打勾 ----------
@@ -188,6 +210,30 @@ const readSheet = (page) => page.evaluate(() => {
       } else {
         await page.click('[data-lists-sheet-backdrop]', { offset: { x: 10, y: 10 } });
         await sleep(600);
+      }
+
+      if (nudgeEnabled) {
+        // ---------- 5c. 提醒@他行：能进、弹层收起、回来打勾 ----------
+        await page.click('[data-tab-lists]');
+        await sleep(700);
+        await page.evaluate(() => document.querySelector('[data-lists-sheet-row="nudge"]')?.click());
+        await sleep(1800);
+        const nd = await page.evaluate(() => ({
+          url: location.pathname,
+          sheet: !!document.querySelector('[data-lists-sheet]'),
+        }));
+        check('点「提醒@他」进到提醒页、弹层收起', nd.url === '/admin/nudges' && nd.sheet === false, JSON.stringify(nd));
+        await page.click('[data-tab-lists]');
+        await sleep(700);
+        const ndSheet = await readSheet(page);
+        const ndMarked = (ndSheet?.rows || []).filter((r) => r.current);
+        check('在提醒@他页打开弹层，「提醒@他」那一行打勾',
+          ndMarked.length === 1 && ndMarked[0].key === 'nudge',
+          JSON.stringify((ndSheet?.rows || []).map((r) => ({ k: r.key, c: r.current }))));
+        await page.click('[data-lists-sheet-close]');
+        await sleep(500);
+        await gotoRetry(page, BASE + '/admin');
+        await sleep(1200);
       }
 
       // ---------- 6. 点遮罩也能收起 + 桌面没有这个弹层 ----------

@@ -6,7 +6,7 @@
 - 仓库：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
 - 发布与安装包：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote/releases>
 - GitHub 镜像：<https://github.com/magicindex/workordernote>
-- 当前版本：`0.43.4`
+- 当前版本：`0.43.5`
 
 > **本项目是衍生作品。** 基于开源项目
 > [TechFunWay/reminders](https://github.com/TechFunWay/reminders)（MIT 许可）衍生开发，
@@ -21,7 +21,7 @@
 | **任务 / 记事** | 任务需确认完成；记事只作记录，保存即归档、不发送通知 |
 | **清单与提醒** | 多清单、优先级、重复提醒（含农历）、逾期提醒、提醒@他 |
 | **视图** | 列表、全屏日历（公历/农历/节气/节日）、首页看板、倒计时卡片 |
-| **课程表** | 按周排课，课程与课外活动分色；支持打印，手机清单弹层可直接进入；浏览时只读，进编辑态才显示添加入口 |
+| **课程表** | 按周排课，课程与课外活动分色；支持打印，手机清单弹层可直接进入；浏览时只读，进编辑态才显示添加入口；可共享给其他账号（只读 / 读写） |
 | **随手记事本** | 随手记录，按时间倒序归档，可搜索 |
 | **人生要有仪式感** | 生日、纪念日、节日、考试倒计时卡片，公历与农历双行显示（干支年份、彩色日期胶囊，「每年」跟随创建历法） |
 | **信用卡账单** | 多卡管理，账单日/还款日/额度/本期金额，临近还款日变色提醒；更多菜单点按展开 |
@@ -29,7 +29,7 @@
 | **AI 小秘** | 接入多家模型服务商，可选模型；基于工作数据回答问题，支持改名 |
 | **数据与同步** | 本机/WebDAV 每日自动备份（自签名证书可跳过校验）、整库与上传文件恢复、导入导出、双机同步（除密码外全部） |
 | **打印** | 日历整月打印，或切换列表按行打印；可调方向、字号、标题与打印列 |
-| **多端** | 桌面与手机自适应，支持 PWA 安装 |
+| **多端** | 桌面与手机自适应，支持 PWA 安装；手机底部「提醒」直达提醒@他，悬浮新建按当前频道分流 |
 
 上游自带的能力（到点催办、重复提醒、多邮箱通知、飞牛一键登录等）全部保留。
 
@@ -46,10 +46,10 @@
 镜像发布在仓库自带的容器仓库，可直接拉取：
 
 ```bash
-docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.43.4
+docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.43.5
 ```
 
-同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.43.4`；Gitea 容器仓库不可用时可直接改用。
+同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.43.5`；Gitea 容器仓库不可用时可直接改用。
 
 ### 用仓库里的 compose 文件安装
 
@@ -74,7 +74,7 @@ curl -fsSLO https://raw.githubusercontent.com/magicindex/workordernote/main/dock
 ```yaml
 services:
   workordernote:
-    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.43.4
+    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.43.5
     container_name: workordernote
     # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
     user: "1000:1001"

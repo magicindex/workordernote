@@ -3,7 +3,7 @@
  * 可以自定义课程表课程，和设定课外活动课，固定清单，通过后台开关打开关闭。」）
  *
  * 钉住这几件事：
- *   1) 开关在个人偏好：默认关（侧栏没有入口），打开后侧栏出现「课程表」；
+ *   1) 开关在个人偏好：默认开；关掉后侧栏没有入口，打开后出现「课程表」；
  *   2) 一个账号可以建多张表（多人表），顶部标签切换，各表课程互不串；
  *   3) 课程 / 课外活动两类，活动卡片是虚线边，卡片上写「活动」；
  *   4) 增删改：按周几落列、时间校验（结束必须晚于开始）、改名、删表；
@@ -62,13 +62,13 @@ async function waitForCard(page, selector, timeout = 12000) {
     await login(page, BASE);
     await dismissAlerts(page);
 
-    // 记下开关原值，收尾还原（多数实例应为 false）。
+    // 记下开关原值，收尾还原（默认 true，用户可能手动关过）。
     const cfgBefore = await api(page, '/api/configs');
-    const originalFlag = cfgBefore.body?.data?.timetable_enabled ?? 'false';
+    const originalFlag = cfgBefore.body?.data?.timetable_enabled ?? 'true';
     const createdTables = [];
 
     try {
-      // ---------------- 1. 默认关 → 侧栏没有入口 ----------------
+      // ---------------- 1. 关掉开关 → 侧栏没有入口 ----------------
       await api(page, '/api/configs', 'PUT', { key: 'timetable_enabled', value: 'false' });
       await page.goto(`${BASE}/admin/timetable`, { waitUntil: 'networkidle2' });
       await sleep(900);

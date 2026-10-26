@@ -158,6 +158,9 @@ async function handleSave(key: string, value: string) {
       if (key === 'notebook_enabled') {
         authStore.setNotebookEnabled(value !== 'false')
       }
+      if (key === 'ceremony_enabled') {
+        authStore.setCeremonyEnabled(value !== 'false')
+      }
       if (key === 'timetable_enabled') {
         authStore.setTimetableEnabled(value === 'true')
       }
