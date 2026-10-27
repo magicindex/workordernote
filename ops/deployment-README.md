@@ -252,6 +252,10 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 定向回归：201 `verify-131` 59/59、`verify-134` 33/33、`verify-137` 15/15（首次失败，单独复跑通过）、`verify-107` 38/38、`verify-128` 31/31、`verify-135` 9/9、`verify-136` 10/10；200 `verify-131` 59/59、`verify-134` 33/33、`verify-137` 15/15、`verify-107` 38/38。
 - 后端 `go vet ./... && go test ./...` 全过；前端 `npm run build` 通过。
 
+**仓库同步**
+- Gitea：`main` 与 tag `v0.43.6` 已推送；Releases 页已创建 `工作序记 v0.43.6`，附离线包、单镜像包、fpk 与截图（Gitea 容器仓库仍受历史 `unexpected EOF` 影响，镜像改由 GHCR 提供）。
+- GitHub：快照仓库提交 `a29e20b` + tag `v0.43.6`，Actions `release` 成功；Release 已发布源码包、bundle、镜像包、SHA256SUMS、fpk 与截图；`ghcr.io/magicindex/workordernote:0.43.6` 已发布。
+
 **构件**
 - 离线整包 `pkg/WorkOrderNote-0.43.6-offline-amd64.tar.gz`（46,326,306 B，sha256 `3353df4e25b085127a1bdc99e2984168ebc66dec42098e6f8dda5bcf8ef2ec6d`，包内校验通过）。
 - 单镜像 `pkg/workordernote-0.43.6-amd64.tar.gz`（49,283,945 B，sha256 `dfa28111041b6fe7ac6e7fd51947b5c62da4ceff5d89592da34d6b3a6eddbb8d`）。
