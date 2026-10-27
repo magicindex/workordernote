@@ -145,6 +145,15 @@ const madeIds = [];
         lunar: card.querySelector('[data-ceremony-lunar]')?.textContent.trim() || '',
         solarRepeat: (card.querySelector('[data-ceremony-solar]')?.textContent || '').includes('每年'),
         lunarRepeat: (card.querySelector('[data-ceremony-lunar]')?.textContent || '').includes('每年'),
+        hero: (() => {
+          const b = card.querySelector('.ceremony-hero b');
+          const s = getComputedStyle(b);
+          return { size: parseFloat(s.fontSize), stroke: s.webkitTextStrokeWidth, bg: s.backgroundImage };
+        })(),
+        cardStyle: (() => {
+          const s = getComputedStyle(card);
+          return { radius: s.borderRadius, shadow: s.boxShadow, blur: s.backdropFilter };
+        })(),
         solarPrimary: !!card.querySelector('[data-ceremony-solar-md]')?.classList.contains('is-primary'),
         solarBadgeOutside: !!card.querySelector('[data-ceremony-solar] > .ceremony-repeat-badge') && !card.querySelector('[data-ceremony-solar-md] .tiny-badge'),
         lunarBadgeOutside: !!card.querySelector('[data-ceremony-lunar] > .ceremony-repeat-badge') && !card.querySelector('[data-ceremony-lunar-md] .tiny-badge'),
@@ -160,12 +169,39 @@ const madeIds = [];
         })(),
         cycle: card.querySelector('[data-ceremony-cycle]')?.textContent.trim() || '',
         bottom: card.querySelector('[data-ceremony-bottom]')?.textContent.trim() || '',
+        icon: card.querySelector('[data-ceremony-icon]')?.getAttribute('data-ceremony-icon-key') || '',
+        iconW: Math.round(card.querySelector('[data-ceremony-icon]')?.getBoundingClientRect().width || 0),
       };
     }, titlePart);
     const national = await cardOf('国庆');
     check('国庆节卡片出现，倒计时是天数、公历日期落在 10 月 1 日、另一行是农历',
       !!national && /还有 \d+ 天|今天|明天/.test(national.countdown) && /10月1日/.test(national.meta) && !!national.lunar && national.lunarBelow,
       JSON.stringify(national));
+    check('卡片是大号无描边倒计时 + 玻璃/黑卡卡面',
+      !!national && national.hero.size >= 40 && (national.hero.stroke === '0px' || national.hero.stroke === '') &&
+      national.hero.bg === 'none' && national.cardStyle.radius === '26px' && national.cardStyle.shadow !== 'none',
+      JSON.stringify(national && { hero: national.hero, card: national.cardStyle }));
+    check('卡片图标放大到约 2 倍，国庆自动用旗帜图标',
+      !!national && national.iconW >= 100 && national.icon === 'flag', JSON.stringify(national && { w: national.iconW, icon: national.icon }));
+    // 点图标 → 编辑 → 图标库选灯笼 → 保存后刷新仍保留
+    await page.evaluate(() => {
+      const card = [...document.querySelectorAll('[data-ceremony-card]')].find((c) => c.textContent.includes('国庆'));
+      card?.querySelector('[data-ceremony-icon]')?.click();
+    });
+    await sleep(700);
+    check('点卡片图标能直接打开编辑弹窗', await page.evaluate(() => !!document.querySelector('[data-ceremony-form-icon]')));
+    await page.click('[data-ceremony-form-icon]');
+    await sleep(500);
+    const iconOpts = await page.evaluate(() => document.querySelectorAll('[data-ceremony-icon-option]').length);
+    check('图标库有分组的常用节日图标', iconOpts >= 15, String(iconOpts));
+    await page.click('[data-ceremony-icon-option="lantern"]');
+    await sleep(900);
+    await page.click('[data-ceremony-form-save]');
+    await sleep(2200);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await sleep(1800);
+    const nationalIcon = await cardOf('国庆');
+    check('保存自定义图标后刷新仍保留', !!nationalIcon && nationalIcon.icon === 'lantern', JSON.stringify(nationalIcon && nationalIcon.icon));
     // 情人节改成「填第一次」（用户 2026-10-15：情人节：第一次情人节；七夕：第一次七夕）：
     // 点模板先出表单（日期栏写「第一次情人节」、默认每年重复），填完保存才见卡片。
     // valentine 还要留给下面第 5 段查「第 1 次」角标。

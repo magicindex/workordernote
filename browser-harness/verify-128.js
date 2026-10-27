@@ -182,8 +182,9 @@ const readSheet = (page) => page.evaluate(() => {
       await page.click('[data-tab-lists]');
       await sleep(700);
       const sheetAll = await readSheet(page);
-      check('除内置频道外，弹层里的行都是具体清单（没有重复的「全部」入口）',
-        !!sheetAll && sheetAll.rows.filter((r) => r.key !== 'timetable' && r.key !== 'nudge').every((r) => String(r.key).startsWith('list:')),
+      check('除内置频道外，弹层里的行都是具体清单，垃圾箱始终最后一个',
+        !!sheetAll && sheetAll.rows.filter((r) => r.key !== 'timetable' && r.key !== 'nudge' && r.key !== 'trash').every((r) => String(r.key).startsWith('list:'))
+          && sheetAll.rows[sheetAll.rows.length - 1]?.key === 'trash',
         JSON.stringify(sheetAll?.rows?.map((r) => r.key)));
       if (timetableEnabled) {
         // ---------- 5b. 课程表行：能进、弹层收起、标签保持选中、回来打勾 ----------

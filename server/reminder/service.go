@@ -26,6 +26,8 @@ type SaveReminderInput struct {
 	Notes string `json:"notes"`
 	// BottomText 是仪式感卡片底部自定义文案；指针区分「没传（不改）」与「传空串（恢复自动）」。
 	BottomText *string `json:"bottom_text"`
+	// Icon 是仪式感卡片图标 key；缺省 = 不改，传空串 = 恢复按标题自动选。
+	Icon *string `json:"icon"`
 	// Kind is "task" (default) or "note". A note ignores every scheduling
 	// field and is stored as already completed.
 	Kind   string `json:"kind"`
@@ -101,6 +103,13 @@ func validateReminderInput(in *SaveReminderInput) error {
 			return errors.New("卡片底部文字最多 120 个字")
 		}
 		in.BottomText = &v
+	}
+	if in.Icon != nil {
+		v := strings.TrimSpace(*in.Icon)
+		if len([]rune(v)) > 32 {
+			return errors.New("卡片图标名称太长")
+		}
+		in.Icon = &v
 	}
 	if in.Title == "" {
 		return errors.New("请输入提醒标题")
@@ -308,8 +317,12 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 		if in.BottomText != nil {
 			bottomText = *in.BottomText
 		}
+		icon := ""
+		if in.Icon != nil {
+			icon = *in.Icon
+		}
 		created = Reminder{
-			UserID: userID, ListID: in.ListID, Title: in.Title, Notes: in.Notes, BottomText: bottomText,
+			UserID: userID, ListID: in.ListID, Title: in.Title, Notes: in.Notes, BottomText: bottomText, Icon: icon,
 			Accent:     accent,
 			Background: background,
 			BgBlur:     bgBlur,
@@ -395,6 +408,9 @@ func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) 
 		existing.Notes = in.Notes
 		if in.BottomText != nil {
 			existing.BottomText = *in.BottomText
+		}
+		if in.Icon != nil {
+			existing.Icon = *in.Icon
 		}
 		// Switching type has to move the row between the open and completed
 		// views: task -> note stamps CompletedAt (and never touches it again
@@ -1317,23 +1333,27 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 
 	result := make([]CompletedItemDTO, 0, len(history)+len(rows))
 	for _, h := range history {
+		owner, ok := ownerByID[h.ReminderID]
+		if !ok || owner.DeletedAt != nil {
+			// 底层提醒已删除（或已不存在）：完成记录跟着进垃圾箱口径，
+			// 不在「已完成」里留下与清单不一致的幽灵行。
+			continue
+		}
 		item := CompletedItemDTO{
 			ID: h.ID, Source: "history", ReminderID: h.ReminderID,
 			Title: h.TitleSnapshot, CompletedAt: h.CompletedAt,
 			ScheduledFor: h.ScheduledFor, Kind: KindTask,
 		}
-		if owner, ok := ownerByID[h.ReminderID]; ok {
-			item.ListID = owner.ListID
-			item.ListName = listNames[owner.ListID]
-			item.Kind = owner.Kind
-			item.RepeatRule = owner.RepeatRule
-			item.ReminderExists = owner.DeletedAt == nil
-			// 完成时段从这条提醒的录入时间算起（用户 2026-10-22 的示例：
-			// 2 号录入、5 号完成，就要能看到 2 号 → 5 号这一整段）。
-			if !owner.CreatedAt.IsZero() {
-				created := owner.CreatedAt
-				item.CreatedAt = &created
-			}
+		item.ListID = owner.ListID
+		item.ListName = listNames[owner.ListID]
+		item.Kind = owner.Kind
+		item.RepeatRule = owner.RepeatRule
+		item.ReminderExists = true
+		// 完成时段从这条提醒的录入时间算起（用户 2026-10-22 的示例：
+		// 2 号录入、5 号完成，就要能看到 2 号 → 5 号这一整段）。
+		if !owner.CreatedAt.IsZero() {
+			created := owner.CreatedAt
+			item.CreatedAt = &created
 		}
 		// 历史行本身不带清单归属，只能回查后在这里按清单过滤
 		if len(listIDs) > 0 && !containsID(listIDs, item.ListID) {

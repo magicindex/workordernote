@@ -126,6 +126,7 @@
               <span class="flex-1">提醒@他</span>
               <span v-if="summary.nudge_pending" class="nav-count">{{ summary.nudge_pending }}</span>
             </RouterLink>
+
           </section>
 
           <section class="nav-group" data-nav-group="my-lists">
@@ -270,7 +271,25 @@
             </span>
           </div>
           </section>
+
+
         </nav>
+
+        <!-- 垃圾箱（用户 2026-10-27）：所有软删除的提醒都收在这里，始终排在侧栏最后。 -->
+        <RouterLink
+          to="/admin/trash"
+          class="nav-row mx-3 mb-2 mt-3"
+          :class="{ 'nav-row-active': isActive('/admin/trash') }"
+          :title="railActive ? '垃圾箱' : '垃圾箱：已删除的提醒，可随时恢复'"
+          data-nav-trash
+          @click="mobileOpen = false"
+        >
+          <span class="nav-symbol h-5 w-5 bg-slate-500/12 text-slate-500">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V5h6v2M7 7l.8 12.2A2 2 0 0 0 9.8 21h4.4a2 2 0 0 0 2-1.8L17 7M10 11v6M14 11v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="flex-1">垃圾箱</span>
+          <span v-if="summary.trash" class="nav-count">{{ summary.trash }}</span>
+        </RouterLink>
 
         <div class="border-t border-border/70 px-2 pb-2 pt-2">
           <!-- 设置区可折叠：折叠后清单列表能多显示好几项。
@@ -540,6 +559,22 @@
                 <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m5 12.5 4.5 4.5L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </span>
             </button>
+            <button
+              type="button"
+              class="lists-sheet-row"
+              :class="{ 'lists-sheet-row-active': route.path === '/admin/trash' }"
+              data-lists-sheet-row="trash"
+              @click="pickTrash"
+            >
+              <span class="nav-symbol h-5 w-5 bg-slate-500/12 text-slate-500">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V5h6v2M7 7l.8 12.2A2 2 0 0 0 9.8 21h4.4a2 2 0 0 0 2-1.8L17 7M10 11v6M14 11v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+              <span class="min-w-0 flex-1 truncate">垃圾箱</span>
+              <span v-if="summary.trash" class="nav-count">{{ summary.trash }}</span>
+              <span v-if="route.path === '/admin/trash'" class="shrink-0 text-brand-500" data-lists-sheet-current aria-label="当前页面">
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m5 12.5 4.5 4.5L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
           </div>
         </div>
       </div>
@@ -547,7 +582,7 @@
 
     <!-- 手机端「新建」改成**悬浮按钮**：脱离底部标签栏，右下角悬浮，键盘弹起/滚动时收起 -->
     <button
-      v-if="canCreate"
+      v-if="canCreate && route.name !== 'Trash'"
       class="mobile-fab"
       :class="{ 'mobile-fab-hidden': keyboardOpen }"
       :aria-label="fabLabel"
@@ -838,6 +873,11 @@ function pickTimetable() {
 function pickNudge() {
   listsSheetOpen.value = false
   if (route.path !== '/admin/nudges') void router.push('/admin/nudges')
+}
+/** 垃圾箱：始终排在手机清单弹层最后 */
+function pickTrash() {
+  listsSheetOpen.value = false
+  if (route.path !== '/admin/trash') void router.push('/admin/trash')
 }
 /** 这一行是不是当前所在页面（弹层里打勾用） */
 function isMyRowCurrent(row: MyListRow): boolean {

@@ -171,10 +171,16 @@ export function accentSurface(accentKey?: string | null, id?: number | string): 
   const ink = bestInk(a.from, a.to)
   const dark = ink === LIGHT_INK
   const mid = mixHex(a.from, a.to, 0.55)
+  // 深色卡走「黑卡」：把色相压进近黑的底里，只留一层很克制的同色反光；
+  // 浅色卡走「水晶」：保留通透的浅色，但把顶部高光收紧，避免像糖果色。
+  const deep = '#05070c'
+  const from = dark ? mixHex(a.from, deep, 0.70) : a.from
+  const middle = dark ? mixHex(a.to, deep, 0.62) : mid
+  const to = dark ? mixHex(a.to, '#03050a', 0.82) : a.to
   return [
-    `radial-gradient(135% 100% at 82% -14%, rgba(255,255,255,${dark ? '0.30' : '0.55'}) 0%, rgba(255,255,255,0) 62%)`,
-    `radial-gradient(120% 90% at 4% 112%, rgba(2,6,23,${dark ? '0.42' : '0.20'}) 0%, rgba(2,6,23,0) 60%)`,
-    `linear-gradient(152deg, ${a.from} 0%, ${mid} 56%, ${a.to} 100%)`,
+    `radial-gradient(120% 82% at 78% -12%, rgba(255,255,255,${dark ? '0.12' : '0.46'}) 0%, rgba(255,255,255,0) 58%)`,
+    `radial-gradient(110% 86% at 6% 112%, rgba(2,6,23,${dark ? '0.52' : '0.16'}) 0%, rgba(2,6,23,0) 62%)`,
+    `linear-gradient(152deg, ${from} 0%, ${middle} 56%, ${to} 100%)`,
   ].join(', ')
 }
 

@@ -48,7 +48,20 @@ export const LIST_ICONS: ListIcon[] = [
   { key: 'pet', label: '宠物', body: '<circle cx="7" cy="9.5" r="1.6"/><circle cx="11" cy="6.8" r="1.6"/><circle cx="15.6" cy="8.2" r="1.6"/><path d="M11.6 12.2c2.2 0 4.4 1.7 4.4 3.8 0 1.7-1.5 2.6-3.2 2.6-1 0-1.4-.3-2.2-.3s-1.2.3-2.2.3c-1.7 0-3.2-.9-3.2-2.6 0-2.1 2.2-3.8 4.4-3.8Z"/>' },
   { key: 'clock', label: '定时', body: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3.2 2"/>' },
   { key: 'calendar', label: '日程', body: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4m8-4v4M3.5 10h17"/><path d="M8 14h3"/>' },
+  { key: 'timetable', label: '课程表', body: '<rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9 3.5v3M15 3.5v3M8.5 14h2M13.5 14h2M8.5 17h2"/>' },
   { key: 'fire', label: '紧急', body: '<path d="M12 21c3.6 0 6-2.3 6-5.4 0-3.9-3.3-5.4-4.3-9.6-2 1.2-3 3.2-3 5.2 0 1.2-.7 1.9-1.5 1.9S7.8 12.3 7.8 11c-1.2 1.4-1.8 3-1.8 4.6C6 18.7 8.4 21 12 21Z"/>' },
+  // 仪式感／节日图标：灯笼、烟花、月亮、粽子、爱心、圣诞树、对戒、花、学士帽、宝宝。
+  { key: 'lantern', label: '灯笼', body: '<path d="M9 3.5h6M10 3.5v2M14 3.5v2"/><rect x="6.5" y="6" width="11" height="12" rx="4"/><path d="M9 6v12M15 6v12M9 18v2h6v-2"/>' },
+  { key: 'firework', label: '烟花', body: '<circle cx="12" cy="12" r="2.4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>' },
+  { key: 'moon', label: '月亮', body: '<path d="M19 15.5A7.5 7.5 0 0 1 8.5 5a7.5 7.5 0 1 0 10.5 10.5Z"/><path d="m17.5 5.5.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5.5-1.5Z"/>' },
+  { key: 'zongzi', label: '粽子', body: '<path d="M12 3.5 20 18a2 2 0 0 1-1.8 3H5.8A2 2 0 0 1 4 18L12 3.5Z"/><path d="M8 14c2.5 1.5 5.5 1.5 8 0M12 7v5"/>' },
+  { key: 'heart', label: '爱心', body: '<path d="M12 20s-7-4.4-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.6-7 9-7 9Z"/>' },
+  { key: 'tree', label: '圣诞树', body: '<path d="M12 3 7 11h3l-4 6h12l-4-6h3L12 3Z"/><path d="M12 17v4M9 21h6"/>' },
+  { key: 'rings', label: '对戒', body: '<circle cx="9" cy="14" r="5"/><circle cx="15" cy="10" r="5"/>' },
+  { key: 'flower', label: '花', body: '<circle cx="12" cy="8" r="2.4"/><circle cx="8" cy="12" r="2.4"/><circle cx="16" cy="12" r="2.4"/><circle cx="12" cy="16" r="2.4"/><circle cx="12" cy="12" r="1.4"/>' },
+  { key: 'grad', label: '毕业', body: '<path d="m3 9 9-4 9 4-9 4-9-4Z"/><path d="M7 11v4c0 1.7 2.2 3 5 3s5-1.3 5-3v-4M21 9v5"/>' },
+  { key: 'baby', label: '宝宝', body: '<circle cx="12" cy="12" r="8"/><path d="M9 10h.01M15 10h.01M9.5 15c1.5 1 3.5 1 5 0M12 4c0-1 .7-1.5 1.5-1.5"/>' },
+  { key: 'party', label: '派对', body: '<path d="M4 20l4-10 6 6-10 4Z"/><path d="M13 4v3M18 6l-2 2M20 12h-3M16 18l-2-2"/>' },
 ]
 
 const ICON_MAP = new Map(LIST_ICONS.map((icon) => [icon.key, icon]))

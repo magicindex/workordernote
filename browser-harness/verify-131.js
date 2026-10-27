@@ -502,10 +502,15 @@ async function waitForCard(page, selector, timeout = 12000) {
           active: Number(document.querySelector('[data-mobile-day-active]')?.getAttribute('data-mobile-day') || 0),
           today,
           tabs: document.querySelectorAll('[data-mobile-day]').length,
+          activeBg: getComputedStyle(document.querySelector('[data-mobile-day-active]')).backgroundColor,
+          activeColor: getComputedStyle(document.querySelector('[data-mobile-day-active]')).color,
+          idleColor: getComputedStyle([...document.querySelectorAll('[data-mobile-day]')].find((e) => !e.hasAttribute('data-mobile-day-active'))).color,
         };
       });
       check('手机默认只显示今天这一天', mobileDayState.total === 7 && mobileDayState.visible === 1
         && mobileDayState.tabs === 7 && mobileDayState.active === mobileDayState.today, JSON.stringify(mobileDayState));
+      check('手机日期条选中日高亮、其余灰暗', mobileDayState.activeBg !== 'rgba(0, 0, 0, 0)'
+        && mobileDayState.activeColor === 'rgb(255, 255, 255)' && mobileDayState.idleColor !== mobileDayState.activeColor, JSON.stringify(mobileDayState));
       await page.click('[data-mobile-day="1"]');
       await sleep(400);
       const mondayOnly = await page.evaluate(() => {

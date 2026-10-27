@@ -49,6 +49,9 @@ func setupAuthRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	group.POST("/items/:id/complete", handleCompleteReminder(db))
 	group.POST("/items/:id/restore", handleRestoreReminder(db))
 	group.POST("/items/:id/snooze", handleSnoozeReminder(db))
+	// 垃圾箱：软删除的提醒集中在这里，可恢复；「全部」等列表默认不含它们。
+	group.GET("/trash", handleListTrash(db))
+	group.POST("/trash/:id/restore", handleRestoreTrash(db))
 
 	// 「提醒@他」：多人之间互相推提醒（见 nudge.go）。开关是系统偏好 nudge_enabled。
 	group.GET("/nudges", handleListNudges(db))
@@ -1022,6 +1025,7 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 			Completed    int64
 			Overdue      int64
 			NudgePending int64
+			Trash        int64
 		}
 		// 「已完成」角标必须和列表同口径（reminders.completed_at ∪ completions 历史），
 		// 否则重复提醒的完成记录会让侧栏数字和页面条数对不上。这里把历史计数作为
@@ -1029,7 +1033,8 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		// （见 performance_test.go 的 TestSummaryUsesTwoAggregateQueries）。
 		hiddenCards := hiddenFeatureListIDs(db, userID)
 		completedExpr := `COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
-					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND deleted_at IS NULL)`
+					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND deleted_at IS NULL
+						AND EXISTS (SELECT 1 FROM reminders r WHERE r.id = completions.reminder_id AND r.deleted_at IS NULL))`
 		// 参数顺序必须与 SQL 里的占位符顺序一致：today → completed 子查询 → overdue。
 		// 口径：待办 = 排期时间 < 今天起第 7 天 24 点（含逾期），逾期 = 排期时间 < 现在。
 		// 时间比较一律走 tsUTC() 归一化（SQLite 里时间是带偏移的文本，直接比会按
@@ -1042,14 +1047,17 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		if len(hiddenCards) > 0 {
 			// 栏目关掉时，它那些卡片提醒的完成记录也不该再计入角标。
 			completedExpr = `COALESCE(SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END), 0)
-					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND deleted_at IS NULL AND reminder_id NOT IN (SELECT id FROM reminders WHERE list_id IN ?))`
+					+ (SELECT COUNT(*) FROM completions WHERE user_id = ? AND deleted_at IS NULL
+						AND EXISTS (SELECT 1 FROM reminders r WHERE r.id = completions.reminder_id AND r.deleted_at IS NULL)
+						AND reminder_id NOT IN (SELECT id FROM reminders WHERE list_id IN ?))`
 			selectArgs = append(selectArgs, hiddenCards)
 		}
 		// 「提醒@他」里**别人提醒我、我还没做完**的条数（用户 2026-10-13：「提醒消息
 		// 归到智能清单显示统计中」）。并成同一条聚合语句里的子查询，不额外发一条
 		// COUNT —— /summary 的查询条数有测试盯着（performance_test.go，稳定态 2 条）。
 		nudgeExpr := `(SELECT COUNT(*) FROM nudges WHERE to_user_id = ? AND done_at IS NULL AND deleted_at IS NULL) AS nudge_pending`
-		selectArgs = append(selectArgs, userID, sqlTimeArg(overdueBefore))
+		trashExpr := `(SELECT COUNT(*) FROM reminders WHERE user_id = ? AND deleted_at IS NOT NULL) AS trash`
+		selectArgs = append(selectArgs, userID, sqlTimeArg(overdueBefore), userID)
 		// 口径与列表一致：用「排期时间」COALESCE(end_at, start_at, due_at) ——
 		// **不看 snoozed_until**（用户 2026-10-14：稍后提醒只延迟提醒时间，不改到期时间）。
 		effectiveDue := "COALESCE(end_at, start_at, due_at)"
@@ -1070,7 +1078,8 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 				COALESCE(SUM(CASE WHEN completed_at IS NULL THEN 1 ELSE 0 END), 0) AS open_total,
 				`+completedExpr+` AS completed,
 				`+nudgeExpr+`,
-				`+overdueExpr, selectArgs...).
+				`+overdueExpr+`,
+				`+trashExpr, selectArgs...).
 			Where("user_id = ? AND deleted_at IS NULL", userID)
 		q = excludeHiddenCardReminders(q, hiddenCards)
 		if err := q.Scan(&counts).Error; err != nil {
@@ -1091,6 +1100,7 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 			"unread":    unread,
 			// 侧栏「提醒@他」的角标（别人提醒我、还没做完）。
 			"nudge_pending": counts.NudgePending,
+			"trash":         counts.Trash,
 		})
 	}
 }

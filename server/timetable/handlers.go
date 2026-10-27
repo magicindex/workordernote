@@ -194,11 +194,7 @@ func handleGetTable(db *gorm.DB) gin.HandlerFunc {
 			response.Error(c, http.StatusNotFound, response.CodeNotFound, "课程表不存在")
 			return
 		}
-		weekStart, err := NormalizeWeekParam(c.Query("week"))
-		if err != nil {
-			response.ErrorBadRequest(c, err.Error())
-			return
-		}
+		weekStart := CurrentWeekStart()
 		if err := ensureWeek(db, table, weekStart); err != nil {
 			response.ErrorInternal(c, "读取课程表失败")
 			return
@@ -211,8 +207,8 @@ func handleGetTable(db *gorm.DB) gin.HandlerFunc {
 		}
 		response.Success(c, gin.H{
 			"table": table, "entries": entries,
-			"week_start": weekStart, "current_week": CurrentWeekStart(),
-			"past":       isPastWeek(weekStart),
+			"week_start": weekStart, "current_week": weekStart,
+			"past":       false,
 			"permission": permission,
 			"owner_name": userDisplayName(db, table.UserID),
 			"is_owner":   permission == PermissionOwner,
@@ -425,15 +421,7 @@ func handleCreateEntry(db *gorm.DB) gin.HandlerFunc {
 			response.ErrorBadRequest(c, err.Error())
 			return
 		}
-		weekStart, err := NormalizeWeekParam(c.Query("week"))
-		if err != nil {
-			response.ErrorBadRequest(c, err.Error())
-			return
-		}
-		if isPastWeek(weekStart) {
-			response.ErrorForbidden(c, "历史课程表只读，不能修改")
-			return
-		}
+		weekStart := CurrentWeekStart()
 		if err := ensureWeek(db, table, weekStart); err != nil {
 			response.ErrorInternal(c, "保存失败")
 			return
@@ -481,10 +469,6 @@ func handleUpdateEntry(db *gorm.DB) gin.HandlerFunc {
 				response.ErrorInternal(c, "保存失败")
 				return
 			}
-		}
-		if isPastWeek(entry.WeekStart) {
-			response.ErrorForbidden(c, "历史课程表只读，不能修改")
-			return
 		}
 		var req struct {
 			Title     *string `json:"title"`
@@ -574,10 +558,6 @@ func handleDeleteEntry(db *gorm.DB) gin.HandlerFunc {
 		}
 		if entry.WeekStart == "" {
 			entry.WeekStart = CurrentWeekStart()
-		}
-		if isPastWeek(entry.WeekStart) {
-			response.ErrorForbidden(c, "历史课程表只读，不能修改")
-			return
 		}
 		if err := db.Delete(&TimetableEntry{}, entry.ID).Error; err != nil {
 			response.ErrorInternal(c, "删除失败")

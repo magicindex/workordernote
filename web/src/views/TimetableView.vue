@@ -80,7 +80,7 @@
         <!-- 用户 2026-10-20：「编辑按钮和空节次合并成一个按钮」——
              进编辑态就铺出空节次（有落点、可点可拖），退出就收起。 -->
         <button
-          v-if="canEditWeek"
+          v-if="canWrite"
           type="button"
           class="timetable-edit-toggle"
           :class="editing ? 'is-on' : ''"
@@ -93,16 +93,6 @@
         </button>
       </div>
 
-      <div v-if="tables.length" class="mt-2 flex flex-wrap items-center gap-1.5" data-timetable-weekbar>
-        <button type="button" class="toolbar-btn !h-7 !px-2" data-week-prev title="上一周" @click="shiftWeek(-1)">‹</button>
-        <span class="rounded-full bg-muted px-2.5 py-1 text-[11px] font-bold text-foreground" data-week-label>{{ weekRangeLabel }}</span>
-        <button type="button" class="toolbar-btn !h-7 !px-2" data-week-next title="下一周" @click="shiftWeek(1)">›</button>
-        <button v-if="!isCurrentWeek" type="button" class="toolbar-btn !h-7 !px-2 !text-[11px]" data-week-current @click="goCurrentWeek">回到本周</button>
-        <span v-if="isPastWeek" class="rounded-full bg-amber-500/12 px-2 py-1 text-[11px] font-bold text-amber-600 dark:text-amber-300" data-week-past>历史课程表 · 只读</span>
-        <span v-else-if="!isCurrentWeek" class="rounded-full bg-brand-500/10 px-2 py-1 text-[11px] font-bold text-brand-600 dark:text-brand-300" data-week-future>未来一周</span>
-        <span v-if="!entries.length" class="text-[11px] text-muted-foreground" data-week-empty>这一周还没有课程</span>
-      </div>
-
       <div v-if="tables.length" class="mt-2 grid grid-cols-7 gap-1 sm:hidden" data-mobile-daybar>
         <button
           v-for="day in days"
@@ -110,15 +100,16 @@
           type="button"
           class="flex flex-col items-center gap-0.5 rounded-xl border px-0.5 py-1.5 transition-colors"
           :class="day.weekday === mobileDay
-            ? 'border-brand-500/40 bg-brand-500/10 text-brand-600 dark:text-brand-300'
-            : 'border-border/60 bg-surface text-muted-foreground'"
+            ? 'border-brand-500 bg-brand-500 text-white shadow-[0_8px_20px_-10px_rgb(59_130_246_/_0.9)]'
+            : 'border-transparent bg-surface/50 text-muted-foreground/55'"
+          :aria-pressed="day.weekday === mobileDay"
           :data-mobile-day="day.weekday"
           :data-mobile-day-active="day.weekday === mobileDay ? '' : undefined"
           @click="mobileDay = day.weekday"
         >
           <span class="text-[11px] font-extrabold">{{ day.label.replace('周', '') }}</span>
-          <span class="text-[9.5px] font-semibold tabular-nums opacity-80">{{ day.date }}</span>
-          <span v-if="isCurrentWeek && day.weekday === todayWeekday" class="h-1 w-1 rounded-full bg-brand-500"></span>
+          <span class="text-[9.5px] font-semibold tabular-nums opacity-75">{{ day.date }}</span>
+          <span v-if="day.weekday === todayWeekday" class="h-1 w-1 rounded-full" :class="day.weekday === mobileDay ? 'bg-white' : 'bg-brand-500'"></span>
           <span v-else class="h-1 w-1"></span>
         </button>
       </div>
@@ -148,10 +139,10 @@
           >
             <header class="timetable-day-head">
               <div class="flex items-baseline gap-1.5">
-                <span class="timetable-day-name" :class="isCurrentWeek && day.weekday === todayWeekday ? 'text-brand-600 dark:text-brand-300' : 'text-foreground'">{{ day.label }}</span>
+                <span class="timetable-day-name" :class="day.weekday === todayWeekday ? 'text-brand-600 dark:text-brand-300' : 'text-foreground'">{{ day.label }}</span>
                 <span class="timetable-day-date">{{ day.date }}</span>
               </div>
-              <span v-if="isCurrentWeek && day.weekday === todayWeekday" class="timetable-today">今天</span>
+              <span v-if="day.weekday === todayWeekday" class="timetable-today">今天</span>
               <span v-else class="timetable-day-count">{{ day.entries.length || '—' }}</span>
             </header>
 
@@ -348,7 +339,7 @@
           {{ [viewEntry.location, viewEntry.teacher].filter(Boolean).join(' · ') }}
         </p>
         <p v-if="viewEntry.note" class="whitespace-pre-wrap rounded-xl bg-muted/50 px-3 py-2 text-xs leading-5 text-foreground/80">{{ viewEntry.note }}</p>
-        <p class="text-[11px] text-muted-foreground">{{ isPastWeek ? '这是历史课程表，只能查看。' : '这张表由对方共享给你，当前权限为只读。' }}</p>
+        <p class="text-[11px] text-muted-foreground">{{ '这张表由对方共享给你，当前权限为只读。' }}</p>
       </div>
       <div class="mt-4 flex justify-end">
         <button type="button" class="btn-secondary !h-9 !px-4 !text-xs" data-entry-view-close @click="viewOpen = false">关闭</button>
@@ -581,28 +572,12 @@ function mondayOf(d: Date) {
   return new Date(x.getFullYear(), x.getMonth(), x.getDate() - (dow - 1))
 }
 const todayMonday = dateKey(mondayOf(new Date()))
-const weekOffset = ref(0)
-const currentWeek = ref(todayMonday)
-const weekStartParam = computed(() => {
-  const base = mondayOf(new Date())
-  base.setDate(base.getDate() + weekOffset.value * 7)
-  return dateKey(base)
-})
-const isCurrentWeek = computed(() => weekStartParam.value === currentWeek.value)
-const isPastWeek = computed(() => weekStartParam.value < currentWeek.value)
 const weekDates = computed(() => {
-  const monday = new Date(weekStartParam.value + 'T00:00:00')
+  const monday = new Date(todayMonday + 'T00:00:00')
   return weekdays.map((day) => {
     const dt = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + day.value - 1)
     return `${dt.getMonth() + 1}/${dt.getDate()}`
   })
-})
-const weekRangeLabel = computed(() => {
-  const monday = new Date(weekStartParam.value + 'T00:00:00')
-  const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6)
-  const fmt = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`
-  const prefix = isCurrentWeek.value ? '本周' : isPastWeek.value ? '历史' : '未来'
-  return `${prefix} ${fmt(monday)} – ${fmt(sunday)}`
 })
 
 // 一天分早课 / 上午 / 下午 / 晚课四段（用户 2026-10-18 要求）。
@@ -613,7 +588,6 @@ const activeSummary = computed(() => tables.value.find((t) => t.id === activeId.
 const activePermission = computed<TimetablePermission>(() => activeSummary.value?.permission || 'owner')
 const isOwner = computed(() => activePermission.value === 'owner')
 const canWrite = computed(() => activePermission.value !== 'read')
-const canEditWeek = computed(() => canWrite.value && !isPastWeek.value)
 
 // 表级「班级 / 地点」：课程条目自己不填地点时，卡片与弹窗都退回用它（用户 2026-10-19）。
 const activeLocation = computed(() => (activeTable.value?.location || '').trim())
@@ -846,35 +820,18 @@ async function loadTables(keep = 0) {
 }
 
 async function loadEntries(id: number) {
-  const res = await getTimetable(id, weekStartParam.value)
+  const res = await getTimetable(id)
   if (res.data?.code !== 0) throw new Error(res.data?.message || '读取课程表失败')
   const data = res.data.data || {}
   entries.value = data.entries || []
   activeTable.value = data.table || null
-  if (data.current_week) currentWeek.value = data.current_week
-  if (!canWrite.value || isPastWeek.value) editing.value = false
-}
-
-async function shiftWeek(delta: number) {
-  if (!activeId.value) return
-  weekOffset.value += delta
-  mobileDay.value = isCurrentWeek.value ? todayWeekday : 1
-  editing.value = false
-  viewOpen.value = false
-  shareOpen.value = false
-  errorMsg.value = ''
-  try { await loadEntries(activeId.value) } catch (err: any) { errorMsg.value = err.message || '读取课程表失败' }
-}
-
-async function goCurrentWeek() {
-  weekOffset.value = 0
-  await shiftWeek(0)
+  if (!canWrite.value) editing.value = false
 }
 
 async function selectTable(id: number) {
   if (id === activeId.value) return
   activeId.value = id
-  mobileDay.value = isCurrentWeek.value ? todayWeekday : 1
+  mobileDay.value = todayWeekday
   shareOpen.value = false
   viewOpen.value = false
   if (!canWrite.value) editing.value = false
@@ -1294,7 +1251,7 @@ const editing = ref(false)
 const dragId = ref<number | null>(null)
 // 编辑态 = 可拖动 + 空白节次；两者原本是两个开关，2026-10-20 合并成一个按钮。
 function toggleEditing() {
-  if (!canEditWeek.value) return
+  if (!canWrite.value) return
   editing.value = !editing.value
   void alignRows()
 }
@@ -1408,7 +1365,7 @@ const viewOpen = ref(false)
 const viewEntry = ref<TimetableEntry | null>(null)
 const viewWeekday = computed(() => weekdays.find((d) => d.value === viewEntry.value?.weekday)?.label || '')
 function openEntry(entry: TimetableEntry) {
-  if (canEditWeek.value) openEditEntry(entry)
+  if (canWrite.value) openEditEntry(entry)
   else {
     viewEntry.value = entry
     viewOpen.value = true
@@ -1512,7 +1469,7 @@ async function saveEntry() {
     const payload: EntryInput = { ...form, title: form.title.trim() }
     const res = entryEditing.value
       ? await updateEntry(entryEditing.value.id, payload)
-      : await createEntry(activeId.value, payload, weekStartParam.value)
+      : await createEntry(activeId.value, payload)
     if (res.data?.code !== 0) throw new Error(res.data?.message || '保存失败')
     entryOpen.value = false
     await Promise.all([loadEntries(activeId.value), loadTables(activeId.value)])
@@ -1564,7 +1521,7 @@ async function removeEntry() {
 @media (max-width: 639px) {
   .timetable-day[data-mobile-hidden='true'] { display: none; }
 }
-.timetable-day-today { @apply bg-brand-500/[0.035]; }
+.timetable-day-today { @apply bg-brand-500/[0.07] ring-1 ring-inset ring-brand-500/20; }
 .timetable-day-head { @apply flex items-center justify-between pb-0.5; }
 .timetable-day-name { @apply text-[12.5px] font-extrabold tracking-wide; }
 .timetable-day-date { @apply text-[10.5px] font-semibold tabular-nums text-muted-foreground/80; }

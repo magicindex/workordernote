@@ -184,6 +184,7 @@ type syncReminder struct {
 	Title      string `json:"title"`
 	Notes      string `json:"notes"`
 	BottomText string `json:"bottom_text,omitempty"`
+	Icon       string `json:"icon,omitempty"`
 	CardRole   string `json:"card_role,omitempty"`
 	// 信用卡生成的提醒属于哪张卡：用 UID 指过去（对端要换成自己的卡片 ID）
 	CardUID  string     `json:"card_uid,omitempty"`

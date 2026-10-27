@@ -74,6 +74,8 @@ type Reminder struct {
 	Notes   string `gorm:"type:text" json:"notes"`
 	// BottomText 是仪式感卡片底部的自定义文案（空 = 自动显示「与你共度第 N 次…」）。
 	BottomText string `gorm:"size:200;not null;default:''" json:"bottom_text"`
+	// Icon 是仪式感卡片左侧的图标 key（见 utils/list-icons.ts）；空 = 按标题自动选。
+	Icon string `gorm:"size:32;not null;default:''" json:"icon,omitempty"`
 	// 信用卡生成的提醒：CardID 指向卡片；CardRole 是 statement（账单日）/
 	// due（还款日）/ advance（还款日前几天提醒）。日历与列表据此给不同标记色。
 	CardID   uint   `gorm:"index" json:"card_id,omitempty"`
