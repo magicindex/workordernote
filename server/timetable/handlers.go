@@ -80,7 +80,7 @@ func handleListTables(db *gorm.DB) gin.HandlerFunc {
 			}
 			if err := db.Model(&TimetableEntry{}).
 				Select("timetable_id, count(*) as n").
-				Where("timetable_id IN ?", ids).
+				Where("timetable_id IN ? AND (week_start = ? OR week_start = '')", ids, CurrentWeekStart()).
 				Group("timetable_id").Scan(&rows).Error; err != nil {
 				response.ErrorInternal(c, "读取课程表失败")
 				return
@@ -194,14 +194,25 @@ func handleGetTable(db *gorm.DB) gin.HandlerFunc {
 			response.Error(c, http.StatusNotFound, response.CodeNotFound, "课程表不存在")
 			return
 		}
+		weekStart, err := NormalizeWeekParam(c.Query("week"))
+		if err != nil {
+			response.ErrorBadRequest(c, err.Error())
+			return
+		}
+		if err := ensureWeek(db, table, weekStart); err != nil {
+			response.ErrorInternal(c, "读取课程表失败")
+			return
+		}
 		var entries []TimetableEntry
-		if err := db.Where("timetable_id = ?", table.ID).
+		if err := db.Where("timetable_id = ? AND week_start = ?", table.ID, weekStart).
 			Order("weekday asc, start_time asc, id asc").Find(&entries).Error; err != nil {
 			response.ErrorInternal(c, "读取课程表失败")
 			return
 		}
 		response.Success(c, gin.H{
 			"table": table, "entries": entries,
+			"week_start": weekStart, "current_week": CurrentWeekStart(),
+			"past":       isPastWeek(weekStart),
 			"permission": permission,
 			"owner_name": userDisplayName(db, table.UserID),
 			"is_owner":   permission == PermissionOwner,
@@ -316,6 +327,10 @@ func handleDeleteTable(db *gorm.DB) gin.HandlerFunc {
 				Delete(&TimetableShare{}).Error; err != nil {
 				return err
 			}
+			if err := tx.Where("timetable_id = ?", table.ID).
+				Delete(&TimetableWeek{}).Error; err != nil {
+				return err
+			}
 			return tx.Where("id = ? AND user_id = ?", table.ID, userID).
 				Delete(&Timetable{}).Error
 		})
@@ -410,18 +425,33 @@ func handleCreateEntry(db *gorm.DB) gin.HandlerFunc {
 			response.ErrorBadRequest(c, err.Error())
 			return
 		}
+		weekStart, err := NormalizeWeekParam(c.Query("week"))
+		if err != nil {
+			response.ErrorBadRequest(c, err.Error())
+			return
+		}
+		if isPastWeek(weekStart) {
+			response.ErrorForbidden(c, "历史课程表只读，不能修改")
+			return
+		}
+		if err := ensureWeek(db, table, weekStart); err != nil {
+			response.ErrorInternal(c, "保存失败")
+			return
+		}
 		var n int64
-		db.Model(&TimetableEntry{}).Where("timetable_id = ?", table.ID).Count(&n)
+		db.Model(&TimetableEntry{}).Where("timetable_id = ? AND week_start = ?", table.ID, weekStart).Count(&n)
 		if n >= maxEntriesPerTable {
-			response.ErrorBadRequest(c, "一张表最多 200 条")
+			response.ErrorBadRequest(c, "一张表一周最多 200 条")
 			return
 		}
 		entry.UserID = table.UserID
 		entry.TimetableID = table.ID
+		entry.WeekStart = weekStart
 		if err := db.Create(&entry).Error; err != nil {
 			response.ErrorInternal(c, "保存失败")
 			return
 		}
+		saveEntryCourseNote(db, &entry)
 		response.Success(c, entry)
 	}
 }
@@ -443,6 +473,17 @@ func handleUpdateEntry(db *gorm.DB) gin.HandlerFunc {
 		}
 		if permission == PermissionRead {
 			response.ErrorForbidden(c, "这张课程表是只读共享，不能修改")
+			return
+		}
+		if entry.WeekStart == "" {
+			entry.WeekStart = CurrentWeekStart()
+			if err := db.Model(&TimetableEntry{}).Where("id = ?", entry.ID).Update("week_start", entry.WeekStart).Error; err != nil {
+				response.ErrorInternal(c, "保存失败")
+				return
+			}
+		}
+		if isPastWeek(entry.WeekStart) {
+			response.ErrorForbidden(c, "历史课程表只读，不能修改")
 			return
 		}
 		var req struct {
@@ -501,12 +542,15 @@ func handleUpdateEntry(db *gorm.DB) gin.HandlerFunc {
 		next.ID = entry.ID
 		next.UserID = table.UserID
 		next.TimetableID = entry.TimetableID
+		next.WeekStart = entry.WeekStart
+		next.CourseNoteID = entry.CourseNoteID
 		next.SyncUID = entry.SyncUID
 		next.CreatedAt = entry.CreatedAt
 		if err := db.Save(&next).Error; err != nil {
 			response.ErrorInternal(c, "保存失败")
 			return
 		}
+		saveEntryCourseNote(db, &next)
 		response.Success(c, next)
 	}
 }
@@ -526,6 +570,13 @@ func handleDeleteEntry(db *gorm.DB) gin.HandlerFunc {
 		}
 		if permission == PermissionRead {
 			response.ErrorForbidden(c, "这张课程表是只读共享，不能修改")
+			return
+		}
+		if entry.WeekStart == "" {
+			entry.WeekStart = CurrentWeekStart()
+		}
+		if isPastWeek(entry.WeekStart) {
+			response.ErrorForbidden(c, "历史课程表只读，不能修改")
 			return
 		}
 		if err := db.Delete(&TimetableEntry{}, entry.ID).Error; err != nil {

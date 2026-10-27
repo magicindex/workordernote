@@ -62,6 +62,7 @@ type syncTimetableEntry struct {
 	Title        string    `json:"title"`
 	Kind         string    `json:"kind"`
 	Weekday      int       `json:"weekday"`
+	WeekStart    string    `json:"week_start,omitempty"`
 	StartTime    string    `json:"start_time"`
 	EndTime      string    `json:"end_time"`
 	Location     string    `json:"location"`
@@ -177,9 +178,9 @@ type syncList struct {
 }
 
 type syncReminder struct {
-	UID      string `json:"uid"`
-	Owner    string `json:"owner"`
-	ListUID  string `json:"list_uid"`
+	UID        string `json:"uid"`
+	Owner      string `json:"owner"`
+	ListUID    string `json:"list_uid"`
 	Title      string `json:"title"`
 	Notes      string `json:"notes"`
 	BottomText string `json:"bottom_text,omitempty"`

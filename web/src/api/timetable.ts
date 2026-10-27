@@ -31,6 +31,7 @@ export interface CoursePeriod {
 export interface TimetableEntry {
   id: number
   timetable_id: number
+  week_start: string
   title: string
   kind: TimetableKind
   weekday: number // 1=周一 … 7=周日
@@ -60,7 +61,8 @@ export const getTimetables = () => request.get('/api/timetable/tables')
 export const createTimetable = (name: string, copyFrom?: number, location = '') =>
   request.post('/api/timetable/tables', { name, location, ...(copyFrom ? { copy_from: copyFrom } : {}) })
 
-export const getTimetable = (id: number) => request.get(`/api/timetable/tables/${id}`)
+export const getTimetable = (id: number, week?: string) =>
+  request.get(`/api/timetable/tables/${id}`, { params: week ? { week } : undefined })
 
 export const updateTimetable = (
   id: number,
@@ -77,8 +79,8 @@ export const updateTimetable = (
 
 export const deleteTimetable = (id: number) => request.delete(`/api/timetable/tables/${id}`)
 
-export const createEntry = (tableId: number, payload: EntryInput) =>
-  request.post(`/api/timetable/tables/${tableId}/entries`, payload)
+export const createEntry = (tableId: number, payload: EntryInput, week?: string) =>
+  request.post(`/api/timetable/tables/${tableId}/entries${week ? `?week=${encodeURIComponent(week)}` : ''}`, payload)
 
 export const updateEntry = (id: number, payload: Partial<EntryInput>) =>
   request.patch(`/api/timetable/entries/${id}`, payload)
@@ -87,6 +89,8 @@ export const deleteEntry = (id: number) => request.delete(`/api/timetable/entrie
 
 export interface TimetableShare {
   id: number
+  timetable_id?: number
+  table_name?: string
   user_id: number
   username: string
   permission: 'read' | 'write'
@@ -104,3 +108,8 @@ export const updateTimetableShare = (shareId: number, permission: 'read' | 'writ
 
 export const removeTimetableShare = (shareId: number) =>
   request.delete(`/api/timetable/shares/${shareId}`)
+
+export const getAllTimetableShares = () => request.get('/api/timetable/shares')
+
+export const batchShareTimetables = (timetableIds: number[], username: string, permission: 'read' | 'write') =>
+  request.post('/api/timetable/shares/batch', { timetable_ids: timetableIds, username, permission })

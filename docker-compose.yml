@@ -1,6 +1,6 @@
 services:
   workordernote:
-    image: ghcr.io/magicindex/workordernote:0.43.5
+    image: ghcr.io/magicindex/workordernote:0.43.6
     container_name: workordernote
     ports:
       - "8906:8906"
