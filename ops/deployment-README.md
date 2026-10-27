@@ -253,6 +253,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 200 生产：升级前应用内备份 `workordernote-backup-20261028-003653.tar.gz`（522,501 B），compose 备份 `docker-compose.yml.bak-pre0437-20261028-0040`；上传镜像并 `docker load`，00:39:45 通过 Compose 重建，healthy。清理历史自检软删除后垃圾箱剩 107 条。
 - 演示 8920：00:40:20 重建，`0.43.7 / 8d1cb14`。
 - 生产定向：201 `verify-131` 60/60、`verify-134` 33/33、`verify-137` 12/12（首跑一次建表竞态，重跑通过）、`verify-138` 11/11、`verify-107` 43/43、`verify-128` 31/31、`verify-133` 12/12（202 项）；200 `verify-131` 60/60、`verify-134` 33/33、`verify-137` 12/12、`verify-138` 11/11、`verify-107` 43/43（159 项）。
+- 回归后再次清理测试课程备注 19 条（201/200 各 19）与新建的测试垃圾箱项；随手记事本回到 10 条真实记事，垃圾箱 201/200 分别为 204/107 条。
 
 **构件**
 - 离线整包 `pkg/WorkOrderNote-0.43.7-offline-amd64.tar.gz`（46,343,222 B，sha256 `45dc91b61f7070f310a223d885ee3536ba5f356e2c1accf2d4d5701e3a8380b3`）。
