@@ -31,7 +31,7 @@ func callQuery(t *testing.T, handler gin.HandlerFunc, method, body, query string
 	return recorder.Code, parsed
 }
 
-func TestWeekSnapshotsIndependentAndPastReadOnly(t *testing.T) {
+func TestWeekParamsNoLongerSwitchWeeks(t *testing.T) {
 	db := newTestDB(t)
 	_, created := call(t, handleCreateTable(db), http.MethodPost, `{"name":"哥哥"}`, 7, nil)
 	tableID := dataID(t, created)
@@ -41,52 +41,35 @@ func TestWeekSnapshotsIndependentAndPastReadOnly(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("本周建课失败：%d %v", status, entry)
 	}
-	entryID := dataID(t, entry)
 
 	next := weekStartOf(time.Now().AddDate(0, 0, 7))
 	status, nextDetail := callQuery(t, handleGetTable(db), http.MethodGet, "", "week="+next, 7, params{"id": tableID})
 	if status != http.StatusOK {
-		t.Fatalf("读下一周失败：%d %v", status, nextDetail)
+		t.Fatalf("带 week 读表失败：%d %v", status, nextDetail)
 	}
 	data := nextDetail["data"].(map[string]interface{})
-	rows := data["entries"].([]interface{})
-	if len(rows) != 1 {
-		t.Fatalf("下一周应继承 1 条，实际 %d", len(rows))
+	if data["week_start"] != CurrentWeekStart() || len(data["entries"].([]interface{})) != 1 {
+		t.Errorf("week 参数应被忽略、只返回本周：%v", data)
 	}
-	if data["week_start"] != next || data["past"] != false {
-		t.Errorf("下周元信息不对：%v", data)
-	}
-	nextID := uint(rows[0].(map[string]interface{})["id"].(float64))
-	if nextID == 0 {
-		t.Fatal("下一周条目没有 id")
+	var weekRows int64
+	db.Model(&TimetableWeek{}).Where("timetable_id = ? AND week_start = ?", tableID, next).Count(&weekRows)
+	if weekRows != 0 {
+		t.Errorf("不应再创建未来周快照，实际 %d 行", weekRows)
 	}
 
-	// 改下一周不影响本周。
-	status, _ = call(t, handleUpdateEntry(db), http.MethodPatch, `{"title":"高数"}`, 7, params{"id": uintString(nextID)})
+	past := weekStartOf(time.Now().AddDate(0, 0, -7))
+	status, pastEntry := callQuery(t, handleCreateEntry(db), http.MethodPost, `{"title":"历史补录","kind":"course","weekday":2,"start_time":"09:00","end_time":"09:45"}`, "week="+past, 7, params{"id": tableID})
 	if status != http.StatusOK {
-		t.Fatalf("改下周课程失败：%d", status)
+		t.Fatalf("旧 week 参数不应阻止建课：%d %v", status, pastEntry)
 	}
-	_, currentDetail := call(t, handleGetTable(db), http.MethodGet, "", 7, params{"id": tableID})
-	currentRows := currentDetail["data"].(map[string]interface{})["entries"].([]interface{})
-	if got := currentRows[0].(map[string]interface{})["title"]; got != "数学" {
-		t.Errorf("本周课程被下周编辑影响：%v", got)
+	id := dataID(t, pastEntry)
+	var got TimetableEntry
+	if err := db.First(&got, id).Error; err != nil {
+		t.Fatal(err)
 	}
-
-	// 更早一周没有快照，保持空白且只读。
-	past := weekStartOf(time.Now().AddDate(0, 0, -21))
-	status, pastDetail := callQuery(t, handleGetTable(db), http.MethodGet, "", "week="+past, 7, params{"id": tableID})
-	if status != http.StatusOK {
-		t.Fatalf("读历史周失败：%d", status)
+	if got.WeekStart != CurrentWeekStart() {
+		t.Errorf("新条目应归入本周，实际 %q", got.WeekStart)
 	}
-	pdata := pastDetail["data"].(map[string]interface{})
-	if pdata["past"] != true || len(pdata["entries"].([]interface{})) != 0 {
-		t.Errorf("历史周应为空且只读：%v", pdata)
-	}
-	status, _ = callQuery(t, handleCreateEntry(db), http.MethodPost, entryBody, "week="+past, 7, params{"id": tableID})
-	if status != http.StatusForbidden {
-		t.Errorf("历史周建课应 403，实际 %d", status)
-	}
-	_ = entryID
 }
 
 func TestLegacyEntriesMoveToCurrentWeek(t *testing.T) {
@@ -159,3 +142,132 @@ func TestBatchShareManyTables(t *testing.T) {
 
 func mustFloat(v interface{}) float64 { f, _ := v.(float64); return f }
 func uintString(v uint) string        { return fmt.Sprintf("%d", v) }
+
+func TestCarriedEntryUIDIsDeterministic(t *testing.T) {
+	a := carriedEntryUID("base-uid", "2026-11-02")
+	b := carriedEntryUID("base-uid", "2026-11-02")
+	c := carriedEntryUID("other-uid", "2026-11-02")
+	if len(a) != 40 || a != b || a == c {
+		t.Fatalf("跨设备复制 UID 应稳定且可区分：%q %q %q", a, b, c)
+	}
+}
+
+func TestWeekCarryForwardCopiesLatestPrevious(t *testing.T) {
+	db := newTestDB(t)
+	table := Timetable{UserID: 1, Name: "测试课表", PeriodCount: 4}
+	if err := db.Create(&table).Error; err != nil {
+		t.Fatal(err)
+	}
+	current := CurrentWeekStart()
+	if err := ensureWeek(db, table, current); err != nil {
+		t.Fatal(err)
+	}
+	entry := TimetableEntry{
+		UserID: 1, TimetableID: table.ID, Title: "数学", Kind: KindCourse,
+		Weekday: 1, StartTime: "08:00", EndTime: "08:45", WeekStart: current,
+	}
+	if err := db.Create(&entry).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	next := weekStartOf(time.Now().AddDate(0, 0, 7))
+	if err := ensureWeek(db, table, next); err != nil {
+		t.Fatal(err)
+	}
+	var copied []TimetableEntry
+	if err := db.Where("timetable_id = ? AND week_start = ?", table.ID, next).Find(&copied).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(copied) != 1 || copied[0].Title != "数学" || copied[0].SyncUID == entry.SyncUID {
+		t.Fatalf("下周应复制本周课程并生成新 UID，实际 %+v", copied)
+	}
+
+	// 同一周重复调用不能复制第二份。
+	if err := ensureWeek(db, table, next); err != nil {
+		t.Fatal(err)
+	}
+	var n int64
+	db.Model(&TimetableEntry{}).Where("timetable_id = ? AND week_start = ?", table.ID, next).Count(&n)
+	if n != 1 {
+		t.Fatalf("同一周应只有一份课程，实际 %d", n)
+	}
+
+	// 修改本周（即下周）后，再下一周沿用最新修改。
+	if err := db.Model(&TimetableEntry{}).Where("id = ?", copied[0].ID).Update("title", "数学改").Error; err != nil {
+		t.Fatal(err)
+	}
+	after := weekStartOf(time.Now().AddDate(0, 0, 14))
+	if err := ensureWeek(db, table, after); err != nil {
+		t.Fatal(err)
+	}
+	var third []TimetableEntry
+	if err := db.Where("timetable_id = ? AND week_start = ?", table.ID, after).Find(&third).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(third) != 1 || third[0].Title != "数学改" {
+		t.Fatalf("再下周应沿用最新修改，实际 %+v", third)
+	}
+}
+
+func TestStaleEmptyFutureWeekRowsDoNotBlockCarryForward(t *testing.T) {
+	db := newTestDB(t)
+	table := Timetable{UserID: 1, Name: "旧快照", PeriodCount: 4}
+	if err := db.Create(&table).Error; err != nil {
+		t.Fatal(err)
+	}
+	current := CurrentWeekStart()
+	next := weekStartOf(time.Now().AddDate(0, 0, 7))
+	if err := db.Create(&TimetableWeek{TimetableID: table.ID, WeekStart: next}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&TimetableEntry{UserID: 1, TimetableID: table.ID, Title: "语文", Kind: KindCourse,
+		Weekday: 1, StartTime: "08:00", EndTime: "08:45", WeekStart: current}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ensureWeek(db, table, current); err != nil {
+		t.Fatal(err)
+	}
+	var stale int64
+	db.Model(&TimetableWeek{}).Where("timetable_id = ? AND week_start = ?", table.ID, next).Count(&stale)
+	if stale != 0 {
+		t.Fatalf("空的未来周记录应被清理，实际 %d 行", stale)
+	}
+	if err := ensureWeek(db, table, next); err != nil {
+		t.Fatal(err)
+	}
+	var copied int64
+	db.Model(&TimetableEntry{}).Where("timetable_id = ? AND week_start = ? AND deleted_at IS NULL", table.ID, next).Count(&copied)
+	if copied != 1 {
+		t.Fatalf("清理后下周应能自动沿用，实际 %d 条", copied)
+	}
+}
+
+func TestWeekCarryForwardSkipsDeletedEntries(t *testing.T) {
+	db := newTestDB(t)
+	table := Timetable{UserID: 1, Name: "删除不沿用", PeriodCount: 4}
+	if err := db.Create(&table).Error; err != nil {
+		t.Fatal(err)
+	}
+	current := CurrentWeekStart()
+	if err := ensureWeek(db, table, current); err != nil {
+		t.Fatal(err)
+	}
+	entry := TimetableEntry{UserID: 1, TimetableID: table.ID, Title: "已删课", Kind: KindCourse,
+		Weekday: 1, StartTime: "08:00", EndTime: "08:45", WeekStart: current}
+	if err := db.Create(&entry).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Delete(&entry).Error; err != nil {
+		t.Fatal(err)
+	}
+	next := weekStartOf(time.Now().AddDate(0, 0, 7))
+	if err := ensureWeek(db, table, next); err != nil {
+		t.Fatal(err)
+	}
+	var n int64
+	db.Model(&TimetableEntry{}).Where("timetable_id = ? AND week_start = ?", table.ID, next).Count(&n)
+	if n != 0 {
+		t.Fatalf("已删除的课程不应被下周沿用，实际 %d 条", n)
+	}
+}

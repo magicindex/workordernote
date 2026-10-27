@@ -64,6 +64,8 @@ export interface ReminderItem {
   notes: string
   /** 仪式感卡片底部自定义文案（空＝自动显示次数） */
   bottom_text?: string
+  /** 仪式感卡片图标 key（空＝按标题自动选） */
+  icon?: string
   kind: ReminderKind
   priority: number
   due_at: string | null
@@ -96,6 +98,22 @@ export interface ReminderItem {
   updated_at: string
 }
 
+// 垃圾箱：所有被软删除的提醒都集中在这里，可恢复回原清单。
+export interface TrashItem {
+  id: number
+  title: string
+  notes?: string
+  kind: string
+  list_id: number
+  list_name: string
+  due_at?: string
+  completed_at?: string
+  deleted_at: string
+}
+
+export const getTrash = () => request.get('/api/reminder/trash')
+export const restoreTrash = (id: number) => request.post(`/api/reminder/trash/${id}/restore`)
+
 export interface SaveReminderInput {
   title: string
   notes?: string
@@ -124,6 +142,8 @@ export interface SaveReminderInput {
   bg_alpha?: number
   /** 仪式感卡片底部自定义文案；传空串恢复自动次数文案 */
   bottom_text?: string
+  /** 仪式感卡片图标 key；传空串恢复按标题自动选 */
+  icon?: string
   version?: number
 }
 

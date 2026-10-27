@@ -553,7 +553,7 @@
                 :style="item.kind === 'note' ? { color: listColor(item.list_color) } : undefined"
                 @click.stop="toggleComplete(item)"
               >
-                <ListIcon v-if="item.kind === 'note'" :name="iconOfItem(item)" :size="19" />
+                <ListIcon v-if="item.kind === 'note'" :name="iconOfItem(item)" :size="19" :data-course-note-icon="isCourseNote(item) ? 'timetable' : undefined" />
                 <svg v-else-if="item.completed_at" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </button>
               <button class="min-w-0 flex-1 text-left" @click="editItem(item)">
@@ -1807,7 +1807,7 @@ const listIcons = computed<Record<number, string>>(() => {
   for (const l of lists.value) map[l.id] = l.icon || 'list'
   return map
 })
-function iconOfItem(item: ReminderItem) { return listIcons.value[item.list_id] || 'list' }
+function iconOfItem(item: ReminderItem) { return isCourseNote(item) ? 'timetable' : (listIcons.value[item.list_id] || 'list') }
 
 // 快速新建里那个清单下拉当前选中项的色名（色点跟清单同色）
 const quickListColor = computed(() => navLists.value.find((l) => l.id === quick.list_id)?.color || 'blue')

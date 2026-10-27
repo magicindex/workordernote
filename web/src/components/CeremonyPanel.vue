@@ -74,7 +74,15 @@
         <!-- 图标挪到内容**左侧**并放大 2 倍（用户 2026-10-12：「图标放内容左侧放大2倍」）；
              名称 / 时间 / 循环 / 次数等一并放大。整组（图标 + 文字）在卡片里居中。 -->
         <div class="ceremony-body">
-          <span class="ceremony-icon"><ListIcon :name="entry.icon" :size="44" /></span>
+          <button
+            type="button"
+            class="ceremony-icon"
+            :title="`更换图标：${ceremonyIconLabel(entry.icon)}`"
+            :aria-label="`更换图标：${ceremonyIconLabel(entry.icon)}`"
+            data-ceremony-icon
+            :data-ceremony-icon-key="entry.icon"
+            @click.stop="edit(entry)"
+          ><ListIcon :name="entry.icon" :size="88" /></button>
           <div class="min-w-0 text-left">
             <h3 class="ceremony-title" :data-ceremony-title="entry.id">{{ entry.title }}</h3>
             <p class="ceremony-date">
@@ -194,6 +202,15 @@
         <label class="field-label">卡片底部文字
           <input v-model="form.bottomText" class="compact-input mt-1" maxlength="120" data-ceremony-form-bottom placeholder="留空自动显示「与你共度第 N 次…」" />
         </label>
+        <div class="field-label">卡片图标
+          <button type="button" class="ceremony-icon-choice" data-ceremony-form-icon @click="iconPickerOpen = true">
+            <span class="ceremony-icon-choice-glyph">
+              <ListIcon :name="form.icon || autoCeremonyIcon(form.title)" :size="26" />
+            </span>
+            <span class="text-[12px] font-semibold">{{ ceremonyIconLabel(form.icon || autoCeremonyIcon(form.title)) }}</span>
+            <span class="ml-auto text-[11px] font-semibold text-brand-600 dark:text-brand-300">更换</span>
+          </button>
+        </div>
         <!-- 卡片配色（用户 2026-10-11 要求：多种过渡色、可自行选择）。
              2026-10-13 起这一档颜色**同时**决定整张卡面与倒计时的底色（原来是两块色），
              所以不再有「单独设卡片颜色」这回事。 -->
@@ -345,6 +362,29 @@
         <button class="btn-primary !h-9 !px-4 !text-xs" :disabled="saving || !form.title.trim() || !form.dueAt" data-ceremony-form-save @click="save">保存</button>
       </div>
     </Modal>
+    <Modal v-model="iconPickerOpen" title="选择卡片图标" size="lg">
+      <p class="mb-3 text-[12px] font-medium text-muted-foreground">常用节假日、纪念日与日常图标；点一下即换，保存后生效。</p>
+      <div v-for="group in CEREMONY_ICON_GROUPS" :key="group.label" class="mb-4 last:mb-0">
+        <p class="mb-1.5 text-[11px] font-bold tracking-[0.12em] text-muted-foreground">{{ group.label }}</p>
+        <div class="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+          <button
+            v-for="key in group.keys"
+            :key="key"
+            type="button"
+            class="ceremony-icon-option"
+            :class="{ selected: (form.icon || autoCeremonyIcon(form.title)) === key }"
+            :data-ceremony-icon-option="key"
+            @click="chooseIcon(key)"
+          >
+            <ListIcon :name="key" :size="22" />
+            <span>{{ ceremonyIconLabel(key) }}</span>
+          </button>
+        </div>
+      </div>
+      <div class="mt-2 flex justify-end">
+        <button type="button" class="btn-secondary !h-8 !px-3 !text-[11px]" data-ceremony-icon-auto @click="chooseIcon('')">恢复自动</button>
+      </div>
+    </Modal>
 
     <ConfirmDialog
       :model-value="!!removeTarget"
@@ -361,13 +401,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import Modal from './Modal.vue'
-import { CARD_ACCENTS, LIGHT_ACCENTS, accentSheen, accentSurface, heroInk, softInk, type CardAccent } from '../utils/card-accents'
+import { CARD_ACCENTS, LIGHT_ACCENTS, accentSurface, heroInk, softInk, type CardAccent } from '../utils/card-accents'
 import { CEREMONY_BACKGROUNDS, backgroundImageUrl } from '../utils/ceremony-backgrounds'
 import ConfirmDialog from './ConfirmDialog.vue'
 import ListIcon from './ListIcon.vue'
 import LunarDatePicker from './LunarDatePicker.vue'
 import { createReminder, deleteReminder, updateReminder, convertLunarDate, getReminders, uploadImage, type ReminderItem, type SaveReminderInput } from '../api/reminder'
 import { formatLunarDate } from '../utils/lunar'
+import { CEREMONY_ICON_GROUPS, autoCeremonyIcon, ceremonyIconLabel } from '../utils/ceremony-icons'
 
 const props = defineProps<{ list: { id: number; name: string } }>()
 const emit = defineEmits<{ (e: 'changed'): void; (e: 'toast', message: string, type?: 'success' | 'error'): void }>()
@@ -376,6 +417,7 @@ const items = ref<ReminderItem[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const presetOpen = ref(false)
+const iconPickerOpen = ref(false)
 const createOpen = ref(false)
 const dateOpen = ref(false)
 const dateAnchor = ref<HTMLElement | null>(null)
@@ -392,12 +434,18 @@ const form = reactive({
   bgBlur: 0, bgMask: 45, // 背景蒙板：虚化像素 / 蒙板透明度百分比（见 server/reminder/models.go）
   bgAlpha: 100, // 整卡背景透明度：100 = 不透明，0 = 只剩文字
   bottomText: '', // 卡片底部自定义文案；空 = 自动次数文案
+  icon: '', // 卡片图标 key；空 = 按标题自动选
   // 日期这一栏的标题：生日模板写「第一次生日时间」、结婚纪念日/金婚写「结婚日期」、
   // 情人节/七夕写「第一次情人节 / 第一次七夕」，其余（含「新建事项」）还是「日期」
   // ——用户 2026-10-13：「选择生日模板日期模板改成 出生年月日会不会更好理解」，
   // 2026-10-15 又把这几个标题统一成「第一次…」/「结婚日期」。
   dateField: '日期',
 })
+function chooseIcon(key: string) {
+  form.icon = key
+  iconPickerOpen.value = false
+}
+
 const uploadingBackground = ref(false)
 // 图片加载失败的卡片（对端没有这个上传文件时）：这张卡回落到配色渐变，不显示破图
 const failedImages = ref<Set<number>>(new Set())
@@ -420,35 +468,17 @@ function cardInk(entry: { accent?: string; id: number; background?: string; bgAl
 }
 
 function heroStyle(entry: { accent?: string; id: number; background?: string; bgAlpha?: number }) {
-  // 倒计时**不再有自己的卡片效果**（用户 2026-10-13：「倒计时不增加卡片效果，直接显示在
-  // 大卡片中」）：这里只给字色与流光要用的变量，不再画独立底色/描边。
-  //   --ceremony-ink 数字的基色（也是流光渐变的两端；对比度用例读它 —— 数字本身是
-  //                  background-clip:text + 透明色，量不到 color）
-  //   --ceremony-flow-1/2/3 彩色流光的三段颜色（用户 2026-10-13：「使用彩色流光」）：
-  //                  深色卡面用**亮**的靛蓝/紫/青（一眼能看清），浅色卡面（琥珀/鎏金）
-  //                  用**深**的同色系（否则亮青亮紫压在浅金上会糊成一片）。
-  //                  与登录页/日历「月·周」那套 .flow-text 是同一个视觉语言。
+  // 倒计时不再有独立底色/描边/流光：高级感交给大号字重、收紧的字距和一层柔和落影。
   const ink = cardInk(entry)
   const white = ink === '#ffffff'
-  // 流光的三种颜色改成**贴着卡面同色系**的柔光（用户 2026-10-18：「卡片不美观」）：
-  // 原来固定用靛蓝/紫/青，压在红卡面上像贴纸；现在玫红卡面扫的是白→浅玫→粉，
-  // 天蓝卡面扫的是白→浅天蓝→天蓝，整体还是一套色，数字仍然是「会流动的亮字」。
-  const [s1, s2, s3] = accentSheen(entry.accent, entry.id)
   return {
     color: ink,
     '--ceremony-ink': ink,
-    '--ceremony-flow-1': s1,
-    '--ceremony-flow-2': s2,
-    '--ceremony-flow-3': s3,
-    // 数字描边（两层，用户 2026-10-13）：
-    //   --ceremony-stroke = **外圈**（深色卡面白边、浅色卡面同族深边）；
-    //   --ceremony-edge   = **内圈**，贴在渐变字边缘、比外圈细 —— 用户要求
-    //   「白色边内侧加黑边衬托数字更清晰」：深色卡面白边里再压一道黑边，
-    //   浅色卡面深边里压一道白边，数字在两种卡面上都立得住。
-    '--ceremony-stroke': white ? 'rgba(255, 255, 255, .92)' : 'rgba(15, 23, 42, .28)',
-    '--ceremony-edge': white ? 'rgba(2, 6, 23, .62)' : 'rgba(255, 255, 255, .9)',
     // 倒计时与信息之间的分隔线：跟字色同色系的一条半透明细线
     '--ceremony-divider': white ? 'rgba(255, 255, 255, .30)' : 'rgba(15, 23, 42, .20)',
+    '--ceremony-num-shadow': white
+      ? '0 1px 0 rgba(255,255,255,.18), 0 18px 40px rgba(0,0,0,.42)'
+      : '0 1px 0 rgba(255,255,255,.55), 0 8px 20px rgba(15,23,42,.14)',
   }
 }
 /**
@@ -503,6 +533,10 @@ function cardStyle(entry: { accent?: string; id: number; background?: string; bg
     '--ceremony-chip': ink === '#ffffff' ? 'rgba(255,255,255,.18)' : 'rgba(15,23,42,.10)',
     '--ceremony-badge-bg': ink === '#ffffff' ? 'rgba(255,255,255,.16)' : 'rgba(15,23,42,.08)',
     '--ceremony-badge-border': ink === '#ffffff' ? 'rgba(255,255,255,.22)' : 'rgba(15,23,42,.12)',
+    '--ceremony-line': ink === '#ffffff' ? 'rgba(255,255,255,.14)' : 'rgba(15,23,42,.10)',
+    '--ceremony-line-hover': ink === '#ffffff' ? 'rgba(255,255,255,.28)' : 'rgba(15,23,42,.18)',
+    '--ceremony-top-light': ink === '#ffffff' ? 'rgba(255,255,255,.26)' : 'rgba(255,255,255,.72)',
+    '--ceremony-metal': ink === '#ffffff' ? 'rgba(255,255,255,.44)' : 'rgba(15,23,42,.20)',
   }
 }
 
@@ -655,7 +689,7 @@ const cards = computed(() => items.value
       : anniversaryLabel(item.title, progress.passed, days === 0)
     return {
       ...item,
-      icon: item.kind === 'note' ? 'notebook' : (item.repeat_rule === 'yearly' && /生日|纪念/.test(item.title) ? 'cake' : 'ceremony'),
+      icon: item.icon || (item.kind === 'note' ? 'notebook' : autoCeremonyIcon(item.title)),
       annual: !!annual,
       passLabel,
       days: days ?? 9999,
@@ -715,7 +749,7 @@ function resetForm(overrides: Partial<typeof form> = {}) {
   milestoneYears.value = 0
   Object.assign(form, {
     title: '', dueAt: '', repeat: 'yearly', calendar: 'solar',
-    accent: '', background: '', bgBlur: 0, bgMask: 45, bottomText: '', dateField: '日期',
+    accent: '', background: '', bgBlur: 0, bgMask: 45, bottomText: '', icon: '', dateField: '日期',
     ...overrides,
   })
 }
@@ -751,6 +785,7 @@ function edit(entry: ReminderItem) {
     bgMask: entry.bg_mask ?? 45,
     bgAlpha: entry.bg_alpha ?? 100,
     bottomText: entry.bottom_text || '',
+    icon: entry.icon || '',
     dateField: dateFieldForTitle(entry.title),
   })
   createOpen.value = true
@@ -797,6 +832,7 @@ async function save() {
       bg_mask: form.bgMask,
       bg_alpha: form.bgAlpha,
       bottom_text: form.bottomText.trim(),
+      icon: form.icon,
       channels: ['inapp'],
     }
     // 婚庆里程碑模板（银婚 25 / 金婚 50 / 钻石婚 60、75）：用户填的是**结婚日期**，
@@ -913,6 +949,7 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
       calendar: preset.lunar ? 'lunar' : 'solar',
       // 「第一次生日时间」/「结婚日期」/「第一次情人节」比干巴巴一个「日期」好懂
       dateField: preset.dateField || '日期',
+      icon: autoCeremonyIcon(preset.title),
     })
     milestoneYears.value = preset.milestone || 0
     presetOpen.value = false
@@ -937,6 +974,7 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
       calendar: preset.lunar ? 'lunar' : 'solar',
       // 模板建出来的卡片不继承任何「上一张」的状态
       accent: '', background: '', bg_blur: 0, bg_mask: 45,
+      icon: autoCeremonyIcon(preset.title),
       channels: ['inapp'],
     })
     presetOpen.value = false
@@ -958,84 +996,117 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 /* 底色由 cardStyle() 内联给（浅色随机 / 同色系浅淡版），这里只保证圆角、内边距与居中；
    不加 bg-* 类，免得把内联的渐变盖掉。深色主题下这些浅色只是很淡的一层，不刺眼。 */
 .ceremony-card {
-  @apply relative flex min-h-[11rem] flex-col items-stretch overflow-hidden rounded-[22px] p-5 text-center;
-  /* 卡面本身的三层渐变由 cardStyle() 内联；这里只补两样东西：
-     · 顶部一道 1px 内高光 + 一层贴地的投影，卡片像一张有厚度的纸；
-     · hover 时轻轻抬起，鼠标扫过能感觉到它是「一张卡」。 */
+  @apply relative flex min-h-[12.5rem] flex-col items-stretch overflow-hidden rounded-[26px] p-5 text-center;
+  border: 1px solid var(--ceremony-line, rgba(255, 255, 255, .12));
+  background: rgba(8, 11, 18, .16);
+  backdrop-filter: blur(22px) saturate(125%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .24),
-    0 2px 6px rgba(15, 23, 42, .16),
-    0 18px 40px -18px rgba(15, 23, 42, .55);
-  transition: box-shadow .25s ease, transform .25s ease;
+    inset 0 1px 0 var(--ceremony-top-light, rgba(255, 255, 255, .18)),
+    inset 0 -34px 60px -46px rgba(0, 0, 0, .62),
+    0 1px 2px rgba(2, 6, 23, .28),
+    0 28px 52px -28px rgba(2, 6, 23, .72);
+  transition: box-shadow .3s ease, transform .3s ease, border-color .3s ease;
 }
 .ceremony-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  border-color: var(--ceremony-line-hover, rgba(255, 255, 255, .22));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .3),
-    0 4px 10px rgba(15, 23, 42, .2),
-    0 30px 56px -20px rgba(15, 23, 42, .62);
+    inset 0 1px 0 var(--ceremony-top-light, rgba(255, 255, 255, .24)),
+    inset 0 -34px 60px -46px rgba(0, 0, 0, .62),
+    0 4px 12px rgba(2, 6, 23, .28),
+    0 36px 64px -30px rgba(2, 6, 23, .78);
 }
-/* 「渐变色蒙版」：一层很细的斜纹，被右上角的径向渐变吃掉边缘 ——
-   卡面因此有了纸面/绸面的质感，而不是一整块纯色。
-   用户自己传了背景图时关掉（那层质感交给图片和它的蒙板）。 */
+/* 水晶卡的关键不是「亮」，而是**一层很薄的反光**：左上角一片柔光，
+   斜向一道几乎看不见的掠光。低透明度，压在高光/暗角之上，像玻璃而不是塑料。 */
 .ceremony-card::before {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: repeating-linear-gradient(118deg, rgba(255, 255, 255, .06) 0 1px, transparent 1px 12px);
-  -webkit-mask-image: radial-gradient(125% 95% at 82% -6%, #000 0%, rgba(0, 0, 0, .55) 38%, transparent 68%);
-  mask-image: radial-gradient(125% 95% at 82% -6%, #000 0%, rgba(0, 0, 0, .55) 38%, transparent 68%);
-  opacity: .5;
+  background:
+    radial-gradient(120% 82% at 18% -18%, rgba(255, 255, 255, .22) 0%, rgba(255, 255, 255, 0) 56%),
+    linear-gradient(116deg, transparent 30%, rgba(255, 255, 255, .055) 46%, transparent 60%);
+  opacity: .9;
 }
-.ceremony-card.has-image::before { content: none; }
-/* 图标：从 36px 方框 / 22px 图标放大 2 倍 → 64px 方框 / 44px 图标（用户 2026-10-12） */
+/* 黑卡的「金属边」：顶部一条极细的渐隐高光，两端收掉。 */
+.ceremony-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 26px;
+  right: 26px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--ceremony-metal, rgba(255, 255, 255, .38)), transparent);
+  opacity: .7;
+}
+.ceremony-card.has-image::before { opacity: .38; }
+/* 图标：从 56px 方框放大 2 倍 → 112px 方框 / 88px 图标；整块可点，点开就是编辑。
+   用户 2026-10-27：「卡片左下侧图标放大2倍，点击图标可以修改」。 */
 .ceremony-icon {
-  @apply flex h-16 w-16 shrink-0 items-center justify-center rounded-[20px];
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14);
+  @apply flex h-28 w-28 shrink-0 cursor-pointer items-center justify-center rounded-[26px];
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    inset 0 0 0 1px var(--ceremony-line, rgba(255, 255, 255, .14)),
+    0 14px 28px -16px rgba(2, 6, 23, .7);
+  transition: transform .18s ease, box-shadow .18s ease;
 }
+.ceremony-icon:hover,
+.ceremony-icon:focus-visible {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .28),
+    inset 0 0 0 1px var(--ceremony-line-hover, rgba(255, 255, 255, .28)),
+    0 18px 34px -16px rgba(2, 6, 23, .8);
+}
+.ceremony-icon:focus-visible { outline: 2px solid var(--ceremony-line-hover, rgba(255,255,255,.6)); outline-offset: 2px; }
 /* 内容整组（图标 + 文字）在卡片里居中，文字内部左对齐 */
 .ceremony-body { @apply flex items-center justify-center gap-3.5; }
+/* 标题与日期拉开层级：标题像名片上的姓名，日期像名片上的小字。 */
 /* 编辑/删除挪到卡片右上角：内容不再被一排按钮压住，卡面更干净；
    手机上常显，桌面上半隐，指到卡片才完全亮起来。 */
-.ceremony-actions { @apply flex items-center gap-0.5 opacity-70 transition-opacity; }
+.ceremony-actions { @apply flex items-center gap-1 opacity-60 transition-opacity; }
+.ceremony-actions .row-action { @apply rounded-full p-1; background: var(--ceremony-chip, rgba(255,255,255,.10)); border: 1px solid var(--ceremony-line, rgba(255,255,255,.12)); }
 /* 注意：下面那条「卡片所有子元素 position: relative」的规则选择器更长，
    会把这里的 absolute 盖掉，所以定位要写一条更具体的选择器。 */
-.ceremony-card > .ceremony-actions { position: absolute; top: .75rem; right: .75rem; }
+.ceremony-card > .ceremony-actions { position: absolute; top: .7rem; right: .7rem; }
 .ceremony-card:hover .ceremony-actions, .ceremony-card:focus-within .ceremony-actions { @apply opacity-100; }
 @media (hover: none) { .ceremony-actions { @apply opacity-100; } }
 /* 名称 / 时间 / 次数都放大（用户 2026-10-12：「所有内容均放大」） */
-.ceremony-title { @apply truncate text-[19px] font-extrabold leading-6 tracking-tight; }
-.ceremony-date { @apply mt-1 space-y-1 text-[13.5px] font-semibold leading-5 text-muted-foreground; }
+.ceremony-title { @apply truncate text-[20px] font-semibold leading-6 tracking-[-0.01em]; }
+.ceremony-date { @apply mt-1.5 space-y-1 text-[13px] font-medium leading-5 text-muted-foreground; }
 /* 年与月日分开：年始终不加底色；只有创建时选中的那种日历，给「月日 + 每年」套彩色药丸。
    未选中的日期整行透明，没有边框（用户 2026-10-26 要求）。 */
 .ceremony-date-line { @apply flex flex-wrap items-baseline gap-1.5; }
-.ceremony-date-year { @apply opacity-75; }
+.ceremony-date-year { @apply opacity-60; }
 .ceremony-date-md { @apply inline-flex items-center gap-1; }
 .ceremony-date-chip {
-  @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5;
+  @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-semibold tracking-[0.01em];
 }
 .ceremony-date-chip-solar { background: rgba(59, 130, 246, .24); border-color: rgba(96, 165, 250, .45); }
 .ceremony-date-chip-lunar { background: rgba(245, 158, 11, .24); border-color: rgba(251, 191, 36, .48); }
 /* 选中/创建时用的那种日历用高饱和实色，保证在深浅、彩色卡面上都一眼能认出来。 */
 .ceremony-date-chip-solar.is-primary {
-  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
-  border-color: #93c5fd;
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 55%, #60a5fa 100%);
+  border-color: rgba(191, 219, 254, .72);
   color: #fff;
-  text-shadow: 0 1px 2px rgba(15, 23, 42, .28);
+  text-shadow: 0 1px 2px rgba(15, 23, 42, .32);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 6px 14px -9px rgba(37, 99, 235, .65);
 }
 .ceremony-date-chip-lunar.is-primary {
-  background: linear-gradient(135deg, #d97706, #fbbf24);
-  border-color: #fde68a;
-  color: #3b1d02;
+  background: linear-gradient(135deg, #b45309 0%, #d97706 55%, #fbbf24 100%);
+  border-color: rgba(253, 230, 138, .8);
+  color: #2b1601;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 6px 14px -9px rgba(180, 83, 9, .6);
 }
 .ceremony-extra { @apply mt-1.5 flex flex-wrap items-center gap-1.5 text-[13px] font-semibold text-muted-foreground; }
 /* 卡面上的小徽标（农历 / 每年 / 第 N 次）改成半透明药丸：比裸文字更像标签，
    又不会像实色块那样跳出来抢倒计时的视线。 */
 .ceremony-card .tiny-badge {
-  @apply rounded-full border px-2 py-0.5 text-[11.5px] font-bold;
-  background: var(--ceremony-badge-bg, rgba(255, 255, 255, .16));
-  border-color: var(--ceremony-badge-border, rgba(255, 255, 255, .22));
+  @apply rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-[0.01em];
+  background: var(--ceremony-badge-bg, rgba(255, 255, 255, .10));
+  border-color: var(--ceremony-badge-border, rgba(255, 255, 255, .16));
+  backdrop-filter: blur(8px);
 }
 /* 次级文字与行内按钮一律用卡面配套的柔化字色（整卡都是一套渐变，见 cardStyle） */
 .ceremony-date, .ceremony-extra, .ceremony-actions { color: var(--ceremony-ink-soft, currentColor); }
@@ -1043,81 +1114,30 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 .ceremony-card .row-action { color: var(--ceremony-ink-soft, currentColor); }
 /* 图标底盘：跟着卡面字色走的一层薄底（原来是固定的玫瑰色块，在彩色卡面上很跳） */
 .ceremony-icon { background: var(--ceremony-chip, rgba(255,255,255,.18)); color: inherit; }
-/* 倒计时：大字 + 底色，放在卡片最上面 */
-/* 倒计时直接显示在大卡片里：没有自己的底色、圆角与边框（用户 2026-10-13 要求）。 */
-.ceremony-hero { @apply flex items-baseline justify-center gap-1.5 text-center text-[18px] font-extrabold leading-none; }
-/* 「还有 / 已过」与「天」用小一号的字、稍低的存在感，把视觉重心全部留给数字 */
-.ceremony-lead, .ceremony-unit { @apply text-[15px] font-bold tracking-wide; opacity: .82; }
-.ceremony-unit { letter-spacing: .12em; }
-/* 数字「流光」：渐变字 + 背景位移动画，一道亮光从左到右扫过数字
-   （和登录页/新建窗口的 .flow-frame 是同一套视觉语言）。
-   prefers-reduced-motion 时停住动画、定在中点，只留静态的亮色数字。 */
+/* 倒计时：不再用描边 + 流光动画，改成大号、克制的数字。
+   高级感来自字重、字距与一层柔和的落影，而不是特效。 */
+.ceremony-hero { @apply flex items-baseline justify-center gap-2 text-center leading-none; }
+.ceremony-lead, .ceremony-unit { @apply text-[12px] font-semibold tracking-[0.18em]; opacity: .62; }
+.ceremony-unit { margin-left: .18em; }
 .ceremony-hero b {
-  @apply text-[44px] font-black leading-none tracking-tight sm:text-[52px];
-  /* 彩色流光：靛蓝 → 紫 → 青 三段滚动（两端回到基色，整体色调仍贴着卡面字色） */
-  background-image: linear-gradient(100deg,
-    var(--ceremony-ink, #ffffff) 0%,
-    var(--ceremony-flow-1, #a5b4fc) 22%,
-    var(--ceremony-flow-2, #d8b4fe) 42%,
-    var(--ceremony-flow-3, #67e8f9) 62%,
-    var(--ceremony-flow-1, #a5b4fc) 80%,
-    var(--ceremony-ink, #ffffff) 100%);
-  background-size: 260% 100%;
-  background-position: 50% 0;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  /* 描边：-webkit-text-stroke 画在字形轮廓上，和渐变填充叠在一起 —— 深色卡面上
-     数字就有一圈亮白边（用户 2026-10-13：「背景暗时看不清，增加白边」）。
-     不支持这个属性的内核忽略它即可，不影响渐变字。 */
-  position: relative;
-  /* 内圈描边（用户 2026-10-13「白色边内侧加黑边衬托数字更清晰」）：直接画在
-     <b> 自己身上，压住渐变字的边缘；它比外圈细，所以外圈那张白边会露在它外侧。
-     从外到内 = 白边 → 黑边 → 彩色渐变。 */
-  -webkit-text-stroke: .9px var(--ceremony-edge, rgba(2, 6, 23, .62));
-  filter: drop-shadow(0 3px 10px rgba(2, 6, 23, .22));
-  animation: ceremony-countdown-flow 3.6s linear infinite;
-}
-/* 外圈描边：同一串数字再叠一层放在 <b> 底下，只描边不填色（颜色交给上面的渐变）。
-   宽度比内圈大一档，于是白边只露在黑边外侧那一圈。 */
-.ceremony-hero b::before {
-  content: attr(data-count);
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
+  @apply text-[52px] font-semibold leading-none sm:text-[60px];
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.065em;
+  color: var(--ceremony-ink, #fff);
+  -webkit-text-fill-color: currentColor;
   background: none;
-  -webkit-text-stroke: 1.6px var(--ceremony-stroke, rgba(255, 255, 255, .92));
+  -webkit-text-stroke: 0;
+  text-shadow: var(--ceremony-num-shadow, 0 1px 0 rgba(255, 255, 255, .12), 0 16px 36px rgba(2, 6, 23, .32));
 }
+.ceremony-hero b::before { content: none; }
 @media (max-width: 640px) {
-  .ceremony-hero b { -webkit-text-stroke-width: .95px; }
-  .ceremony-hero b::before { -webkit-text-stroke-width: 1.55px; }
-}
-/* 兜底：老内核不支持 background-clip:text 时字会整个透明、等于看不见 —— 退回静态字色 */
-@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
-  .ceremony-hero b {
-    color: var(--ceremony-ink, inherit);
-    -webkit-text-fill-color: var(--ceremony-ink, inherit);
-    background-image: none;
-    animation: none;
-  }
-  /* 不支持 background-clip:text 的内核上，外层伪元素只剩一圈描边、看着像空心字 */
-  .ceremony-hero b::before { content: none; }
-}
-@keyframes ceremony-countdown-flow {
-  0% { background-position: 130% 0; }
-  100% { background-position: -130% 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ceremony-hero b { animation: none; }
+  .ceremony-hero b { @apply text-[46px]; }
 }
 /* 倒计时与信息之间的横线（用户 2026-10-13）：
    1px、半透明、跟卡面字色同色系；上下留白由这里的 margin 控制，
    信息块自己的 mt-3 让位（见 .ceremony-body）。 */
 .ceremony-divider {
-  @apply my-3.5 block h-px w-full shrink-0 border-0;
+  @apply my-3 block h-px w-full shrink-0 border-0;
   background: var(--ceremony-divider, rgba(255, 255, 255, .3));
   /* 两头淡出：不是一条硬邦邦的横杠，而是一道「呼吸」的分隔 */
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
@@ -1146,5 +1166,10 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 .accent-swatch { @apply flex h-7 w-7 items-center justify-center rounded-full border-2 border-transparent text-[12px] font-black text-white/95 shadow-sm transition hover:scale-105; }
 .accent-swatch.selected { @apply border-foreground/60 ring-2 ring-brand-500/40; }
 .ceremony-preset { @apply flex items-center gap-2.5 rounded-xl border border-border/70 bg-surface px-3 py-2 text-left transition hover:border-brand-500/40 hover:bg-muted/40; }
+.ceremony-icon-choice { @apply mt-1 flex w-full items-center gap-2.5 rounded-xl border border-border/70 bg-surface px-3 py-2 text-left transition hover:border-brand-500/40 hover:bg-muted/40; }
+.ceremony-icon-choice-glyph { @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-300; }
+.ceremony-icon-option { @apply flex flex-col items-center justify-center gap-1 rounded-xl border border-border/70 bg-surface px-2 py-2.5 text-[11px] font-semibold text-muted-foreground transition hover:border-brand-500/40 hover:bg-muted/40 hover:text-foreground; }
+.ceremony-icon-option.selected { @apply border-brand-500/60 bg-brand-500/10 text-brand-600 dark:text-brand-300; }
+
 .field-label { @apply block text-[11px] font-bold text-muted-foreground; }
 </style>

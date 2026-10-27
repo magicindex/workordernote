@@ -107,7 +107,8 @@ func TestCompletedHistoryUnionsReminderAndHistorySources(t *testing.T) {
 		t.Fatalf("summary.completed=%d，列表 %d 条，两者必须一致", got, len(all))
 	}
 
-	// 删掉重复提醒后，它的完成历史仍应保留（靠 title_snapshot）。
+	// 删掉重复提醒后，它的完成历史应从「已完成」移出（进垃圾箱），
+	// 不能留下与清单不一致的幽灵行；恢复后完成历史再回来。
 	if err := deleteReminder(appDB, userID, repeating.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -115,21 +116,36 @@ func TestCompletedHistoryUnionsReminderAndHistorySources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var found *CompletedItemDTO
 	for i := range afterDelete {
 		if afterDelete[i].Title == "每天还款提醒" {
-			found = &afterDelete[i]
+			t.Fatal("提醒删除后完成历史应移出已完成")
 		}
 	}
-	if found == nil {
-		t.Fatal("提醒删除后完成历史不应消失")
-	}
-	if found.ReminderExists {
-		t.Fatal("提醒已删除，ReminderExists 应为 false")
-	}
-	// 提醒删掉后，它的完成历史既不该从列表消失，也不该从角标里掉出去。
 	if got := summaryCompleted(t, userID); got != int64(len(afterDelete)) {
 		t.Fatalf("删除提醒后 summary.completed=%d，列表 %d 条，两者必须一致", got, len(afterDelete))
+	}
+	var trashed Reminder
+	if err := appDB.Unscoped().Where("id = ? AND deleted_at IS NOT NULL", repeating.ID).First(&trashed).Error; err != nil {
+		t.Fatalf("删除提醒应能在垃圾箱口径里找到: %v", err)
+	}
+	if _, err := restoreDeletedReminder(appDB, userID, repeating.ID); err != nil {
+		t.Fatal(err)
+	}
+	afterRestore, err := listCompletedHistory(appDB, userID, CompletedRange{}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for i := range afterRestore {
+		if afterRestore[i].Title == "每天还款提醒" && afterRestore[i].ReminderExists {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("恢复提醒后完成历史应回来")
+	}
+	if got := summaryCompleted(t, userID); got != int64(len(afterRestore)) {
+		t.Fatalf("恢复后 summary.completed=%d，列表 %d 条，两者必须一致", got, len(afterRestore))
 	}
 }
 
