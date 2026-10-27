@@ -261,7 +261,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 截图包 `release/0.43.7/screenshots-0.43.7.zip`（5 张：仪式感卡片、图标库、课程备注、手机课程表、垃圾箱）。
 
 **仓库同步**
-- 待发版提交后补记。
+- Gitea：`main` 与 tag `v0.43.7` 已推送（main `292f94d`）；Releases 页已创建 `工作序记 v0.43.7`（id 49），附离线包、单镜像、fpk 与截图。
+- GitHub：快照仓库提交 `fdf32ce` + tag `v0.43.7`，Actions `release` 成功；Release 已发布源码包、bundle、镜像包、SHA256SUMS、fpk 与截图（历史版本资产保留）；`ghcr.io/magicindex/workordernote:0.43.7` 已发布。
+- Gitea 容器仓库仍受历史 `unexpected EOF` 影响，未推 0.43.7；README 保留 GHCR 备用拉取。
 
 ### 2026-10-27：0.43.6（201 生产 / 201 沙箱 / 200 生产 / 演示 8920 上线）—— 课程表按周留档、批量共享与手机当天视图
 
