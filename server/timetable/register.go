@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	database.RegisterModels(&Timetable{}, &TimetableEntry{}, &TimetableShare{})
+	database.RegisterModels(&Timetable{}, &TimetableEntry{}, &TimetableShare{}, &TimetableWeek{})
 
 	// 默认开（用户 2026-10-26：「系统内置的几个频道 默认全部开启」）：与信用卡、
 	// 记事本、仪式感、提醒@他一致；关掉只隐藏、不删数据。
@@ -36,6 +36,8 @@ func RegisterRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 
 	auth.GET("/timetable/tables/:id/shares", handleListShares(db))
 	auth.POST("/timetable/tables/:id/shares", handleAddShare(db))
+	auth.GET("/timetable/shares", handleListAllShares(db))
+	auth.POST("/timetable/shares/batch", handleBatchShare(db))
 	auth.PATCH("/timetable/shares/:id", handleUpdateShare(db))
 	auth.DELETE("/timetable/shares/:id", handleDeleteShare(db))
 }

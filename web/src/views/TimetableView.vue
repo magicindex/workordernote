@@ -18,10 +18,10 @@
           设置
         </button>
         <button
-          v-if="tables.length && isOwner"
+          v-if="ownTables.length"
           type="button"
           class="btn-secondary !h-9 !px-3 !text-xs"
-          title="把这张表共享给另一个账号（只读或读写）"
+          title="勾选一张或多张课程表，批量共享给同一个账号"
           data-timetable-share
           @click="openShareDialog"
         >
@@ -80,7 +80,7 @@
         <!-- 用户 2026-10-20：「编辑按钮和空节次合并成一个按钮」——
              进编辑态就铺出空节次（有落点、可点可拖），退出就收起。 -->
         <button
-          v-if="canWrite"
+          v-if="canEditWeek"
           type="button"
           class="timetable-edit-toggle"
           :class="editing ? 'is-on' : ''"
@@ -90,6 +90,36 @@
         >
           <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke-width="1.8" stroke-linejoin="round"/></svg>
           {{ editing ? '完成' : '编辑课程表' }}
+        </button>
+      </div>
+
+      <div v-if="tables.length" class="mt-2 flex flex-wrap items-center gap-1.5" data-timetable-weekbar>
+        <button type="button" class="toolbar-btn !h-7 !px-2" data-week-prev title="上一周" @click="shiftWeek(-1)">‹</button>
+        <span class="rounded-full bg-muted px-2.5 py-1 text-[11px] font-bold text-foreground" data-week-label>{{ weekRangeLabel }}</span>
+        <button type="button" class="toolbar-btn !h-7 !px-2" data-week-next title="下一周" @click="shiftWeek(1)">›</button>
+        <button v-if="!isCurrentWeek" type="button" class="toolbar-btn !h-7 !px-2 !text-[11px]" data-week-current @click="goCurrentWeek">回到本周</button>
+        <span v-if="isPastWeek" class="rounded-full bg-amber-500/12 px-2 py-1 text-[11px] font-bold text-amber-600 dark:text-amber-300" data-week-past>历史课程表 · 只读</span>
+        <span v-else-if="!isCurrentWeek" class="rounded-full bg-brand-500/10 px-2 py-1 text-[11px] font-bold text-brand-600 dark:text-brand-300" data-week-future>未来一周</span>
+        <span v-if="!entries.length" class="text-[11px] text-muted-foreground" data-week-empty>这一周还没有课程</span>
+      </div>
+
+      <div v-if="tables.length" class="mt-2 grid grid-cols-7 gap-1 sm:hidden" data-mobile-daybar>
+        <button
+          v-for="day in days"
+          :key="'m' + day.weekday"
+          type="button"
+          class="flex flex-col items-center gap-0.5 rounded-xl border px-0.5 py-1.5 transition-colors"
+          :class="day.weekday === mobileDay
+            ? 'border-brand-500/40 bg-brand-500/10 text-brand-600 dark:text-brand-300'
+            : 'border-border/60 bg-surface text-muted-foreground'"
+          :data-mobile-day="day.weekday"
+          :data-mobile-day-active="day.weekday === mobileDay ? '' : undefined"
+          @click="mobileDay = day.weekday"
+        >
+          <span class="text-[11px] font-extrabold">{{ day.label.replace('周', '') }}</span>
+          <span class="text-[9.5px] font-semibold tabular-nums opacity-80">{{ day.date }}</span>
+          <span v-if="isCurrentWeek && day.weekday === todayWeekday" class="h-1 w-1 rounded-full bg-brand-500"></span>
+          <span v-else class="h-1 w-1"></span>
         </button>
       </div>
 
@@ -114,13 +144,14 @@
             class="timetable-day"
             :class="day.weekday === todayWeekday ? 'timetable-day-today' : ''"
             :data-day-column="day.weekday"
+            :data-mobile-hidden="day.weekday === mobileDay ? undefined : 'true'"
           >
             <header class="timetable-day-head">
               <div class="flex items-baseline gap-1.5">
-                <span class="timetable-day-name" :class="day.weekday === todayWeekday ? 'text-brand-600 dark:text-brand-300' : 'text-foreground'">{{ day.label }}</span>
+                <span class="timetable-day-name" :class="isCurrentWeek && day.weekday === todayWeekday ? 'text-brand-600 dark:text-brand-300' : 'text-foreground'">{{ day.label }}</span>
                 <span class="timetable-day-date">{{ day.date }}</span>
               </div>
-              <span v-if="day.weekday === todayWeekday" class="timetable-today">今天</span>
+              <span v-if="isCurrentWeek && day.weekday === todayWeekday" class="timetable-today">今天</span>
               <span v-else class="timetable-day-count">{{ day.entries.length || '—' }}</span>
             </header>
 
@@ -317,20 +348,26 @@
           {{ [viewEntry.location, viewEntry.teacher].filter(Boolean).join(' · ') }}
         </p>
         <p v-if="viewEntry.note" class="whitespace-pre-wrap rounded-xl bg-muted/50 px-3 py-2 text-xs leading-5 text-foreground/80">{{ viewEntry.note }}</p>
-        <p class="text-[11px] text-muted-foreground">这张表由对方共享给你，当前权限为只读。</p>
+        <p class="text-[11px] text-muted-foreground">{{ isPastWeek ? '这是历史课程表，只能查看。' : '这张表由对方共享给你，当前权限为只读。' }}</p>
       </div>
       <div class="mt-4 flex justify-end">
         <button type="button" class="btn-secondary !h-9 !px-4 !text-xs" data-entry-view-close @click="viewOpen = false">关闭</button>
       </div>
     </Modal>
 
-    <!-- 共享：只允许表主管理；接收方按 read/write 权限使用 -->
+    <!-- 共享：勾选多张表，一次共享给同一个账号；接收方按 read/write 权限使用 -->
     <Modal v-model="shareOpen" title="共享课程表">
       <div class="space-y-3" data-share-dialog>
         <p class="text-xs leading-5 text-muted-foreground">
-          把「<b class="font-bold text-foreground">{{ activeSummary?.name }}</b>」共享给另一个账号。
-          只读只能查看；读写可以增删改课程，不能改表设置、删表或再共享。
+          勾选要共享的课程表，填对方登录用户名并选择权限。只读只能查看；读写可以增删改课程，不能改表设置、删表或再共享。
         </p>
+        <div class="grid max-h-40 gap-1.5 overflow-y-auto rounded-xl border border-border/70 p-2" data-share-tables>
+          <label v-for="t in ownTables" :key="t.id" class="flex items-center gap-2 rounded-lg px-2 py-1 text-xs font-semibold text-foreground hover:bg-muted/60">
+            <input v-model="shareSelected" type="checkbox" :value="t.id" class="h-4 w-4 accent-brand-500" data-share-table-check />
+            <span class="min-w-0 flex-1 truncate">{{ t.name }}</span>
+            <span class="text-[11px] text-muted-foreground">{{ t.entry_count }} 节</span>
+          </label>
+        </div>
         <form class="flex flex-wrap items-center gap-2" @submit.prevent="addShare">
           <input
             v-model="shareUsername"
@@ -348,12 +385,15 @@
           </button>
         </form>
         <p v-if="shareError" class="text-xs font-semibold text-destructive" data-share-error>{{ shareError }}</p>
+        <p v-if="shareNotice" class="text-xs font-semibold text-emerald-600 dark:text-emerald-300" data-share-notice>{{ shareNotice }}</p>
 
         <div v-if="sharesLoading" class="rounded-xl border border-border/70 px-3 py-4 text-center text-xs text-muted-foreground">读取共享名单…</div>
         <div v-else-if="!shares.length" class="rounded-xl border border-dashed border-border/70 px-3 py-4 text-center text-xs text-muted-foreground" data-share-empty>还没有共享给任何人</div>
         <ul v-else class="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70" data-share-list>
           <li v-for="share in shares" :key="share.id" class="flex items-center gap-2 px-3 py-2" data-share-row>
-            <span class="min-w-0 flex-1 truncate text-xs font-semibold text-foreground" data-share-row-name>{{ share.username }}</span>
+            <span class="min-w-0 flex-1 truncate text-xs font-semibold text-foreground" data-share-row-name>
+              <span class="text-muted-foreground">{{ share.table_name || '课程表' }} · </span>{{ share.username }}
+            </span>
             <select
               class="input-field !h-8 !w-[86px] !px-2 !text-[11px]"
               :value="share.permission"
@@ -493,8 +533,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import PageHeader from '../components/PageHeader.vue'
 import Modal from '../components/Modal.vue'
 import {
-  addTimetableShare, createEntry, createTimetable, deleteEntry, deleteTimetable,
-  getTimetable, getTimetableShares, getTimetables, removeTimetableShare,
+  batchShareTimetables, createEntry, createTimetable, deleteEntry, deleteTimetable,
+  getAllTimetableShares, getTimetable, getTimetables, removeTimetableShare,
   updateEntry, updateTimetable, updateTimetableShare,
   type EntryInput, type TimetableEntry, type TimetablePermission, type TimetableShare, type TimetableSummary,
 } from '../api/timetable'
@@ -528,15 +568,41 @@ const todayWeekday = (() => {
   return d === 0 ? 7 : d
 })()
 
-// 本周一到周日的日期，列头写「周一 10/19」；跨天时也一眼知道是哪天。
+// 手机上一天一屏：默认落在今天，省得从周一一路往下翻。
+const mobileDay = ref(todayWeekday)
+
+function dateKey(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+function mondayOf(d: Date) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const dow = x.getDay() === 0 ? 7 : x.getDay()
+  return new Date(x.getFullYear(), x.getMonth(), x.getDate() - (dow - 1))
+}
+const todayMonday = dateKey(mondayOf(new Date()))
+const weekOffset = ref(0)
+const currentWeek = ref(todayMonday)
+const weekStartParam = computed(() => {
+  const base = mondayOf(new Date())
+  base.setDate(base.getDate() + weekOffset.value * 7)
+  return dateKey(base)
+})
+const isCurrentWeek = computed(() => weekStartParam.value === currentWeek.value)
+const isPastWeek = computed(() => weekStartParam.value < currentWeek.value)
 const weekDates = computed(() => {
-  const now = new Date()
-  const dow = now.getDay() === 0 ? 7 : now.getDay()
-  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (dow - 1))
+  const monday = new Date(weekStartParam.value + 'T00:00:00')
   return weekdays.map((day) => {
     const dt = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + day.value - 1)
     return `${dt.getMonth() + 1}/${dt.getDate()}`
   })
+})
+const weekRangeLabel = computed(() => {
+  const monday = new Date(weekStartParam.value + 'T00:00:00')
+  const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6)
+  const fmt = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`
+  const prefix = isCurrentWeek.value ? '本周' : isPastWeek.value ? '历史' : '未来'
+  return `${prefix} ${fmt(monday)} – ${fmt(sunday)}`
 })
 
 // 一天分早课 / 上午 / 下午 / 晚课四段（用户 2026-10-18 要求）。
@@ -547,6 +613,7 @@ const activeSummary = computed(() => tables.value.find((t) => t.id === activeId.
 const activePermission = computed<TimetablePermission>(() => activeSummary.value?.permission || 'owner')
 const isOwner = computed(() => activePermission.value === 'owner')
 const canWrite = computed(() => activePermission.value !== 'read')
+const canEditWeek = computed(() => canWrite.value && !isPastWeek.value)
 
 // 表级「班级 / 地点」：课程条目自己不填地点时，卡片与弹窗都退回用它（用户 2026-10-19）。
 const activeLocation = computed(() => (activeTable.value?.location || '').trim())
@@ -779,16 +846,35 @@ async function loadTables(keep = 0) {
 }
 
 async function loadEntries(id: number) {
-  const res = await getTimetable(id)
+  const res = await getTimetable(id, weekStartParam.value)
   if (res.data?.code !== 0) throw new Error(res.data?.message || '读取课程表失败')
-  entries.value = res.data.data?.entries || []
-  activeTable.value = res.data.data?.table || null
-  if (!canWrite.value) editing.value = false
+  const data = res.data.data || {}
+  entries.value = data.entries || []
+  activeTable.value = data.table || null
+  if (data.current_week) currentWeek.value = data.current_week
+  if (!canWrite.value || isPastWeek.value) editing.value = false
+}
+
+async function shiftWeek(delta: number) {
+  if (!activeId.value) return
+  weekOffset.value += delta
+  mobileDay.value = isCurrentWeek.value ? todayWeekday : 1
+  editing.value = false
+  viewOpen.value = false
+  shareOpen.value = false
+  errorMsg.value = ''
+  try { await loadEntries(activeId.value) } catch (err: any) { errorMsg.value = err.message || '读取课程表失败' }
+}
+
+async function goCurrentWeek() {
+  weekOffset.value = 0
+  await shiftWeek(0)
 }
 
 async function selectTable(id: number) {
   if (id === activeId.value) return
   activeId.value = id
+  mobileDay.value = isCurrentWeek.value ? todayWeekday : 1
   shareOpen.value = false
   viewOpen.value = false
   if (!canWrite.value) editing.value = false
@@ -1208,7 +1294,7 @@ const editing = ref(false)
 const dragId = ref<number | null>(null)
 // 编辑态 = 可拖动 + 空白节次；两者原本是两个开关，2026-10-20 合并成一个按钮。
 function toggleEditing() {
-  if (!canWrite.value) return
+  if (!canEditWeek.value) return
   editing.value = !editing.value
   void alignRows()
 }
@@ -1322,7 +1408,7 @@ const viewOpen = ref(false)
 const viewEntry = ref<TimetableEntry | null>(null)
 const viewWeekday = computed(() => weekdays.find((d) => d.value === viewEntry.value?.weekday)?.label || '')
 function openEntry(entry: TimetableEntry) {
-  if (canWrite.value) openEditEntry(entry)
+  if (canEditWeek.value) openEditEntry(entry)
   else {
     viewEntry.value = entry
     viewOpen.value = true
@@ -1336,13 +1422,15 @@ const shareUsername = ref('')
 const sharePermission = ref<'read' | 'write'>('read')
 const shareBusy = ref(false)
 const shareError = ref('')
+const shareNotice = ref('')
+const shareSelected = ref<number[]>([])
+const ownTables = computed(() => tables.value.filter((t) => (t.permission || 'owner') === 'owner' && !t.is_shared))
 
 async function loadShares() {
-  if (!activeId.value) return
   sharesLoading.value = true
   shareError.value = ''
   try {
-    const res = await getTimetableShares(activeId.value)
+    const res = await getAllTimetableShares()
     if (res.data?.code !== 0) throw new Error(res.data?.message || '读取共享名单失败')
     shares.value = res.data.data?.shares || []
   } catch (err: any) {
@@ -1354,10 +1442,13 @@ async function loadShares() {
 }
 
 async function openShareDialog() {
-  if (!isOwner.value) return
+  if (!ownTables.value.length) return
   shareUsername.value = ''
   sharePermission.value = 'read'
   shareError.value = ''
+  shareNotice.value = ''
+  const current = ownTables.value.find((t) => t.id === activeId.value)
+  shareSelected.value = [current?.id || ownTables.value[0].id]
   shareOpen.value = true
   await loadShares()
 }
@@ -1365,12 +1456,16 @@ async function openShareDialog() {
 async function addShare() {
   const username = shareUsername.value.trim()
   if (!username) { shareError.value = '请输入对方的登录用户名'; return }
-  if (!activeId.value || shareBusy.value) return
+  if (!shareSelected.value.length) { shareError.value = '请至少勾选一张课程表'; return }
+  if (shareBusy.value) return
   shareBusy.value = true
   shareError.value = ''
+  shareNotice.value = ''
   try {
-    const res = await addTimetableShare(activeId.value, username, sharePermission.value)
+    const res = await batchShareTimetables(shareSelected.value, username, sharePermission.value)
     if (res.data?.code !== 0) throw new Error(res.data?.message || '共享失败')
+    const d = res.data.data || {}
+    shareNotice.value = `已共享 ${d.added || 0} 张，更新 ${d.updated || 0} 张`
     shareUsername.value = ''
     await loadShares()
   } catch (err: any) {
@@ -1397,7 +1492,7 @@ async function changeSharePermission(share: TimetableShare, event: Event) {
 }
 
 async function removeShare(share: TimetableShare) {
-  if (!window.confirm(`不再把课程表共享给「${share.username}」？`)) return
+  if (!window.confirm(`不再把「${share.table_name || '课程表'}」共享给「${share.username}」？`)) return
   shareError.value = ''
   try {
     const res = await removeTimetableShare(share.id)
@@ -1417,7 +1512,7 @@ async function saveEntry() {
     const payload: EntryInput = { ...form, title: form.title.trim() }
     const res = entryEditing.value
       ? await updateEntry(entryEditing.value.id, payload)
-      : await createEntry(activeId.value, payload)
+      : await createEntry(activeId.value, payload, weekStartParam.value)
     if (res.data?.code !== 0) throw new Error(res.data?.message || '保存失败')
     entryOpen.value = false
     await Promise.all([loadEntries(activeId.value), loadTables(activeId.value)])
@@ -1466,6 +1561,9 @@ async function removeEntry() {
 .timetable-shell { @apply overflow-hidden rounded-[22px] border border-border bg-surface bg-no-repeat shadow-sm; }
 .timetable-grid { @apply grid grid-cols-1 gap-px bg-border/70 sm:grid-cols-2 xl:grid-cols-7; }
 .timetable-day { @apply flex min-h-[13rem] flex-col gap-2 bg-surface p-3; }
+@media (max-width: 639px) {
+  .timetable-day[data-mobile-hidden='true'] { display: none; }
+}
 .timetable-day-today { @apply bg-brand-500/[0.035]; }
 .timetable-day-head { @apply flex items-center justify-between pb-0.5; }
 .timetable-day-name { @apply text-[12.5px] font-extrabold tracking-wide; }

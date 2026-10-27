@@ -493,7 +493,26 @@ async function waitForCard(page, selector, timeout = 12000) {
       await sleep(1200);
       await dismissAlerts(page);
       await page.screenshot({ path: path.join(SHOTS, 'timetable-390.png') });
-      check('手机上一列一天，能正常打开', (await page.$$('[data-day-column]')).length === 7);
+      const mobileDayState = await page.evaluate(() => {
+        const cols = [...document.querySelectorAll('[data-day-column]')];
+        const today = new Date().getDay() === 0 ? 7 : new Date().getDay();
+        return {
+          total: cols.length,
+          visible: cols.filter((c) => c.offsetParent !== null).length,
+          active: Number(document.querySelector('[data-mobile-day-active]')?.getAttribute('data-mobile-day') || 0),
+          today,
+          tabs: document.querySelectorAll('[data-mobile-day]').length,
+        };
+      });
+      check('手机默认只显示今天这一天', mobileDayState.total === 7 && mobileDayState.visible === 1
+        && mobileDayState.tabs === 7 && mobileDayState.active === mobileDayState.today, JSON.stringify(mobileDayState));
+      await page.click('[data-mobile-day="1"]');
+      await sleep(400);
+      const mondayOnly = await page.evaluate(() => {
+        const cols = [...document.querySelectorAll('[data-day-column]')];
+        return { active: Number(document.querySelector('[data-mobile-day-active]')?.getAttribute('data-mobile-day') || 0), visible: cols.filter((c) => c.offsetParent !== null).length };
+      });
+      check('手机点周一只显示周一', mondayOnly.active === 1 && mondayOnly.visible === 1, JSON.stringify(mondayOnly));
     } finally {
       // ---------------- 收尾 ----------------
       for (const id of createdTables) {

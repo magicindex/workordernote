@@ -6,7 +6,7 @@
 - 仓库：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
 - 发布与安装包：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote/releases>
 - GitHub 镜像：<https://github.com/magicindex/workordernote>
-- 当前版本：`0.43.5`
+- 当前版本：`0.43.6`
 
 > **本项目是衍生作品。** 基于开源项目
 > [TechFunWay/reminders](https://github.com/TechFunWay/reminders)（MIT 许可）衍生开发，
@@ -21,7 +21,7 @@
 | **任务 / 记事** | 任务需确认完成；记事只作记录，保存即归档、不发送通知 |
 | **清单与提醒** | 多清单、优先级、重复提醒（含农历）、逾期提醒、提醒@他 |
 | **视图** | 列表、全屏日历（公历/农历/节气/节日）、首页看板、倒计时卡片 |
-| **课程表** | 按周排课，课程与课外活动分色；支持打印，手机清单弹层可直接进入；浏览时只读，进编辑态才显示添加入口；可共享给其他账号（只读 / 读写） |
+| **课程表** | 按周排课、每周独立留档，可切上周/下周查看历史（历史只读）；课程与课外活动分色，支持打印；手机默认只看今天，可点日期切换；可按账号批量共享多张表（只读 / 读写）；课程备注自动收进随手记事本，可按「课程备注」筛选 |
 | **随手记事本** | 随手记录，按时间倒序归档，可搜索 |
 | **人生要有仪式感** | 生日、纪念日、节日、考试倒计时卡片，公历与农历双行显示（干支年份、彩色日期胶囊，「每年」跟随创建历法） |
 | **信用卡账单** | 多卡管理，账单日/还款日/额度/本期金额，临近还款日变色提醒；更多菜单点按展开 |
@@ -46,10 +46,10 @@
 镜像发布在仓库自带的容器仓库，可直接拉取：
 
 ```bash
-docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.43.5
+docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.43.6
 ```
 
-同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.43.5`；Gitea 容器仓库不可用时可直接改用。
+同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.43.6`；Gitea 容器仓库不可用时可直接改用。
 
 ### 用仓库里的 compose 文件安装
 
@@ -74,7 +74,7 @@ curl -fsSLO https://raw.githubusercontent.com/magicindex/workordernote/main/dock
 ```yaml
 services:
   workordernote:
-    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.43.5
+    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.43.6
     container_name: workordernote
     # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
     user: "1000:1001"

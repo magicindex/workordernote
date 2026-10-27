@@ -311,7 +311,7 @@
       <!-- 标题工具栏：条数 / 过期提示 / 未完成·全部 / 刷新（导出只在电脑上出现） -->
       <div class="list-toolbar">
         <div class="list-toolbar-count">
-          <span class="count-number">{{ view === 'completed' ? completedItems.length : items.length }}</span>
+          <span class="count-number">{{ view === 'completed' ? completedItems.length : (isNoteBucketPage && courseNotesOnly ? displayItems.length : items.length) }}</span>
           <span class="count-unit">项</span>
           <span
             v-if="view !== 'completed' && overdueCount"
@@ -390,6 +390,18 @@
               <path v-else d="M12 5v14m0 0 5-5m-5 5-5-5" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
             <span>{{ listSortDir === 'asc' ? '时间升序' : '时间倒序' }}</span>
+          </button>
+          <button
+            v-if="isNoteBucketPage"
+            class="toolbar-btn inline-flex"
+            :class="{ 'is-on': courseNotesOnly }"
+            :aria-pressed="courseNotesOnly"
+            title="只显示课程表保存过来的备注"
+            data-course-notes-filter
+            @click="courseNotesOnly = !courseNotesOnly"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M5 4.5h14v15l-7-3-7 3v-15Z" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 8h6M9 11.5h4" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <span>课程备注</span>
           </button>
           <button
             class="toolbar-btn inline-flex"
@@ -526,7 +538,7 @@
               v-for="item in group.items"
               :key="item.id"
               class="reminder-row group"
-              :class="{ 'reminder-completed': !!item.completed_at && item.kind !== 'note', 'reminder-overdue': isOverdue(item), 'reminder-highlight': highlightedId === item.id }"
+              :class="{ 'reminder-completed': !!item.completed_at && item.kind !== 'note', 'reminder-overdue': isOverdue(item), 'reminder-highlight': highlightedId === item.id, 'course-note-row': isCourseNote(item) }"
               :data-reminder-row="item.id"
             >
               <!-- 记事行前面那个位置放**它所属清单的图标**（记事本图标）并用清单颜色上色，
@@ -549,7 +561,8 @@
                   <!-- 任务标题用所属清单的颜色：侧栏圆点、这里的标题、日历色块三处同色。
                        颜色在侧栏「编辑清单」里改，改完会广播数据变更，本页与日历立即刷新。 -->
                   <h3 class="min-w-0 break-words text-sm font-bold leading-5 sm:truncate sm:text-[15px]" :style="{ color: listColor(item.list_color) }">{{ item.title }}</h3>
-                  <span v-if="item.kind === 'note'" class="tiny-badge">记事</span>
+                  <span v-if="isCourseNote(item)" class="tiny-badge !bg-sky-500/12 !text-sky-600 dark:!text-sky-300" data-course-note-badge>课程备注</span>
+                  <span v-else-if="item.kind === 'note'" class="tiny-badge">记事</span>
                   <span v-if="item.priority" class="priority-mark" :class="`priority-${item.priority}`">{{ '!'.repeat(item.priority) }}</span>
                   <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ repeatBadge(item) }}</span>
                   <span v-if="item.repeat_notify_minutes" class="tiny-badge">过期提醒</span>
@@ -751,13 +764,16 @@ async function loadCycleDue() {
   if (token === cycleDueToken) cycleDue.value = out
 }
 
-const displayItems = computed(() => items.value.map((item) => {
-  if (item.repeat_rule !== 'yearly' || !item.due_at) return item
-  const due = new Date(item.due_at)
-  if (Number.isNaN(due.getTime()) || due > new Date(clockNow.value)) return item
-  const iso = item.calendar === 'lunar' ? cycleDue.value[item.id] : solarYearlyDue(due, new Date(clockNow.value)).toISOString()
-  return iso ? { ...item, due_at: iso } : item
-}))
+const displayItems = computed(() => {
+  const rows = items.value.map((item) => {
+    if (item.repeat_rule !== 'yearly' || !item.due_at) return item
+    const due = new Date(item.due_at)
+    if (Number.isNaN(due.getTime()) || due > new Date(clockNow.value)) return item
+    const iso = item.calendar === 'lunar' ? cycleDue.value[item.id] : solarYearlyDue(due, new Date(clockNow.value)).toISOString()
+    return iso ? { ...item, due_at: iso } : item
+  })
+  return isNoteBucketPage.value && courseNotesOnly.value ? rows.filter(isCourseNote) : rows
+})
 // 「已完成」的数据源与普通列表不同（历史表 ∪ 完成记录），单独存一份。
 const completedItems = ref<CompletedItem[]>([])
 // 后端算出来的实际区间文案（含当天），显示在筛选器下方供核对。
@@ -1130,6 +1146,12 @@ const isCardBucketPage = computed(() => selectedList.value?.template === 'credit
 // 「记事本」也是固定栏目：它不是卡片页那种特殊页面，而是一个内容全是记事的普通清单页
 // （按记录时间倒序、固定显示全部）。偏好关掉时不认这一页。
 const isNoteBucketPage = computed(() => selectedList.value?.template === 'notebook' && authStore.notebookEnabled)
+
+const courseNotesOnly = ref(false)
+function isCourseNote(item: ReminderItem) {
+  return item.kind === 'note' && item.title.startsWith('课程备注：')
+}
+
 // 「人生要有仪式感」：固定栏目，页面是倒计时卡片（不是普通清单列表）
 const isCeremonyBucketPage = computed(() => selectedList.value?.template === 'ceremony' && authStore.ceremonyEnabled)
 // 下拉/筛选里能选的只有普通清单（信用卡/记事本栏目不是「清单」，不该出现在这些地方）
@@ -1909,6 +1931,8 @@ function onShortcut(e: KeyboardEvent) {
   50% { background-color: rgba(var(--color-brand-500) / .2); }
 }
 .reminder-completed { @apply opacity-60; }
+.course-note-row { border-left: 3px solid rgb(14 165 233 / .65); background: linear-gradient(90deg, rgb(14 165 233 / .08), transparent 38%); }
+.course-note-row h3 { @apply text-sky-700 dark:text-sky-300; }
 .reminder-completed h3 { @apply line-through; }
 .complete-button { @apply flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-brand-500/35 text-white transition hover:scale-110 hover:border-brand-500 hover:bg-brand-500; }
 /* 记事行的那个位置放清单图标（用户 2026-10-17）：没有圈、没有底色、不跟着悬停放大，

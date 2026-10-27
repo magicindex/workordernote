@@ -63,11 +63,13 @@ async function waitSel(page, sel, timeout = 12000) {
   }
 }
 
+const tableName = `共享自检-${STAMP}`;
 const readerName = `share_r_${STAMP}`;
 const writerName = `share_w_${STAMP}`;
 const extraName = `share_x_${STAMP}`;
 let ownerToken = '';
 let tableId = 0;
+let tableId2 = 0;
 let readerId = 0;
 let writerId = 0;
 let extraId = 0;
@@ -80,9 +82,12 @@ let entryId = 0;
     if (!ownerToken) throw new Error('owner login failed');
 
     // 建一张临时表 + 一条课程，避免动到用户自己的表。
-    const created = await callApi(ownerToken, '/api/timetable/tables', 'POST', { name: `共享自检-${STAMP}` });
+    const created = await callApi(ownerToken, '/api/timetable/tables', 'POST', { name: tableName });
     tableId = Number(created.body?.data?.id || 0);
     check('创建临时课程表', created.status === 200 && tableId > 0, JSON.stringify(created.body));
+    const created2 = await callApi(ownerToken, '/api/timetable/tables', 'POST', { name: tableName + '-B' });
+    tableId2 = Number(created2.body?.data?.id || 0);
+    check('创建第二张临时表（批量共享用）', created2.status === 200 && tableId2 > 0, JSON.stringify(created2.body));
     const entry = await callApi(ownerToken, `/api/timetable/tables/${tableId}/entries`, 'POST', {
       title: '共享数学', kind: 'course', weekday: 1, start_time: '08:00', end_time: '08:45',
       location: '三班', teacher: '李老师', note: '共享自检', color: 'indigo',
@@ -124,39 +129,47 @@ let entryId = 0;
       await login(page, BASE);
       await page.goto(BASE + '/admin/timetable', { waitUntil: 'domcontentloaded' });
       await sleep(1600);
-      const tabSel = `[data-timetable-tab="共享自检-${STAMP}"]`;
+      const tabSel = `[data-timetable-tab="${tableName}"]`;
       check('表主能看到临时表', await waitSel(page, tabSel));
       await page.click(tabSel);
       await sleep(700);
       check('表主能看到「共享」按钮', await waitSel(page, '[data-timetable-share]'));
       await page.click('[data-timetable-share]');
       check('共享弹窗打开', await waitSel(page, '[data-share-dialog]'));
-      const rows = await page.evaluate(() => [...document.querySelectorAll('[data-share-row]')].map((r) => r.innerText.replace(/\s+/g, ' ').trim()));
-      check('共享名单列出两个账号', rows.length === 2 && rows.some((r) => r.includes(readerName)) && rows.some((r) => r.includes(writerName)), JSON.stringify(rows));
+      const rows = await page.evaluate((name) => [...document.querySelectorAll('[data-share-row]')]
+        .map((r) => r.innerText.replace(/\s+/g, ' ').trim()).filter((r) => r.includes(name)), tableName);
+      check('批量共享弹窗列出本表两个账号', rows.length === 2 && rows.some((r) => r.includes(readerName)) && rows.some((r) => r.includes(writerName)), JSON.stringify(rows));
+      const checks = await page.evaluate(() => document.querySelectorAll('[data-share-table-check]').length);
+      check('批量共享弹窗能勾选多张课程表', checks >= 1, String(checks));
       const hasForm = await page.evaluate(() => !!(document.querySelector('[data-share-username]') && document.querySelector('[data-share-permission]') && document.querySelector('[data-share-add]')));
       check('共享弹窗有用户名/权限/共享按钮', hasForm);
+      await page.evaluate(() => document.querySelectorAll('[data-share-table-check]').forEach((c) => { if (!c.checked) c.click(); }));
+      await sleep(300);
       await page.type('[data-share-username]', extraName);
       await page.select('[data-share-permission]', 'read');
       await page.click('[data-share-add]');
       await sleep(900);
-      const rowsAfterAdd = await page.evaluate(() => [...document.querySelectorAll('[data-share-row]')].map((r) => r.innerText.replace(/\s+/g, ' ').trim()));
-      check('弹窗里能直接添加共享账号', rowsAfterAdd.length === 3 && rowsAfterAdd.some((r) => r.includes(extraName)), JSON.stringify(rowsAfterAdd));
+      const rowsAfterAdd = await page.evaluate((name) => [...document.querySelectorAll('[data-share-row]')]
+        .map((r) => r.innerText.replace(/\s+/g, ' ').trim()).filter((r) => r.includes(name)), tableName);
+      const rowsSecond = await page.evaluate((name) => [...document.querySelectorAll('[data-share-row]')]
+        .map((r) => r.innerText.replace(/\s+/g, ' ').trim()).filter((r) => r.includes(name)), tableName + '-B');
+      check('弹窗里能批量添加共享账号', rowsAfterAdd.some((r) => r.includes(extraName)) && rowsSecond.some((r) => r.includes(extraName)), JSON.stringify({ rowsAfterAdd, rowsSecond }));
 
       // 改权限：把 writer 从读写改成只读，再改回来，接口应同步。
-      await page.evaluate((name) => {
-        const row = [...document.querySelectorAll('[data-share-row]')].find((r) => r.innerText.includes(name));
+      await page.evaluate(({ name, tname }) => {
+        const row = [...document.querySelectorAll('[data-share-row]')].find((r) => r.innerText.includes(name) && r.innerText.includes(tname));
         const select = row?.querySelector('[data-share-row-permission]');
         if (select) { select.value = 'read'; select.dispatchEvent(new Event('change', { bubbles: true })); }
-      }, writerName);
+      }, { name: writerName, tname: tableName });
       await sleep(900);
       const sharesAfterChange = (await callApi(ownerToken, `/api/timetable/tables/${tableId}/shares`)).body?.data?.shares || [];
       const writerShare = sharesAfterChange.find((s) => s.username === writerName);
       check('改权限会保存（读写→只读）', writerShare?.permission === 'read', JSON.stringify(sharesAfterChange));
-      await page.evaluate((name) => {
-        const row = [...document.querySelectorAll('[data-share-row]')].find((r) => r.innerText.includes(name));
+      await page.evaluate(({ name, tname }) => {
+        const row = [...document.querySelectorAll('[data-share-row]')].find((r) => r.innerText.includes(name) && r.innerText.includes(tname));
         const select = row?.querySelector('[data-share-row-permission]');
         if (select) { select.value = 'write'; select.dispatchEvent(new Event('change', { bubbles: true })); }
-      }, writerName);
+      }, { name: writerName, tname: tableName });
       await sleep(900);
       check('改权限能再改回读写', (await callApi(ownerToken, `/api/timetable/tables/${tableId}/shares`)).body?.data?.shares?.find((s) => s.username === writerName)?.permission === 'write');
       await page.evaluate(() => {
@@ -168,7 +181,7 @@ let entryId = 0;
 
       // 只读账号。
       await loginAs(page, readerName, PASSWORD);
-      const readerTab = `[data-timetable-tab*="共享自检-${STAMP}"]`;
+      const readerTab = `[data-timetable-tab*="${tableName}"]`;
       check('只读账号能看到共享表', await waitSel(page, readerTab));
       const readBadge = await page.evaluate((sel) => document.querySelector(sel + ' .timetable-share-chip')?.textContent.trim(), readerTab);
       check('只读表带「只读」徽标', readBadge === '只读', String(readBadge));
@@ -200,6 +213,7 @@ let entryId = 0;
   } finally {
     // 清理：删表（级联共享）、删两个测试账号。尽量不把自检数据留在库里。
     if (tableId && ownerToken) await callApi(ownerToken, `/api/timetable/tables/${tableId}`, 'DELETE').catch(() => {});
+    if (tableId2 && ownerToken) await callApi(ownerToken, `/api/timetable/tables/${tableId2}`, 'DELETE').catch(() => {});
     if (readerId && ownerToken) await callApi(ownerToken, `/api/users/${readerId}`, 'DELETE').catch(() => {});
     if (writerId && ownerToken) await callApi(ownerToken, `/api/users/${writerId}`, 'DELETE').catch(() => {});
     if (extraId && ownerToken) await callApi(ownerToken, `/api/users/${extraId}`, 'DELETE').catch(() => {});

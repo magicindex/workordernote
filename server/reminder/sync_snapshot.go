@@ -222,7 +222,7 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 		}
 		snap.TimetableEntries = append(snap.TimetableEntries, syncTimetableEntry{
 			UID: e.SyncUID, Owner: users[e.UserID], TimetableUID: tableUID[e.TimetableID],
-			Title: e.Title, Kind: e.Kind, Weekday: e.Weekday, StartTime: e.StartTime,
+			Title: e.Title, Kind: e.Kind, Weekday: e.Weekday, WeekStart: e.WeekStart, StartTime: e.StartTime,
 			EndTime: e.EndTime, Location: e.Location, Teacher: e.Teacher, Note: e.Note,
 			Color: e.Color, Deleted: e.DeletedAt.Valid, CreatedAt: e.CreatedAt, UpdatedAt: stamp,
 		})

@@ -132,7 +132,7 @@ func applySyncTimetableEntries(tx *gorm.DB, snap syncSnapshot, users map[string]
 		if !exists {
 			row := timetable.TimetableEntry{
 				UserID: owner.ID, TimetableID: tableID, Title: in.Title, Kind: in.Kind,
-				Weekday: in.Weekday, StartTime: in.StartTime, EndTime: in.EndTime,
+				Weekday: in.Weekday, WeekStart: in.WeekStart, StartTime: in.StartTime, EndTime: in.EndTime,
 				Location: in.Location, Teacher: in.Teacher, Note: in.Note, Color: in.Color,
 				SyncUID: in.UID, CreatedAt: in.CreatedAt, UpdatedAt: in.UpdatedAt,
 			}
@@ -152,7 +152,7 @@ func applySyncTimetableEntries(tx *gorm.DB, snap syncSnapshot, users map[string]
 		}
 		updates := map[string]interface{}{
 			"user_id": owner.ID, "timetable_id": tableID, "title": in.Title, "kind": in.Kind,
-			"weekday": in.Weekday, "start_time": in.StartTime, "end_time": in.EndTime,
+			"weekday": in.Weekday, "week_start": in.WeekStart, "start_time": in.StartTime, "end_time": in.EndTime,
 			"location": in.Location, "teacher": in.Teacher, "note": in.Note, "color": in.Color,
 			"updated_at": in.UpdatedAt,
 		}
