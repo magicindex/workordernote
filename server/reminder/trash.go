@@ -1,11 +1,15 @@
 package reminder
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"smallgo/server/database"
+	"smallgo/server/logger"
 	"smallgo/server/response"
 )
 
@@ -27,8 +31,13 @@ func handleListTrash(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := currentUserID(c)
 		var rows []Reminder
+		purged, err := purgeExpiredTrash(db, userID, time.Now())
+		if err != nil {
+			logger.Error("reminder: 自动清空垃圾箱失败 user=%d: %v", userID, err)
+			purged = 0
+		}
 		if err := db.Unscoped().
-			Where("user_id = ? AND deleted_at IS NOT NULL", userID).
+			Where("user_id = ? AND deleted_at IS NOT NULL AND purged_at IS NULL", userID).
 			Order("deleted_at DESC, id DESC").Find(&rows).Error; err != nil {
 			response.ErrorInternal(c, "读取垃圾箱失败")
 			return
@@ -61,7 +70,78 @@ func handleListTrash(db *gorm.DB) gin.HandlerFunc {
 				DeletedAt: deleted,
 			})
 		}
-		response.Success(c, gin.H{"items": items})
+		response.Success(c, gin.H{"items": items, "purged": purged})
+	}
+}
+
+// clearTrash 把当前用户垃圾箱里的条目全部标记为已清空。保留 deleted_at 作为同步墓碑，
+// 再加 purged_at；硬删除会被对端同步快照重新带回，所以不能直接删行。
+func clearTrash(db *gorm.DB, userID uint, now time.Time) (int64, error) {
+	res := db.Unscoped().Model(&Reminder{}).
+		Where("user_id = ? AND deleted_at IS NOT NULL AND purged_at IS NULL", userID).
+		Updates(map[string]interface{}{
+			"purged_at": now, "updated_at": now,
+			"version": gorm.Expr("version + 1"),
+		})
+	return res.RowsAffected, res.Error
+}
+
+func trashRetentionDays(db *gorm.DB, userID uint) int {
+	days, err := strconv.Atoi(strings.TrimSpace(userConfigValue(db, userID, "trash_auto_clear_days")))
+	if err != nil || days <= 0 {
+		return 0
+	}
+	if days > 3650 {
+		return 3650
+	}
+	return days
+}
+
+// purgeExpiredTrash 按用户配置把删除超过 N 天的提醒标记为已清空；N=0 不处理。
+func purgeExpiredTrash(db *gorm.DB, userID uint, now time.Time) (int64, error) {
+	days := trashRetentionDays(db, userID)
+	if days <= 0 {
+		return 0, nil
+	}
+	cutoff := now.Add(-time.Duration(days) * 24 * time.Hour)
+	res := db.Unscoped().Model(&Reminder{}).
+		Where("user_id = ? AND deleted_at IS NOT NULL AND purged_at IS NULL AND deleted_at <= ?", userID, cutoff).
+		Updates(map[string]interface{}{
+			"purged_at": now, "updated_at": now,
+			"version": gorm.Expr("version + 1"),
+		})
+	return res.RowsAffected, res.Error
+}
+
+func purgeExpiredTrashAll(db *gorm.DB) {
+	var users []database.User
+	if err := db.Where("status = 1").Find(&users).Error; err != nil {
+		logger.Error("reminder: 读取用户失败，跳过垃圾箱自动清空: %v", err)
+		return
+	}
+	now := time.Now()
+	for _, u := range users {
+		n, err := purgeExpiredTrash(db, u.ID, now)
+		if err != nil {
+			logger.Error("reminder: 自动清空垃圾箱失败 user=%d: %v", u.ID, err)
+			continue
+		}
+		if n > 0 {
+			logger.Info("reminder: 自动清空垃圾箱 user=%d count=%d", u.ID, n)
+		}
+	}
+}
+
+func handleClearTrash(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := currentUserID(c)
+		n, err := clearTrash(db, userID, time.Now())
+		if err != nil {
+			response.ErrorInternal(c, "清空垃圾箱失败")
+			return
+		}
+		publishDataChanged(userID, "reminder", "purged", 0, originClientID(c))
+		response.Success(c, gin.H{"purged": n})
 	}
 }
 
@@ -88,7 +168,7 @@ func restoreDeletedReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, 
 	err := db.Transaction(func(tx *gorm.DB) error {
 		var item Reminder
 		if err := tx.Unscoped().
-			Where("id = ? AND user_id = ? AND deleted_at IS NOT NULL", reminderID, userID).
+			Where("id = ? AND user_id = ? AND deleted_at IS NOT NULL AND purged_at IS NULL", reminderID, userID).
 			First(&item).Error; err != nil {
 			return err
 		}

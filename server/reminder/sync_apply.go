@@ -424,6 +424,13 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 				}
 				stats.RemindersDeleted++
 				stats.AffectedUsers = append(stats.AffectedUsers, existing.UserID)
+			} else if incoming.PurgedAt != nil && existing.PurgedAt == nil {
+				// 对端清空了垃圾箱：本地还留着同一条墓碑，补上 purged_at 一起隐藏。
+				if err := tx.Unscoped().Model(&Reminder{}).Where("id = ?", existing.ID).
+					Updates(map[string]interface{}{"purged_at": incoming.PurgedAt, "updated_at": incoming.UpdatedAt, "version": incoming.Version}).Error; err != nil {
+					return nil, err
+				}
+				stats.RemindersUpdated++
 			} else {
 				stats.Skipped++
 			}
@@ -463,7 +470,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 				"repeat_notify_minutes": incoming.RepeatNotifyMinutes,
 				"completed_at":          incoming.CompletedAt, "snoozed_until": incoming.SnoozedUntil,
 				"position": incoming.Position, "version": incoming.Version,
-				"deleted_at": nil, "updated_at": incoming.UpdatedAt,
+				"deleted_at": nil, "purged_at": nil, "updated_at": incoming.UpdatedAt,
 			}).Error; err != nil {
 			return nil, err
 		}
@@ -651,6 +658,7 @@ func sameReminder(local *Reminder, incoming syncReminder, listID uint, channels 
 		local.Position == incoming.Position &&
 		local.Version == incoming.Version &&
 		(local.DeletedAt != nil) == incoming.Deleted &&
+		equalTimePtr(local.PurgedAt, incoming.PurgedAt) &&
 		sameChannels(channels, incoming.Channels)
 }
 

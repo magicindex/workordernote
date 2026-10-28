@@ -52,6 +52,7 @@ func setupAuthRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	// 垃圾箱：软删除的提醒集中在这里，可恢复；「全部」等列表默认不含它们。
 	group.GET("/trash", handleListTrash(db))
 	group.POST("/trash/:id/restore", handleRestoreTrash(db))
+	group.DELETE("/trash", handleClearTrash(db))
 
 	// 「提醒@他」：多人之间互相推提醒（见 nudge.go）。开关是系统偏好 nudge_enabled。
 	group.GET("/nudges", handleListNudges(db))
@@ -1056,7 +1057,7 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 		// 归到智能清单显示统计中」）。并成同一条聚合语句里的子查询，不额外发一条
 		// COUNT —— /summary 的查询条数有测试盯着（performance_test.go，稳定态 2 条）。
 		nudgeExpr := `(SELECT COUNT(*) FROM nudges WHERE to_user_id = ? AND done_at IS NULL AND deleted_at IS NULL) AS nudge_pending`
-		trashExpr := `(SELECT COUNT(*) FROM reminders WHERE user_id = ? AND deleted_at IS NOT NULL) AS trash`
+		trashExpr := `(SELECT COUNT(*) FROM reminders WHERE user_id = ? AND deleted_at IS NOT NULL AND purged_at IS NULL) AS trash`
 		selectArgs = append(selectArgs, userID, sqlTimeArg(overdueBefore), userID)
 		// 口径与列表一致：用「排期时间」COALESCE(end_at, start_at, due_at) ——
 		// **不看 snoozed_until**（用户 2026-10-14：稍后提醒只延迟提醒时间，不改到期时间）。

@@ -113,6 +113,7 @@ export interface TrashItem {
 
 export const getTrash = () => request.get('/api/reminder/trash')
 export const restoreTrash = (id: number) => request.post(`/api/reminder/trash/${id}/restore`)
+export const clearTrash = () => request.delete('/api/reminder/trash')
 
 export interface SaveReminderInput {
   title: string

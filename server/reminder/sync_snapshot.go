@@ -154,6 +154,7 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 			Version:             r.Version,
 			Channels:            channelRows[r.ID],
 			Deleted:             r.DeletedAt != nil,
+			PurgedAt:            r.PurgedAt,
 			CreatedAt:           r.CreatedAt,
 			UpdatedAt:           r.UpdatedAt,
 		})

@@ -132,15 +132,18 @@ type Reminder struct {
 	// BgAlpha 是**整张卡片背景的透明度**（用户 2026-10-19 要求：「增加卡片透明度调整，
 	// 可以把整个卡片调整为透明（不含文字）」）：100 = 不透明，0 = 只留文字。
 	// 只作用于卡片的背景层（配色渐变 / 背景图 / 蒙板），文字、图标、按钮不受影响。
-	BgAlpha      int               `gorm:"not null;default:100" json:"bg_alpha,omitempty"`
-	CompletedAt  *time.Time        `gorm:"index:idx_reminders_user_completed" json:"completed_at"`
-	SnoozedUntil *time.Time        `json:"snoozed_until"`
-	Position     int               `gorm:"not null;default:0" json:"position"`
-	Version      uint              `gorm:"not null;default:1" json:"version"`
-	CreatedAt    time.Time         `json:"created_at"`
-	UpdatedAt    time.Time         `json:"updated_at"`
-	DeletedAt    *time.Time        `gorm:"index" json:"-"`
-	Channels     []ReminderChannel `gorm:"foreignKey:ReminderID" json:"-"`
+	BgAlpha      int        `gorm:"not null;default:100" json:"bg_alpha,omitempty"`
+	CompletedAt  *time.Time `gorm:"index:idx_reminders_user_completed" json:"completed_at"`
+	SnoozedUntil *time.Time `json:"snoozed_until"`
+	Position     int        `gorm:"not null;default:0" json:"position"`
+	Version      uint       `gorm:"not null;default:1" json:"version"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	DeletedAt    *time.Time `gorm:"index" json:"-"`
+	// PurgedAt 是「已从垃圾箱清空」的墓碑时间。软删除后仍保留 deleted_at 参与双机同步；
+	// 清空只打这个标记，让两端都隐藏，而不会因硬删除被对端快照重新带回。
+	PurgedAt *time.Time        `gorm:"index" json:"-"`
+	Channels []ReminderChannel `gorm:"foreignKey:ReminderID" json:"-"`
 }
 
 type ReminderChannel struct {
