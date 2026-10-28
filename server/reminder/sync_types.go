@@ -216,10 +216,12 @@ type syncReminder struct {
 	// Channels 只带渠道名（inapp/email/...），不带 Targets：Targets 存的是本机
 	// channel_bindings 的自增 ID，到了对端指向的是别人的绑定。对端按渠道名重建，
 	// 邮箱留空即「该用户在该机器上绑定的全部地址」。
-	Channels  []string  `json:"channels"`
-	Deleted   bool      `json:"deleted"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Channels []string `json:"channels"`
+	Deleted  bool     `json:"deleted"`
+	// PurgedAt：垃圾箱清空/自动清空的墓碑；delete 仍是软删，purged 只是隐藏。
+	PurgedAt  *time.Time `json:"purged_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 }
 
 type syncCompletion struct {

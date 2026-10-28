@@ -183,13 +183,19 @@ const madeIds = [];
       JSON.stringify(national && { hero: national.hero, card: national.cardStyle }));
     check('卡片图标放大到约 2 倍，国庆自动用旗帜图标',
       !!national && national.iconW >= 100 && national.icon === 'flag', JSON.stringify(national && { w: national.iconW, icon: national.icon }));
-    // 点图标 → 编辑 → 图标库选灯笼 → 保存后刷新仍保留
+    // 图标本身不可点击；修改统一走右上角编辑按钮 → 图标库选灯笼 → 保存后刷新仍保留
     await page.evaluate(() => {
       const card = [...document.querySelectorAll('[data-ceremony-card]')].find((c) => c.textContent.includes('国庆'));
       card?.querySelector('[data-ceremony-icon]')?.click();
     });
+    await sleep(500);
+    check('点图标不再打开编辑弹窗（改用编辑按钮）', await page.evaluate(() => !document.querySelector('[data-ceremony-form-icon]')));
+    await page.evaluate(() => {
+      const card = [...document.querySelectorAll('[data-ceremony-card]')].find((c) => c.textContent.includes('国庆'));
+      card?.querySelector('[data-ceremony-edit]')?.click();
+    });
     await sleep(700);
-    check('点卡片图标能直接打开编辑弹窗', await page.evaluate(() => !!document.querySelector('[data-ceremony-form-icon]')));
+    check('点编辑按钮打开编辑弹窗', await page.evaluate(() => !!document.querySelector('[data-ceremony-form-icon]')));
     await page.click('[data-ceremony-form-icon]');
     await sleep(500);
     const iconOpts = await page.evaluate(() => document.querySelectorAll('[data-ceremony-icon-option]').length);

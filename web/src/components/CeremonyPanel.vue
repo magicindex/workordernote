@@ -74,15 +74,11 @@
         <!-- 图标挪到内容**左侧**并放大 2 倍（用户 2026-10-12：「图标放内容左侧放大2倍」）；
              名称 / 时间 / 循环 / 次数等一并放大。整组（图标 + 文字）在卡片里居中。 -->
         <div class="ceremony-body">
-          <button
-            type="button"
+          <span
             class="ceremony-icon"
-            :title="`更换图标：${ceremonyIconLabel(entry.icon)}`"
-            :aria-label="`更换图标：${ceremonyIconLabel(entry.icon)}`"
             data-ceremony-icon
             :data-ceremony-icon-key="entry.icon"
-            @click.stop="edit(entry)"
-          ><ListIcon :name="entry.icon" :size="88" /></button>
+          ><ListIcon :name="entry.icon" :size="88" /></span>
           <div class="min-w-0 text-left">
             <h3 class="ceremony-title" :data-ceremony-title="entry.id">{{ entry.title }}</h3>
             <p class="ceremony-date">
@@ -1041,25 +1037,11 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
   opacity: .7;
 }
 .ceremony-card.has-image::before { opacity: .38; }
-/* 图标：从 56px 方框放大 2 倍 → 112px 方框 / 88px 图标；整块可点，点开就是编辑。
-   用户 2026-10-27：「卡片左下侧图标放大2倍，点击图标可以修改」。 */
+/* 图标只显示图形，不再带方框/底色；修改统一走卡片右上角编辑按钮。
+   用户 2026-10-28：「卡片中图标取消边框只显示图标，取消点击修改，通过修改按钮修改」。 */
 .ceremony-icon {
-  @apply flex h-28 w-28 shrink-0 cursor-pointer items-center justify-center rounded-[26px];
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .22),
-    inset 0 0 0 1px var(--ceremony-line, rgba(255, 255, 255, .14)),
-    0 14px 28px -16px rgba(2, 6, 23, .7);
-  transition: transform .18s ease, box-shadow .18s ease;
+  @apply flex h-28 w-28 shrink-0 items-center justify-center;
 }
-.ceremony-icon:hover,
-.ceremony-icon:focus-visible {
-  transform: translateY(-1px) scale(1.02);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .28),
-    inset 0 0 0 1px var(--ceremony-line-hover, rgba(255, 255, 255, .28)),
-    0 18px 34px -16px rgba(2, 6, 23, .8);
-}
-.ceremony-icon:focus-visible { outline: 2px solid var(--ceremony-line-hover, rgba(255,255,255,.6)); outline-offset: 2px; }
 /* 内容整组（图标 + 文字）在卡片里居中，文字内部左对齐 */
 .ceremony-body { @apply flex items-center justify-center gap-3.5; }
 /* 标题与日期拉开层级：标题像名片上的姓名，日期像名片上的小字。 */
@@ -1112,8 +1094,8 @@ async function choosePreset(preset: (typeof PRESETS)[number]) {
 .ceremony-date, .ceremony-extra, .ceremony-actions { color: var(--ceremony-ink-soft, currentColor); }
 .ceremony-card .tiny-badge,
 .ceremony-card .row-action { color: var(--ceremony-ink-soft, currentColor); }
-/* 图标底盘：跟着卡面字色走的一层薄底（原来是固定的玫瑰色块，在彩色卡面上很跳） */
-.ceremony-icon { background: var(--ceremony-chip, rgba(255,255,255,.18)); color: inherit; }
+/* 图标跟随卡面字色，不再单独铺底 */
+.ceremony-icon { color: inherit; }
 /* 倒计时：不再用描边 + 流光动画，改成大号、克制的数字。
    高级感来自字重、字距与一层柔和的落影，而不是特效。 */
 .ceremony-hero { @apply flex items-baseline justify-center gap-2 text-center leading-none; }

@@ -327,6 +327,18 @@ func init() {
 	})
 	// 逾期提醒（用户 2026-10-12）：到期日当天过了「逾期提醒时间」还没完成的任务，
 	// 各发一条站内提醒（每个任务每天最多一条，见 notify_window.go）。
+	// 垃圾箱自动清空：按每个用户的 trash_auto_clear_days 每天清理一次；
+	// 打开垃圾箱时也会惰性清理，保证改完设置不用等一天。
+	scheduler.Register(scheduler.Job{
+		Name:       "reminder-trash-gc",
+		Interval:   24 * time.Hour,
+		RunAtStart: true,
+		Run: func() {
+			if appDB != nil {
+				purgeExpiredTrashAll(appDB)
+			}
+		},
+	})
 	scheduler.Register(scheduler.Job{
 		Name:     "reminder-overdue-notify",
 		Interval: time.Minute,

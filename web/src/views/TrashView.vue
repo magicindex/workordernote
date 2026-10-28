@@ -8,9 +8,19 @@
           删除的提醒都收在这里，不会出现在「全部」或「已完成」。恢复后会回到原来的清单。
         </p>
       </div>
-      <span class="rounded-full bg-slate-500/10 px-3 py-1 text-xs font-bold text-slate-600 dark:text-slate-300" data-trash-count>
-        {{ items.length }} 条
-      </span>
+      <div class="flex items-center gap-2">
+        <span class="rounded-full bg-slate-500/10 px-3 py-1 text-xs font-bold text-slate-600 dark:text-slate-300" data-trash-count>
+          {{ items.length }} 条
+        </span>
+        <button
+          v-if="items.length"
+          type="button"
+          class="rounded-full border border-rose-500/30 bg-rose-500/[.07] px-3 py-1 text-xs font-bold text-rose-500 transition hover:bg-rose-500/15 disabled:opacity-50"
+          data-trash-clear
+          :disabled="clearing"
+          @click="clearOpen = true"
+        >清空</button>
+      </div>
     </div>
 
     <div v-if="errorMsg" class="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-rose-500/25 bg-rose-500/[.06] px-4 py-3 text-xs font-bold text-rose-500" data-trash-error>
@@ -79,22 +89,39 @@
         {{ toast }}
       </div>
     </Transition>
+
+    <ConfirmDialog
+      v-model="clearOpen"
+      title="清空垃圾箱"
+      message="清空后这些提醒将无法恢复，只能重新创建。确定清空吗？"
+      confirm-text="清空"
+      :danger="true"
+      :loading="clearing"
+      @confirm="clearAll"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { getTrash, restoreTrash, type TrashItem } from '../api/reminder'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { clearTrash, getTrash, restoreTrash, type TrashItem } from '../api/reminder'
 
 const items = ref<TrashItem[]>([])
 const loading = ref(true)
 const restoring = ref<number | null>(null)
+const clearing = ref(false)
+const clearOpen = ref(false)
 const visibleCount = ref(100)
 const visibleItems = computed(() => items.value.slice(0, visibleCount.value))
 const remaining = computed(() => Math.max(0, items.value.length - visibleItems.value.length))
 const errorMsg = ref('')
 const toast = ref('')
 let toastTimer: ReturnType<typeof setTimeout> | undefined
+
+function notifyChanged() {
+  window.dispatchEvent(new CustomEvent('reminder-data-changed'))
+}
 
 function showToast(message: string) {
   toast.value = message
@@ -115,11 +142,29 @@ async function load() {
   errorMsg.value = ''
   try {
     const res = await getTrash()
-    items.value = res.data?.data?.items || []
+    const data = res.data?.data || {}
+    items.value = data.items || []
+    if (data.purged) notifyChanged()
   } catch (err: any) {
     errorMsg.value = err?.response?.data?.message || '读取垃圾箱失败，请稍后再试'
   } finally {
     loading.value = false
+  }
+}
+
+async function clearAll() {
+  clearing.value = true
+  errorMsg.value = ''
+  try {
+    await clearTrash()
+    items.value = []
+    clearOpen.value = false
+    notifyChanged()
+    showToast('垃圾箱已清空')
+  } catch (err: any) {
+    errorMsg.value = err?.response?.data?.message || '清空失败，请稍后再试'
+  } finally {
+    clearing.value = false
   }
 }
 
@@ -129,6 +174,7 @@ async function restore(item: TrashItem) {
   try {
     await restoreTrash(item.id)
     items.value = items.value.filter((x) => x.id !== item.id)
+    notifyChanged()
     showToast(`已恢复「${item.title}」`)
   } catch (err: any) {
     errorMsg.value = err?.response?.data?.message || '恢复失败，请稍后再试'

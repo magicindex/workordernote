@@ -313,6 +313,14 @@ func init() {
 		Group: "features", Label: "提醒@他",
 		Description: "在侧栏「我的清单」下显示「提醒@他」页面（多人之间互相推提醒）；关掉后入口隐藏，别人在 @ 列表里也看不到你，已发提醒数据保留",
 	})
+	// 垃圾箱自动清空：0 表示不自动清空；大于 0 时每天把删除超过 N 天的提醒
+	// 打上 purged_at 墓碑（垃圾箱隐藏，但仍随双机同步，不会被对端快照复活）。
+	RegisterConfig(ConfigDef{
+		Key: "trash_auto_clear_days", Scope: ScopeUser, Type: TypeInt,
+		Default: "0", Public: true,
+		Group: "features", Label: "垃圾箱自动清空",
+		Description: "删除的提醒在垃圾箱保留多少天后自动清空；填 0 表示不自动清空（默认）",
+	})
 	RegisterConfig(ConfigDef{
 		Key: "log_retention_days", Scope: ScopeSystem, Type: TypeInt,
 		Default: "30",
