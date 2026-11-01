@@ -14,6 +14,22 @@
 
 ---
 
+## 界面预览
+
+| 首页看板 | 月历总览 |
+| --- | --- |
+| ![首页看板](docs/screenshots/home.png) | ![月历总览](docs/screenshots/calendar-month.png) |
+| **周视图** | **课程表** |
+| ![周视图](docs/screenshots/calendar-week.png) | ![课程表](docs/screenshots/timetable.png) |
+
+<p align="center">
+  <img src="docs/screenshots/mobile-home.png" width="260" alt="手机首页">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/mobile-timetable.png" width="260" alt="手机课程表">
+</p>
+
+---
+
 ## 功能
 
 | 模块 | 说明 |
