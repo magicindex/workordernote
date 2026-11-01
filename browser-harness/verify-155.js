@@ -22,7 +22,7 @@ function check(name, ok, detail) {
       const r = await fetch(base + '/api/reminder/lists', { headers: { Authorization: 'Bearer ' + token } });
       return (await r.json())?.data || [];
     }, BASE);
-    const need = Math.max(0, 4 - existing.length);
+    const need = Math.max(0, 12 - existing.length);
     for (let i = 0; i < need; i++) {
       const made = await page.evaluate(async ({ base, i }) => {
         const token = localStorage.getItem('reminders.token');

@@ -86,6 +86,8 @@ const text = (page) => page.evaluate(() => document.body.innerText);
 
       await page.goto(BASE + '/admin/settings', { waitUntil: 'domcontentloaded' });
       await sleep(1800);
+      const mobileTab = await page.$('[data-settings-tab="mobile"]');
+      if (mobileTab) { await mobileTab.click(); await sleep(500); }
       const settings = await text(page);
       check('偏好设置有手机日历卡', settings.includes('手机日历') && settings.includes('订阅到手机日历'));
       check('不再出现安卓客户端入口', !settings.includes('安卓客户端'));
