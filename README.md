@@ -46,10 +46,10 @@
 镜像发布在仓库自带的容器仓库，可直接拉取：
 
 ```bash
-docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.44.0
+docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.44.1
 ```
 
-同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.44.0`；Gitea 容器仓库不可用时可直接改用。
+同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.44.1`；Gitea 容器仓库不可用时可直接改用。
 
 ### 用仓库里的 compose 文件安装
 
@@ -74,7 +74,7 @@ curl -fsSLO https://raw.githubusercontent.com/magicindex/workordernote/main/dock
 ```yaml
 services:
   workordernote:
-    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.44.0
+    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.44.1
     container_name: workordernote
     # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
     user: "1000:1001"
