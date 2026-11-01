@@ -243,6 +243,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 离线包 `pkg/WorkOrderNote-0.44.1-offline-amd64.tar.gz`（sha256 `797e8f22f07df3ea32b9fd7ffd44acdfe08e92a8ab670dbfe148fd2c8b9b32f0`）。
 - README 界面截图（首页 / 月历 / 周视图 / 课程表 / 手机）提交 `246c7bb`，Gitea `main` 已推送；Gitea Release `v0.44.1`（id 53）附离线包、单镜像包、bundle、截图包。
 - GitHub 快照 `publish-workordernote` 通过 Git Data API 提交 `bc1423b` 并创建 `v0.44.1` tag；Actions `release`（run 41297442286）成功，Release 附源码包、bundle、镜像包、截图包与 SHA256SUMS；`ghcr.io/magicindex/workordernote:v0.44.1` / `latest` 已发布。旧版本 fpk/截图资产已从该 Release 清理。
+- 飞牛 fnOS 安装包 `release/0.44.1/workordernote_0.44.1_amd64.fpk`（21,888,350 B，sha256 `4d9cf16d2f8b46dac84b2a29f060efd966c5011436ae2f8d1d5a97e1914f2ea5`，x86）已补传到 Gitea Release 53 与 GitHub Release v0.44.1。
 - 源码提交 `52e215b`；后续部署记录单独提交。
 
 ### 2026-11-01：0.44.0（201 生产 / 200 生产上线）—— 周视图重做、邮箱找回与日历同步
