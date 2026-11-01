@@ -1,310 +1,261 @@
 package security
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/rand"
 	"errors"
 	"fmt"
-	"net/http"
+	"log"
+	"math/big"
+	"strconv"
+	"strings"
+	"time"
 	"unicode/utf8"
 
 	"smallgo/server/auth"
 	"smallgo/server/database"
 	"smallgo/server/response"
+	"smallgo/server/sysconfig"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-var ErrAnswerTooLong = errors.New("安全问题答案不能超过72字节")
+const (
+	configEmailResetEnabled = "password_reset_email_enabled"
+	configCodeTTLMinutes    = "password_reset_code_ttl_minutes"
 
-func SetSecurityQuestions(db *gorm.DB, userID uint, q1, a1, q2, a2, q3, a3 string) error {
-	var sq database.SecurityQuestion
-	result := db.Where("user_id = ?", userID).First(&sq)
+	defaultCodeTTLMinutes = 10
+	maxCodeTTLMinutes     = 60
+	codeCooldown          = time.Minute
+	maxCodeAttempts       = 5
+	codeLength            = 6
+)
 
-	hashedA1, err := auth.HashPassword(a1)
-	if err != nil {
-		return ErrAnswerTooLong
-	}
-	hashedA2, err := auth.HashPassword(a2)
-	if err != nil {
-		return ErrAnswerTooLong
-	}
-	hashedA3, err := auth.HashPassword(a3)
-	if err != nil {
-		return ErrAnswerTooLong
-	}
+var (
+	errEmailResetDisabled = errors.New("邮箱找回密码已关闭，请联系管理员")
+	errInvalidResetCode   = errors.New("验证码无效或已过期，请重新获取")
+	errTooManyAttempts    = errors.New("验证码错误次数过多，请重新获取")
+)
 
-	if result.Error == gorm.ErrRecordNotFound {
-		sq = database.SecurityQuestion{
-			UserID:    userID,
-			Question1: q1,
-			Answer1:   hashedA1,
-			Question2: q2,
-			Answer2:   hashedA2,
-			Question3: q3,
-			Answer3:   hashedA3,
-		}
-		return db.Create(&sq).Error
-	}
+// recoveryMailer 给用户所有 active 接收邮箱发一封纯文本邮件。
+// sent=false 表示这个账号没有绑定邮箱；调用方不应把这个结果直接暴露给访客，
+// 否则接口会变成「用户名是否存在/有没有邮箱」的探测器。
+type recoveryMailer func(db *gorm.DB, userID uint, subject, body string) (sent bool, err error)
 
-	if result.Error != nil {
-		return result.Error
-	}
-
-	sq.Question1 = q1
-	sq.Answer1 = hashedA1
-	sq.Question2 = q2
-	sq.Answer2 = hashedA2
-	sq.Question3 = q3
-	sq.Answer3 = hashedA3
-	return db.Save(&sq).Error
+// 由 main.go 注入 reminder.SendMailToUser。security 不能直接 import reminder：
+// reminder 的测试 import 根 server 包，而根 server 包 import security，
+// 直接依赖会绕成 test import cycle。
+var sendRecoveryMail recoveryMailer = func(*gorm.DB, uint, string, string) (bool, error) {
+	return false, nil
 }
 
-func GetSecurityQuestions(db *gorm.DB, userID uint) (map[string]interface{}, error) {
-	var sq database.SecurityQuestion
-	result := db.Where("user_id = ?", userID).First(&sq)
-	if result.Error == gorm.ErrRecordNotFound {
-		return map[string]interface{}{
-			"question1":     "",
-			"question2":     "",
-			"question3":     "",
-			"has_questions": false,
-		}, nil
+func SetRecoveryMailer(fn recoveryMailer) {
+	if fn != nil {
+		sendRecoveryMail = fn
 	}
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return map[string]interface{}{
-		"question1":     sq.Question1,
-		"question2":     sq.Question2,
-		"question3":     sq.Question3,
-		"has_questions": true,
-	}, nil
 }
 
-func GetSecurityQuestionsByUsername(db *gorm.DB, username string) (map[string]interface{}, error) {
-	var user database.User
-	if err := db.Where("username = ?", username).First(&user).Error; err != nil {
-		return nil, err
-	}
+func emailResetEnabled(db *gorm.DB) bool {
+	value, err := sysconfig.GetConfig(db, configEmailResetEnabled, 0)
+	return err != nil || value != "false"
+}
 
-	questions, err := GetSecurityQuestions(db, user.ID)
+func resetCodeTTL(db *gorm.DB) time.Duration {
+	value, err := sysconfig.GetConfig(db, configCodeTTLMinutes, 0)
 	if err != nil {
-		return nil, err
+		return defaultCodeTTLMinutes * time.Minute
 	}
-
-	questions["user_id"] = user.ID
-	return questions, nil
+	minutes, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || minutes < 1 || minutes > maxCodeTTLMinutes {
+		return defaultCodeTTLMinutes * time.Minute
+	}
+	return time.Duration(minutes) * time.Minute
 }
 
-func VerifyAnswers(db *gorm.DB, username string, a1, a2, a3 string, a1md5, a2md5, a3md5 string) error {
-	var user database.User
-	if err := db.Where("username = ?", username).First(&user).Error; err != nil {
-		return fmt.Errorf("用户不存在")
+func validateNewPassword(password string) error {
+	if utf8.RuneCountInString(password) < 6 {
+		return fmt.Errorf("密码长度不能少于6位")
 	}
-
-	var sq database.SecurityQuestion
-	if err := db.Where("user_id = ?", user.ID).First(&sq).Error; err != nil {
-		return fmt.Errorf("未设置安全问题")
+	if len(password) > 72 {
+		return fmt.Errorf("密码长度不能超过72字节")
 	}
-
-	ok1, migrate1 := verifyAnswer(sq.Answer1, a1, a1md5)
-	ok2, migrate2 := verifyAnswer(sq.Answer2, a2, a2md5)
-	ok3, migrate3 := verifyAnswer(sq.Answer3, a3, a3md5)
-	if !ok1 || !ok2 || !ok3 {
-		return fmt.Errorf("安全问题验证失败")
-	}
-	if migrate1 || migrate2 || migrate3 {
-		hashedA1, err := auth.HashPassword(a1)
-		if err != nil {
-			return ErrAnswerTooLong
-		}
-		hashedA2, err := auth.HashPassword(a2)
-		if err != nil {
-			return ErrAnswerTooLong
-		}
-		hashedA3, err := auth.HashPassword(a3)
-		if err != nil {
-			return ErrAnswerTooLong
-		}
-		if err := db.Model(&sq).Updates(map[string]interface{}{
-			"answer1": hashedA1,
-			"answer2": hashedA2,
-			"answer3": hashedA3,
-		}).Error; err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
-func verifyAnswer(stored, raw, legacyMD5 string) (bool, bool) {
-	if auth.VerifyPassword(stored, raw) {
-		return true, auth.IsLegacyHash(stored)
+func newResetCode() (string, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
+	if err != nil {
+		return "", err
 	}
-	sum := sha256.Sum256([]byte(raw))
-	for _, candidate := range []string{hex.EncodeToString(sum[:]), legacyMD5} {
-		if candidate != "" && candidate != raw && auth.VerifyPassword(stored, candidate) {
-			return true, true
-		}
-	}
-	return false, false
+	return fmt.Sprintf("%0*d", codeLength, n.Int64()), nil
 }
 
-func VerifyAndResetPassword(db *gorm.DB, username string, a1, a2, a3 string, a1md5, a2md5, a3md5 string, newPassword string) error {
-	if utf8.RuneCountInString(newPassword) < 6 {
-		return fmt.Errorf("密码长度不能少于6位")
-	}
-	if len(newPassword) > 72 {
-		return fmt.Errorf("密码长度不能超过72字节")
-	}
-	if err := VerifyAnswers(db, username, a1, a2, a3, a1md5, a2md5, a3md5); err != nil {
-		return err
-	}
-
+func activeUserByName(db *gorm.DB, username string) (*database.User, error) {
 	var user database.User
-	if err := db.Where("username = ?", username).First(&user).Error; err != nil {
-		return err
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	if err := db.Where("username = ? AND status = ?", username, 1).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// issueResetCode 生成验证码并发送。返回 sent=false 时，调用方仍要回统一的
+// 「已发送」提示：用户不存在、没绑邮箱、刚发过都在这一层被抹平。
+func issueResetCode(db *gorm.DB, username string) (bool, error) {
+	user, err := activeUserByName(db, username)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
 	}
 
-	hashedPassword, err := auth.HashPassword(newPassword)
+	var last database.PasswordResetCode
+	if err := db.Where("user_id = ? AND consumed_at IS NULL", user.ID).
+		Order("created_at DESC").First(&last).Error; err == nil &&
+		time.Since(last.CreatedAt) < codeCooldown {
+		return false, nil
+	}
+
+	code, err := newResetCode()
+	if err != nil {
+		return false, err
+	}
+	hash, err := auth.HashPassword(code)
+	if err != nil {
+		return false, err
+	}
+	ttl := resetCodeTTL(db)
+	row := database.PasswordResetCode{
+		UserID:    user.ID,
+		CodeHash:  hash,
+		ExpiresAt: time.Now().Add(ttl),
+	}
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", user.ID).Delete(&database.PasswordResetCode{}).Error; err != nil {
+			return err
+		}
+		return tx.Create(&row).Error
+	}); err != nil {
+		return false, err
+	}
+
+	subject := "工作序记｜找回密码验证码"
+	body := fmt.Sprintf("你正在找回工作序记的登录密码。\r\n\r\n验证码：%s\r\n有效期：%d 分钟\r\n\r\n如果不是你本人操作，请忽略这封邮件。",
+		code, int(ttl/time.Minute))
+	sent, err := sendRecoveryMail(db, user.ID, subject, body)
+	if err != nil {
+		_ = db.Delete(&row).Error
+		return false, err
+	}
+	if !sent {
+		_ = db.Delete(&row).Error
+		return false, nil
+	}
+	return true, nil
+}
+
+func ResetPasswordByEmail(db *gorm.DB, username, code, newPassword string) error {
+	if err := validateNewPassword(newPassword); err != nil {
+		return err
+	}
+	user, err := activeUserByName(db, username)
+	if err != nil {
+		return errInvalidResetCode
+	}
+
+	var row database.PasswordResetCode
+	if err := db.Where("user_id = ? AND consumed_at IS NULL", user.ID).
+		Order("created_at DESC").First(&row).Error; err != nil {
+		return errInvalidResetCode
+	}
+	if time.Now().After(row.ExpiresAt) {
+		_ = db.Delete(&row).Error
+		return errInvalidResetCode
+	}
+	if row.Attempts >= maxCodeAttempts {
+		return errTooManyAttempts
+	}
+	if !auth.VerifyPassword(row.CodeHash, strings.TrimSpace(code)) {
+		_ = db.Model(&row).UpdateColumn("attempts", gorm.Expr("attempts + 1")).Error
+		return errInvalidResetCode
+	}
+
+	hash, err := auth.HashPassword(newPassword)
 	if err != nil {
 		return err
 	}
-	return db.Model(&user).Updates(map[string]interface{}{
-		"password":     hashedPassword,
-		"auth_version": gorm.Expr("auth_version + 1"),
-	}).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		consumed := tx.Model(&database.PasswordResetCode{}).
+			Where("id = ? AND consumed_at IS NULL", row.ID).
+			Update("consumed_at", time.Now())
+		if consumed.Error != nil {
+			return consumed.Error
+		}
+		if consumed.RowsAffected != 1 {
+			return errInvalidResetCode
+		}
+		if err := tx.Model(&database.User{}).Where("id = ?", user.ID).Updates(map[string]interface{}{
+			"password":     hash,
+			"auth_version": gorm.Expr("auth_version + 1"),
+		}).Error; err != nil {
+			return err
+		}
+		return tx.Where("user_id = ?", user.ID).Delete(&database.PasswordResetCode{}).Error
+	})
 }
 
-func handleGetQuestions(db *gorm.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		userID := c.GetUint("userID")
-
-		questions, err := GetSecurityQuestions(db, userID)
-		if err != nil {
-			response.ErrorInternal(c, "获取安全问题失败")
-			return
-		}
-
-		response.Success(c, questions)
-	}
-}
-
-func handleSetQuestions(db *gorm.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		userID := c.GetUint("userID")
-
-		var req struct {
-			Question1 string `json:"question1" binding:"required"`
-			Answer1   string `json:"answer1" binding:"required"`
-			Question2 string `json:"question2" binding:"required"`
-			Answer2   string `json:"answer2" binding:"required"`
-			Question3 string `json:"question3" binding:"required"`
-			Answer3   string `json:"answer3" binding:"required"`
-		}
-
-		if err := c.ShouldBindJSON(&req); err != nil {
-			response.ErrorBadRequest(c, "请填写所有安全问题和答案")
-			return
-		}
-
-		if err := SetSecurityQuestions(db, userID, req.Question1, req.Answer1, req.Question2, req.Answer2, req.Question3, req.Answer3); err != nil {
-			if errors.Is(err, ErrAnswerTooLong) {
-				response.ErrorBadRequest(c, err.Error())
-			} else {
-				response.ErrorInternal(c, "设置安全问题失败")
-			}
-			return
-		}
-
-		response.Success(c, nil)
-	}
-}
-
-func handleGetQuestionsByUsername(db *gorm.DB) gin.HandlerFunc {
+func handleSendCode(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			Username string `json:"username" binding:"required"`
 		}
-
 		if err := c.ShouldBindJSON(&req); err != nil {
 			response.ErrorBadRequest(c, "请输入用户名")
 			return
 		}
-
-		questions, err := GetSecurityQuestionsByUsername(db, req.Username)
-		if err != nil {
-			response.Error(c, http.StatusNotFound, response.CodeNotFound, "用户不存在")
+		if !emailResetEnabled(db) {
+			response.ErrorBadRequest(c, errEmailResetDisabled.Error())
 			return
 		}
-
-		response.Success(c, questions)
+		if _, err := issueResetCode(db, req.Username); err != nil {
+			// 发送失败也不能把「账号存在/不存在」暴露给访客：统一回成功，
+			// 具体 SMTP 错误只写服务端日志，由管理员在通知方式页排查。
+			log.Printf("security: send password reset code: %v", err)
+		}
+		response.Success(c, gin.H{"expires_in": int(resetCodeTTL(db) / time.Second)})
 	}
 }
 
-func handleVerifyAnswers(db *gorm.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var req struct {
-			Username   string `json:"username" binding:"required"`
-			Answer1    string `json:"answer1" binding:"required"`
-			Answer2    string `json:"answer2" binding:"required"`
-			Answer3    string `json:"answer3" binding:"required"`
-			Answer1Md5 string `json:"answer1_md5"`
-			Answer2Md5 string `json:"answer2_md5"`
-			Answer3Md5 string `json:"answer3_md5"`
-		}
-
-		if err := c.ShouldBindJSON(&req); err != nil {
-			response.ErrorBadRequest(c, "请填写所有安全问题答案")
-			return
-		}
-
-		if err := VerifyAnswers(db, req.Username, req.Answer1, req.Answer2, req.Answer3, req.Answer1Md5, req.Answer2Md5, req.Answer3Md5); err != nil {
-			response.ErrorBadRequest(c, err.Error())
-			return
-		}
-
-		response.Success(c, nil)
-	}
-}
-
-func handleVerifyAndReset(db *gorm.DB) gin.HandlerFunc {
+func handleEmailReset(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			Username    string `json:"username" binding:"required"`
-			Answer1     string `json:"answer1" binding:"required"`
-			Answer2     string `json:"answer2" binding:"required"`
-			Answer3     string `json:"answer3" binding:"required"`
-			Answer1Md5  string `json:"answer1_md5"`
-			Answer2Md5  string `json:"answer2_md5"`
-			Answer3Md5  string `json:"answer3_md5"`
+			Code        string `json:"code" binding:"required"`
 			NewPassword string `json:"new_password" binding:"required"`
 		}
-
 		if err := c.ShouldBindJSON(&req); err != nil {
-			response.ErrorBadRequest(c, "请填写所有字段")
+			response.ErrorBadRequest(c, "请填写用户名、验证码和新密码")
 			return
 		}
-
-		if err := VerifyAndResetPassword(db, req.Username, req.Answer1, req.Answer2, req.Answer3, req.Answer1Md5, req.Answer2Md5, req.Answer3Md5, req.NewPassword); err != nil {
+		if !emailResetEnabled(db) {
+			response.ErrorBadRequest(c, errEmailResetDisabled.Error())
+			return
+		}
+		if err := ResetPasswordByEmail(db, req.Username, req.Code, req.NewPassword); err != nil {
 			response.ErrorBadRequest(c, err.Error())
 			return
 		}
-
 		response.Success(c, nil)
 	}
 }
 
-// RegisterRoutes wires security-question endpoints. Managing one's own
-// questions requires auth; the forgot-password flow is public but rate limited
-// to slow down brute-forcing of answers.
-func RegisterRoutes(public *gin.RouterGroup, auth *gin.RouterGroup, db *gorm.DB) {
-	auth.GET("/security/questions", handleGetQuestions(db))
-	auth.POST("/security/questions", handleSetQuestions(db))
-	public.POST("/security/forgot/username", handleGetQuestionsByUsername(db))
-	public.POST("/security/forgot/verify", handleVerifyAnswers(db))
-	public.POST("/security/forgot/reset", handleVerifyAndReset(db))
+// RegisterRoutes 只保留邮箱验证码找回密码。安全问题流程已移除：
+// 旧 security_questions 表仅作历史数据保留，账号删除时仍会清理。
+func RegisterRoutes(public *gin.RouterGroup, db *gorm.DB) {
+	public.POST("/security/forgot/send-code", handleSendCode(db))
+	public.POST("/security/forgot/email-reset", handleEmailReset(db))
 }

@@ -72,6 +72,8 @@ type Reminder struct {
 	ListID  uint   `gorm:"not null;index" json:"list_id"`
 	Title   string `gorm:"size:200;not null" json:"title"`
 	Notes   string `gorm:"type:text" json:"notes"`
+	// Color 是这条提醒自己在日历里挑的颜色（空 = 周视图自动配色）。
+	Color string `gorm:"size:16;not null;default:''" json:"color"`
 	// BottomText 是仪式感卡片底部的自定义文案（空 = 自动显示「与你共度第 N 次…」）。
 	BottomText string `gorm:"size:200;not null;default:''" json:"bottom_text"`
 	// Icon 是仪式感卡片左侧的图标 key（见 utils/list-icons.ts）；空 = 按标题自动选。
@@ -343,6 +345,7 @@ type CompletedItemDTO struct {
 type CalendarItemDTO struct {
 	ID       uint   `json:"id"`
 	Title    string `json:"title"`
+	Color    string `json:"color"`
 	ListID   uint   `json:"list_id"`
 	ListName string `json:"list_name"`
 	// ListColor 是清单的色名（blue/violet/rose/amber/emerald），前端沿用
@@ -351,6 +354,9 @@ type CalendarItemDTO struct {
 	// ListIcon 是清单的图标 key（见 list_icons.go）：日历格子用图标代替原来的圆点。
 	ListIcon string    `json:"list_icon"`
 	DueAt    time.Time `json:"due_at"`
+	// CreatedAt 是创建时间。周视图对「当天创建、当天到期」的普通待办，从创建时刻画到到期时刻，
+	// 否则 23:59 的任务只剩最底下一小截，看不出时间段。
+	CreatedAt time.Time `json:"created_at"`
 	// StartAt / EndAt 是时间段任务的起止（计划页的「开始—结束」）；没有区间时为空。
 	StartAt *time.Time `json:"start_at,omitempty"`
 	EndAt   *time.Time `json:"end_at,omitempty"`

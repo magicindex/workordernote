@@ -7,7 +7,6 @@
  *   3) 手机端不提供导出表格（列表页「导出表格」、日历页「导出本月」在窄屏隐藏，电脑上仍在）。
  *   4) 列表页标题工具栏：条数 / 过期提示 / 未完成·全部 / 刷新都在，刷新真的会重新拉数据。
  *   5) 手机端渲染优化：行与卡片在窄屏去掉模糊阴影、hover 位移，transition 收窄，并量一次帧间隔。
- *   6) 安卓壳子里的登录页只显示「服务器设置」这行文字（不再摆出服务器地址），点了调原生设置。
  *
  * 用法：APP_URL=http://127.0.0.1:8918 node verify-096.js
  * 数据：会临时改「记住登录天数」配置（读完原值→改→验→改回），并做一次登录/登出。
@@ -375,38 +374,7 @@ async function gotoRetry(page, url, tries = 3) {
     });
     check('电脑端仍然有「导出表格」', desktopExport === true);
 
-    // ---------- 6. 安卓壳子：登录页只显示「服务器设置」文字 ----------
-    await page.evaluateOnNewDocument(() => {
-      window.__shellOpened = 0
-      window.AndroidShell = {
-        getServerUrl: () => 'http://192.168.3.201:8906',
-        getAppVersion: () => '0.1.0',
-        openServerSettings: () => { window.__shellOpened += 1 },
-        reload: () => {},
-      }
-    })
-    // 壳子里的登录页同样要先登出才看得到（守卫会把已登录的人送回工作台）
-    const shellKeep = await openLoginForm(page, BASE);
-    const shellEntry = await page.evaluate(() => {
-      const entry = document.querySelector('[data-server-entry]')
-      return {
-        exists: !!entry,
-        text: entry ? entry.innerText.replace(/\s+/g, ' ').trim() : '',
-        showsUrl: /https?:\/\//.test(entry ? entry.innerText : ''),
-        hasUrlNode: !!document.querySelector('[data-server-url]'),
-      }
-    });
-    check('壳子里登录页有「服务器设置」入口', shellEntry.exists === true, JSON.stringify(shellEntry));
-    check('入口只有文字、不再显示服务器地址', shellEntry.text === '服务器设置' && shellEntry.showsUrl === false && shellEntry.hasUrlNode === false, JSON.stringify(shellEntry));
-    await page.evaluate(() => document.querySelector('[data-server-edit]').click());
-    await sleep(400);
-    const opened = await page.evaluate(() => window.__shellOpened);
-    check('点「服务器设置」会弹出原生地址输入', opened === 1, String(opened));
-    await page.screenshot({ path: path.join(SHOTS, 'login-server-text.png') });
-    await page.evaluateOnNewDocument(() => { delete window.AndroidShell; });
-    await restoreToken(page, shellKeep);
-
-    console.log(`  截图：${path.join(SHOTS, 'install-card.png')} / login-server-text.png`);
+    console.log(`  截图：${path.join(SHOTS, 'install-card.png')}`);
   });
 
   console.log(`\n结果：${passed} 项通过，${failed} 项失败`);

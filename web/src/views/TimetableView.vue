@@ -72,8 +72,15 @@
               v-if="table.is_shared"
               class="timetable-share-chip"
               :class="table.permission === 'read' ? 'is-readonly' : 'is-write'"
-              :title="`由 ${table.owner_name || '对方'} 共享`"
-            >{{ table.permission === 'read' ? '只读' : '可编辑' }}</span>
+              :data-share-access="table.permission"
+              :title="`由 ${table.owner_name || '对方'} 共享 · ${table.permission === 'read' ? '只读' : '可编辑'}`"
+              :aria-label="`共享课程表，${table.permission === 'read' ? '只读' : '可编辑'}`"
+            >
+              <!-- 共享标识 + 权限状态都用图标，避免在标签里挤文字（用户 2026-10-29）。 -->
+              <svg viewBox="0 0 24 24" class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5"/><path d="M17 8h5M19.5 5.5v5"/></svg>
+              <svg v-if="table.permission === 'read'" viewBox="0 0 24 24" class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+              <svg v-else viewBox="0 0 24 24" class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z"/></svg>
+            </span>
             <span class="timetable-tab-count">{{ table.entry_count }}</span>
           </button>
         </div>
@@ -321,6 +328,35 @@
           <button type="button" class="btn-secondary !h-9 !px-3 !text-xs" @click="entryOpen = false">取消</button>
           <button type="submit" class="btn-primary !h-9 !px-4 !text-xs" :disabled="savingEntry" data-entry-save>
             {{ savingEntry ? '保存中…' : '保存' }}
+          </button>
+        </div>
+      </form>
+    </Modal>
+
+    <!-- 手机非编辑态：点课程只改备注，其他字段不展示（用户 2026-10-29） -->
+    <Modal
+      v-model="noteOpen"
+      :title="noteTitle"
+      panel-class="dark:border dark:border-white/20 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_0_34px_-10px_rgba(147,197,253,0.5)]"
+    >
+      <form class="space-y-3" data-entry-note-dialog @submit.prevent="saveNote">
+        <textarea
+          v-model="noteText"
+          rows="5"
+          maxlength="300"
+          class="input-field resize-y"
+          :readonly="noteReadonly"
+          :placeholder="noteReadonly ? '这条课程没有备注' : '记一句作业、要带的东西，或课堂提醒…'"
+          data-entry-note-input
+        ></textarea>
+        <p class="text-[11px] text-muted-foreground">
+          {{ noteReadonly ? '只读共享：备注不可修改。' : '这条备注会同步到随手记事本的「课程备注」里。' }}
+        </p>
+        <p v-if="noteError" class="text-xs font-semibold text-destructive" data-entry-note-error>{{ noteError }}</p>
+        <div class="flex items-center justify-end gap-2 pt-1">
+          <button type="button" class="btn-secondary !h-9 !px-3 !text-xs" @click="noteOpen = false">{{ noteReadonly ? '关闭' : '取消' }}</button>
+          <button v-if="!noteReadonly" type="submit" class="btn-primary !h-9 !px-4 !text-xs" :disabled="noteSaving" data-entry-note-save>
+            {{ noteSaving ? '保存中…' : '保存备注' }}
           </button>
         </div>
       </form>
@@ -690,8 +726,9 @@ function seededColors(seed: number) {
   return map
 }
 const sectionColors = computed<Record<string, string>>(() => seededColors(activeId.value || 1))
-function sectionColorForStart(start: string) {
-  return sectionColors.value[sectionOfStart(start)] || palette[0].key
+function sectionColorForTime(start: string, end: string) {
+  const slot = nearestSlotFor(start, end)
+  return sectionColors.value[slot?.section || sectionOfStart(start)] || palette[0].key
 }
 
 function sectionOfStart(start: string): PeriodKey {
@@ -722,14 +759,29 @@ type PeriodItem =
   | { kind: 'slot'; at: string; slot: TimetableSlot; row: number }
   | { kind: 'filler'; at: string; slot: TimetableSlot; row: number }
 
-function slotIndexFor(entry: TimetableEntry, sectionSlots: { start: string; end: string }[]) {
-  const at = entry.start_time
-  const inside = sectionSlots.findIndex((slot) => at >= slot.start && at < slot.end)
-  if (inside >= 0) return inside
-  for (let i = sectionSlots.length - 1; i >= 0; i -= 1) {
-    if (at >= sectionSlots[i].start) return i
+// 这节课离哪一节最近就归哪一节：先看时间段与节次的重叠，完全没重叠时按间隔距离；
+// 距离一样时优先往下一节放，避免「10:10 的课挂到 10:05 结束的上一节」。
+function nearestSlotFor(start: string, end: string): TimetableSlot | null {
+  const list = slots.value
+  if (!list.length) return null
+  const startMin = minutesOf(start)
+  const endMin = Math.max(startMin + 1, minutesOf(end))
+  let best: TimetableSlot | null = null
+  let bestOverlap = Number.NEGATIVE_INFINITY
+  let bestGap = Number.POSITIVE_INFINITY
+  for (const slot of list) {
+    const slotStart = minutesOf(slot.start)
+    const slotEnd = minutesOf(slot.end)
+    const overlap = Math.min(endMin, slotEnd) - Math.max(startMin, slotStart)
+    const gap = Math.max(0, slotStart - endMin, startMin - slotEnd)
+    const preferNext = !!(best && gap === bestGap && slot.start >= start && best.start < start)
+    if (overlap > bestOverlap || (overlap === bestOverlap && (gap < bestGap || preferNext))) {
+      best = slot
+      bestOverlap = overlap
+      bestGap = gap
+    }
   }
-  return sectionSlots.length ? 0 : -1
+  return best
 }
 
 // 整周哪些节次上有课：别的天有课时，本天空位补一块同高的占位，
@@ -737,10 +789,8 @@ function slotIndexFor(entry: TimetableEntry, sectionSlots: { start: string; end:
 const rowsWithContent = computed(() => {
   const set = new Set<number>()
   for (const entry of entries.value) {
-    const section = sectionOfStart(entry.start_time)
-    const sectionSlots = slots.value.filter((slot) => slot.section === section)
-    const index = slotIndexFor(entry, sectionSlots)
-    if (index >= 0) set.add(sectionSlots[index].index)
+    const slot = nearestSlotFor(entry.start_time, entry.end_time)
+    if (slot) set.add(slot.index)
   }
   return set
 })
@@ -756,19 +806,26 @@ const days = computed(() => weekdays.map((day, i) => {
     entries: own,
     periods: SECTIONS
       .map((period) => {
-        const ownInSection = own.filter((entry) => sectionOfStart(entry.start_time) === period.key)
         const sectionSlots = slots.value.filter((slot) => slot.section === period.key)
-        const buckets: TimetableEntry[][] = sectionSlots.map(() => [])
-        const loose: TimetableEntry[] = []
-        for (const entry of ownInSection) {
-          const index = slotIndexFor(entry, sectionSlots)
-          if (index >= 0) buckets[index].push(entry)
-          else loose.push(entry)
+        const buckets = new Map<number, TimetableEntry[]>()
+        const looseBySection = new Map<string, TimetableEntry[]>()
+        for (const entry of own) {
+          const slot = nearestSlotFor(entry.start_time, entry.end_time)
+          if (slot) {
+            const list = buckets.get(slot.index) || []
+            list.push(entry)
+            buckets.set(slot.index, list)
+          } else {
+            const section = sectionOfStart(entry.start_time)
+            looseBySection.set(section, [...(looseBySection.get(section) || []), entry])
+          }
         }
         const items: PeriodItem[] = []
-        sectionSlots.forEach((slot, index) => {
-          const list = buckets[index].sort((a, b) => a.start_time.localeCompare(b.start_time))
+        let count = 0
+        sectionSlots.forEach((slot) => {
+          const list = (buckets.get(slot.index) || []).sort((a, b) => a.start_time.localeCompare(b.start_time))
           if (list.length) {
+            count += list.length
             list.forEach((entry) => items.push({ kind: 'entry', at: entry.start_time, entry, row: slot.index }))
           } else if (showSlots.value) {
             items.push({ kind: 'slot', at: slot.start, slot, row: slot.index })
@@ -776,8 +833,11 @@ const days = computed(() => weekdays.map((day, i) => {
             items.push({ kind: 'filler', at: slot.start, slot, row: slot.index })
           }
         })
-        for (const entry of loose) items.push({ kind: 'entry', at: entry.start_time, entry, row: -1 })
-        return { ...period, items, count: ownInSection.length }
+        for (const entry of looseBySection.get(period.key) || []) {
+          count += 1
+          items.push({ kind: 'entry', at: entry.start_time, entry, row: -1 })
+        }
+        return { ...period, items, count }
       })
       .filter((period) => period.items.length > 0),
   }
@@ -915,7 +975,7 @@ function printTimetable() {
           number: slot.sectionIndex,
           cells: dayLists.map((list) =>
             list
-              .filter((entry) => sectionOfStart(entry.start_time) === section.key && slotIndexFor(entry, sectionSlots) === index)
+              .filter((entry) => nearestSlotFor(entry.start_time, entry.end_time)?.index === slot.index)
               .sort((a, b) => a.start_time.localeCompare(b.start_time)),
           ),
         })
@@ -1220,7 +1280,7 @@ function openNewEntry(weekday: number, start?: string) {
   const at = start || nextStartFor(weekday)
   Object.assign(form, blankEntry(at), { weekday, start_time: at })
   form.end_time = addMinutes(at, pacing.value.lesson)
-  form.color = sectionColorForStart(at)
+  form.color = sectionColorForTime(at, form.end_time)
   colorTouched.value = false
   entryError.value = ''
   entryOpen.value = true
@@ -1234,14 +1294,14 @@ function onPickSlot(event: Event) {
   if (!slot) return
   form.start_time = slot.start
   form.end_time = slot.end
-  if (!colorTouched.value) form.color = sectionColorForStart(slot.start)
+  if (!colorTouched.value) form.color = sectionColorForTime(slot.start, slot.end)
 }
 
 // 改了开始时间就按「一节课」重算结束；想手动改结束仍然可以。
 function syncEndFromStart() {
   if (!form.start_time) return
   form.end_time = addMinutes(form.start_time, pacing.value.lesson)
-  if (!colorTouched.value) form.color = sectionColorForStart(form.start_time)
+  if (!colorTouched.value) form.color = sectionColorForTime(form.start_time, form.end_time)
 }
 
 // ---------------- 拖动换课 ----------------
@@ -1360,16 +1420,55 @@ function openEditEntry(entry: TimetableEntry) {
   entryOpen.value = true
 }
 
+// 非编辑态只改备注：课程名、时间、地点等一律不展示（用户 2026-10-29，手机与 PC 一致）。
+// 进编辑态后才打开完整表单。
+const noteOpen = ref(false)
+const noteEntry = ref<TimetableEntry | null>(null)
+const noteTitle = computed(() => noteEntry.value?.title ? `课程备注 · ${noteEntry.value.title}` : '课程备注')
+const noteText = ref('')
+const noteError = ref('')
+const noteSaving = ref(false)
+const noteReadonly = ref(false)
+
+function openNoteEntry(entry: TimetableEntry, readonly = false) {
+  noteEntry.value = entry
+  noteText.value = entry.note
+  noteError.value = ''
+  noteReadonly.value = readonly
+  noteOpen.value = true
+}
+
+async function saveNote() {
+  if (!noteEntry.value || noteReadonly.value) return
+  noteSaving.value = true
+  noteError.value = ''
+  try {
+    const res = await updateEntry(noteEntry.value.id, { note: noteText.value })
+    if (res.data?.code !== 0) throw new Error(res.data?.message || '保存失败')
+    noteOpen.value = false
+    await Promise.all([loadEntries(activeId.value), loadTables(activeId.value)])
+  } catch (err: any) {
+    noteError.value = err.message || '保存失败'
+  } finally {
+    noteSaving.value = false
+  }
+}
+
 // 只读详情与共享管理
 const viewOpen = ref(false)
 const viewEntry = ref<TimetableEntry | null>(null)
 const viewWeekday = computed(() => weekdays.find((d) => d.value === viewEntry.value?.weekday)?.label || '')
 function openEntry(entry: TimetableEntry) {
-  if (canWrite.value) openEditEntry(entry)
-  else {
-    viewEntry.value = entry
-    viewOpen.value = true
+  if (!editing.value) {
+    openNoteEntry(entry, !canWrite.value)
+    return
   }
+  if (canWrite.value) {
+    openEditEntry(entry)
+    return
+  }
+  viewEntry.value = entry
+  viewOpen.value = true
 }
 
 const shareOpen = ref(false)
@@ -1509,7 +1608,7 @@ async function removeEntry() {
   @apply rounded-md bg-foreground/[0.07] px-1 py-0.5 text-[10px] font-semibold leading-none opacity-80;
 }
 .timetable-share-chip {
-  @apply rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none;
+  @apply inline-flex items-center gap-1 rounded-full px-1.5 py-1 leading-none;
 }
 .timetable-share-chip.is-readonly { @apply bg-slate-500/15 text-slate-600 dark:text-slate-300; }
 .timetable-share-chip.is-write { @apply bg-emerald-500/15 text-emerald-700 dark:text-emerald-300; }

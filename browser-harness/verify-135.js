@@ -2,7 +2,7 @@
  * 手机悬浮「+」按频道分流（用户 2026-10-26）：
  *   提醒@他 → 新建提醒；信用卡账单 → 新建卡片；人生要有仪式感 → 新建事项；
  *   其余频道 → 新建待办（快速新建卡）。
- * 同时确认内置频道（课程表/提醒@他）在手机「全部清单」弹层最前面。
+ * 同时确认内置频道（课程表）在手机「全部清单」弹层最前面；提醒@他已从弹层移除（用户 2026-10-29）。
  *
  * 只读打开、关闭弹窗，不保存任何数据。
  * 用法：APP_URL=http://127.0.0.1:8918 node verify-135.js
@@ -123,8 +123,9 @@ async function goto(page, path) {
     await sleep(700);
     const rows = await page.evaluate(() => [...document.querySelectorAll('[data-lists-sheet-row]')].map((e) => e.getAttribute('data-lists-sheet-row')));
     const cfg = await api(page, '/api/configs');
-    const expect = [...(cfg?.timetable_enabled === 'true' ? ['timetable'] : []), ...(cfg?.nudge_enabled !== 'false' ? ['nudge'] : [])];
-    check('手机清单弹层把课程表 / 提醒@他排在最前面', expect.every((k, i) => rows[i] === k), JSON.stringify({ expect, rows }));
+    const expect = cfg?.timetable_enabled === 'true' ? ['timetable'] : [];
+    check('手机清单弹层把课程表排在最前面', expect.every((k, i) => rows[i] === k), JSON.stringify({ expect, rows }));
+    check('手机清单弹层不再列提醒@他（底部快捷托盘已有入口）', !rows.includes('nudge'), JSON.stringify(rows));
     await page.click('[data-lists-sheet-close]');
     await sleep(300);
   });

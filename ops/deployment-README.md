@@ -1,4 +1,4 @@
-# 工作序记 (WorkOrderNote) 0.43.8
+# 工作序记 (WorkOrderNote) 0.44.0
 
 任务、记事与日历一体的提醒应用。飞牛 NAS 上以 Docker 部署。
 
@@ -2928,7 +2928,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   **SW 缓存策略**：只对带内容 hash 的 `/assets/**` 缓存优先，页面导航与其它静态文件（含 manifest）
   一律网络优先。第一版把 manifest 也缓存了，升级后安装卡片一直读旧清单（被用例抓出来）。
   注意浏览器安装要求 HTTPS 或 localhost：内网 `http://192.168.x.x:8906` 下不提供安装，
-  卡片里如实说明并建议改用安卓客户端或用外网 HTTPS 域名。
+  卡片里如实说明并建议用外网 HTTPS 域名。
 - **记住登录**：新增系统配置 `login_remember_days`（默认 **7**）与 `login_session_hours`（默认 **12**），
   在「系统配置 → 访问控制」里改。登录请求带 `remember`，服务端据此签发不同有效期的 JWT
   （`auth.GenerateTokenTTL`）；前端勾了就存 localStorage、没勾存 sessionStorage。两个配置都是
@@ -2953,7 +2953,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   `login_session_hours=12`（默认值）。
 - **注意**：内网是 `http://192.168.x.x:8906`，不是安全上下文——浏览器安装（PWA）在这种源上
   Chrome 不提供安装、`navigator.serviceWorker` 也不存在（代码按设计跳过注册）。
-  要用浏览器安装，请走 HTTPS 域名（外网反代），或改用安卓客户端。
+  要用浏览器安装，请走 HTTPS 域名（外网反代）。
 - 安卓客户端无需重装：这批只改了网页（服务器地址入口在登录页上），已装的 0.1.0 客户端会自动看到新界面。
 
 ### 2026-10-06：0.10.0 → 0.11.0

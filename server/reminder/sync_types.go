@@ -183,6 +183,7 @@ type syncReminder struct {
 	ListUID    string `json:"list_uid"`
 	Title      string `json:"title"`
 	Notes      string `json:"notes"`
+	Color      string `json:"color,omitempty"`
 	BottomText string `json:"bottom_text,omitempty"`
 	Icon       string `json:"icon,omitempty"`
 	CardRole   string `json:"card_role,omitempty"`

@@ -40,6 +40,10 @@ func setupAuthRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	group.GET("/completed", handleCompletedHistory(db))
 	// 日历视图：按日期区间取到期提醒（含已完成），供月历网格按天铺开。
 	group.GET("/calendar", handleCalendarItems(db))
+	// 手机日历：订阅地址（只读 ICS）与 .ics 导入。公开的取数端点见 sync_handlers.go。
+	group.GET("/calendar/subscription", handleGetCalendarSubscription(db))
+	group.POST("/calendar/subscription/rotate", handleRotateCalendarSubscription(db))
+	group.POST("/calendar/import", handleImportCalendar(db))
 	// 导出当前筛选结果成 CSV：scope=active 走列表口径，scope=completed 走完成记录口径。
 	group.GET("/export", handleExportReminders(db))
 	group.POST("/items", handleCreateReminder(db))
@@ -95,9 +99,6 @@ func originClientID(c *gin.Context) string {
 func setupAdminRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	// 双机同步的设置与手动触发（见 sync_handlers.go）。
 	setupSyncAdminRoutes(api, db)
-	// 安卓客户端安装包的上传/下架（见 android_client.go）
-	api.POST("/reminder/admin/android/apk", handleAndroidUploadAPK(db))
-	api.DELETE("/reminder/admin/android/apk", handleAndroidDeleteAPK(db))
 	api.GET("/reminder/admin/providers", handleProviderStatuses(db))
 	api.GET("/reminder/admin/notification-brand", handleNotificationBrand(db))
 	api.PUT("/reminder/admin/notification-brand", handleNotificationBrand(db))

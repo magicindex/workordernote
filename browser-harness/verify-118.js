@@ -111,6 +111,7 @@ const readPage = (page) => page.evaluate((content) => {
     receivedRows: rows('received'),
     mine: [...rows('sent'), ...rows('received')].filter((t) => t.includes(content)),
     badge: (document.querySelector('[data-nav-nudges] .nav-count')?.innerText || '').trim(),
+    retention: (document.querySelector('[data-nudge-retention]')?.innerText || '').replace(/\s+/g, ' ').trim(),
   };
 }, CONTENT);
 
@@ -216,6 +217,9 @@ const readPage = (page) => page.evaluate((content) => {
       && page0.sentTitles.includes('我提醒他人') && page0.receivedTitles.includes('别人提醒我'),
       JSON.stringify({ sent: page0.sentTitles, received: page0.receivedTitles }));
 
+    check('「我提醒他人」标注默认保留 30 天、超期自动清除',
+      page0.retention.includes('30 天') && page0.retention.includes('自动清除'), page0.retention);
+
     // ---------------- 2. 不能自己提醒自己 ----------------
     await page.evaluate(() => document.querySelector('[data-nudge-new]')?.click());
     await sleep(800);
@@ -289,6 +293,7 @@ const readPage = (page) => page.evaluate((content) => {
     nudgeId = (sent.body?.data?.sent || []).find((n) => n.content === CONTENT)?.id ?? null;
     if (nudgeId) nudgeIds.push(nudgeId);
     check('接口侧确认这条进了「我提醒他人」', !!nudgeId, JSON.stringify(sent.body?.data?.counts));
+    check('接口返回卡片保留天数 30', sent.body?.data?.retention_days === 30, JSON.stringify(sent.body?.data?.retention_days));
 
     // ---------------- 4. 对方视角：右列 + 角标 ----------------
     await loginAs(page, PROBE_USER, PROBE_PASS);

@@ -4,8 +4,8 @@
  * 覆盖：
  *   1) 表主把自己的表共享给两个测试账号（read / write）；
  *   2) 表主弹窗里能看到共享名单、能改权限；
- *   3) 只读账号列表里带「只读」徽标，不能编辑/加课/改表设置，点课程只出只读详情；
- *   4) 读写账号带「可编辑」徽标，可以进编辑态，但不能改表设置/再共享；
+ *   3) 只读账号列表里用「分享 + 锁」图标标注只读，不能编辑/加课/改表设置，点课程只出只读详情；
+ *   4) 读写账号用「分享 + 铅笔」图标标注，可以进编辑态，但不能改表设置/再共享；
  *   5) 通过接口确认只读写入 403、读写写入成功且条目归表主。
  *
  * 用法：APP_URL=http://127.0.0.1:8918 node verify-134.js
@@ -183,24 +183,35 @@ let entryId = 0;
       await loginAs(page, readerName, PASSWORD);
       const readerTab = `[data-timetable-tab*="${tableName}"]`;
       check('只读账号能看到共享表', await waitSel(page, readerTab));
-      const readBadge = await page.evaluate((sel) => document.querySelector(sel + ' .timetable-share-chip')?.textContent.trim(), readerTab);
-      check('只读表带「只读」徽标', readBadge === '只读', String(readBadge));
+      const readBadge = await page.evaluate((sel) => {
+        const el = document.querySelector(sel + ' .timetable-share-chip');
+        return { permission: el?.getAttribute('data-share-access'), icons: el?.querySelectorAll('svg').length || 0, text: el?.textContent.trim() || '' };
+      }, readerTab);
+      check('只读表用图标标注（分享 + 锁）', readBadge.permission === 'read' && readBadge.icons === 2, JSON.stringify(readBadge));
+      check('只读徽标不再显示文字', readBadge.text === '', JSON.stringify(readBadge));
       check('只读没有设置按钮', !(await page.evaluate(() => !!document.querySelector('[data-timetable-settings]'))));
       check('只读没有共享按钮', !(await page.evaluate(() => !!document.querySelector('[data-timetable-share]'))));
       check('只读没有编辑按钮', !(await page.evaluate(() => !!document.querySelector('[data-timetable-edit]'))));
       await page.click(readerTab);
       await sleep(800);
-      check('只读账号能打开课程详情', await waitSel(page, `[data-entry-id="${entryId}"]`));
+      check('只读账号能打开课程卡片', await waitSel(page, `[data-entry-id="${entryId}"]`));
       await page.click(`[data-entry-id="${entryId}"]`);
-      check('只读点课程出现只读详情', await waitSel(page, '[data-entry-view]'));
-      check('只读详情没有保存按钮', !(await page.evaluate(() => !!document.querySelector('[data-entry-view] [data-entry-save]'))));
-      check('只读详情说明是只读共享', await page.evaluate(() => (document.querySelector('[data-entry-view]')?.innerText || '').includes('只读')));
+      check('只读点课程出现只读备注', await waitSel(page, '[data-entry-note-dialog]'));
+      check('只读备注框不可编辑且没有保存按钮', await page.evaluate(() => {
+        const box = document.querySelector('[data-entry-note-input]');
+        return !!box && (box.readOnly || box.disabled) && !document.querySelector('[data-entry-note-save]');
+      }));
+      check('只读备注标题带课程名', await page.evaluate(() => (document.body.innerText || '').includes('课程备注 · 共享数学')));
 
       // 读写账号。
       await loginAs(page, writerName, PASSWORD);
       check('读写账号能看到共享表', await waitSel(page, readerTab));
-      const writeBadge = await page.evaluate((sel) => document.querySelector(sel + ' .timetable-share-chip')?.textContent.trim(), readerTab);
-      check('读写表带「可编辑」徽标', writeBadge === '可编辑', String(writeBadge));
+      const writeBadge = await page.evaluate((sel) => {
+        const el = document.querySelector(sel + ' .timetable-share-chip');
+        return { permission: el?.getAttribute('data-share-access'), icons: el?.querySelectorAll('svg').length || 0, text: el?.textContent.trim() || '' };
+      }, readerTab);
+      check('读写表用图标标注（分享 + 铅笔）', writeBadge.permission === 'write' && writeBadge.icons === 2, JSON.stringify(writeBadge));
+      check('读写徽标不再显示文字', writeBadge.text === '', JSON.stringify(writeBadge));
       check('读写有编辑按钮', await waitSel(page, '[data-timetable-edit]'));
       check('读写没有设置按钮', !(await page.evaluate(() => !!document.querySelector('[data-timetable-settings]'))));
       check('读写没有共享按钮', !(await page.evaluate(() => !!document.querySelector('[data-timetable-share]'))));

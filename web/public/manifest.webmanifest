@@ -11,22 +11,22 @@
       "src": "favicon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
-      "src": "favicon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "favicon-512.png",
-      "sizes": "512x512",
+      "src": "favicon-192.png",
+      "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "favicon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
-  "id": "/",
+  "id": "./",
   "lang": "zh-CN",
   "dir": "ltr",
   "description": "任务、记事与日历一体的提醒应用",

@@ -1,7 +1,7 @@
 <template>
-  <div class="space-y-4 sm:space-y-6">
+  <div :class="columns === 2 ? 'grid items-start gap-4 sm:gap-5 md:grid-cols-2' : 'space-y-4 sm:space-y-6'">
     <!-- Empty state -->
-    <div v-if="groups.length === 0" class="surface rounded-2xl p-10 text-center sm:p-16">
+    <div v-if="groups.length === 0" class="surface rounded-2xl p-10 text-center sm:p-16 md:col-span-2">
       <div class="flex flex-col items-center gap-3 text-muted-foreground">
         <svg class="w-12 h-12 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
         <span class="text-sm">暂无配置项</span>
@@ -11,23 +11,26 @@
     <!-- Group panels -->
     <div
       v-for="group in groups"
+      v-show="!visibleGroups || visibleGroups.includes(group.key)"
       :key="group.key"
-      class="surface rounded-2xl overflow-hidden"
+      class="space-y-4"
     >
-      <div class="border-b border-border px-4 py-3 sm:p-5 sm:px-6">
-        <h2 class="text-sm font-bold text-foreground sm:text-base">{{ group.title }}</h2>
+      <div class="surface rounded-2xl overflow-hidden">
+      <div class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <h2 class="text-sm font-bold text-foreground">{{ group.title }}</h2>
+        <span class="text-[11px] font-semibold text-muted-foreground">{{ group.items.length }} 项</span>
       </div>
       <div class="divide-y divide-border">
         <div
           v-for="item in group.items"
           :key="item.key"
-          class="flex flex-col gap-2.5 px-4 py-3.5 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:gap-3 sm:p-5 sm:px-6"
+          class="flex flex-col gap-2.5 px-4 py-3 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:gap-3"
           :data-config-key="item.key"
         >
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 flex-wrap">
               <span class="text-sm font-semibold text-foreground">{{ item.label }}</span>
-              <code class="text-xs text-muted-foreground">{{ item.key }}</code>
+              <code class="sr-only">{{ item.key }}</code>
               <span
                 v-if="isDirty(item)"
                 class="badge bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
@@ -35,7 +38,7 @@
             </div>
             <div class="text-xs text-muted-foreground mt-1">{{ item.description || '—' }}</div>
           </div>
-          <div class="flex items-center gap-2 sm:w-80">
+          <div class="flex items-center gap-2 sm:w-64">
             <!-- bool: accessible toggle switch
                  用 inline-flex + p-0.5 定位滑块：原来靠 inline-block 的 translate，
                  button 默认 text-align:center 会先把滑块居中再位移，滑块整个被推到
@@ -121,6 +124,8 @@
           </div>
         </div>
       </div>
+      </div>
+      <slot v-if="extraGroup === group.key" name="group-extra"></slot>
     </div>
   </div>
 </template>
@@ -137,6 +142,12 @@ interface RowState {
 
 const props = defineProps<{
   items: ConfigMeta[]
+  /** 只显示这些分组；不传则全部显示（系统配置页沿用）。 */
+  visibleGroups?: string[]
+  /** 2 = 桌面双列卡片；默认单列（系统配置页字段多、控件宽）。 */
+  columns?: number
+  /** 在该分组的配置项下面追加一个自定义槽位（目前用于「默认清单」）。 */
+  extraGroup?: string
 }>()
 
 const emit = defineEmits<{
@@ -152,8 +163,8 @@ const groupTitleMap: Record<string, string> = {
   dnd: '免打扰',
   appearance: '外观',
   system: '系统维护',
-  android: '安卓客户端',
   backup: '数据备份',
+  security: '账号安全',
 }
 
 const selectOptionLabelMap: Record<string, Record<string, string>> = {

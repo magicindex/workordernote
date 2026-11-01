@@ -46,6 +46,9 @@
             待完成 {{ box.counts.sent_pending }}
           </span>
         </header>
+        <p class="-mt-1 mb-3 text-[11px] leading-5 text-muted-foreground" data-nudge-retention>
+          默认保留 {{ box.retention_days || 30 }} 天，超过后自动清除（双方都不再看到）。
+        </p>
         <p v-if="!box.sent.length" class="rounded-2xl border border-dashed border-border bg-surface/40 px-4 py-10 text-center text-xs text-muted-foreground">
           还没有提醒过别人。点右上角「提醒@他」推一条。
         </p>
@@ -290,7 +293,7 @@ import {
 
 const authStore = useAuthStore()
 const router = useRouter()
-const box = ref<NudgeBox>({ sent: [], received: [], counts: { received_pending: 0, received_unread: 0, sent_pending: 0, sent_done: 0 } })
+const box = ref<NudgeBox>({ sent: [], received: [], retention_days: 30, counts: { received_pending: 0, received_unread: 0, sent_pending: 0, sent_done: 0 } })
 const users = ref<NudgeUser[]>([])
 const loading = ref(true)
 const busy = ref(false)

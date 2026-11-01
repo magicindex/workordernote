@@ -98,8 +98,8 @@ router.beforeEach(async (to, from, next) => {
     next({ name: 'Login' })
   } else if ((to.name === 'Login' || to.name === 'Register' || to.name === 'ForgotPassword')
     && authStore.isAuthenticated && !hasFnOSFlow(to)) {
-    // 已经登录了就别再摆登录页：安卓壳子启动时固定打开 /login（见 android-shell 的
-    // loadApp），不拦的话「记住我」明明勾着、token 也还在，用户每次仍要重输一遍密码。
+    // 已经登录了就别再摆登录页：旧客户端启动时固定打开 /login，不拦的话「记住我」
+    // 明明勾着、token 也还在，用户每次仍要重输一遍密码。
     // 带飞牛授权参数的链接例外——那条路要继续走绑定/换账号流程。
     next({ path: '/admin' })
   } else if (to.meta.requiresAdmin && !authStore.isAdmin) {

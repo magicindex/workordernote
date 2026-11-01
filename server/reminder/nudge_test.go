@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"smallgo/server/database"
 	"smallgo/server/sysconfig"
@@ -15,11 +16,12 @@ import (
 )
 
 // 「提醒@他」（用户 2026-10-13）的接口行为：
-//   · 只能提醒别人（自己提醒自己一律 400）；
-//   · 两列各归各的（我提醒他人 / 别人提醒我）；
-//   · 对方「已收到」「已完成」都写一条回执通知给发起人（这就是消息面板里的反馈）；
-//   · 站内回执只有接收人能点（发起人越权 404）；
-//   · 别人提醒我、还没做完的条数要进 /summary 的统计。
+//
+//	· 只能提醒别人（自己提醒自己一律 400）；
+//	· 两列各归各的（我提醒他人 / 别人提醒我）；
+//	· 对方「已收到」「已完成」都写一条回执通知给发起人（这就是消息面板里的反馈）；
+//	· 站内回执只有接收人能点（发起人越权 404）；
+//	· 别人提醒我、还没做完的条数要进 /summary 的统计。
 func nudgeRequest(t *testing.T, handler gin.HandlerFunc, userID uint, method, body string, params gin.Params) *httptest.ResponseRecorder {
 	t.Helper()
 	recorder := httptest.NewRecorder()
@@ -372,5 +374,55 @@ func TestNudgeCountsInSummaryStats(t *testing.T) {
 	}
 	if got := summary(me); got != 1 {
 		t.Fatalf("完成一条后 nudge_pending 应为 1，实际 %d", got)
+	}
+}
+
+// 「我提醒他人」卡片默认保留 30 天，超过后自动清除（用户 2026-10-29）。
+func TestNudgeListPurgesCardsOlderThanRetention(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+	gin.SetMode(gin.TestMode)
+
+	const me, mate = 921, 922
+	seedNudgeUsers(t, me, mate)
+
+	now := time.Now()
+	old := Nudge{FromUserID: me, ToUserID: mate, Content: "超过 30 天", CreatedAt: now.Add(-31 * 24 * time.Hour)}
+	fresh := Nudge{FromUserID: me, ToUserID: mate, Content: "还在 30 天内", CreatedAt: now.Add(-29 * 24 * time.Hour)}
+	if err := appDB.Create(&old).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := appDB.Create(&fresh).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	rec := nudgeRequest(t, handleListNudges(appDB), me, http.MethodGet, "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("读取提醒@他应当 200，实际 %d（%s）", rec.Code, rec.Body.String())
+	}
+	box := nudgeData[struct {
+		Sent   []NudgeDTO `json:"sent"`
+		Counts struct {
+			SentPending int64 `json:"sent_pending"`
+		} `json:"counts"`
+		RetentionDays int `json:"retention_days"`
+	}](t, rec)
+
+	if box.RetentionDays != 30 {
+		t.Fatalf("接口应返回保留天数 30，实际 %d", box.RetentionDays)
+	}
+	if len(box.Sent) != 1 || box.Sent[0].ID != fresh.ID {
+		t.Fatalf("只应剩下 30 天内的卡片，实际 %+v", box.Sent)
+	}
+	if box.Counts.SentPending != 1 {
+		t.Fatalf("角标只应统计保留期内的卡片，实际 %d", box.Counts.SentPending)
+	}
+
+	var oldRows int64
+	if err := appDB.Unscoped().Model(&Nudge{}).Where("id = ?", old.ID).Count(&oldRows).Error; err != nil {
+		t.Fatal(err)
+	}
+	if oldRows != 0 {
+		t.Fatalf("超过 30 天的卡片应被硬删除，实际仍有 %d 行", oldRows)
 	}
 }

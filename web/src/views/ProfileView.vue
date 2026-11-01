@@ -68,35 +68,50 @@
       </section>
     </div>
 
-    <!-- Security questions -->
-    <section class="surface rounded-2xl p-4 sm:p-7">
+    <!-- 邮箱找回密码：不再设置安全问题，验证码发到「通知方式 → 邮件」已绑定的接收邮箱。 -->
+    <section class="surface rounded-2xl p-4 sm:p-7" data-recovery-card>
       <div class="flex items-center gap-2.5 sm:gap-3 mb-3 sm:mb-5">
-        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 flex items-center justify-center shrink-0">
-          <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-sky-50 dark:bg-sky-500/15 text-sky-600 dark:text-sky-300 flex items-center justify-center shrink-0">
+          <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
         </div>
-        <h2 class="text-base sm:text-lg font-bold text-foreground">安全问题</h2>
-      </div>
-
-      <div v-if="hasQuestions" class="flex items-center gap-2 text-[13px] sm:text-sm text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-xl px-3 py-2 sm:px-4 sm:py-3 mb-3 sm:mb-4">
-        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        安全问题已设置，可用于找回密码
-      </div>
-
-      <p class="text-[13px] sm:text-sm text-muted-foreground mb-3 sm:mb-4">{{ hasQuestions ? '修改安全问题，忘记密码时用于身份验证。' : '设置三组安全问题，忘记密码时用于身份验证。' }}</p>
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
-        <div v-for="n in 3" :key="n" class="space-y-2.5 sm:space-y-3">
-          <div>
-            <label class="block text-[13px] sm:text-sm font-medium text-foreground mb-1">问题 {{ n }}</label>
-            <input v-model="qa[n - 1].q" type="text" class="input-field" :placeholder="`安全问题 ${n}`" />
-          </div>
-          <div>
-            <label class="block text-[13px] sm:text-sm font-medium text-foreground mb-1">答案 {{ n }}</label>
-            <input v-model="qa[n - 1].a" type="text" class="input-field" :placeholder="`答案 ${n}`" />
-          </div>
+        <div class="min-w-0">
+          <h2 class="text-base sm:text-lg font-bold text-foreground">邮箱找回密码</h2>
+          <p class="mt-0.5 text-[13px] sm:text-sm text-muted-foreground">忘记登录密码时，用已绑定的接收邮箱收验证码重置。</p>
         </div>
       </div>
-      <p v-if="secMsg" :class="secSuccess ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'" class="text-sm mt-3 sm:mt-4">{{ secMsg }}</p>
-      <button @click="handleSetQuestions" :disabled="secLoading" class="btn-brand mt-3 sm:mt-4">{{ secLoading ? '保存中...' : (hasQuestions ? '修改安全问题' : '设置安全问题') }}</button>
+
+      <div v-if="recoveryLoading" class="text-sm text-muted-foreground">正在读取邮箱状态…</div>
+      <div v-else-if="recoveryError" class="flex items-center gap-2 text-[13px] sm:text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-xl px-3 py-2 sm:px-4 sm:py-3">
+        {{ recoveryError }}
+      </div>
+      <div v-else-if="!recoveryEnabled" class="flex items-center gap-2 text-[13px] sm:text-sm text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-xl px-3 py-2 sm:px-4 sm:py-3">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86a2 2 0 001.74-3L13.74 4a2 2 0 00-3.48 0L3.34 16a2 2 0 001.73 3z"/></svg>
+        管理员已关闭邮箱找回密码，忘记密码时请联系管理员处理。
+      </div>
+      <div v-else-if="!emailStatus?.configured" class="space-y-3">
+        <div class="flex items-center gap-2 text-[13px] sm:text-sm text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-xl px-3 py-2 sm:px-4 sm:py-3">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86a2 2 0 001.74-3L13.74 4a2 2 0 00-3.48 0L3.34 16a2 2 0 001.73 3z"/></svg>
+          邮件服务还没有配置发件邮箱，暂时无法发送验证码。请管理员在「通知方式 → 邮件」里配置。
+        </div>
+        <router-link to="/admin/channels" class="btn-ghost inline-flex">去通知方式</router-link>
+      </div>
+      <div v-else-if="activeEmails.length === 0" class="space-y-3">
+        <div class="flex items-center gap-2 text-[13px] sm:text-sm text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-xl px-3 py-2 sm:px-4 sm:py-3">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86a2 2 0 001.74-3L13.74 4a2 2 0 00-3.48 0L3.34 16a2 2 0 001.73 3z"/></svg>
+          还没有绑定接收邮箱。先绑定一个邮箱，忘记密码时才能收到验证码。
+        </div>
+        <router-link to="/admin/channels" class="btn-brand inline-flex">去绑定邮箱</router-link>
+      </div>
+      <div v-else class="space-y-3">
+        <p class="text-[13px] sm:text-sm text-muted-foreground">验证码会发送到以下接收邮箱（验证码 {{ recoveryTTL }} 分钟内有效）：</p>
+        <div class="flex flex-wrap gap-2">
+          <span v-for="mail in activeEmails" :key="mail.id" class="inline-flex items-center gap-1.5 rounded-xl bg-muted border border-border px-3 py-1.5 text-[13px] sm:text-sm text-foreground">
+            <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            {{ mail.target_masked }}
+          </span>
+        </div>
+        <router-link to="/admin/channels" class="btn-ghost inline-flex">管理接收邮箱</router-link>
+      </div>
     </section>
 
     <!-- 退出登录：顶栏在手机端收起了退出按钮，这里提供统一入口。
@@ -128,11 +143,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { changePassword, regenerateAPIKey } from '../api/auth'
-import { getSecurityQuestions, setSecurityQuestions } from '../api/security'
+import { getChannelStatuses, type ChannelStatus } from '../api/reminder'
+import { getPublicConfigs } from '../api/config'
 import { passwordValidationError } from '../utils/password'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { onFnOSGatewayOrigin } from '../utils/gateway'
@@ -168,32 +184,37 @@ const pwdLoading = ref(false)
 const pwdMsg = ref('')
 const pwdSuccess = ref(false)
 
-const hasQuestions = ref(false)
-const qa = reactive([
-  { q: '', a: '' },
-  { q: '', a: '' },
-  { q: '', a: '' },
-])
-const secLoading = ref(false)
-const secMsg = ref('')
-const secSuccess = ref(false)
+const emailStatus = ref<ChannelStatus | null>(null)
+const recoveryEnabled = ref(true)
+const recoveryTTL = ref(10)
+const recoveryLoading = ref(true)
+const recoveryError = ref('')
+const activeEmails = computed(() => (emailStatus.value?.bindings || []).filter((mail) => mail.status === 'active'))
 
 const apiKey = ref('')
 const apiKeyLoading = ref(false)
 const apiKeyMsg = ref('')
 const apiKeySuccess = ref(false)
 
-onMounted(async () => {
+onMounted(loadRecoveryStatus)
+
+async function loadRecoveryStatus() {
+  recoveryLoading.value = true
+  recoveryError.value = ''
   try {
-    const res = await getSecurityQuestions()
-    if (res.data?.code === 0 && res.data.data?.has_questions) {
-      hasQuestions.value = true
-      qa[0].q = res.data.data.question1 || ''
-      qa[1].q = res.data.data.question2 || ''
-      qa[2].q = res.data.data.question3 || ''
-    }
-  } catch {}
-})
+    const [channelRes, configRes] = await Promise.all([getChannelStatuses(), getPublicConfigs()])
+    const channels: ChannelStatus[] = channelRes.data?.data || []
+    emailStatus.value = channels.find((item) => item.channel === 'email') || null
+    const configs = configRes.data?.data || {}
+    recoveryEnabled.value = configs.password_reset_email_enabled !== 'false'
+    const ttl = Number(configs.password_reset_code_ttl_minutes)
+    if (Number.isFinite(ttl) && ttl >= 1 && ttl <= 60) recoveryTTL.value = ttl
+  } catch {
+    recoveryError.value = '读取邮箱状态失败，请刷新重试'
+  } finally {
+    recoveryLoading.value = false
+  }
+}
 
 async function handleChangePassword() {
   const validationError = passwordValidationError(newPassword.value)
@@ -230,28 +251,6 @@ async function handleChangePassword() {
     pwdSuccess.value = false
   } finally {
     pwdLoading.value = false
-  }
-}
-
-async function handleSetQuestions() {
-  secLoading.value = true
-  secMsg.value = ''
-  try {
-    const res = await setSecurityQuestions(qa[0].q, qa[0].a, qa[1].q, qa[1].a, qa[2].q, qa[2].a)
-    if (res.data?.code === 0) {
-      secMsg.value = hasQuestions.value ? '安全问题修改成功' : '安全问题设置成功'
-      secSuccess.value = true
-      hasQuestions.value = true
-      authStore.refreshSecurityQuestions()
-    } else {
-      secMsg.value = res.data?.message || '设置失败'
-      secSuccess.value = false
-    }
-  } catch (err: any) {
-    secMsg.value = err.response?.data?.message || '网络错误'
-    secSuccess.value = false
-  } finally {
-    secLoading.value = false
   }
 }
 

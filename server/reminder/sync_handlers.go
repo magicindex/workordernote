@@ -59,10 +59,8 @@ func requireSyncToken(db *gorm.DB) gin.HandlerFunc {
 }
 
 func setupSyncPublicRoutes(api *gin.RouterGroup, db *gorm.DB) {
-	// 安卓客户端信息与 APK 下载：公开（新装的手机还没登录，扫码就得能下）
-	api.GET("/reminder/android", handleAndroidClient(db))
-	api.GET("/reminder/android/apk", handleAndroidDownloadAPK(db))
-	api.GET("/reminder/android/qrcode", handleAndroidQRCode(db))
+	// 手机日历订阅：公开但只认 URL 里的随机令牌（见 calendar_sync.go）。
+	api.GET("/calendar/feed/:token", handleCalendarFeed(db))
 
 	peer := api.Group("/reminder/sync", requireSyncToken(db))
 	peer.GET("/info", handleSyncInfo(db))

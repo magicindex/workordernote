@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"smallgo/server/auth"
 	"smallgo/server/config"
@@ -847,22 +848,104 @@ func TestResetPasswordEnforcesMinLength(t *testing.T) {
 	}
 }
 
-func TestForgotPasswordEnforcesMinLength(t *testing.T) {
+func seedResetCode(t *testing.T, db *gorm.DB, userID uint, code string) {
+	t.Helper()
+	hash, err := auth.HashPassword(code)
+	if err != nil {
+		t.Fatalf("hash reset code: %v", err)
+	}
+	if err := db.Create(&database.PasswordResetCode{
+		UserID:    userID,
+		CodeHash:  hash,
+		ExpiresAt: time.Now().Add(10 * time.Minute),
+	}).Error; err != nil {
+		t.Fatalf("seed reset code: %v", err)
+	}
+}
+
+func TestEmailResetEnforcesMinLength(t *testing.T) {
+	r, db, _ := setupTestRouter(t)
+	registerUser(t, r, "admin", "secret123")
+	seedResetCode(t, db, 1, "123456")
+
+	reset := map[string]string{"username": "admin", "code": "123456", "new_password": "a"}
+	if got := doJSON(r, http.MethodPost, "/api/security/forgot/email-reset", "", reset).Code; got != http.StatusBadRequest {
+		t.Fatalf("short email-reset password returned %d, want 400", got)
+	}
+	// 密码校验失败不应消耗验证码。
+	loginToken(t, r, "admin", "secret123")
+}
+
+func TestEmailResetConsumesCodeAndChangesPassword(t *testing.T) {
+	r, db, _ := setupTestRouter(t)
+	registerUser(t, r, "admin", "secret123")
+	seedResetCode(t, db, 1, "654321")
+
+	reset := map[string]string{"username": "admin", "code": "654321", "new_password": "newsecret"}
+	if got := doJSON(r, http.MethodPost, "/api/security/forgot/email-reset", "", reset).Code; got != http.StatusOK {
+		t.Fatalf("email reset returned %d, want 200", got)
+	}
+	oldLogin := doJSON(r, "POST", "/api/auth/login", "", map[string]string{"username": "admin", "password": "secret123"})
+	if oldLogin.Code == http.StatusOK {
+		t.Fatalf("old password still works after reset")
+	}
+	loginToken(t, r, "admin", "newsecret")
+
+	if got := doJSON(r, http.MethodPost, "/api/security/forgot/email-reset", "", reset).Code; got != http.StatusBadRequest {
+		t.Fatalf("reused reset code returned %d, want 400", got)
+	}
+}
+
+func TestEmailResetWrongCodeCountsAttempt(t *testing.T) {
+	r, db, _ := setupTestRouter(t)
+	registerUser(t, r, "admin", "secret123")
+	seedResetCode(t, db, 1, "111111")
+
+	reset := map[string]string{"username": "admin", "code": "000000", "new_password": "newsecret"}
+	if got := doJSON(r, http.MethodPost, "/api/security/forgot/email-reset", "", reset).Code; got != http.StatusBadRequest {
+		t.Fatalf("wrong code returned %d, want 400", got)
+	}
+	var row database.PasswordResetCode
+	if err := db.First(&row).Error; err != nil {
+		t.Fatalf("load reset code: %v", err)
+	}
+	if row.Attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", row.Attempts)
+	}
+}
+
+func TestSendResetCodeHidesUnknownAccount(t *testing.T) {
 	r, _, _ := setupTestRouter(t)
-	token := registerUser(t, r, "admin", "secret123")
-	questions := map[string]string{
-		"question1": "q1", "answer1": "answer1",
-		"question2": "q2", "answer2": "answer2",
-		"question3": "q3", "answer3": "answer3",
+	registerUser(t, r, "admin", "secret123")
+	// 用户不存在、或存在但没绑邮箱时，都必须回同一句成功，避免账号枚举。
+	for _, username := range []string{"nobody", "admin"} {
+		body := map[string]string{"username": username}
+		if got := doJSON(r, http.MethodPost, "/api/security/forgot/send-code", "", body).Code; got != http.StatusOK {
+			t.Fatalf("send-code %s returned %d, want 200", username, got)
+		}
 	}
-	if got := doJSON(r, http.MethodPost, "/api/security/questions", token, questions).Code; got != http.StatusOK {
-		t.Fatalf("set security questions returned %d", got)
+}
+
+func TestEmailResetCanBeDisabled(t *testing.T) {
+	r, db, _ := setupTestRouter(t)
+	registerUser(t, r, "admin", "secret123")
+	if err := db.Model(&database.SystemConfig{}).
+		Where("user_id = ? AND key = ?", 0, "password_reset_email_enabled").
+		Update("value", "false").Error; err != nil {
+		t.Fatalf("disable email reset: %v", err)
 	}
-	reset := map[string]string{
-		"username": "admin", "answer1": "answer1", "answer2": "answer2", "answer3": "answer3", "new_password": "a",
+	body := map[string]string{"username": "admin"}
+	if got := doJSON(r, http.MethodPost, "/api/security/forgot/send-code", "", body).Code; got != http.StatusBadRequest {
+		t.Fatalf("disabled send-code returned %d, want 400", got)
 	}
-	if got := doJSON(r, http.MethodPost, "/api/security/forgot/reset", "", reset).Code; got != http.StatusBadRequest {
-		t.Fatalf("short forgot-password reset returned %d, want 400", got)
+}
+
+func TestSecurityQuestionRoutesRemoved(t *testing.T) {
+	r, _, _ := setupTestRouter(t)
+	for _, path := range []string{"/api/security/questions", "/api/security/forgot/username", "/api/security/forgot/verify", "/api/security/forgot/reset"} {
+		if got := doJSON(r, http.MethodPost, path, "", map[string]string{}).Code; got != http.StatusNotFound {
+			t.Fatalf("%s returned %d, want 404", path, got)
+		}
 	}
 }
 

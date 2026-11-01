@@ -20,6 +20,7 @@ const STAMP = Date.now();
 
 let passed = 0;
 let failed = 0;
+const near = (a, b, tolerance = 3) => Math.abs(a - b) <= tolerance;
 function check(name, ok, extra = '') {
   if (ok) { passed++; console.log(`  ✓ ${name}`); }
   else { failed++; console.log(`  ✗ ${name}${extra ? ' — ' + extra : ''}`); }
@@ -62,13 +63,13 @@ async function waitSel(page, sel, timeout = 20000) {
       return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00${s}${p(Math.floor(Math.abs(off) / 60))}:${p(Math.abs(off) % 60)}`;
     };
     const now = new Date();
-    // 本周的周三，造两条**重叠**的时间段任务（14:00-15:00 / 14:30-15:30）
-    const monday = new Date(now); monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-    const wed = new Date(monday); wed.setDate(monday.getDate() + 2);
-    const a1 = new Date(wed.getFullYear(), wed.getMonth(), wed.getDate(), 14, 0, 0, 0);
+    // 造两条**重叠**的时间段任务。放在当前时间 1 小时后，避免「超时未完成自动续日」
+    // 把 14:00 的旧 fixture 滚到未来，导致当周找不到块。
+    const a1 = new Date(now.getTime() + 60 * 60e3); a1.setSeconds(0, 0);
     const a2 = new Date(a1.getTime() + 60 * 60e3);
     const b1 = new Date(a1.getTime() + 30 * 60e3);
     const b2 = new Date(b1.getTime() + 60 * 60e3);
+    const expectedTop = (a1.getHours() + a1.getMinutes() / 60) * 44;
 
     const seed = async (title, start, end) => {
       for (let i = 0; i < 3; i += 1) {
@@ -93,11 +94,14 @@ async function waitSel(page, sel, timeout = 20000) {
       await api(page, '/api/configs', 'PUT', { key: 'calendar_week_start', value: 'monday' });
     }
 
+    await page.evaluate(() => localStorage.removeItem('ui_calendar_lists'));
     await page.setViewport({ width: 1440, height: 900 });
     await gotoRetry(page, BASE + '/admin/calendar');
     await waitSel(page, '[data-cal-view-toggle]', 20000);
     await sleep(1500);
-
+    await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => (x.textContent || '').includes('知道了')); if (b) b.click(); });
+      await sleep(500);
+      
     // 1) 切到周视图
     await page.evaluate(() => document.querySelector('[data-cal-view="week"]')?.click());
     await waitSel(page, '[data-week-grid]', 15000);
@@ -135,19 +139,31 @@ async function waitSel(page, sel, timeout = 20000) {
         colW: Math.round(colW),
         bg: mine.map((b) => getComputedStyle(b).backgroundColor),
         tops: mine.map((b) => Math.round(b.getBoundingClientRect().top - (col ? col.getBoundingClientRect().top : 0))),
+        caps: mine.map((b) => [b.getAttribute('data-week-cap-top'), b.getAttribute('data-week-cap-bottom')]),
+        regions: [...(col ? col.querySelectorAll('[data-week-region]') : [])].map((r) => {
+          const rr = r.getBoundingClientRect();
+          return {
+            top: Math.round(rr.top - (col ? col.getBoundingClientRect().top : 0)),
+            height: Math.round(rr.height),
+            width: Math.round(rr.width),
+            bg: getComputedStyle(r).backgroundColor,
+          };
+        }),
       };
     });
     check('两条时间段任务都画成了块', blocks.mineCount === 2, JSON.stringify(blocks));
-    check('重叠的两条并排分栏（各占约半列宽）',
-      blocks.widths.length === 2 && blocks.colW > 0
-      && blocks.widths.every((w) => Math.abs(w - blocks.colW / 2) <= 3),
+    check('重叠的任务并排分栏（按重叠数均分列宽）',
+      blocks.widths.length === 2 && blocks.colW > 0 && blocks.overlap[0] > 1
+      && blocks.widths.every((w) => Math.abs(w - blocks.colW / blocks.overlap[0]) <= 3),
       JSON.stringify(blocks));
-    check('重叠时给出重叠提示（data-overlap=2）',
-      blocks.overlap.every((n) => n === 2), JSON.stringify(blocks.overlap));
-    check('任务块按清单颜色上色（不是透明）',
-      blocks.bg.every((c) => !/rgba\(0, 0, 0, 0\)/.test(c)), JSON.stringify(blocks.bg));
-    check('14:00 的块画在 14 点那一行（top ≈ 14×44）',
-      blocks.tops.some((t) => Math.abs(t - 14 * 44) <= 3), JSON.stringify(blocks.tops));
+    check('重叠时给出重叠提示（data-overlap ≥ 2）',
+      blocks.overlap.every((n) => n >= 2), JSON.stringify(blocks.overlap));
+    check('不再给整段任务铺背景色块',
+      blocks.regions.length === 0, JSON.stringify(blocks.regions));
+    check('工字线首尾都有横杠',
+      blocks.caps.length === 2 && blocks.caps.every((c) => c[0] === '1' && c[1] === '1'), JSON.stringify(blocks.caps));
+    check('任务块画在开始时刻那一行（top ≈ 开始时间×44）',
+      blocks.tops.some((t) => Math.abs(t - expectedTop) <= 3), JSON.stringify({ tops: blocks.tops, expectedTop }));
 
     // 4) 悬停显示时分
     const colBox = await page.evaluate(() => {

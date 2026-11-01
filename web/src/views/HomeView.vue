@@ -217,12 +217,6 @@
                   data-quick-date
                   @click="quickDateOpen = !quickDateOpen"
                 >{{ quick.due_at ? formatFullDue(quick.due_at) : '选择日期' }}</button>
-                <!-- 剩余时间：实时显示「剩余 时:分」（用户 2026-10-13 要求） -->
-                <span
-                  v-if="quickRemaining"
-                  class="quick-chip !cursor-default !border-transparent !bg-muted/40 !text-muted-foreground"
-                  data-quick-remaining
-                >{{ quickRemaining }}</span>
                 <button
                   v-if="quick.due_at"
                   type="button"
@@ -261,7 +255,6 @@
               </button>
             </template>
             <span v-if="quick.kind === 'note'" class="ml-auto text-xs font-semibold text-muted-foreground">记事保存后进入「随手记事本」</span>
-            <span v-else-if="quick.due_at" class="ml-auto text-xs font-semibold text-brand-600 dark:text-brand-300">{{ formatDue(quick.due_at) }}</span>
           </div>
 
           <!-- 无日期提示：保存前就让用户看到「这条不会进今天/计划」（0.15.4 的 bug）。
@@ -559,32 +552,72 @@
               <button class="min-w-0 flex-1 text-left" @click="editItem(item)">
                 <div class="flex items-center gap-2">
                   <!-- 任务标题用所属清单的颜色：侧栏圆点、这里的标题、日历色块三处同色。
-                       颜色在侧栏「编辑清单」里改，改完会广播数据变更，本页与日历立即刷新。 -->
-                  <h3 class="min-w-0 break-words text-sm font-bold leading-5 sm:truncate sm:text-[15px]" :style="{ color: listColor(item.list_color) }">{{ item.title }}</h3>
-                  <span v-if="isCourseNote(item)" class="tiny-badge !bg-sky-500/12 !text-sky-600 dark:!text-sky-300" data-course-note-badge>课程备注</span>
-                  <span v-else-if="item.kind === 'note'" class="tiny-badge">记事</span>
+                       颜色在侧栏「编辑清单」里改，改完会广播数据变更，本页与日历立即刷新。
+                       计划页（用户 2026-10-29）：标题单独占一行、允许自动换行（原来桌面端
+                       sm:truncate 会把长名字截掉，移动端又会跟徽标抢宽度）。 -->
+                  <h3
+                    class="min-w-0 break-words text-sm font-bold leading-5"
+                    :class="isPlanned ? 'text-[15px]' : 'sm:truncate sm:text-[15px]'"
+                    :style="{ color: listColor(item.list_color) }"
+                  >{{ item.title }}</h3>
                   <span v-if="item.priority" class="priority-mark" :class="`priority-${item.priority}`">{{ '!'.repeat(item.priority) }}</span>
-                  <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ repeatBadge(item) }}</span>
-                  <span v-if="item.repeat_notify_minutes" class="tiny-badge">过期提醒</span>
-                  <!-- 循环周期：计划页看成「这一轮到什么时候」，其余页面仍显示第几次。
-                       倒计时跟着页面每分钟的 E 走（下面 setInterval 已经在跳）。 -->
-                  <span v-if="item.cycle_index" class="tiny-badge !text-brand-600 dark:!text-brand-300" data-cycle-badge :data-cycle-remaining="isPlanned ? cycleRemaining(item) : ''">
-                    {{ isPlanned ? cycleRemaining(item) || `第 ${item.cycle_index} 次` : `第 ${item.cycle_index} 次` }}
-                  </span>
+                  <template v-if="!isPlanned">
+                    <span v-if="isCourseNote(item)" class="tiny-badge !bg-sky-500/12 !text-sky-600 dark:!text-sky-300" data-course-note-badge>课程备注</span>
+                    <span v-else-if="item.kind === 'note'" class="tiny-badge">记事</span>
+                    <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ repeatBadge(item) }}</span>
+                    <span v-if="item.repeat_notify_minutes" class="tiny-badge">过期提醒</span>
+                    <!-- 循环周期：其余页面仍显示第几次。 -->
+                    <span v-if="item.cycle_index" class="tiny-badge !text-brand-600 dark:!text-brand-300" data-cycle-badge>
+                      第 {{ item.cycle_index }} 次
+                    </span>
+                  </template>
                 </div>
-                <p v-if="item.notes" class="mt-0.5 break-words text-xs leading-4 text-muted-foreground sm:mt-1 sm:truncate">{{ item.notes }}</p>
+                <!-- 计划页第二行（用户 2026-10-29）：循环周期 + 倒计时同一行，不再挤在标题行里。
+                     倒计时跟着页面每分钟的 clockNow 走（下面 setInterval 已经在跳）。 -->
+                <div
+                  v-if="isPlanned && planStatusLine(item)"
+                  class="mt-1 flex items-center gap-1.5 overflow-hidden text-[11px] font-medium text-muted-foreground"
+                  data-plan-status
+                >
+                  <span v-if="item.repeat_rule !== 'none'" class="tiny-badge whitespace-nowrap" data-plan-cycle>{{ repeatBadge(item) }}</span>
+                  <span
+                    v-if="item.cycle_index"
+                    class="tiny-badge whitespace-nowrap !text-brand-600 dark:!text-brand-300"
+                    data-cycle-badge
+                    :data-cycle-remaining="cycleRemaining(item)"
+                  >{{ cycleRemaining(item) || `第 ${item.cycle_index} 次` }}</span>
+                  <span
+                    v-else-if="itemRemaining(item)"
+                    class="whitespace-nowrap font-bold"
+                    :class="isOverdue(item) || remainingUrgent(item) ? 'text-rose-500' : 'text-brand-600 dark:text-brand-300'"
+                    data-item-remaining
+                  >{{ itemRemaining(item) }}</span>
+                  <span v-if="item.repeat_notify_minutes" class="tiny-badge whitespace-nowrap">过期提醒</span>
+                </div>
+                <!-- 备注信息一行：计划页固定单行（超出省略），其余页面保持原来的两行自适应。 -->
+                <p
+                  v-if="item.notes"
+                  class="mt-0.5 text-xs leading-4 text-muted-foreground sm:mt-1"
+                  :class="isPlanned ? 'truncate' : 'break-words sm:truncate'"
+                >{{ item.notes }}</p>
                 <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground sm:mt-2">
-                  <span class="inline-flex items-center gap-1" :class="{ 'text-rose-500': isOverdue(item) }">
+                  <span
+                    class="inline-flex items-center gap-1"
+                    :class="{ 'text-rose-500': isOverdue(item) }"
+                    :data-created-range="showCreatedRange(item) ? createdRangeLabel(item) : undefined"
+                  >
                     <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7v5l3 2" stroke-width="1.8" stroke-linecap="round"/></svg>
-                    {{ dueLabel(item) }}
+                    <template v-if="showCreatedRange(item)">{{ createdRangeLabel(item) }}</template>
+                    <template v-else>{{ dueLabel(item) }}</template>
                   </span>
-                  <span class="h-1 w-1 rounded-full bg-border"></span>
-                  <span>{{ item.list_name }}</span>
-                  <span v-if="item.channels?.length" class="h-1 w-1 rounded-full bg-border"></span>
-                  <span v-if="item.channels?.length">{{ item.channels.map(channelName).join(' · ') }}</span>
+                  <span class="inline-flex items-center gap-2">
+                    <span class="hidden h-1 w-1 rounded-full bg-border sm:block"></span>
+                    <span>{{ [item.list_name, ...(item.channels || []).map(channelName)].join(' · ') }}</span>
+                  </span>
                   <!-- 行尾倒计时（用户 2026-10-20）：已逾期的写「已逾期 N 天 H 小时」，
-                       未逾期的写「剩余 N 天 H 小时 M 分」；计划页的循环徽章已经带了倒计时，不重复。 -->
-                  <template v-if="itemRemaining(item) && !(isPlanned && item.cycle_index)">
+                       未逾期的写「剩余 N 天 H 小时 M 分」；计划页的倒计时已经挪到卡片第二行
+                       （循环周期同一行），这里不再重复。 -->
+                  <template v-if="itemRemaining(item) && !isPlanned">
                     <span class="h-1 w-1 rounded-full bg-border"></span>
                     <span
                       class="font-bold"
@@ -897,7 +930,6 @@ function clockParts(value: string): { h: number; m: number } {
  * 分钟级实时（页面本来就有 clockNow 每分钟跳一次）。超过一天就先写天数，
  * 后面仍是「时:分」——用户要的时:分不被天数吃掉。
  */
-const quickRemaining = computed(() => remainingText(quick.due_at, clockNow.value))
 
 const blankInput = (): SaveReminderInput => ({
   title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: defaultQuickDue(),
@@ -1057,6 +1089,14 @@ function itemRemaining(item: ReminderItem): string {
   const target = deadline + overdueGraceMinutes.value * 60_000
   const diff = target - clockNow.value
   return `${diff < 0 ? '已逾期' : '剩余'} ${spanText(diff)}`
+}
+
+/** 计划页卡片第二行有没有内容：循环周期、这一轮倒计时、过期提醒，有一个就占一行。 */
+function planStatusLine(item: ReminderItem): boolean {
+  return item.repeat_rule !== 'none'
+    || !!item.cycle_index
+    || !!itemRemaining(item)
+    || !!item.repeat_notify_minutes
 }
 const planStartOpen = ref(false)
 const planEndOpen = ref(false)
@@ -1391,6 +1431,20 @@ async function submitQuick() {
     const payload: SaveReminderInput = planned
       ? { ...quick, kind: 'task', title: quick.title.trim(), due_at: null, end_at: quick.end_at || null }
       : { ...quick, title: quick.title.trim(), due_at: isNote ? null : fallbackDue }
+    if (!isNote) {
+      const startMs = payload.start_at ? new Date(payload.start_at).getTime() : (payload.due_at ? new Date(payload.due_at).getTime() : 0)
+      if (payload.end_at && payload.start_at && new Date(payload.end_at).getTime() <= startMs) {
+        saving.value = false
+        showToast('结束时间要晚于开始时间', 'error')
+        return
+      }
+      const endMs = payload.end_at ? new Date(payload.end_at).getTime() : (payload.due_at ? new Date(payload.due_at).getTime() : 0)
+      if (endMs && endMs < Date.now() - 60_000) {
+        saving.value = false
+        showToast('结束时间不能早于现在', 'error')
+        return
+      }
+    }
     await createReminder(payload)
     quickChannelsTouched = false
     Object.assign(quick, blankInput(), {
@@ -1686,6 +1740,22 @@ function formatDue(value: string | null | undefined) {
   const day = sameDay ? '今天' : d.toDateString() === tomorrow.toDateString() ? '明天' : new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(d)
   return `${day} ${d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}`
 }
+/** 待办卡片的信息行要能看出「创建 → 结束」，但创建时间只读、只在列表展示；
+    计划页的循环项目不显示创建时间，已完成卡片沿用原来的完成时段文案。 */
+function showCreatedRange(item: ReminderItem): boolean {
+  if (isPlanned.value || (item.repeat_rule || 'none') !== 'none' || item.cycle_index || item.kind !== 'task' || item.completed_at || !item.created_at) return false
+  const end = item.end_at || item.due_at
+  if (!end) return false
+  // 历史数据里有用过期时间补建的任务，created_at 会晚于结束时间；这种卡片不再显示「创建 – 结束」。
+  return new Date(item.created_at).getTime() < new Date(end).getTime()
+}
+
+function createdRangeLabel(item: ReminderItem): string {
+  const created = formatDue(item.created_at)
+  const end = item.end_at ? formatDue(item.end_at) : dueLabel(item)
+  return `创建 ${created} – ${end}`
+}
+
 /** 列表行里的时间：记事显示**记录时间**，有计划时间段就显示「开始 – 结束」，
     否则沿用原来的相对日期。
     记事没有到期时间，原来一律显示「无日期」——记事本里每条都看不出是哪天记的

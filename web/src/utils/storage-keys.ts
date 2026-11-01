@@ -15,7 +15,6 @@ export const SK = {
   fnosEntryError: `${P}fnos_entry_error`,
   // 安全提示的「稍后再说」时间戳：也必须是带前缀的键——网关域下与兄弟应用
   // 共享 localStorage，裸键会互相覆盖。
-  securityPromptDismissed: `${P}security_prompt_dismissed_at`,
   // 本标签页的客户端标识（sessionStorage，一个标签页一个）：随请求与 SSE 连接
   // 一起发给服务端，服务端广播数据变更时据此跳过发起者自己。同样必须带前缀。
   clientId: `${P}client_id`,

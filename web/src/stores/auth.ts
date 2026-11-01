@@ -3,7 +3,6 @@ import { ref, computed, watch } from 'vue'
 import { checkAuth, checkSetupRequired as apiCheckSetupRequired, logout as apiLogout } from '../api/auth'
 import { getBootstrap, type BootstrapData } from '../api/bootstrap'
 import { getUserConfigMeta } from '../api/config'
-import { getSecurityQuestions } from '../api/security'
 import { useThemeStore } from './theme'
 import { withTimeout } from '../utils/async'
 import { setBootHint } from '../utils/boot'
@@ -93,14 +92,6 @@ export const useAuthStore = defineStore('auth', () => {
   const sessionSource = ref<'app' | 'gateway'>('app')
   const followsFnOSSession = computed(() => onFnOSGatewayOrigin() && sessionSource.value === 'gateway')
   watch(siteTitle, (t) => { document.title = t }, { immediate: true })
-  const hasSecurityQuestions = ref(true)
-  const DISMISS_KEY = SK.securityPromptDismissed
-  const DISMISS_TTL = 60 * 60 * 1000 // 1 hour
-  const securityPromptDismissed = ref((() => {
-    const ts = localStorage.getItem(DISMISS_KEY)
-    if (!ts) return false
-    return Date.now() - Number(ts) < DISMISS_TTL
-  })())
   let initialized = false
   let initPromise: Promise<void> | null = null
 
@@ -219,14 +210,8 @@ export const useAuthStore = defineStore('auth', () => {
     return initPromise
   }
 
-  // 登录后的补充信息：安全提示状态与用户主题偏好。失败静默，不阻塞首屏。
+  // 登录后的补充信息：用户主题偏好。失败静默，不阻塞首屏。
   async function loadUserPreferences() {
-    try {
-      const secRes = await getSecurityQuestions()
-      if (secRes.data?.code === 0) {
-        hasSecurityQuestions.value = !!secRes.data.data?.has_questions
-      }
-    } catch {}
     try {
       const metaRes = await getUserConfigMeta()
       if (metaRes.data?.code === 0 && Array.isArray(metaRes.data.data)) {
@@ -296,11 +281,9 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = ''
     user.value = null
     clearStoredToken()
-    localStorage.removeItem(DISMISS_KEY)
     // 一次性飞牛票据不能跨会话残留：换 NAS 账号登录时必须重新取票。
     sessionStorage.removeItem(SK.fnosTicket)
     sessionStorage.removeItem(SK.fnosTicketUsername)
-    securityPromptDismissed.value = false
   }
 
   // 退出登录（用户点击）。必须先让服务端记下「这位用户主动登出了」，再清本地：
@@ -330,25 +313,6 @@ export const useAuthStore = defineStore('auth', () => {
       }
     } catch {}
     return setupRequired.value
-  }
-
-  function dismissSecurityPrompt() {
-    securityPromptDismissed.value = true
-    localStorage.setItem(DISMISS_KEY, String(Date.now()))
-  }
-
-  function refreshSecurityQuestions() {
-    if (!token.value) return
-    getSecurityQuestions()
-      .then(res => {
-        if (res.data?.code === 0) {
-          hasSecurityQuestions.value = !!res.data.data?.has_questions
-          if (hasSecurityQuestions.value) {
-            localStorage.removeItem(DISMISS_KEY)
-          }
-        }
-      })
-      .catch(() => {})
   }
 
   // 会话回收：网关域上如果这次登录态只是「网关注入的 NAS 身份」，会话实际归
@@ -405,5 +369,5 @@ export const useAuthStore = defineStore('auth', () => {
   return { token, user, requireLogin, allowRegister, creditCardEnabled, setCreditCardEnabled, notebookEnabled, setNotebookEnabled,
     ceremonyEnabled, setCeremonyEnabled, nudgeEnabled, setNudgeEnabled, reloadBootstrap,
     timetableEnabled, setTimetableEnabled,
-    reminderNotifyMinutes, reminderAckMinutes, reminderOverdueTime, setReminderFrequencies, setupRequired, siteTitle, hasSecurityQuestions, securityPromptDismissed, servicePort, fnosGatewayEntry, fnosApp, sessionSource, followsFnOSSession, isAuthenticated, isAdmin, init, resetInit, setToken, setUser, endSession, logout, dropIfFnOSSessionGone, checkSetupRequired, dismissSecurityPrompt, refreshSecurityQuestions }
+    reminderNotifyMinutes, reminderAckMinutes, reminderOverdueTime, setReminderFrequencies, setupRequired, siteTitle, servicePort, fnosGatewayEntry, fnosApp, sessionSource, followsFnOSSession, isAuthenticated, isAdmin, init, resetInit, setToken, setUser, endSession, logout, dropIfFnOSSessionGone, checkSetupRequired }
 })

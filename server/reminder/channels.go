@@ -664,6 +664,38 @@ func sendEmail(db *gorm.DB, recipients []string, item Reminder) (sendResult, err
 	if err != nil || values["host"] == "" || values["from_address"] == "" {
 		return sendResult{}, &deliveryError{Code: "PROVIDER_CONFIG_INVALID", Message: "邮件服务尚未配置", Permanent: true}
 	}
+	subject := "提醒：" + item.Title
+	body := notificationBody(item)
+	if item.Notes != "" {
+		body += "\r\n\r\n" + item.Notes
+	}
+	if err := sendMailMessage(values, recipients, subject, body); err != nil {
+		return sendResult{}, &deliveryError{Code: "SMTP_SEND_FAILED", Message: smtpErrorMessage(values["host"], err)}
+	}
+	return sendResult{}, nil
+}
+
+// SendMailToUser 给用户所有 active 的接收邮箱发一封纯文本邮件。
+// sent=false 表示这个账号没有绑定邮箱（不应向外暴露账号是否存在）；
+// err 表示邮件服务未配置或发送失败，调用方只适合回一句通用错误。
+// 由 main.go 注入给 security 包：reminder 的测试 import 根 server 包，
+// security 直接 import reminder 会绕成 test import cycle。
+func SendMailToUser(db *gorm.DB, userID uint, subject, body string) (bool, error) {
+	recipients, err := activeEmailRecipients(db, userID, nil)
+	if err != nil {
+		return false, err
+	}
+	if len(recipients) == 0 {
+		return false, nil
+	}
+	values, err := providerSettings(db, ChannelEmail)
+	if err != nil || values["host"] == "" || values["from_address"] == "" {
+		return true, errors.New("邮件服务尚未配置")
+	}
+	return true, sendMailMessage(values, recipients, subject, body)
+}
+
+func sendMailMessage(values map[string]string, recipients []string, subject, body string) error {
 	host := values["host"]
 	port := values["port"]
 	if port == "" {
@@ -674,11 +706,6 @@ func sendEmail(db *gorm.DB, recipients []string, item Reminder) (sendResult, err
 	if name == "" {
 		name = "工作序记"
 	}
-	subject := "提醒：" + item.Title
-	body := notificationBody(item)
-	if item.Notes != "" {
-		body += "\r\n\r\n" + item.Notes
-	}
 	message := []byte("From: " + name + " <" + from + ">\r\n" +
 		"To: " + strings.Join(recipients, ", ") + "\r\n" +
 		"Subject: =?UTF-8?B?" + base64.StdEncoding.EncodeToString([]byte(subject)) + "?=\r\n" +
@@ -687,10 +714,7 @@ func sendEmail(db *gorm.DB, recipients []string, item Reminder) (sendResult, err
 	if user := values["username"]; user != "" {
 		auth = smtp.PlainAuth("", user, values["password"], host)
 	}
-	if err := sendSMTP(host, port, auth, from, recipients, message); err != nil {
-		return sendResult{}, &deliveryError{Code: "SMTP_SEND_FAILED", Message: smtpErrorMessage(host, err)}
-	}
-	return sendResult{}, nil
+	return sendSMTP(host, port, auth, from, recipients, message)
 }
 
 func smtpErrorMessage(host string, err error) string {

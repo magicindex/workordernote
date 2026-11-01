@@ -85,34 +85,17 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     check('「本周末」芯片的时间是 23:59',
       /23:59$/.test(chipTimes.weekend), JSON.stringify(chipTimes));
 
-    // ---------------- 2. 剩余时间（实时，时:分） ----------------
-    // 先把日期点回「今天」再读：上面那圈芯片最后停的是「本周末」，而**周五**的「本周末」就是
-    // 「明天」，直接读会让下面「明天 > 今天」永远相等（2026-10-16 踩到过）。
-    await page.evaluate(() => {
-      const btns = [...document.querySelectorAll('.quick-chip')];
-      btns.find((b) => (b.textContent || '').trim() === '今天')?.click();
-    });
-    await sleep(500);
-    const remain1 = await page.evaluate(() => document.querySelector('[data-quick-remaining]')?.textContent.trim() || '');
-    check('芯片行显示「剩余时间」（时:分）',
-      /^剩余 (\d+ 天 )?\d{2}:\d{2}$/.test(remain1), remain1);
-    // 换成明天：剩余时间要跟着变（实时反映所选结束时间）
-    await page.evaluate(() => {
-      const btns = [...document.querySelectorAll('.quick-chip')];
-      btns.find((b) => (b.textContent || '').trim() === '明天')?.click();
-    });
-    await sleep(500);
-    const remain2 = await page.evaluate(() => document.querySelector('[data-quick-remaining]')?.textContent.trim() || '');
-    check('改日期后剩余时间跟着变（明天 > 今天）',
-      !!remain2 && remain2 !== remain1 && /^剩余 /.test(remain2), `${remain1} → ${remain2}`);
-    // 回到「今天」再确认一次（分钟级刷新不会把它刷成空）
+    // ---------------- 2. 新建窗口不再显示剩余时间/右侧「今天 23:59」 ----------------
+    check('新建窗口不再显示剩余时间', await page.evaluate(() => !document.querySelector('[data-quick-remaining]')));
     await page.evaluate(() => {
       const btns = [...document.querySelectorAll('.quick-chip')];
       btns.find((b) => (b.textContent || '').trim() === '今天')?.click();
     });
     await sleep(400);
-    const remainToday = await page.evaluate(() => document.querySelector('[data-quick-remaining]')?.textContent.trim() || '');
-    check('切回「今天」后剩余时间仍然正常显示', /^剩余 /.test(remainToday), remainToday);
+    check('新建窗口右侧不再重复「今天 23:59」', await page.evaluate(() => {
+      const card = document.querySelector('.quick-card');
+      return !card || !card.textContent.replace(/\s+/g, ' ').includes('今天 23:59');
+    }));
 
     // ---------------- 3. 弹窗「知道了（…）」与后台偏好文案一致 ----------------
     // 后台那一项下拉里显示什么，弹窗按钮括号里就该是什么

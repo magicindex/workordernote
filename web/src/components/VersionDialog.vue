@@ -26,9 +26,6 @@
       </div>
     </div>
 
-    <!-- 安卓客户端：软件信息卡片（版本/更新说明/下载地址与二维码） -->
-    <AndroidClientCard :open="modelValue" />
-
     <!-- 浏览器安装（PWA）：手机/电脑把网页装成独立应用 -->
     <InstallAppCard />
 
@@ -103,7 +100,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import Modal from './Modal.vue'
-import AndroidClientCard from './AndroidClientCard.vue'
 import InstallAppCard from './InstallAppCard.vue'
 import { PROJECT, UPSTREAM, iterationThemes, releaseNotes } from '../data/release-notes'
 

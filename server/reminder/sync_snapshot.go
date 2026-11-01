@@ -130,6 +130,7 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 			ListUID:             listUID[r.ListID],
 			Title:               r.Title,
 			Notes:               r.Notes,
+			Color:               r.Color,
 			BottomText:          r.BottomText,
 			Icon:                r.Icon,
 			CardRole:            r.CardRole,
@@ -236,7 +237,9 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 		return snap, err
 	}
 	for _, row := range rows {
-		if syncConfigSecrets[row.Key] || strings.HasPrefix(row.Key, "sync_") {
+		// 安卓客户端已下线（2026-10-29）：历史 android_* 配置不再参与同步，
+		// 否则对端启动时刚清掉的行会被下一次同步原样拉回来。
+		if syncConfigSecrets[row.Key] || strings.HasPrefix(row.Key, "sync_") || strings.HasPrefix(row.Key, "android") {
 			continue
 		}
 		if row.UserID == 0 {

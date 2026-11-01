@@ -44,6 +44,14 @@
   animation: flow-frame-rotate 7s linear infinite;
   pointer-events: none;
 }
+/* 日历「今天」整列：沿用同一套流光，但边框加粗到 2px 并带一点外发光，长条上才看得清。 */
+.flow-frame.today-flow::before {
+  inset: 1px;
+  padding: 2px;
+  background: conic-gradient(from var(--bd-angle), #6366f1, #a855f7, #22d3ee, #6366f1);
+  filter: drop-shadow(0 0 6px rgba(124, 92, 255, 0.55));
+}
+
 @keyframes flow-frame-rotate {
   to { --bd-angle: 360deg; }
 }

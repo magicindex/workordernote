@@ -21,6 +21,8 @@
         :autocomplete="autocomplete"
         :placeholder="placeholder"
         :autofocus="shouldAutofocus || undefined"
+        :inputmode="inputmode"
+        :maxlength="maxlength"
         :class="[
           'w-full py-3 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder-white/30 focus:bg-white/[0.07] focus:border-brand-400/70 focus:ring-4 focus:ring-brand-500/20 outline-none transition-colors duration-150',
           $slots.icon ? 'pl-11' : 'pl-4',
@@ -54,12 +56,14 @@ const props = withDefaults(
     /**
      * 浏览器/安卓 WebView 的密码管理器靠 name + id 认字段：只给 autocomplete
      * 时 Safari 与部分安卓浏览器仍然不弹「保存密码」，于是用户每次都手输
-     * （实测反馈：安卓客户端里勾了「记住我」也记不住密码）。
+     * （实测反馈：某些 WebView 里勾了「记住我」也记不住密码）。
      */
     name?: string
     id?: string
     required?: boolean
     autofocus?: boolean
+    inputmode?: 'text' | 'numeric' | 'email' | 'tel' | 'url' | 'search'
+    maxlength?: number
   }>(),
   { type: 'text', required: false },
 )

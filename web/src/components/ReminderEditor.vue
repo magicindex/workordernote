@@ -89,6 +89,13 @@
                 </div>
               </div>
               <label class="editor-field"><span>清单</span><select v-model.number="editing.list_id"><option v-for="list in lists" :key="list.id" :value="list.id">{{ list.name }}</option></select></label>
+              <div v-if="!isNoteEditing" class="editor-field" :class="isModal ? 'col-span-2 sm:col-span-3' : 'col-span-2'">
+                <span>颜色</span>
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <button type="button" data-editor-color="" class="h-6 rounded-md border px-2 text-[11px] font-semibold" :class="!editing.color ? 'border-brand-500/45 bg-brand-500/10 text-brand-600 dark:text-brand-300' : 'border-border text-muted-foreground'" @click="editing.color = ''">自动配色</button>
+                  <button v-for="c in LIST_COLOR_NAMES" :key="c" type="button" :data-editor-color="c" class="h-6 w-6 rounded-full border-2 transition" :class="editing.color === c ? 'border-foreground' : 'border-transparent'" :style="{ background: listColorHex(c) }" :aria-label="listColorLabel(c)" :title="listColorLabel(c)" @click="editing.color = c" />
+                </div>
+              </div>
               <label class="editor-field"><span>优先级</span><select v-model.number="editing.priority"><option :value="0">无</option><option :value="1">低</option><option :value="2">中</option><option :value="3">高</option></select></label>
               <label class="editor-field"><span>重复</span><select v-model="editing.repeat_rule"><option value="none">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option></select></label>
               <label class="editor-field"><span>按农历循环</span><select v-model="editing.calendar" @change="upgradeCalendarToYearly"><option value="solar">公历</option><option value="lunar">农历</option></select></label>
@@ -156,6 +163,7 @@ import ConfirmDialog from './ConfirmDialog.vue'
 import { RouterLink } from 'vue-router'
 import LunarDatePicker from './LunarDatePicker.vue'
 import RepeatNotifySelect from './RepeatNotifySelect.vue'
+import { LIST_COLOR_NAMES, listColorHex, listColorLabel } from '../utils/list-colors'
 import {
   createReminder, deleteReminder, getReminder, updateReminder,
   type ChannelStatus, type ReminderChannel, type ReminderItem, type ReminderKind,
@@ -195,10 +203,11 @@ const emit = defineEmits<{
 }>()
 
 const isCreate = computed(() => props.preset != null)
+const isNoteEditing = computed(() => (editing.kind as string) === 'note')
 const isModal = computed(() => props.presentation === 'modal')
 
 const blankInput = (): SaveReminderInput & { id?: number } => ({
-  title: '', notes: '', kind: 'task', list_id: 0, priority: 0, due_at: null,
+  title: '', notes: '', color: '', kind: 'task', list_id: 0, priority: 0, due_at: null,
   start_at: null, end_at: null,
   all_day: false, repeat_rule: 'none', calendar: 'solar', repeat_notify_minutes: 0, channels: ['inapp'],
 })
@@ -258,7 +267,7 @@ function enableEnd() {
 function applyItem(item: ReminderItem) {
   canDelete.value = item.can_delete !== false
   Object.assign(editing, {
-    id: item.id, title: item.title, notes: item.notes, kind: item.kind || 'task', list_id: item.list_id,
+    id: item.id, title: item.title, notes: item.notes, color: item.color || '', kind: item.kind || 'task', list_id: item.list_id,
     priority: item.priority, due_at: item.due_at, all_day: item.all_day,
     start_at: item.start_at || null, end_at: item.end_at || null,
     repeat_rule: item.repeat_rule, calendar: item.calendar || 'solar',
