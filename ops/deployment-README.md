@@ -1,4 +1,4 @@
-# 工作序记 (WorkOrderNote) 0.44.0
+# 工作序记 (WorkOrderNote) 0.44.1
 
 任务、记事与日历一体的提醒应用。飞牛 NAS 上以 Docker 部署。
 

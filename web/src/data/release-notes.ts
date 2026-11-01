@@ -32,6 +32,14 @@ export const UPSTREAM = {
 
 const versionHistory: ReleaseNote[] = [
   {
+    version: '0.44.1',
+    date: '2026-11-01',
+    title: '周视图去掉今天的底色与流光',
+    items: [
+      '**周视图**：取消今天整列的背景色块和流光边框，只保留日期头的「今天」标记；月视图今天的圆角流光保留。任务线、标签和配色规则不变。',
+    ],
+  },
+  {
     version: '0.44.0',
     date: '2026-11-01',
     title: '周视图重做，邮箱找回上线',

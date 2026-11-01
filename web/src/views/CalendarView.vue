@@ -116,11 +116,6 @@
             >
               <div v-for="h in 24" :key="h" class="border-t border-border/40" :style="{ height: HOUR_H + 'px' }"></div>
               <!-- 只给今天铺一整天的底色，其他日期没有背景。 -->
-              <div
-                v-if="sameToday(d)"
-                class="flow-frame today-flow !absolute pointer-events-none inset-0 bg-brand-500/[0.16]"
-                data-week-today-bg
-              />
               <!-- 每条任务一根工字线：起止横杠 + 中间竖线；跨天只在真起点/真终点封口 -->
               <div
                 v-for="b in (weekBlocks[dayKey(d)] || [])"
