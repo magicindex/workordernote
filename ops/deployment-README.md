@@ -243,6 +243,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 离线包 `pkg/WorkOrderNote-0.44.0-offline-amd64.tar.gz`（sha256 `b63beecd94d3447bcf033cb573c6fd9ed82fe0eab7572e5fc0bfcb3522645da5`）。
 - 单镜像包 `pkg/workordernote-0.44.0-amd64.tar.gz`（sha256 `2afde92a8629f9b6749b5cbfb183ae41e3e2772aaf82e7c518f8736499c89903`）。
 - 源码提交 `aa54f40`；测试修复（verify-142 手机设置分区、verify-155 12 个清单）随后提交。
+- Gitea `main` 与 tag `v0.44.0` 已推送（`fac4916`）；GitHub 镜像本次未推送。
 
 ### 2026-10-28：0.43.8（201 生产 / 201 沙箱 / 200 生产 / 演示 8920 上线）—— 垃圾箱清空/自动清空与图标去边框
 
