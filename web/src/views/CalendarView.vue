@@ -1,14 +1,14 @@
 <template>
-  <div class="animate-fade-in flex flex-col gap-2.5 lg:min-h-[calc(100dvh-8.5rem)]" :style="{ '--cal-task-font': calendarFontPx + 'px' }">
+  <div class="animate-fade-in flex flex-col gap-2.5 lg:h-[calc(100dvh-8.5rem)]" :style="{ '--cal-task-font': calendarFontPx + 'px' }">
     <!-- 不再单独放一个页头：顶栏和侧栏已经表明当前在日历，重复的标题+描述白占 52px
          （外加两段 24px 间距），把这段还给日历格子。 -->
     <div v-if="errorMsg" class="surface rounded-2xl px-5 py-3 text-sm text-destructive">
       {{ errorMsg }}
     </div>
 
-    <!-- 工具条：翻月 / 回今天 / 计数 -->
-    <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-      <div class="flex items-center gap-1.5 sm:gap-2">
+    <!-- 工具条：上与表格左右分栏对齐；第一行翻月/打印，第二行清单/统计。 -->
+    <div data-cal-toolbar class="grid grid-cols-1 gap-x-3 gap-y-2 lg:grid-cols-[minmax(0,1fr)_19rem]">
+      <div class="flex min-w-0 items-center gap-1.5 sm:gap-2">
         <button class="icon-button" aria-label="上个月" @click="shiftMonth(-1)">
           <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m15 6-6 6 6 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
@@ -19,16 +19,7 @@
         <h2 class="ml-1 text-base font-extrabold tracking-tight sm:text-lg">{{ monthTitle }}</h2>
         <span v-if="lunarYearName" class="hidden text-xs font-semibold text-muted-foreground md:inline">{{ lunarYearName }}</span>
       </div>
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <!-- 选择哪些清单显示在日历里；不选=全部。选择记在本地。 -->
-        <!-- 用全部清单：信用卡账单栏目的提醒（账单日/还款日/提前提醒）也在日历里，要能按它筛 -->
-        <ListFilter v-model="listFilter" :lists="lists" />
-        <div class="flex items-center gap-3 text-[11px] font-semibold text-muted-foreground sm:text-xs">
-          <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-brand-500"></i>未完成 {{ openCount }}</span>
-          <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-emerald-500"></i>已完成 {{ doneCount }}</span>
-          <!-- 记事既不是未完成也不是「做完的任务」，单独计数，免得两个数字互相污染 -->
-          <span v-if="noteCount" class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-slate-400"></i>记事 {{ noteCount }}</span>
-        </div>
+      <div class="flex items-center justify-end gap-2">
         <button
           type="button"
           class="btn-secondary !h-8 !gap-1.5 !px-3 !text-[11px] sm:!text-xs"
@@ -52,6 +43,17 @@
           {{ exporting ? '导出中…' : '导出本月' }}
         </button>
       </div>
+      <div class="flex min-w-0 items-center">
+        <!-- 选择哪些清单显示在日历里；不选=全部。选择记在本地。 -->
+        <!-- 用全部清单：信用卡账单栏目的提醒（账单日/还款日/提前提醒）也在日历里，要能按它筛 -->
+        <ListFilter v-model="listFilter" :lists="lists" class="w-full" more-align-end />
+      </div>
+      <div class="flex items-center justify-end gap-3 text-[11px] font-semibold text-muted-foreground sm:text-xs">
+        <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-brand-500"></i>未完成 {{ openCount }}</span>
+        <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-emerald-500"></i>已完成 {{ doneCount }}</span>
+        <!-- 记事既不是未完成也不是「做完的任务」，单独计数，免得两个数字互相污染 -->
+        <span v-if="noteCount" class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-slate-400"></i>记事 {{ noteCount }}</span>
+      </div>
     </div>
 
     <div class="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_19rem]">
@@ -74,7 +76,7 @@
             <span class="ml-1 text-xs font-extrabold" data-week-label>{{ weekLabel }}</span>
           </template>
         </div>
-        <div class="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1 pb-1.5">
+        <div v-if="viewMode === 'month'" class="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1 pb-1.5" data-cal-weekdays>
           <div
             v-for="(w, i) in weekdays"
             :key="w"
@@ -91,7 +93,13 @@
               v-for="d in weekDays"
               :key="'h' + dayKey(d)"
               class="sticky top-0 z-10 bg-surface px-1 pb-1 text-center text-[11px] font-bold"
-            >{{ ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()] }} <span class="text-muted-foreground">{{ d.getMonth() + 1 }}/{{ d.getDate() }}</span></div>
+              :class="sameToday(d) ? 'text-brand-600 dark:text-brand-300' : ''"
+            >
+              <div class="mb-0.5 flex h-3.5 items-center justify-center">
+                <span v-if="sameToday(d)" class="rounded bg-brand-500/15 px-1.5 text-[9px] font-extrabold leading-3.5 text-brand-600 dark:text-brand-300" data-week-today-mark>今天</span>
+              </div>
+              {{ ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()] }} <span class="text-muted-foreground">{{ d.getMonth() + 1 }}/{{ d.getDate() }}</span>
+            </div>
             <div class="relative">
               <div v-for="h in 24" :key="'t' + h" class="pr-1 text-right text-[10px] text-muted-foreground" :style="{ height: HOUR_H + 'px' }">{{ pad(h - 1) }}:00</div>
             </div>
@@ -107,20 +115,61 @@
               title="双击在鼠标所在时分新建任务"
             >
               <div v-for="h in 24" :key="h" class="border-t border-border/40" :style="{ height: HOUR_H + 'px' }"></div>
+              <!-- 只给今天铺一整天的底色，其他日期没有背景。 -->
+              <!-- 每条任务一根工字线：起止横杠 + 中间竖线；跨天只在真起点/真终点封口 -->
               <div
                 v-for="b in (weekBlocks[dayKey(d)] || [])"
                 :key="b.item.id"
-                class="absolute overflow-hidden rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-white shadow"
-                :class="{ 'ring-2 ring-rose-300': b.overlap > 1, 'opacity-55 line-through': b.item.completed && b.item.kind !== 'note' }"
-                :style="{ top: b.top + 'px', height: b.height + 'px', left: (b.lane * 100) / b.lanes + '%', width: 100 / b.lanes + '%', background: listInk(b.item.list_color) }"
+                class="absolute cursor-pointer"
+                :class="{ 'opacity-55': b.item.completed && b.item.kind !== 'note' }"
+                :style="{ top: b.top + 'px', height: b.height + 'px', left: (b.lane * 100) / b.lanes + '%', width: 100 / b.lanes + '%' }"
                 :data-week-block="b.item.id"
+                :data-week-role="b.role"
                 :data-overlap="b.overlap"
-                :title="`${b.item.title} · ${timeLabel(b.item)}${b.overlap > 1 ? ` · 与 ${b.overlap - 1} 条重叠（并排显示）` : ''}`"
+                :data-week-cap-top="b.capTop ? '1' : undefined"
+                :data-week-cap-bottom="b.capBottom ? '1' : undefined"
+                :title="`${b.item.title} · ${timeLabel(b.item)}${b.overlap > 1 ? ` · 与 ${b.overlap - 1} 条重叠` : ''}`"
                 @click.stop="onItemClick(b.item)"
                 @dblclick.stop="onItemDblClick(b.item)"
               >
-                <span class="block truncate">{{ b.item.title }}</span>
-                <span class="block truncate opacity-85">{{ timeLabel(b.item) }}</span>
+                <span
+                  class="absolute bottom-0 left-2 top-0 w-[2px] rounded-full"
+                  :style="{ background: taskInk(b.item) }"
+                />
+                <!-- 起始/结束横线跟着标签长度走，右侧与文字右侧对齐；标签在线右侧，不压竖线。 -->
+                <span
+                  v-if="b.role === 'end' && b.capBottom"
+                  data-week-cap
+                  class="absolute bottom-0 left-2 h-[2px] w-[14px] rounded-full"
+                  :style="{ background: taskInk(b.item) }"
+                />
+                <div
+                  class="absolute bottom-0 left-2 right-0 top-0 flex"
+                  :class="b.role === 'single' ? 'items-start' : 'items-end'"
+                >
+                  <div
+                    class="relative flex h-full w-max max-w-full"
+                    :class="b.role === 'single' ? 'items-start' : 'items-end'"
+                  >
+                    <span
+                      v-if="b.capTop"
+                      data-week-cap
+                      class="absolute left-0 top-0 h-[2px] w-full rounded-full"
+                      :style="{ background: taskInk(b.item) }"
+                    />
+                    <span
+                      v-if="b.capBottom"
+                      data-week-cap
+                      class="absolute bottom-0 left-0 h-[2px] w-full rounded-full"
+                      :style="{ background: taskInk(b.item) }"
+                    />
+                    <span
+                      data-week-label-mode="right"
+                      class="pointer-events-none z-10 ml-1 block whitespace-nowrap rounded bg-surface/95 px-0.5 py-0.5 text-[10px] font-bold leading-[10px]"
+                      :style="{ color: taskInk(b.item), writingMode: 'vertical-rl', textOrientation: 'mixed' }"
+                    >{{ b.item.title }}</span>
+                  </div>
+                </div>
               </div>
               <div
                 v-if="hoverTime && hoverTime.day === dayKey(d)"
@@ -132,17 +181,17 @@
           </div>
         </div>
 
-        <div v-if="viewMode === 'month' && loading && !cells.length" class="grid flex-1 grid-cols-[repeat(7,minmax(0,1fr))] gap-1">
+        <div v-if="viewMode === 'month' && loading && !cells.length" class="grid min-h-0 flex-1 auto-rows-[minmax(0,1fr)] grid-cols-[repeat(7,minmax(0,1fr))] gap-1" data-month-grid>
           <div v-for="n in 35" :key="n" class="min-h-[4.5rem] animate-pulse rounded-xl bg-muted/70"></div>
         </div>
 
-        <div v-else-if="viewMode === 'month'" class="grid flex-1 auto-rows-fr grid-cols-[repeat(7,minmax(0,1fr))] gap-1">
+        <div v-else-if="viewMode === 'month'" class="grid min-h-0 flex-1 auto-rows-[minmax(0,1fr)] grid-cols-[repeat(7,minmax(0,1fr))] gap-1" data-month-grid>
           <div
             v-for="cell in cells"
             :key="cellKey(cell)"
             role="button"
             tabindex="0"
-            class="cal-cell group relative flex flex-col rounded-xl border p-1 text-left transition sm:p-1.5"
+            class="cal-cell group relative flex flex-col overflow-hidden rounded-xl border p-1 text-left transition sm:p-1.5"
             :class="cellClass(cell)"
             @click="selectCell(cellKey(cell))"
             @dblclick="openCreateForDate(cellKey(cell))"
@@ -150,6 +199,11 @@
             :title="`双击在这天新建提醒`"
             :data-cal-date="cellKey(cell)"
           >
+            <div
+              v-if="cellKey(cell) === todayKey"
+              class="flow-frame today-flow !absolute pointer-events-none inset-0 rounded-xl"
+              data-month-today-flow
+            />
             <div class="flex items-start justify-between gap-1">
               <span
                 class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold leading-none sm:h-6 sm:w-6 sm:text-xs"
@@ -177,7 +231,7 @@
                  参考信用卡/记事本那种「图标 + 浅色底」的样式，用清单色。 -->
             <div v-if="spansOf(cellKey(cell)).length" class="mt-1 flex flex-col gap-0.5" data-cal-spans>
               <button
-                v-for="span in spansOf(cellKey(cell))"
+                v-for="span in visibleSpans(cell)"
                 :key="`span-${span.item.id}`"
                 type="button"
                 class="cal-span flex min-w-0 items-center gap-1 rounded-md px-1 py-[1px] text-left font-semibold leading-tight"
@@ -247,6 +301,18 @@
               data-cal-overflow
               @click.stop
             >
+              <button
+                v-for="span in overflowSpans(cell)"
+                :key="`ospan-${span.item.id}`"
+                type="button"
+                class="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[11px] font-semibold hover:bg-muted"
+                @click.stop="onSpanClick(span.item); overflowFor = ''"
+              >
+                <span class="cal-plan-mark shrink-0" :style="{ background: chipDot(span.item) }">
+                  <ListIcon name="clock" :size="10" class="text-white" />
+                </span>
+                <span class="truncate">{{ span.item.title }}</span>
+              </button>
               <button
                 v-for="item in overflowItems(cell)"
                 :key="item.id"
@@ -473,6 +539,10 @@ function startOfWeek(d: Date) {
   return s
 }
 const weekStart = ref(startOfWeek(new Date()))
+// 今天的高亮块要跟着实际时间走：每分钟刷新一次当前分钟。
+const clockNow = ref(new Date())
+const todayKey = computed(() => dayKey(clockNow.value))
+let clockTimer: number | undefined
 const weekDays = computed(() => Array.from({ length: 7 }, (_, i) => {
   const d = new Date(weekStart.value)
   d.setDate(d.getDate() + i)
@@ -484,47 +554,215 @@ const weekLabel = computed(() => {
   return `${a.getFullYear()} 年 ${f(a)} – ${f(b)}`
 })
 const HOUR_H = 44
-const weekBlocks = computed<Record<string, Array<{ item: CalendarItem; top: number; height: number; lane: number; lanes: number; overlap: number }>>>(() => {
-  const out: Record<string, Array<{ item: CalendarItem; top: number; height: number; lane: number; lanes: number; overlap: number }>> = {}
-  for (const d of weekDays.value) out[dayKey(d)] = []
-  const byDay: Record<string, CalendarItem[]> = {}
+// 周视图：同一天的提醒先合并成连续色块（最早开始 → 最晚结束，重叠/首尾相接就连续，
+// 中间断开则拆成多块），色块占满当天通道。每条提醒再画一根「工字线」：
+// 起止各一根横杠，中间一根竖线；跨天时只有第一天有上横杠、最后一天有下横杠。
+type WeekBlock = {
+  item: CalendarItem
+  top: number
+  height: number
+  lane: number
+  lanes: number
+  overlap: number
+  role: 'single' | 'start' | 'mid' | 'end'
+  capTop: boolean
+  capBottom: boolean
+  startMin: number
+  endMin: number
+  labelMode: 'inline' | 'above' | 'below'
+  labelSide: 'left' | 'right'
+}
+const weekLayout = computed<Record<string, WeekBlock[]>>(() => {
+  const blocks: Record<string, WeekBlock[]> = {}
+  for (const d of weekDays.value) blocks[dayKey(d)] = []
+  const weekStartMs = weekStart.value.getTime()
+  const weekEndMs = weekStartMs + 7 * 24 * 3600_000
+  const DAY_MS = 24 * 3600_000
+
+  type Span = { item: CalendarItem; start: number; end: number; explicit: boolean }
+  const spans: Span[] = []
   for (const it of items.value) {
-    if (it.all_day || !it.due_at) continue
-    const k = String(it.due_date || '').slice(0, 10)
-    if (!(k in out)) continue
-    ;(byDay[k] ||= []).push(it)
+    if (it.all_day) continue
+    const dueMs = it.due_at ? new Date(it.due_at).getTime() : 0
+    const explicitEnd = it.end_at ? new Date(it.end_at).getTime() : 0
+    // 没有单独填「开始时间」的普通待办：当天创建、当天到期时，从创建那一刻画到到期，
+    // 否则 23:59 的任务会缩成底部一个小点，周视图里什么都看不出来。
+    let start = it.start_at ? new Date(it.start_at).getTime() : dueMs
+    let fromCreation = false
+    if (!it.start_at && it.created_at && dueMs > 0) {
+      const created = new Date(it.created_at)
+      const createdMs = created.getTime()
+      const dueDate = new Date(dueMs)
+      const sameDay = created.getFullYear() === dueDate.getFullYear()
+        && created.getMonth() === dueDate.getMonth()
+        && created.getDate() === dueDate.getDate()
+      if (sameDay && createdMs < dueMs) {
+        start = createdMs
+        fromCreation = true
+      }
+    }
+    if (!start) continue
+    const startDate = new Date(start)
+    const nextMidnight = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + 1).getTime()
+    // 只有真的填了「结束时间」才跨天；单点任务固定一小时，23:59 的任务不能溢出到次日。
+    let end = explicitEnd > start ? explicitEnd : fromCreation ? dueMs : Math.min(start + 3600_000, nextMidnight)
+    if (end <= start) end = Math.min(start + 3600_000, nextMidnight)
+    // 已完成的用「实际提交完成时刻」收尾；未完成的过期任务逐日续到下一次同一时刻，
+    // 这样 23:59 的任务跨过午夜后会继续铺到次日 23:59，直到提交为止。
+    const doneMs = it.completed_at ? new Date(it.completed_at).getTime() : 0
+    if (it.completed && doneMs > 0) {
+      end = Math.max(start + 60_000, doneMs)
+    } else if (!it.completed && dueMs > 0) {
+      let rolled = dueMs
+      let guard = 0
+      while (rolled <= clockNow.value.getTime() && guard++ < 3660) {
+        const next = new Date(rolled)
+        next.setDate(next.getDate() + 1)
+        rolled = next.getTime()
+      }
+      if (rolled > dueMs) end = rolled
+    }
+    if (end <= weekStartMs || start >= weekEndMs) continue
+    spans.push({ item: it, start, end, explicit: explicitEnd > start || fromCreation })
   }
-  for (const [k, list] of Object.entries(byDay)) {
-    const spans = list.map((it) => {
-      const start = new Date(it.due_at as string)
-      const startMin = start.getHours() * 60 + start.getMinutes()
-      const end = it.end_at ? new Date(it.end_at) : null
-      let endMin = end ? end.getHours() * 60 + end.getMinutes() : startMin + 60
-      // 跨天的时段先截到当天结束（周视图一天一列，不跨列画）
-      if (end && end.toDateString() !== start.toDateString()) endMin = 24 * 60
-      if (endMin <= startMin) endMin = startMin + 30
-      return { it, startMin, endMin }
-    }).sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin)
-    // 贪心分道：同一天里重叠的并排分栏（各占 1/lanes 宽）
-    const laneEnds: number[] = []
-    const placed = spans.map((sp) => {
-      let lane = laneEnds.findIndex((end) => end <= sp.startMin)
-      if (lane === -1) { laneEnds.push(sp.endMin); lane = laneEnds.length - 1 } else laneEnds[lane] = sp.endMin
-      return { ...sp, lane }
-    })
-    for (const a of placed) {
-      const overlapGroup = placed.filter((b) => b.startMin < a.endMin && a.startMin < b.endMin)
-      const lanes = Math.max(1, ...overlapGroup.map((b) => b.lane + 1))
-      out[k].push({
-        item: a.it,
-        top: (a.startMin / 60) * HOUR_H,
-        height: Math.max(22, ((a.endMin - a.startMin) / 60) * HOUR_H - 2),
-        lane: a.lane, lanes, overlap: overlapGroup.length,
+
+  // 按天切段；跨天任务的段会延续到后续日期。
+  type DaySeg = { span: Span; startMin: number; endMin: number; role: WeekBlock['role']; explicit: boolean }
+  const daySegs: Record<string, DaySeg[]> = {}
+  for (const d of weekDays.value) daySegs[dayKey(d)] = []
+  for (const sp of spans) {
+    for (let i = 0; i < 7; i++) {
+      const dayStart = weekStartMs + i * DAY_MS
+      const dayEnd = dayStart + DAY_MS
+      const segStart = Math.max(sp.start, dayStart)
+      const segEnd = Math.min(sp.end, dayEnd)
+      if (segEnd <= segStart) continue
+      const startsToday = sp.start >= dayStart && sp.start < dayEnd
+      const endsToday = sp.end > dayStart && sp.end <= dayEnd
+      const role: WeekBlock['role'] = startsToday && endsToday ? 'single' : startsToday ? 'start' : endsToday ? 'end' : 'mid'
+      daySegs[dayKey(weekDays.value[i])].push({
+        span: sp,
+        startMin: (segStart - dayStart) / 60_000,
+        endMin: (segEnd - dayStart) / 60_000,
+        role,
+        explicit: sp.explicit,
       })
     }
   }
-  return out
+
+  for (const d of weekDays.value) {
+    const key = dayKey(d)
+    const sorted = [...daySegs[key]].sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin)
+    // 先合并连续时段：重叠或首尾刚好相接都算一块；中间有空档就断开。
+    const merged: Array<{ startMin: number; endMin: number; segs: DaySeg[] }> = []
+    for (const seg of sorted) {
+      const last = merged[merged.length - 1]
+      if (last && seg.startMin <= last.endMin + 0.001) {
+        last.endMin = Math.max(last.endMin, seg.endMin)
+        last.segs.push(seg)
+      } else {
+        merged.push({ startMin: seg.startMin, endMin: seg.endMin, segs: [seg] })
+      }
+    }
+
+    for (const region of merged) {
+      // 通道内部：只有互相重叠的提醒才分左右竖线；单点提醒与时间段分开算，
+      // 避免 23:59 的小点把跨天任务压窄、导致竖线跨天错位。
+      const layoutGroup = (group: DaySeg[]) => {
+        if (!group.length) return
+        const laneEnds: number[] = []
+        const laneOf = new Map<DaySeg, number>()
+        for (const seg of group) {
+          let lane = laneEnds.findIndex((end) => end <= seg.startMin)
+          if (lane === -1) { laneEnds.push(seg.endMin); lane = laneEnds.length - 1 } else laneEnds[lane] = seg.endMin
+          laneOf.set(seg, lane)
+        }
+        for (const seg of group) {
+          const overlap = group.filter((o) => o.startMin < seg.endMin && seg.startMin < o.endMin).length
+          const raw = ((seg.endMin - seg.startMin) / 60) * HOUR_H
+          blocks[key].push({
+            item: seg.span.item,
+            top: (seg.startMin / 60) * HOUR_H,
+            height: seg.role === 'single' ? Math.max(22, raw - 2) : Math.max(22, raw),
+            lane: laneOf.get(seg) ?? 0,
+            lanes: Math.max(1, laneEnds.length),
+            overlap,
+            role: seg.role,
+            capTop: seg.role === 'single' || seg.role === 'start',
+            capBottom: seg.role === 'single' || seg.role === 'end',
+            startMin: seg.startMin,
+            endMin: seg.endMin,
+            labelMode: 'inline',
+            labelSide: 'right',
+          })
+        }
+      }
+      // 所有任务共用同一套车道：只要时间重叠就分到不同竖线，避免单点任务
+      // 和时间段任务各从第 0 道开始、两根线叠在一起。
+      layoutGroup(region.segs)
+    }
+
+    // 标题统一竖排，放在竖线两侧；放不下就优先放线段前边，前边被占则放尾端后边。
+    const dayBlocks = blocks[key]
+    for (const b of dayBlocks) {
+      const chars = [...b.item.title].length
+      const labelMin = (Math.max(2, chars) * 10 * 60) / HOUR_H
+      const fits = b.height >= chars * 10 + 4
+      if (fits) {
+        b.labelMode = 'inline'
+        b.labelSide = b.lane % 2 === 0 ? 'right' : 'left'
+      } else {
+        const aboveStart = b.startMin - labelMin
+        const blocked = aboveStart < 0 || dayBlocks.some((o) =>
+          o !== b && o.lane === b.lane && o.startMin < b.startMin && o.endMin > aboveStart)
+        b.labelMode = blocked ? 'below' : 'above'
+        b.labelSide = 'right'
+      }
+    }
+  }
+  return blocks
 })
+const weekBlocks = computed(() => weekLayout.value)
+
+/** 当前周出现的任务（每个任务只算一次），按开始时间 + id 排序，作为配色的稳定顺序。 */
+const weekTaskItems = computed(() => {
+  const seen = new Map<number, CalendarItem>()
+  for (const blocks of Object.values(weekBlocks.value)) {
+    for (const b of blocks) if (!seen.has(b.item.id)) seen.set(b.item.id, b.item)
+  }
+  const at = (item: CalendarItem) => new Date(item.start_at || item.due_at || 0).getTime()
+  return [...seen.values()].sort((a, b) => at(a) - at(b) || a.id - b.id)
+})
+
+/**
+ * 一周内任务颜色必须唯一：先保留用户自选色，重复的、未选色的按黄金角生成不同色相。
+ * 只按「这一周实际出现的任务」分配，所以换周会重新排，但同一周内稳定。
+ */
+const DONE_INK = '#94a3b8'
+const weekColorMap = computed(() => {
+  const used = new Set<string>()
+  const map = new Map<number, string>()
+  weekTaskItems.value.forEach((item, index) => {
+    if (item.completed_at) { map.set(item.id, DONE_INK); return }
+    let ink = item.color ? listInk(item.color) : ''
+    if (!ink || used.has(ink)) ink = uniqueWeekInk(index, used)
+    used.add(ink)
+    map.set(item.id, ink)
+  })
+  return map
+})
+
+function uniqueWeekInk(index: number, used: Set<string>) {
+  for (let step = 0; step < 720; step++) {
+    const hue = Math.round((index * 137.508 + step * 11.25) % 360)
+    const sat = 64 + (index % 3) * 5
+    const light = 50 + (step % 3) * 5
+    const ink = `hsl(${hue} ${sat}% ${light}%)`
+    if (!used.has(ink)) return ink
+  }
+  return `hsl(${index % 360} 70% 55%)`
+}
+
 const hoverTime = ref<{ day: string; y: number; label: string } | null>(null)
 function minutesFromEvent(e: MouseEvent, cols = 4) {
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -593,8 +831,15 @@ const channels = ref<ChannelStatus[]>([])
 const editorOpen = ref(false)
 // 超过 MAX_CHIPS 的条目收在下拉里：记住当前展开的是哪一天
 const overflowFor = ref('')
+function plainItems(c: LunarDayInfo) {
+  const spanIds = new Set(spansOf(cellKey(c)).map((s) => s.item.id))
+  return (byDate.value.get(cellKey(c)) || []).filter((i) => !spanIds.has(i.id))
+}
 function overflowItems(c: LunarDayInfo) {
-  return (byDate.value.get(cellKey(c)) || []).slice(MAX_CHIPS)
+  return plainItems(c).slice(visibleItems(c).length)
+}
+function overflowSpans(c: LunarDayInfo) {
+  return spansOf(cellKey(c)).slice(visibleSpans(c).length)
 }
 function toggleOverflow(c: LunarDayInfo) {
   const key = cellKey(c)
@@ -672,12 +917,25 @@ const selectedTags = computed(() => {
 })
 
 // 月历单元格里最多铺 3 条，其余折成 +N；手机上只显示圆点。
-const MAX_CHIPS = 3
+// 日期格能放几条：窗口变矮时日期格会跟着压缩，条目数也要同步减少，避免内容被裁掉。
+const monthChipLimit = ref(3)
+function syncMonthChipLimit() {
+  const h = window.innerHeight
+  monthChipLimit.value = h >= 850 ? 3 : h >= 720 ? 2 : 1
+}
+syncMonthChipLimit()
+// 月历一格最多铺 3 条（时间段条与普通提醒合计），超出的都进「+N 条」。
+// 以前只限制普通提醒，跨天时间段条没有上限，内容一多就把格子撑高。
+function visibleSpans(c: LunarDayInfo) {
+  return spansOf(cellKey(c)).slice(0, 1)
+}
 function visibleItems(c: LunarDayInfo) {
-  return (byDate.value.get(cellKey(c)) || []).slice(0, MAX_CHIPS)
+  const used = visibleSpans(c).length
+  return plainItems(c).slice(0, Math.max(0, monthChipLimit.value - used))
 }
 function extraCount(c: LunarDayInfo) {
-  return Math.max(0, (byDate.value.get(cellKey(c)) || []).length - MAX_CHIPS)
+  const total = spansOf(cellKey(c)).length + plainItems(c).length
+  return Math.max(0, total - visibleSpans(c).length - visibleItems(c).length)
 }
 
 // 农历标签优先显示节日/节气，其次才是农历日名——节日节气更值得一眼看到。
@@ -759,6 +1017,18 @@ function iconOf(item: CalendarItem) {
 // 清单色表在 utils/list-colors.ts（与侧栏、列表页标题共用一份）。
 // 用清单色做浅底 + 同色文字，同一清单在日历里和侧栏、列表页同色。
 const tint = listTint
+function taskInk(item: CalendarItem) {
+  return weekColorMap.value.get(item.id) || listInk(item.color || 'blue')
+}
+/** 线段太短时文字竖排放不下，挪到线段上方横排。 */
+function labelFits(b: { item: CalendarItem; height: number }) {
+  const chars = Array.from(b.item.title || '').length
+  return b.height >= Math.min(140, Math.max(22, chars * 10 + 4))
+}
+function sameToday(d: Date) {
+  const n = clockNow.value
+  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate()
+}
 const ink = listInk
 const dot = listInk
 
@@ -802,16 +1072,18 @@ function timeLabel(item: CalendarItem) {
     return '记录 ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
   }
   if (item.all_day) return '全天'
-  const d = new Date(item.due_at)
+  // 时间段任务以 start_at 为准；due_at 只是归位后的开始时间，不能替代真实区间。
+  const d = new Date(item.start_at || item.due_at)
   const start = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
   // 时间段任务（计划页的「开始—结束」）显示成区间，格子里一眼看得出是两个小时的事
   const end = item.end_at
   if (end) {
     const e = new Date(end)
     const sameDay = e.toDateString() === d.toDateString()
+    const endClock = e.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
     const endText = sameDay
-      ? e.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-      : new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(e)
+      ? endClock
+      : `${new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(e)} ${endClock}`
     return `${start} – ${endText}`
   }
   return start
@@ -1097,6 +1369,9 @@ function refreshFromEvent() {
 }
 
 onMounted(() => {
+  syncMonthChipLimit()
+  window.addEventListener('resize', syncMonthChipLimit)
+  clockTimer = window.setInterval(() => { clockNow.value = new Date() }, 30_000)
   void loadWeekStart()
   loadEditorContext()
   load()
@@ -1105,6 +1380,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', syncMonthChipLimit)
+  if (clockTimer) window.clearInterval(clockTimer)
   window.removeEventListener('reminder-realtime', refreshFromEvent)
   window.removeEventListener('reminder-realtime-resume', refreshFromEvent)
 })
@@ -1116,12 +1393,10 @@ onBeforeUnmount(() => {
 /* 跨天的条：一天内首尾同格时也保持可点区域 */
 .cal-span { min-height: 15px; }
 
-/* 字号由根元素上的 --cal-task-font 变量驱动（见 calendarFontPx），
-   格子最小高度也跟着缩放，字号调大时不会把任务条挤没。 */
+/* 字号由根元素上的 --cal-task-font 变量驱动（见 calendarFontPx）。
+   日期格不再设最小高度：浏览器变矮时 5/6 行要能跟着压缩，内容在格子内裁切，
+   否则最小高度会把网格顶出卡片。 */
 .cal-task { font-size: var(--cal-task-font, 10px); }
 .cal-task-lg { font-size: calc(var(--cal-task-font, 10px) + 4px); }
-.cal-cell { min-height: calc(var(--cal-task-font, 10px) * 6.8); }
-@media (min-width: 640px) {
-  .cal-cell { min-height: calc(var(--cal-task-font, 10px) * 8.4); }
-}
+.cal-cell { min-height: 0; }
 </style>

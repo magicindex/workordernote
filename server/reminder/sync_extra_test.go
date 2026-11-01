@@ -1,6 +1,7 @@
 package reminder
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -132,5 +133,48 @@ func TestSyncTimetableAndSettings(t *testing.T) {
 	}
 	if !raw.DeletedAt.Valid {
 		t.Fatal("墓碑没传过来：对端下次同步会把它复活")
+	}
+}
+
+// 安卓客户端下线后，历史 android_* 设置必须既不随同步发出去，也不从对端写进来。
+func TestSyncSkipsRetiredAndroidConfigs(t *testing.T) {
+	dbA, dbB := newSyncDB(t), newSyncDB(t)
+	userA := seedUser(t, dbA, "王耀辉", "admin")
+	seedUser(t, dbB, "王耀辉", "admin")
+
+	if err := dbA.Create(&database.SystemConfig{UserID: 0, Key: "android_version", Value: "0.1.0"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := dbA.Create(&database.SystemConfig{UserID: userA.ID, Key: "android_notes", Value: "旧说明"}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	snap, err := buildSyncSnapshot(dbA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cfg := range snap.SystemConfigs {
+		if strings.HasPrefix(cfg.Key, "android") {
+			t.Fatalf("android 配置 %q 不该出现在系统设置报文里", cfg.Key)
+		}
+	}
+	for _, cfg := range snap.UserConfigs {
+		if strings.HasPrefix(cfg.Key, "android") {
+			t.Fatalf("android 配置 %q 不该出现在个人设置报文里", cfg.Key)
+		}
+	}
+
+	// 模拟对端仍带旧键：应用时也必须跳过。
+	snap.SystemConfigs = append(snap.SystemConfigs, syncSystemConfig{Key: "android_wan_url", Value: "https://old/apk"})
+	snap.UserConfigs = append(snap.UserConfigs, syncUserConfig{Owner: "王耀辉", Key: "android_lan_url", Value: "http://old"})
+	if _, err := applySyncSnapshot(dbB, snap); err != nil {
+		t.Fatal(err)
+	}
+	var count int64
+	if err := dbB.Model(&database.SystemConfig{}).Where("key LIKE ?", "android%").Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("对端的 android 配置不该被同步进来，实际 %d 行", count)
 	}
 }

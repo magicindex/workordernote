@@ -50,7 +50,7 @@
             data-sync-peer-url
             inputmode="url"
             class="input-field !py-2 mt-1.5 font-mono text-xs"
-            placeholder="http://192.168.1.10:8906"
+            placeholder="http://192.168.3.201:8906"
             :disabled="busy || !syncOn"
           />
           <span class="mt-1 block text-[11px] leading-4 text-muted-foreground">

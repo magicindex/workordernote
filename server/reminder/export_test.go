@@ -147,7 +147,12 @@ func TestExportRemindersHandler(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	future := time.Now().Add(24 * time.Hour).Truncate(time.Second)
+	now := time.Now().In(shanghai())
+	future := now.Add(24 * time.Hour).Truncate(time.Second)
+	// 月末跑测试时「明天」会落到下个月，日历导出只取本月，固定用例会误报；夹回本月最后一天。
+	if future.Month() != now.Month() {
+		future = time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 0, 0, now.Location())
+	}
 	if _, err := createReminder(appDB, userID, SaveReminderInput{
 		Title: "还没到期", DueAt: &future, RepeatRule: "none",
 	}); err != nil {

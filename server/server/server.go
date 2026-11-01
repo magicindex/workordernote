@@ -438,9 +438,9 @@ func NewRouter(cfg config.Config, db *gorm.DB, jwtSecret string) *gin.Engine {
 	// auth; system config read & metadata require admin.
 	sysconfig.RegisterRoutes(publicGroup, authGroup, adminGroup, db)
 
-	// Security questions: forgot-password flow is public (rate limited); managing
-	// one's own questions requires auth.
-	security.RegisterRoutes(publicGroup, authGroup, db)
+	// 邮箱找回密码：公开接口，由 public limiter 限制频率；旧的
+	// 「安全问题」管理与验证接口已移除。
+	security.RegisterRoutes(publicGroup, db)
 
 	// File upload requires authentication; uploaded content is still readable by
 	// URL so it can be embedded in public pages.
@@ -480,6 +480,8 @@ func NewRouter(cfg config.Config, db *gorm.DB, jwtSecret string) *gin.Engine {
 		appGroup.StaticFile("/apple-touch-icon.png", cfg.WebDir+"/apple-touch-icon.png")
 		appGroup.GET("/manifest.webmanifest", func(c *gin.Context) {
 			c.Header("Content-Type", "application/manifest+json")
+			// 清单文件名不变、内容会随版本变化，不能沿用静态文件的 7 天缓存。
+			c.Header("Cache-Control", "no-cache")
 			c.File(cfg.WebDir + "/manifest.webmanifest")
 		})
 		// Service Worker 必须显式注册：静态白名单里没有它，会落到 SPA 兜底；

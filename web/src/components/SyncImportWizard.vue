@@ -18,7 +18,7 @@
       <div class="grid gap-3 sm:grid-cols-2">
         <label class="block">
           <span class="text-xs font-bold text-foreground">老设备的地址</span>
-          <input v-model="peerURL" class="input-field mt-1.5 !py-2" placeholder="http://192.168.1.10:8906" data-import-peer />
+          <input v-model="peerURL" class="input-field mt-1.5 !py-2" placeholder="http://192.168.3.201:8906" data-import-peer />
         </label>
         <label class="block">
           <span class="text-xs font-bold text-foreground">同步令牌</span>

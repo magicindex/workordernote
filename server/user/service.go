@@ -606,15 +606,11 @@ func GetCurrentUser(db *gorm.DB, userID uint) (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	var sq database.SecurityQuestion
-	hasQuestions := db.Where("user_id = ?", userID).First(&sq).Error == nil
-
 	return map[string]interface{}{
-		"id":                     user.ID,
-		"username":               user.Username,
-		"role":                   user.Role,
-		"api_key":                user.APIKey,
-		"has_security_questions": hasQuestions,
+		"id":       user.ID,
+		"username": user.Username,
+		"role":     user.Role,
+		"api_key":  user.APIKey,
 	}, nil
 }
 

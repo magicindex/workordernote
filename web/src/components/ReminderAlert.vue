@@ -22,10 +22,17 @@
               <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">工作序记</p>
               <p class="truncate text-sm font-bold text-foreground">{{ timeLabel }}</p>
             </div>
-            <span
-              v-if="pendingCount > 0"
-              class="shrink-0 rounded-full bg-brand-500/15 px-2 py-0.5 text-[11px] font-bold text-brand-600 dark:text-brand-300"
-            >还有 {{ pendingCount }} 条</span>
+            <div class="flex shrink-0 items-center gap-1">
+              <span
+                v-if="repeatCount > 1"
+                class="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-700 dark:text-amber-300"
+                data-alert-repeat
+              >已提醒 {{ repeatCount }} 次</span>
+              <span
+                v-if="pendingCount > 0"
+                class="rounded-full bg-brand-500/15 px-2 py-0.5 text-[11px] font-bold text-brand-600 dark:text-brand-300"
+              >还有 {{ pendingCount }} 条</span>
+            </div>
           </div>
 
           <div class="px-5 pb-5 pt-4">
@@ -91,6 +98,8 @@ const props = withDefaults(defineProps<{
   createdAt?: string
   /** 队列里还排着多少条，让用户知道后面还有。 */
   pendingCount?: number
+  /** 当前这条提醒累计弹过多少次（同一提醒的重复通知会合并）。 */
+  repeatCount?: number
   busy?: boolean
   error?: string
   /** 「稍后提醒」按钮上的文案（按偏好里的提醒频率显示间隔） */
@@ -105,6 +114,7 @@ const props = withDefaults(defineProps<{
   createdAt: '',
   showSnooze: true,
   pendingCount: 0,
+  repeatCount: 1,
   busy: false,
   error: '',
   snoozeLabel: '稍后提醒',

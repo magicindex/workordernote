@@ -16,6 +16,7 @@ import (
 
 	"smallgo/server/assistant"
 	"smallgo/server/config"
+	"smallgo/server/security"
 	"smallgo/server/server"
 
 	// Apps are imported for their side effects (init registers routes), but the
@@ -33,6 +34,9 @@ func main() {
 	config.LoadDotEnv(".env", "server/.env")
 	cfg := config.Parse()
 	reminder.SetUploadDir(cfg.UploadDir)
+	// 邮箱找回密码复用提醒的邮件发送（SMTP + 已绑定接收邮箱）。注入而不是让
+	// security 直接 import reminder，原因同上：reminder 的测试 import 根 server 包。
+	security.SetRecoveryMailer(reminder.SendMailToUser)
 	// 小秘要能按真实工作数据作答（周报/月报/工作清单/关键词查询），也要能把
 	// 一段回答存成记事：两件事的实现都在 reminder 包，这里注入进去，assistant
 	// 就不必直接依赖提醒库（reminder 的测试 import 根包 server，而根包 import

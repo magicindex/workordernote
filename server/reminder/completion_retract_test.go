@@ -23,7 +23,7 @@ func TestCompletionRetractionSyncsToPeer(t *testing.T) {
 
 	const username = "同步撤回用户"
 	owner := seedUser(t, appDB, username, "admin")
-	configureSync(t, appDB, syncDirectionBoth, "http://192.168.1.90:8906", "shared-token-123")
+	configureSync(t, appDB, syncDirectionBoth, "http://192.168.3.90:8906", "shared-token-123")
 
 	// B 端另起一个库（同一个账号）
 	dbB, err := database.InitDB(filepath.Join(t.TempDir(), "peer-retract.db"))
@@ -35,7 +35,7 @@ func TestCompletionRetractionSyncsToPeer(t *testing.T) {
 	}
 	defer database.CloseDB(dbB)
 	seedUser(t, dbB, username, "admin")
-	configureSync(t, dbB, syncDirectionBoth, "http://192.168.1.91:8906", "shared-token-123")
+	configureSync(t, dbB, syncDirectionBoth, "http://192.168.3.91:8906", "shared-token-123")
 
 	// A：一条每天重复的提醒，先完成一次 → 完成历史里多一条
 	due := time.Now().Add(-time.Hour)
@@ -154,7 +154,7 @@ func TestUnknownCompletionTombstoneIsSkipped(t *testing.T) {
 	withFreshCardFeature(t)
 
 	seedUser(t, appDB, "墓碑用户", "admin")
-	configureSync(t, appDB, syncDirectionPull, "http://192.168.1.92:8906", "shared-token-123")
+	configureSync(t, appDB, syncDirectionPull, "http://192.168.3.92:8906", "shared-token-123")
 
 	past := time.Now().Add(-2 * time.Hour)
 	snap := syncSnapshot{
@@ -208,7 +208,7 @@ func TestCardTombstoneAppliesWhenContentUnchanged(t *testing.T) {
 
 	const username = "墓碑卡用户"
 	owner := seedUser(t, appDB, username, "admin")
-	configureSync(t, appDB, syncDirectionBoth, "http://192.168.1.93:8906", "shared-token-123")
+	configureSync(t, appDB, syncDirectionBoth, "http://192.168.3.93:8906", "shared-token-123")
 
 	dbB, err := database.InitDB(filepath.Join(t.TempDir(), "peer-card-tomb.db"))
 	if err != nil {
@@ -219,7 +219,7 @@ func TestCardTombstoneAppliesWhenContentUnchanged(t *testing.T) {
 	}
 	defer database.CloseDB(dbB)
 	seedUser(t, dbB, username, "admin")
-	configureSync(t, dbB, syncDirectionBoth, "http://192.168.1.94:8906", "shared-token-123")
+	configureSync(t, dbB, syncDirectionBoth, "http://192.168.3.94:8906", "shared-token-123")
 
 	// A：建卡 + 记一期金额
 	bucket, err := ensureCardBucket(appDB, owner.ID)

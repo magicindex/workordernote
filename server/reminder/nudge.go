@@ -36,6 +36,9 @@ const (
 	// 通知里带的正文长度：站内通知的 Body 只有 500 字符，标题更短，
 	// 超长的提醒内容截断即可（原文在「提醒@他」页面里看得到）。
 	nudgeNotifyTitleRunes = 30
+	// 「我提醒他人」的卡片默认保留 30 天（用户 2026-10-29）：
+	// 超期后双方都不再看到，页面上会标注这条规则。
+	nudgeRetentionDays = 30
 )
 
 type Nudge struct {
@@ -139,10 +142,23 @@ func nudgeDTOs(db *gorm.DB, rows []Nudge, me uint) []NudgeDTO {
 	return out
 }
 
+// purgeExpiredNudges 硬删除超过保留期的提醒。卡片过期后对双方都不再可见，
+// 用 Unscoped 直接删行，避免软删数据长期堆积。
+func purgeExpiredNudges(db *gorm.DB) error {
+	cutoff := time.Now().Add(-nudgeRetentionDays * 24 * time.Hour)
+	return db.Unscoped().Where("created_at < ?", cutoff).Delete(&Nudge{}).Error
+}
+
 // handleListNudges 一次给全两列 + 三个角标数字（侧栏「提醒@他」的角标要它）。
 func handleListNudges(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		me := currentUserID(c)
+		// 打开页面时惰性清理，保证不用等每日任务，过期卡片立刻消失；
+		// 每日调度见 register.go，长时间没人打开页面也会清。
+		if err := purgeExpiredNudges(db); err != nil {
+			response.ErrorInternal(c, "清理过期提醒失败")
+			return
+		}
 		var sent, received []Nudge
 		if err := db.Where("from_user_id = ?", me).Order("created_at DESC, id DESC").Limit(300).Find(&sent).Error; err != nil {
 			response.ErrorInternal(c, "读取提醒@他失败")
@@ -170,8 +186,9 @@ func handleListNudges(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		response.Success(c, gin.H{
-			"sent":     nudgeDTOs(db, sent, me),
-			"received": nudgeDTOs(db, received, me),
+			"sent":           nudgeDTOs(db, sent, me),
+			"received":       nudgeDTOs(db, received, me),
+			"retention_days": nudgeRetentionDays,
 			"counts": gin.H{
 				"received_pending": n.ReceivedPending,
 				"received_unread":  n.ReceivedUnread,

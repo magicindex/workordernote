@@ -339,6 +339,18 @@ func init() {
 			}
 		},
 	})
+	// 「提醒@他」卡片保留 30 天（用户 2026-10-29）：页面打开时会惰性清理，
+	// 这里每天再兜底一次，保证没人打开页面也会自动消失。
+	scheduler.Register(scheduler.Job{
+		Name:       "reminder-nudge-gc",
+		Interval:   24 * time.Hour,
+		RunAtStart: true,
+		Run: func() {
+			if appDB != nil {
+				_ = purgeExpiredNudges(appDB)
+			}
+		},
+	})
 	scheduler.Register(scheduler.Job{
 		Name:     "reminder-overdue-notify",
 		Interval: time.Minute,

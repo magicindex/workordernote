@@ -804,7 +804,7 @@ func TestSyncSettingsValidation(t *testing.T) {
 
 	// 地址补协议、去尾斜杠；关掉同步时不要求令牌。
 	if err := saveSyncSettings(db, syncSettingsInput{
-		Direction: syncDirectionOff, PeerURL: "192.168.1.10:8906/",
+		Direction: syncDirectionOff, PeerURL: "192.168.3.201:8906/",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -812,7 +812,7 @@ func TestSyncSettingsValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settings.PeerURL != "http://192.168.1.10:8906" {
+	if settings.PeerURL != "http://192.168.3.201:8906" {
 		t.Fatalf("地址规范化结果 = %q", settings.PeerURL)
 	}
 	// 令牌留空表示「不改」，此时不该把已有令牌清掉。
@@ -899,7 +899,7 @@ func TestAutoSyncTickRespectsDirectionAndInterval(t *testing.T) {
 func TestSaveSyncSettingsKeepsExistingToken(t *testing.T) {
 	db := newSyncDB(t)
 	if err := saveSyncSettings(db, syncSettingsInput{
-		Direction: syncDirectionBoth, PeerURL: "http://192.168.1.10:8908", Token: "shared-token-123",
+		Direction: syncDirectionBoth, PeerURL: "http://192.168.3.201:8908", Token: "shared-token-123",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -910,7 +910,7 @@ func TestSaveSyncSettingsKeepsExistingToken(t *testing.T) {
 
 	// 只改地址、令牌留空
 	if err := saveSyncSettings(db, syncSettingsInput{
-		Direction: syncDirectionBoth, PeerURL: "http://192.168.1.10:8906",
+		Direction: syncDirectionBoth, PeerURL: "http://192.168.3.201:8906",
 	}); err != nil {
 		t.Fatalf("令牌留空表示不改，应当成功，实际报错：%v", err)
 	}
@@ -921,7 +921,7 @@ func TestSaveSyncSettingsKeepsExistingToken(t *testing.T) {
 	if after.Token != before.Token {
 		t.Fatalf("令牌不该被改动：%q → %q", before.Token, after.Token)
 	}
-	if after.PeerURL != "http://192.168.1.10:8906" {
+	if after.PeerURL != "http://192.168.3.201:8906" {
 		t.Fatalf("地址应已更新，实际 %q", after.PeerURL)
 	}
 
@@ -930,14 +930,14 @@ func TestSaveSyncSettingsKeepsExistingToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := saveSyncSettings(db, syncSettingsInput{
-		Direction: syncDirectionBoth, PeerURL: "http://192.168.1.10:8906",
+		Direction: syncDirectionBoth, PeerURL: "http://192.168.3.201:8906",
 	}); err == nil {
 		t.Fatal("库里令牌为空时应当拒绝启用同步")
 	}
 
 	// 新填一个太短的令牌仍然要拦。
 	if err := saveSyncSettings(db, syncSettingsInput{
-		Direction: syncDirectionBoth, PeerURL: "http://192.168.1.10:8906", Token: "short",
+		Direction: syncDirectionBoth, PeerURL: "http://192.168.3.201:8906", Token: "short",
 	}); err == nil {
 		t.Fatal("太短的令牌应当被拒绝")
 	}

@@ -1,208 +1,217 @@
 # 工作序记 · WorkOrderNote
 
-任务、记事、日历、课程表与倒计时，一体的个人提醒应用。
+任务、记事与日历一体的提醒应用。清单管理、定时提醒、记事归档、月历总览，
+支持站内消息、电子邮件、短信、飞书机器人和 QQ 机器人通知。
 
-单机部署、数据全在本地；也可以两台机器自动同步。界面同时适配桌面与手机，
-支持装成 PWA 或打包安卓客户端；手机底部「提醒」直达提醒@他，悬浮新建按当前频道分流。
+- 仓库：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
+- 发布与安装包：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote/releases>
+- GitHub 镜像：<https://github.com/magicindex/workordernote>
+- 当前版本：`0.44.1`
 
-**下载**：[GitHub Releases](https://github.com/magicindex/workordernote/releases) · 最新版本 v0.43.8
+> **本项目是衍生作品。** 基于开源项目
+> [TechFunWay/reminders](https://github.com/TechFunWay/reminders)（MIT 许可）衍生开发，
+> 原项目的著作权与出处均予保留。详见文末「原项目信息」。
 
-**国内仓库（Gitea）**：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
+---
 
-![首页看板](docs/screenshots/features/home.png)
+## 界面预览
+
+| 首页看板 | 月历总览 |
+| --- | --- |
+| ![首页看板](docs/screenshots/home.png) | ![月历总览](docs/screenshots/calendar-month.png) |
+| **周视图** | **课程表** |
+| ![周视图](docs/screenshots/calendar-week.png) | ![课程表](docs/screenshots/timetable.png) |
+
+<p align="center">
+  <img src="docs/screenshots/mobile-home.png" width="260" alt="手机首页">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/mobile-timetable.png" width="260" alt="手机课程表">
+</p>
+
+---
 
 ## 功能
 
 | 模块 | 说明 |
 | --- | --- |
-| **任务 / 记事** | 任务需要确认完成；记事只作记录，保存即归档、不发通知 |
-| **提醒** | 到点提醒；站内、邮件、短信、飞书、QQ、钉钉多渠道，可分别绑定接收人 |
-| **重复规则** | 每天 / 每周 / 每月 / 每年，支持农历（生日、中秋、春节等）；年度循环按当前年份算这一轮，不再用首次录入年份算逾期 |
-| **列表视图** | 今天、计划、全部、已完成，以及可清空/自动清空的垃圾箱；行尾显示剩余或已逾期时长，不足 24 小时转红 |
-| **首页看板** | 「接下来 14 天」与「已逾期」两列，打开即知轻重缓急 |
-| **日历** | 月历同时显示公历、农历、节气与节日 |
+| **任务 / 记事** | 任务需确认完成；记事只作记录，保存即归档、不发送通知；待办卡片显示创建到结束时间 |
+| **清单与提醒** | 多清单、优先级、重复提醒（含农历）、逾期提醒、提醒@他、垃圾箱恢复 |
+| **视图** | 列表、全屏日历（公历/农历/节气/节日；周视图连续色块、竖排标签、唯一配色、今天流光）、首页看板、倒计时卡片 |
+| **课程表** | 按周排课，新一周自动沿用上一周最新课程，已删除课程不带走；课程与课外活动分色，支持打印；手机默认只看今天、日期条切换；可按账号批量共享多张表（只读 / 读写）；课程备注自动收进随手记事本，可按「课程备注」筛选 |
+| **随手记事本** | 随手记录，按时间倒序归档，可搜索 |
+| **人生要有仪式感** | 生日、纪念日、节日、考试倒计时卡片，公历与农历双行显示（干支年份、彩色日期胶囊，「每年」跟随创建历法）；黑卡/水晶卡面，图标可在编辑里更换，内置节日图标库 |
+| **信用卡账单** | 多卡管理，账单日/还款日/额度/本期金额，临近还款日变色提醒；更多菜单点按展开 |
+| **通知渠道** | 站内消息、电子邮件、短信、飞书机器人、QQ 机器人；支持免打扰；邮件同时用于找回密码 |
+| **AI 小秘** | 接入多家模型服务商，可选模型；基于工作数据回答问题，支持改名 |
+| **数据与同步** | 本机/WebDAV 每日自动备份、整库与上传文件恢复、导入导出、双机同步；手机日历只读 ICS 订阅与 .ics 导入；垃圾箱可手动清空或按天数自动清空 |
 | **打印** | 日历整月打印，或切换列表按行打印；可调方向、字号、标题与打印列 |
-| **课程表** | 按周几排课；新一周自动沿用上一周最新课程，已删除课程不带走；非编辑态只读，进编辑态才铺空节次与添加入口；可按账号批量共享多张表（只读 / 读写）；课程备注自动收进随手记事本并可筛选；手机默认只看今天、日期条切换 |
-| **人生要有仪式感** | 生日、纪念日、考试倒计时卡片；黑卡/水晶两种质感，顶部大号无描边倒计时；112px 图标可点击更换，内置节日/纪念/日常图标库；公历、农历分两行同显，农历年份用干支 |
-| **信用卡账单** | 账单日、还款日、免息期与本期金额，接近还款日自动变色；「更多」点击展开菜单 |
-| **数据备份** | 每天定时备份整库与上传文件到本机目录和/或 WebDAV，可保留 N 份；支持一键恢复；自签名证书 / IP 访问可跳过证书校验 |
-| **双机同步** | 清单、任务、记事、完成记录、账单、课程表、个人偏好、站点设置；账号密码与渠道凭据不同步 |
-| **AI 小秘** | 接 Ollama 或任意 OpenAI 兼容接口；可查日程、写周报、把一句话变成待办 |
+| **多端** | 桌面与手机自适应，支持 PWA 安装；手机底部「提醒」直达提醒@他，悬浮新建按当前频道分流 |
 
-## 界面一览
+上游自带的能力（到点催办、重复提醒、多邮箱通知、飞牛一键登录等）全部保留。
 
-### 待办与计划
+---
 
-列表按日期分组，行尾直接显示「剩余 1 天 2 小时」或「已逾期 22 小时」；
-进入 24 小时内自动转红，逾期与今天分成不同色带。
+## 技术栈
 
-| 待办 | 计划 |
-| --- | --- |
-| ![待办](docs/screenshots/features/todo.png) | ![计划](docs/screenshots/features/planned.png) |
+- 后端：Go 1.26 + Gin + GORM + SQLite（CGO）
+- 前端：Vue 3 + TypeScript + Vite + Tailwind CSS
+- 部署：单二进制或 Docker；数据全部落在本地数据目录
 
-| 全部 | 已完成 |
-| --- | --- |
-| ![全部](docs/screenshots/features/all.png) | ![已完成](docs/screenshots/features/completed.png) |
+## 快速开始（Docker Compose）
 
-### 日历与课程表
-
-月历格子同时标注农历、节气与节日，可切换周视图；课程表按周几铺课，
-课程与课外活动分开标色，支持打印。
-
-| 日历 | 课程表 |
-| --- | --- |
-| ![日历](docs/screenshots/features/calendar.png) | ![课程表](docs/screenshots/features/timetable.png) |
-
-### 打印预览
-
-日历可整月打印，也可切换成「列表」按行打印；两种模式都先给预览，
-可调纸张方向、字号、标题、说明，以及要打印的列。
-
-| 日历打印 | 列表打印 |
-| --- | --- |
-| ![日历打印](docs/screenshots/features/print-calendar.png) | ![列表打印](docs/screenshots/features/print-list.png) |
-
-### 记事与仪式感
-
-随手记事本只记录、不需要完成；「人生要有仪式感」把生日、纪念日、考试
-做成倒计时卡片，支持每年循环与农历。
-
-| 随手记事本 | 人生要有仪式感 |
-| --- | --- |
-| ![随手记事本](docs/screenshots/features/notebook.png) | ![人生要有仪式感](docs/screenshots/features/ceremony.png) |
-
-### 信用卡账单
-
-一个栏目装多张卡：账单日、还款日、额度、免息期与本期金额都在卡面上；
-临近还款日时卡面颜色会由黄转橙、再转红，支持标记已还与修改本期金额。
-手机端卡片改为单列，左右滑动查看。
-
-| 桌面端 | 手机端 |
-| --- | --- |
-| ![信用卡账单](docs/screenshots/features/credit-cards.png) | ![手机信用卡账单](docs/screenshots/features/credit-cards-mobile.png) |
-
-### 新建与编辑提醒
-
-快速面板支持「任务 / 记事」、今天 / 明天 / 本周末、重复规则、优先级与清单；
-点开任意一条可改日期、农历循环、过期提醒频率和通知方式。
-
-| 新建提醒 | 提醒详情 |
-| --- | --- |
-| ![新建提醒](docs/screenshots/features/new-reminder.png) | ![提醒详情](docs/screenshots/features/detail.png) |
-
-### 搜索与通知
-
-顶栏搜索直接过滤当前视图；通知中心汇总到期、逾期、渠道失败与「提醒@他」
-回执；通知方式里分别配置站内、邮件、短信、飞书、QQ、钉钉。
-
-| 搜索 | 通知中心 |
-| --- | --- |
-| ![搜索](docs/screenshots/features/search.png) | ![通知中心](docs/screenshots/features/notifications.png) |
-
-| 通知方式 | 提醒@他 |
-| --- | --- |
-| ![通知方式](docs/screenshots/features/channels.png) | ![提醒@他](docs/screenshots/features/nudges.png) |
-
-### 偏好设置
-
-默认首页、任务过期时间与宽限、免打扰时段、提醒频率、主题与各栏目开关，
-都按账号保存；系统级配置在「系统配置」里，仅管理员可改。
-
-![偏好设置](docs/screenshots/features/settings.png)
-
-### 手机端
-
-手机浏览器直接可用，底部为待办 / 计划 / 清单 / 通知 / 方式五个入口，
-也支持添加到主屏当 PWA 使用。
-
-| 手机首页 | 手机待办 |
-| --- | --- |
-| ![手机首页](docs/screenshots/features/mobile.png) | ![手机待办](docs/screenshots/features/mobile-todo.png) |
-
-## 快速开始
-
-### Docker Compose
-
-使用预构建镜像，无需克隆源码：
+镜像发布在仓库自带的容器仓库，可直接拉取：
 
 ```bash
-mkdir -p workordernote && cd workordernote
+docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.44.1
+```
+
+同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.44.1`；Gitea 容器仓库不可用时可直接改用。
+
+### 用仓库里的 compose 文件安装
+
+```bash
+mkdir -p ~/workordernote && cd ~/workordernote
+curl -fsSLO https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote/raw/branch/main/docker-compose.yml
+docker compose up -d
+```
+
+从 GitHub 镜像下载同款文件：
+
+```bash
 curl -fsSLO https://raw.githubusercontent.com/magicindex/workordernote/main/docker-compose.yml
-docker compose up -d
 ```
 
-打开 <http://localhost:8906>，首次启动后注册第一个账号（即管理员）。
+启动后访问 `http://<主机>:8906`，首次打开按页面提示注册管理员账号。
 
-也可以克隆仓库、从源码构建：
+### compose 内容
+
+仓库根目录的 `docker-compose.yml` 已指向当前版本镜像：
+
+```yaml
+services:
+  workordernote:
+    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.44.1
+    container_name: workordernote
+    # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
+    user: "1000:1001"
+    ports:
+      - "8906:8906"
+    volumes:
+      - workordernote-data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - ENV=release
+      - DATA_DIR=/app/data
+      - TZ=Asia/Shanghai
+    command: ["-data-dir", "/app/data", "-web-dir", "./static/dist", "-log-console"]
+    restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+
+volumes:
+  workordernote-data:
+```
+
+- **数据**：默认存命名卷 `workordernote-data`；想改用本机目录，把 `workordernote-data:/app/data` 换成 `./data:/app/data`，并确保 `user` 与目录属主一致。
+- **属主**：`user` 要与数据目录属主一致（常见为 `1000:1001`），否则 SQLite 写入会静默失败。
+- **端口**：宿主 8906 被占用时，改 `"8906:8906"` 左侧的端口。
+- **watchtower**：若本机运行 watchtower，`watchtower.enable=false` 可避免被上游镜像覆盖。
+- **飞牛 NAS**：也可用 Release 里的 `*.fpk` 或离线包安装，无需联网拉镜像。
+
+### 日常操作
 
 ```bash
-git clone https://github.com/magicindex/workordernote.git
-cd workordernote
-docker build -t ghcr.io/magicindex/workordernote:0.43.0 .
-docker compose up -d
+docker compose logs -f        # 查看日志（compose 里已带 -log-console）
+docker compose ps             # 查看状态
+docker compose down           # 停止并删除容器，数据卷保留
 ```
 
-数据落在命名卷 `workordernote-data`；如需指定宿主机目录，改成
-`- ./data:/app/data` 并确保容器用户对目录可写（镜像内以 uid 1000 运行）。
-
-升级：修改 compose 里的镜像 tag 后执行 `docker compose pull && docker compose up -d`。
-
-### 直接运行二进制
+升级时，把 compose 里的镜像 tag 改成新版本，再执行：
 
 ```bash
-make build          # 前端 + 后端
-./server/smallgo -data-dir ./data -web-dir ./server/static/dist
+docker compose pull && docker compose up -d
 ```
 
-需要 Go 1.26（CGO，SQLite）与 Node 20+。
+## 本地开发
 
-## 配置
+```bash
+# 构建 Vue 前端、复制到后端静态目录、构建并启动 Go 后端
+make dev
 
-首次登录后，侧栏「设置」里可以调整：
+# 仅构建
+make build
 
-- **偏好设置**：默认首页、默认清单、任务过期时间与宽限、免打扰时段、提醒频率、AI 提示词与小秘名字
-- **系统配置**：站点标题、访问控制、通知渠道、AI 服务、数据备份、双机同步
-
-所有个人偏好按账号隔离；系统配置仅管理员可改。
-
-### AI
-
-在「系统配置 → AI 服务」填 Ollama 地址（如 `http://127.0.0.1:11434/v1`）或任意
-OpenAI 兼容服务的 Base URL、模型与密钥。不配置时应用完全可用，只是没有对话入口。
-
-### 备份
-
-「系统配置 → 数据备份」可设每天几点、落本机目录与 WebDAV、保留份数；
-「立即备份」可随时手动打一份。备份包含数据库与上传文件，不包含日志。
-WebDAV 用自签名证书、或用 IP 访问而证书里没有 IP SAN 时，可打开「跳过 HTTPS 证书校验」。
-「数据恢复」可列出本机备份，或上传别处保存的 `.tar.gz`；恢复前会自动生成
-一份 `...-before-restore.tar.gz` 安全备份，确认后覆盖整库与上传文件。
-
-### 双机同步
-
-两台都升级到 0.39 以上，在「系统配置 → 双机同步」里互填地址与同一个通信令牌，
-选择双向或单向、自动同步间隔。账号按用户名配对，不存在的账号不会自动创建。
-
-## 安全
-
-- 数据默认只存本机，不上传任何第三方
-- 密码以 bcrypt 哈希保存；同步与接口密钥不随同步外发
-- 公网访问请置于 HTTPS 反向代理之后，并设置强密码
-- 应用内的备份文件包含数据库，请按敏感数据保管
-
-## 目录
-
-```
-server/         Go 后端（Gin + GORM + SQLite）
-web/            Vue 3 + TypeScript 前端
-android-shell/  安卓 WebView 壳
-scripts/        构建与打包脚本
-docs/           截图
+# 跑测试
+cd server && go test ./...
 ```
 
-## 许可与出处
+## 构建 Docker 镜像
 
-本项目是开源项目 [TechFunWay/reminders](https://github.com/TechFunWay/reminders)
-（MIT 许可）的衍生作品，原项目著作权与出处均予保留，详见 [NOTICE](NOTICE)。
+上游的 `Dockerfile` 在部分内网环境拉不到 `alpine:3.20`、`npm`/`go` 官方源也不通，
+因此本仓库提供了 `Dockerfile.custom`：改用本地可用的 `alpine:latest`（与
+`golang:1.26-alpine` 同为 3.24.x，musl ABI 匹配），并把包源换成国内镜像
+（apk → mirrors.aliyun.com，npm → registry.npmmirror.com，go → goproxy.cn），
+运行阶段的 ca-certificates 与 tzdata 从已有镜像 COPY。
 
-以 MIT 许可发布，见 [LICENSE](LICENSE)。
+```bash
+docker build -f Dockerfile.custom \
+  --build-arg VERSION=$(cat VERSION) \
+  --build-arg BUILD_TIME=$(date +%Y-%m-%dT%H:%M:%S) \
+  --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) \
+  -t gitea.topzero.cn:10241/cyberzero/workordernote:$(cat VERSION) .
+```
+
+> tzdata 不是可选项：服务端多处调用 `time.LoadLocation("Asia/Shanghai")`，
+> 缺失时返回 `nil`，紧接着的 `now.In(loc)` 会 panic。
+
+## 版本号规则
+
+- **软件版本**：根目录 `VERSION` 文件，格式 `主版本号.小版本号.修正号`。
+  对外展示与 `web/src/data/release-notes.ts` 里的迭代说明保持同步。
+- **数据库结构版本**：`server/database/Upgrades` 与 `server/reminder/register.go` 里注册的升级条目，
+  **只增不改**。继承自上游的 `0.1.2 / 0.3.0 / 0.3.2` 三条保留原编号，
+  由 `database.inheritedUpstreamUpgrades` 豁免版本比较——否则切换到本分支后，
+  启动时会因「数据库 schema 比程序新」而拒绝服务。
+
+发新版时：改 `VERSION` → 在 `release-notes.ts` 最前面加一条迭代说明 → 如有表结构变更，
+在 `register.go` 追加一条 `database.Upgrade`。
+
+## 运行日志
+
+```bash
+docker compose logs -f          # 需要 -log-console（compose 示例里已带）
+./verify-data.sh                # 数据体检：表数量、行数、integrity_check
+```
+
+---
+
+## 回归测试与部署运维
+
+| 目录 | 说明 |
+| --- | --- |
+| `browser-harness/` | **浏览器回归套件**（39 个套件 / 1000+ 项断言）：登录、列表与日历、信用卡账单、记事本、仪式感卡片、通知弹窗、清单排序、免打扰与逾期提醒、卡片背景图、双机同步、离线包安装……跑之前先 `cd browser-harness && npm install`，用法见该目录的 `README.md` 与 `run-all.sh`。 |
+| `ops/` | **部署与发版**：部署记录与逐版本变更、发版台账（`待发布改动.md`）、离线包打包脚本与模板、数据体检脚本。入口见 `ops/README.md`。 |
+
+常用的两条：
+
+```bash
+# 全量回归（默认打沙箱 8908；也可指向刚起好的临时容器）
+APP_URL=http://127.0.0.1:8908 bash browser-harness/run-all.sh
+
+# 打 Docker 离线一键安装包（默认读仓库 VERSION）
+bash ops/build-offline-package.sh
+```
+
+---
+
+## 原项目信息
+
+| 项目 | 内容 |
+| --- | --- |
+| 上游项目 | [TechFunWay/reminders](https://github.com/TechFunWay/reminders) |
+| 上游作者 | 科技智趣坊（TechFunWay） |
+| 许可 | MIT License，见 [LICENSE](LICENSE) |
+| 本项目 | WorkOrderNote（工作序记），基于上游衍生开发 |
+
+本衍生作品遵循上游的 MIT 许可，保留原始版权声明；上游项目名称、作者与链接
+均如实标注，未作删改。上游的能力与设计成果归原作者所有。

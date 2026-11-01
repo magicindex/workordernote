@@ -1,7 +1,9 @@
 services:
   workordernote:
-    image: ghcr.io/magicindex/workordernote:0.43.8
+    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.43.8
     container_name: workordernote
+    # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
+    user: "1000:1001"
     ports:
       - "8906:8906"
     volumes:

@@ -2,7 +2,7 @@
   <!-- 浏览器安装（PWA）：把网页像 App 一样装到手机桌面 / 电脑上。
        能不能装取决于浏览器：需要 HTTPS（或 localhost）+ manifest + Service Worker；
        内网纯 http 打开时 Chrome 不提供安装，这里就如实说明并给出替代方案。 -->
-  <h4 class="mt-5 text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground">装到桌面</h4>
+  <h4 class="mt-5 text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground" data-install-heading>{{ heading }}</h4>
   <div class="mt-2 rounded-2xl border border-border/70 p-3.5" data-install-card>
     <div class="flex flex-wrap items-center gap-2">
       <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/12 text-brand-600 dark:text-brand-300">
@@ -11,25 +11,58 @@
         </svg>
       </span>
       <div class="min-w-0 flex-1">
-        <p class="text-sm font-bold">{{ installed ? '已经装到这台设备上了' : '把工作序记装到桌面' }}</p>
+        <p class="text-sm font-bold">{{ cardTitle || (installed ? '已经装到这台设备上了' : '把工作序记装到桌面') }}</p>
         <p class="mt-0.5 text-[11px] font-medium text-muted-foreground" data-install-hint>{{ hint }}</p>
       </div>
       <button
-        v-if="canPrompt && !installed"
+        v-if="showInstallButton"
         class="btn-primary !h-9 !px-4 !text-xs"
         data-install-button
         @click="promptInstall"
       >立即安装</button>
     </div>
 
-    <ul v-if="!installed && !canPrompt" class="mt-3 space-y-1.5 text-[12px] leading-5 text-muted-foreground">
+    <div v-if="mobileOnly" class="mt-3 grid gap-2.5 sm:grid-cols-2" data-mobile-app-guide>
+      <div class="rounded-xl border border-border/60 bg-muted/25 p-3" data-guide-platform="ios">
+        <div class="flex items-center gap-1.5">
+          <span class="text-xs font-extrabold text-foreground">iPhone / iPad</span>
+          <span v-if="isIOS()" class="rounded-full bg-brand-500/12 px-2 py-0.5 text-[10px] font-bold text-brand-600 dark:text-brand-300">当前设备</span>
+        </div>
+        <ol class="mt-2 space-y-1 text-[12px] leading-5 text-muted-foreground">
+          <li>1. 用 Safari 打开本页</li>
+          <li>2. 点底部「分享」</li>
+          <li>3. 选「添加到主屏幕」并确认</li>
+        </ol>
+      </div>
+      <div class="rounded-xl border border-border/60 bg-muted/25 p-3" data-guide-platform="android">
+        <div class="flex items-center gap-1.5">
+          <span class="text-xs font-extrabold text-foreground">安卓</span>
+          <span v-if="isAndroid()" class="rounded-full bg-brand-500/12 px-2 py-0.5 text-[10px] font-bold text-brand-600 dark:text-brand-300">当前设备</span>
+        </div>
+        <ol class="mt-2 space-y-1 text-[12px] leading-5 text-muted-foreground">
+          <li>1. 用 Chrome 打开本页</li>
+          <li>2. 点右上角「⋮」菜单</li>
+          <li>3. 选「安装应用」或「添加到主屏幕」</li>
+        </ol>
+      </div>
+    </div>
+
+    <ul v-if="!mobileOnly && !installed && !canPrompt" class="mt-3 space-y-1.5 text-[12px] leading-5 text-muted-foreground">
       <li v-for="(line, i) in steps" :key="i" class="flex gap-2">
         <span class="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500/60"></span>
         <span>{{ line }}</span>
       </li>
     </ul>
 
-    <p v-if="!installed && !canPrompt" class="mt-2.5 flex items-start gap-1.5 rounded-xl bg-muted/60 px-3 py-2 text-[11px] leading-4 text-muted-foreground">
+    <p v-if="mobileOnly" class="mt-2.5 flex items-start gap-1.5 rounded-xl bg-muted/60 px-3 py-2 text-[11px] leading-4 text-muted-foreground" data-mobile-guide-note>
+      <svg viewBox="0 0 24 24" class="mt-0.5 h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 8v5m0 3h.01M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>微信、QQ 内置浏览器不支持添加；不需要应用商店。电脑上请用手机打开同一地址。</span>
+    </p>
+
+    <p v-if="insecureContext" class="mt-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold leading-4 text-amber-700 dark:text-amber-300" data-install-insecure>
+      当前是 HTTP 地址，安卓 Chrome 不会出现安装入口；请改用 HTTPS 地址，或用浏览器菜单里的「添加到主屏幕」。
+    </p>
+    <p v-if="!mobileOnly && !installed && !canPrompt" class="mt-2.5 flex items-start gap-1.5 rounded-xl bg-muted/60 px-3 py-2 text-[11px] leading-4 text-muted-foreground">
       <svg viewBox="0 0 24 24" class="mt-0.5 h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 8v5m0 3h.01M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span>{{ reason }}</span>
     </p>
@@ -38,6 +71,12 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+
+const props = withDefaults(defineProps<{ heading?: string; cardTitle?: string; mobileOnly?: boolean }>(), {
+  heading: '装到桌面',
+  cardTitle: '',
+  mobileOnly: false,
+})
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -55,18 +94,31 @@ const standalone = () =>
   (window.navigator as unknown as { standalone?: boolean }).standalone === true
 
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 const isAndroid = () => /Android/.test(navigator.userAgent)
-const canPrompt = computed(() => !!deferred.value && !installed.value)
+const isPhone = () => isIOS() || isAndroid()
+const canPrompt = computed(() => !!deferred.value && !installed.value && !isIOS() && (!props.mobileOnly || isPhone()))
+const showInstallButton = computed(() => canPrompt.value && !props.mobileOnly)
+// 安卓 Chrome 只在 HTTPS（或 localhost）下提供安装入口；局域网 HTTP 访问时明确说明原因。
+const insecureContext = computed(() => typeof location !== 'undefined' && location.protocol === 'http:' && !['localhost', '127.0.0.1'].includes(location.hostname))
 
 const hint = computed(() => {
-  if (installed.value) return '从桌面图标打开就是全屏应用，和安卓客户端一样'
+  if (installed.value) return '从桌面图标打开就是全屏应用，没有地址栏'
+  if (props.mobileOnly) return 'iPhone 与安卓的添加方式不同，按下面两组步骤操作；不需要应用商店'
   if (canPrompt.value) return '点右边的按钮，浏览器会把它装成独立应用（有图标、无地址栏）'
-  if (isIOS()) return 'iPhone / iPad 用 Safari 的「分享 → 添加到主屏幕」'
+  if (isIOS()) return 'iPhone / iPad 用 Safari 分享 → 添加到主屏幕，不需要应用商店'
   if (isAndroid()) return '安卓 Chrome 用右上角菜单里的「安装应用 / 添加到主屏幕」'
   return '电脑 Chrome / Edge 地址栏右侧会出现安装图标，点一下就装好'
 })
 
 const steps = computed(() => {
+  if (props.mobileOnly && !isPhone()) {
+    return [
+      '在手机上用 Safari / Chrome 打开本页（微信、QQ 内置浏览器不支持）',
+      'iPhone 用「分享 → 添加到主屏幕」；安卓用菜单里的「安装应用 / 添加到主屏幕」',
+      '添加后从主屏幕图标进入，登录一次即可',
+    ]
+  }
   if (isIOS()) {
     return [
       '用 Safari 打开本页（微信/QQ 内置浏览器不支持安装）',
@@ -89,9 +141,17 @@ const steps = computed(() => {
 })
 
 const reason = computed(() => {
+  if (props.mobileOnly && !isPhone()) {
+    return '当前是电脑浏览器；用手机打开同一地址，再按上面步骤添加到主屏幕。'
+  }
+  if (isIOS()) {
+    return secure.value
+      ? '按上面步骤用 Safari 添加；从桌面图标打开就是全屏应用。'
+      : 'iPhone / iPad 可直接用 Safari 分享 → 添加到主屏幕，内网 http 也能添加；离线缓存需要 HTTPS。'
+  }
   if (!secure.value) {
     return '浏览器只有在 HTTPS（或 localhost）下才允许安装，当前是内网 http 地址。'
-      + '可以在外面用 HTTPS 域名打开本页再安装，或直接装安卓客户端（自带服务器地址设置，内网也能用）。'
+      + '可以在外面用 HTTPS 域名打开本页再安装。'
   }
   return '这台浏览器暂时没有提供安装入口（可能已经装过、或用的是内置浏览器）。按上面的步骤手动添加也可以。'
 })

@@ -32,6 +32,8 @@ type SaveReminderInput struct {
 	// field and is stored as already completed.
 	Kind   string `json:"kind"`
 	ListID uint   `json:"list_id"`
+	// Color 是这条提醒的日历颜色；nil = 不修改（新建时为空）。
+	Color *string `json:"color"`
 	// CardRole 只由信用卡还款计划生成时写入（statement/due），
 	// 普通新建与编辑不传，保持原值。
 	CardRole string     `json:"card_role"`
@@ -122,6 +124,15 @@ func validateReminderInput(in *SaveReminderInput) error {
 	}
 	if in.Priority < 0 || in.Priority > 3 {
 		return errors.New("优先级无效")
+	}
+	if in.Color != nil {
+		v := strings.TrimSpace(*in.Color)
+		if v != "" {
+			if err := validateListColor(v); err != nil {
+				return err
+			}
+		}
+		in.Color = &v
 	}
 	if in.Accent != nil {
 		if err := validateAccent(*in.Accent); err != nil {
@@ -292,6 +303,10 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 		if err := assertListOwner(tx, userID, in.ListID); err != nil {
 			return err
 		}
+		color := ""
+		if in.Color != nil {
+			color = *in.Color
+		}
 		accent := ""
 		if in.Accent != nil {
 			accent = *in.Accent
@@ -329,6 +344,7 @@ func createReminder(db *gorm.DB, userID uint, in SaveReminderInput) (ReminderDTO
 			BgMask:     bgMask,
 			BgAlpha:    bgAlpha,
 			CardRole:   in.CardRole,
+			Color:      color,
 			Kind:       in.Kind,
 			Priority:   in.Priority, DueAt: in.DueAt, AllDay: in.AllDay,
 			StartAt: in.StartAt, EndAt: in.EndAt,
@@ -425,6 +441,9 @@ func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) 
 			existing.CompletedAt = nil
 		}
 		existing.ListID = in.ListID
+		if in.Color != nil {
+			existing.Color = *in.Color
+		}
 		existing.Priority = in.Priority
 		existing.DueAt = in.DueAt
 		existing.AllDay = in.AllDay
@@ -1511,8 +1530,8 @@ func listCalendarItems(db *gorm.DB, userID uint, from, to time.Time, listIDs []u
 			continue
 		}
 		item := CalendarItemDTO{
-			ID: r.ID, Title: r.Title, ListID: r.ListID,
-			DueAt: *at, StartAt: r.StartAt, EndAt: r.EndAt, DueDate: at.In(loc).Format("2006-01-02"),
+			ID: r.ID, Title: r.Title, Color: r.Color, ListID: r.ListID,
+			DueAt: *at, CreatedAt: r.CreatedAt, StartAt: r.StartAt, EndAt: r.EndAt, DueDate: at.In(loc).Format("2006-01-02"),
 			AllDay: r.AllDay && r.Kind == KindTask, Completed: r.CompletedAt != nil,
 			Kind: r.Kind, Priority: r.Priority, RepeatRule: r.RepeatRule,
 			// CardID / CardRole 都要带上：日历靠 card_role 上色，靠 card_id 才能关联回卡片

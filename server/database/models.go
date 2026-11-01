@@ -3,17 +3,20 @@ package database
 import "time"
 
 type User struct {
-	ID           uint   `gorm:"primarykey"`
-	Username     string `gorm:"uniqueIndex;not null"`
-	Password     string `gorm:"not null"`
-	Role         string `gorm:"default:user"`
-	Status       int    `gorm:"default:1"`
-	APIKey       string
-	AuthVersion  uint  `gorm:"not null;default:1"`
-	FnOSUserID   *uint `gorm:"uniqueIndex"`
-	FnOSUsername string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID       uint   `gorm:"primarykey"`
+	Username string `gorm:"uniqueIndex;not null"`
+	Password string `gorm:"not null"`
+	Role     string `gorm:"default:user"`
+	Status   int    `gorm:"default:1"`
+	APIKey   string
+	// CalendarToken 是手机日历订阅地址里的随机令牌（只读 ICS 用）。空 = 还没生成。
+	// 普通索引而不是唯一索引：AutoMigrate 会给历史行补空串，多行空串建不出唯一索引。
+	CalendarToken string `gorm:"size:64;index" json:"-"`
+	AuthVersion   uint   `gorm:"not null;default:1"`
+	FnOSUserID    *uint  `gorm:"uniqueIndex"`
+	FnOSUsername  string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // UserSession 记录「用户在应用里主动退出登录」这件事，而不是记录登录本身。
@@ -75,4 +78,17 @@ type SecurityQuestion struct {
 	Answer3   string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+// PasswordResetCode 是一次性的邮箱验证码。只存 bcrypt 哈希，不存明文；
+// consumed_at 非空表示已使用，attempts 记录输错次数；每个用户只保留最新一条，发新码会覆盖旧码。
+// 找回密码只依赖「通知方式 → 邮件」里已绑定的接收邮箱，不再有安全问题。
+type PasswordResetCode struct {
+	ID         uint      `gorm:"primarykey"`
+	UserID     uint      `gorm:"not null;index"`
+	CodeHash   string    `gorm:"not null"`
+	ExpiresAt  time.Time `gorm:"not null;index"`
+	Attempts   int       `gorm:"not null;default:0"`
+	ConsumedAt *time.Time
+	CreatedAt  time.Time
 }

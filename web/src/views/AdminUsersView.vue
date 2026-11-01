@@ -70,7 +70,7 @@
         </div>
       </div>
 
-      <div class="overflow-x-auto">
+      <div class="hidden overflow-x-auto md:block">
         <table class="w-full text-sm">
           <thead>
             <tr class="text-left text-xs uppercase tracking-wider text-muted-foreground bg-muted/60">
@@ -144,6 +144,46 @@
             </tr>
           </tbody>
         </table>
+      </div>
+
+
+      <!-- 手机端：表格改卡片，避免用户名/角色/时间被挤成竖排 -->
+      <div class="divide-y divide-border md:hidden" data-mobile-users>
+        <div v-for="user in users" :key="'m-' + user.id" class="p-4" data-mobile-user-card>
+          <div class="flex items-start gap-3">
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white" :class="avatarClass(user.username)">
+              {{ user.username.charAt(0).toUpperCase() }}
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center justify-between gap-2">
+                <div class="truncate font-semibold text-foreground">{{ user.username }}</div>
+                <span v-if="user.status === 1" class="badge shrink-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                  <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>启用
+                </span>
+                <span v-else class="badge shrink-0 bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+                  <span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span>禁用
+                </span>
+              </div>
+              <div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                <span>ID #{{ user.id }}</span>
+                <span class="text-border">·</span>
+                <span>{{ user.role === 'admin' ? '管理员' : '普通用户' }}</span>
+                <span class="text-border">·</span>
+                <span>{{ user.created_at }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="mt-3 grid grid-cols-3 gap-2">
+            <button class="btn-ghost !px-2 !py-1.5 text-xs" @click="handleToggleStatus(user)">{{ user.status === 1 ? '禁用' : '启用' }}</button>
+            <button class="btn-ghost !px-2 !py-1.5 text-xs" @click="handleResetPassword(user)">重置密码</button>
+            <button class="btn-ghost !px-2 !py-1.5 text-xs text-rose-600 dark:text-rose-300" @click="handleDelete(user)">删除</button>
+          </div>
+        </div>
+        <div v-if="errorMsg" class="p-8 text-center text-sm text-rose-500">
+          {{ errorMsg }}
+          <button class="ml-2 underline" @click="loadUsers()">重试</button>
+        </div>
+        <div v-else-if="users.length === 0" class="p-8 text-center text-sm text-muted-foreground">暂无用户数据</div>
       </div>
 
       <div class="flex flex-wrap items-center justify-between gap-3 p-5 sm:px-6 border-t border-border">

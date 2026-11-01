@@ -17,7 +17,7 @@
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V8a4 4 0 118 0v3"/></svg>
         </template>
         <template #labelRight>
-          <router-link to="/forgot-password" class="text-xs font-medium text-brand-300 hover:text-brand-200 transition-colors">忘记密码？</router-link>
+          <router-link v-if="passwordResetEnabled" to="/forgot-password" class="text-xs font-medium text-brand-300 hover:text-brand-200 transition-colors">忘记密码？</router-link>
         </template>
       </AuthField>
 
@@ -50,18 +50,6 @@
         {{ loading ? '正在获取飞牛账号…' : '使用飞牛 NAS 登录' }}
       </button>
     </form>
-
-    <!-- 安卓客户端里才显示：改服务器地址（网页里没有这个概念，所以只在壳子内出现）。
-         只放一行文字入口，地址本身不摆在登录页上——点一下弹原生输入框。 -->
-    <div v-if="inAndroidShell" class="mt-6 text-center" data-server-entry>
-      <button
-        type="button"
-        class="text-xs font-semibold text-white/50 underline-offset-4 transition-colors hover:text-white/80 hover:underline"
-        data-server-edit
-        aria-label="服务器设置"
-        @click="openServerSettings"
-      >服务器设置</button>
-    </div>
 
     <Teleport to="body">
       <transition enter-active-class="transition duration-200" enter-from-class="opacity-0" leave-active-class="transition duration-150" leave-to-class="opacity-0">
@@ -110,24 +98,13 @@ import AuthField from '../components/auth/AuthField.vue'
 const router = useRouter()
 const authStore = useAuthStore()
 
-// 安卓壳子（WebView 客户端）会注入 AndroidShell 这个 JS 桥；网页里没有它。
-const shell = (window as unknown as { AndroidShell?: { getServerUrl?: () => string; openServerSettings?: () => void } }).AndroidShell
-const inAndroidShell = ref(!!shell)
-const serverUrl = ref('')
-function openServerSettings() {
-  try { shell?.openServerSettings?.() } catch { /* 桥异常不该影响登录页 */ }
-}
-function readServerUrl() {
-  try { serverUrl.value = String(shell?.getServerUrl?.() || '') } catch { serverUrl.value = '' }
-}
-readServerUrl()
-
 const username = ref('')
 const password = ref('')
 // 记住登录：默认勾上（与之前的行为一致——之前所有令牌都是 7 天）。
 // 天数/小时数由后台「系统配置 → 访问控制」决定，这里只显示出来让用户心里有数。
 const remember = ref(true)
 const rememberDays = ref(7)
+const passwordResetEnabled = ref(true)
 // 勾上「记住密码」：① 登录态记 ${rememberDays} 天（后端配置）② 账号密码存在本机浏览器里，
 // 下次打开登录页自动填好 —— 用户反馈「记住登录没有效果」，就把「记住密码」做实。
 const rememberHint = computed(() => (remember.value
@@ -348,8 +325,10 @@ onMounted(async () => {
   }
   try {
     const res = await getPublicConfigs()
-    const days = Number(res.data?.data?.login_remember_days)
+    const configs = res.data?.data || {}
+    const days = Number(configs.login_remember_days)
     if (Number.isFinite(days) && days > 0) rememberDays.value = days
+    passwordResetEnabled.value = configs.password_reset_email_enabled !== 'false'
   } catch { /* 读不到就按 7 天显示 */ }
   // 整页授权流程带回的票据由 main.ts 从 hash 接到 sessionStorage，这里直接读；
   // 服务端口与网关入口已随启动引导取回并缓存在 store / localStorage。

@@ -11,14 +11,14 @@
             v-model="filterUsername"
             type="text"
             placeholder="用户名"
-            class="input-field !py-2 w-36"
+            class="input-field !py-2 w-full sm:w-36"
             @keyup.enter="reload"
           />
           <input
             v-model="filterAction"
             type="text"
             placeholder="操作 (如 login)"
-            class="input-field !py-2 w-44"
+            class="input-field !py-2 w-full sm:w-44"
             @keyup.enter="reload"
           />
           <button @click="reload" class="btn-brand !px-4 !py-2">筛选</button>
@@ -29,7 +29,7 @@
         </div>
       </div>
 
-      <div class="overflow-x-auto">
+      <div class="hidden overflow-x-auto md:block">
         <table class="w-full text-sm">
           <thead>
             <tr class="text-left text-xs uppercase tracking-wider text-muted-foreground bg-muted/60">
@@ -77,6 +77,31 @@
             </tr>
           </tbody>
         </table>
+      </div>
+
+
+      <!-- 手机端：日志表格改卡片，时间/用户/操作不再挤成一列 -->
+      <div class="divide-y divide-border md:hidden" data-mobile-audit>
+        <div v-for="log in logs" :key="'m-' + log.id" class="p-4" data-mobile-audit-card>
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex min-w-0 items-center gap-2">
+              <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white" :class="avatarClass(log.username || '?')">
+                {{ (log.username || '?').charAt(0).toUpperCase() }}
+              </div>
+              <div class="min-w-0">
+                <div class="truncate text-sm font-semibold text-foreground">{{ log.username || '—' }} <span class="text-[11px] font-normal text-muted-foreground">#{{ log.user_id }}</span></div>
+                <div class="text-[11px] text-muted-foreground">{{ log.created_at }}</div>
+              </div>
+            </div>
+            <span class="badge shrink-0" :class="actionClass(log.action)">{{ log.action }}</span>
+          </div>
+          <div class="mt-2 space-y-1 text-xs text-muted-foreground">
+            <div v-if="log.target_type">对象：{{ log.target_type }}<span v-if="log.target_id">/{{ log.target_id }}</span></div>
+            <div v-if="log.detail" class="break-words text-foreground/80">详情：{{ log.detail }}</div>
+            <div>IP：<code class="text-[11px]">{{ log.ip }}</code></div>
+          </div>
+        </div>
+        <div v-if="logs.length === 0" class="p-8 text-center text-sm text-muted-foreground">暂无日志记录</div>
       </div>
 
       <div class="flex flex-wrap items-center justify-between gap-3 p-5 sm:px-6 border-t border-border">

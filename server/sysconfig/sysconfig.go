@@ -57,6 +57,11 @@ func InitDefaultConfigs(db *gorm.DB) error {
 			return result.Error
 		}
 	}
+	// 安卓客户端已下线（用户 2026-10-29）：清掉历史遗留的 android_* 配置，
+	// 免得后台设置接口或旧管理页还把它们当成有效项返回。
+	if err := db.Where("key LIKE ?", "android%").Delete(&database.SystemConfig{}).Error; err != nil {
+		return err
+	}
 	return nil
 }
 

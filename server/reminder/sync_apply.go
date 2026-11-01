@@ -359,7 +359,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 			}
 			row := Reminder{
 				SyncUID: incoming.UID, UserID: owner.ID, ListID: listID,
-				Title: incoming.Title, Notes: incoming.Notes, BottomText: incoming.BottomText, Icon: incoming.Icon, CardRole: incoming.CardRole,
+				Title: incoming.Title, Notes: incoming.Notes, Color: incoming.Color, BottomText: incoming.BottomText, Icon: incoming.Icon, CardRole: incoming.CardRole,
 				CardID:   cardIDs[incoming.CardUID],
 				Kind:     normalizeKind(incoming.Kind),
 				Priority: incoming.Priority, DueAt: incoming.DueAt, AllDay: incoming.AllDay,
@@ -456,6 +456,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 			Updates(map[string]interface{}{
 				"list_id": listID, "title": incoming.Title, "notes": incoming.Notes,
 				"bottom_text": incoming.BottomText,
+				"color":       incoming.Color,
 				"icon":        incoming.Icon,
 				"card_role":   incoming.CardRole, "card_id": cardIDs[incoming.CardUID],
 				"kind": normalizeKind(incoming.Kind), "priority": incoming.Priority,
@@ -637,6 +638,7 @@ func sameReminder(local *Reminder, incoming syncReminder, listID uint, channels 
 	return local.ListID == listID &&
 		local.Title == incoming.Title &&
 		local.Notes == incoming.Notes &&
+		local.Color == incoming.Color &&
 		local.BottomText == incoming.BottomText &&
 		local.Icon == incoming.Icon &&
 		local.Kind == normalizeKind(incoming.Kind) &&

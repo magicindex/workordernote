@@ -62,6 +62,8 @@ export interface ReminderItem {
   cycle_index?: number
   title: string
   notes: string
+  /** 单条提醒的日历颜色（空＝按清单色自动分配） */
+  color?: string
   /** 仪式感卡片底部自定义文案（空＝自动显示次数） */
   bottom_text?: string
   /** 仪式感卡片图标 key（空＝按标题自动选） */
@@ -118,6 +120,7 @@ export const clearTrash = () => request.delete('/api/reminder/trash')
 export interface SaveReminderInput {
   title: string
   notes?: string
+  color?: string
   kind?: ReminderKind
   channel_targets?: Record<string, number[]>
   repeat_notify_minutes?: number
@@ -178,6 +181,7 @@ export interface LunarCalendarMonth {
 export interface CalendarItem {
   id: number
   title: string
+  color?: string
   list_id: number
   list_name: string
   /** 色名（blue/violet/rose/amber/emerald），沿用侧栏那套映射上色 */
@@ -185,6 +189,8 @@ export interface CalendarItem {
   /** 清单图标的 key（见 utils/list-icons.ts）：日历格子用图标代替圆点 */
   list_icon: string
   due_at: string
+  /** 创建时间；周视图对「当天创建、当天到期」的普通待办从创建时刻开始画 */
+  created_at?: string
   /** 时间段任务的起止（计划页的「开始—结束」）；没有区间时为空 */
   start_at?: string | null
   end_at?: string | null
@@ -349,6 +355,8 @@ export interface Nudge {
 export interface NudgeBox {
   sent: Nudge[]
   received: Nudge[]
+  /** 卡片默认保留天数（后端当前为 30 天，超期自动清除） */
+  retention_days: number
   counts: {
     received_pending: number
     received_unread: number
@@ -420,20 +428,6 @@ export const saveProvider = (provider: 'email' | 'sms' | 'qq', data: Record<stri
   request.put(`/api/reminder/admin/providers/${provider}`, data)
 export const createQQBindCode = () => request.post('/api/reminder/channels/qq/bind-code')
 
-// ---- 安卓客户端（WebView 壳子）的发布信息 ----
-export interface AndroidClient {
-  version: string
-  notes: string
-  file_name: string
-  file_size: number
-  sha256: string
-  uploaded_at: string
-  has_apk: boolean
-  lan_url: string
-  wan_url: string
-  min_sdk: number
-}
-
 /**
  * 上传一张图片（仪式感卡片的背景图用），返回服务端存下来的路径 `/uploads/...`。
  *
@@ -445,20 +439,6 @@ export const uploadImage = (file: File) => {
   fd.append('file', file)
   return request.post('/api/upload', fd, { timeout: 120000 })
 }
-
-export const getAndroidClient = () => request.get('/api/reminder/android')
-
-/** 管理员上传/替换安装包（顺带把版本号写进配置）。 */
-export const uploadAndroidApk = (file: File, version: string) => {
-  const fd = new FormData()
-  fd.append('file', file)
-  fd.append('version', version)
-  // 上传大文件别用默认的 30s 超时
-  return request.post('/api/reminder/admin/android/apk', fd, { timeout: 300000 })
-}
-
-/** 管理员下架安装包。 */
-export const deleteAndroidApk = () => request.delete('/api/reminder/admin/android/apk')
 
 // ---- 新设备导入（从另一台设备搬清单与内容） ----
 export interface SyncProfileUser {
@@ -492,6 +472,27 @@ export const runSyncImport = (data: {
   interval_minutes?: number
 }) => request.post('/api/reminder/admin/sync/import', data, { timeout: 300000 })
 
+
+// ---- 手机日历（订阅只读 ICS / 导入 .ics） ----
+export interface CalendarSubscription {
+  token: string
+  path: string
+  url: string
+}
+
+export const getCalendarSubscription = () =>
+  request.get('/api/reminder/calendar/subscription')
+
+export const rotateCalendarSubscription = () =>
+  request.post('/api/reminder/calendar/subscription/rotate')
+
+/** 把手机/电脑日历导出的 .ics 导入成提醒；list_id 为 0 时落到默认清单。 */
+export const importCalendarFile = (file: File, listId = 0) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  if (listId) fd.append('list_id', String(listId))
+  return request.post('/api/reminder/calendar/import', fd, { timeout: 120000 })
+}
 
 // ---- 信用卡（一个清单可以放多张卡） ----
 export interface CardSummary {

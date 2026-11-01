@@ -2,6 +2,7 @@ package reminder
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -176,7 +177,7 @@ func applySyncTimetableEntries(tx *gorm.DB, snap syncSnapshot, users map[string]
 
 func applySyncUserConfigs(tx *gorm.DB, snap syncSnapshot, users map[string]database.User, stats *syncApplyStats) error {
 	for _, in := range snap.UserConfigs {
-		if in.Key == "" || syncConfigSecrets[in.Key] {
+		if in.Key == "" || syncConfigSecrets[in.Key] || strings.HasPrefix(in.Key, "android") {
 			continue
 		}
 		owner, ok := users[in.Owner]
@@ -214,7 +215,7 @@ func applySyncUserConfigs(tx *gorm.DB, snap syncSnapshot, users map[string]datab
 
 func applySyncSystemConfigs(tx *gorm.DB, snap syncSnapshot, stats *syncApplyStats) error {
 	for _, in := range snap.SystemConfigs {
-		if in.Key == "" || syncConfigSecrets[in.Key] {
+		if in.Key == "" || syncConfigSecrets[in.Key] || strings.HasPrefix(in.Key, "android") {
 			continue
 		}
 		var local database.SystemConfig

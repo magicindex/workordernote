@@ -43,9 +43,9 @@ func closedBaseURL(t *testing.T) string {
 // 地址排第二（容器里它就是宿主地址），随后才是几个常见的容器内地址；重复的去掉。
 func TestOllamaCandidatesPreferSavedAndDedupe(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/api/assistant/admin/detect-ollama", nil)
-	request.Host = "192.168.1.10:8906"
+	request.Host = "192.168.3.201:8906"
 
-	candidates := ollamaCandidates(request, "http://192.168.1.10:11434/v1")
+	candidates := ollamaCandidates(request, "http://192.168.3.201:11434/v1")
 
 	// 「已填地址」和「Host 推出来的地址」是同一条：只能留一个。
 	if len(candidates) != 4 {
@@ -54,7 +54,7 @@ func TestOllamaCandidatesPreferSavedAndDedupe(t *testing.T) {
 	if candidates[0].Label != "当前填写的地址" {
 		t.Errorf("第一条应当是已填写的地址，实际是 %q", candidates[0].Label)
 	}
-	if candidates[0].BaseURL != "http://192.168.1.10:11434/v1" {
+	if candidates[0].BaseURL != "http://192.168.3.201:11434/v1" {
 		t.Errorf("第一条地址不对：%q", candidates[0].BaseURL)
 	}
 	for _, item := range candidates {
@@ -169,7 +169,7 @@ func TestDetectOllamaHandlerAlwaysReturnsEnvelope(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/assistant/admin/detect-ollama", nil)
-	ctx.Request.Host = "192.168.1.10:8906"
+	ctx.Request.Host = "192.168.3.201:8906"
 
 	handleDetectOllama(db)(ctx)
 

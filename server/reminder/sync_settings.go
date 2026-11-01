@@ -108,7 +108,7 @@ func normalizeSyncPeerURL(raw string) (string, error) {
 		return "", nil
 	}
 	if !strings.Contains(value, "://") {
-		// 常见输入：192.168.1.10:8906。补上 http://，省得用户被「格式不对」卡住。
+		// 常见输入：192.168.3.201:8906。补上 http://，省得用户被「格式不对」卡住。
 		value = "http://" + value
 	}
 	parsed, err := url.Parse(value)
@@ -119,7 +119,7 @@ func normalizeSyncPeerURL(raw string) (string, error) {
 		return "", fmt.Errorf("对端地址必须以 http:// 或 https:// 开头")
 	}
 	if parsed.Host == "" {
-		return "", fmt.Errorf("对端地址缺少主机名，例如 http://192.168.1.10:8906")
+		return "", fmt.Errorf("对端地址缺少主机名，例如 http://192.168.3.201:8906")
 	}
 	parsed.Path = strings.TrimSuffix(parsed.Path, "/")
 	parsed.RawQuery = ""

@@ -445,6 +445,8 @@
       </main>
     </div>
 
+    <IosInstallTip />
+
     <nav class="mobile-tabbar" :class="{ 'mobile-tabbar-hidden': keyboardOpen }">
       <RouterLink to="/admin" class="mobile-tab" :class="{ active: route.path === '/admin' }"><span v-html="smartNav[1].icon"></span><small>待办</small></RouterLink>
       <RouterLink to="/admin/planned" class="mobile-tab" :class="{ active: route.path === '/admin/planned' }"><span v-html="smartNav[2].icon"></span><small>计划</small></RouterLink>
@@ -482,7 +484,8 @@
          点一行切过去、弹层关闭。
          课程表（用户 2026-10-23）：「手机页面 中间清单 显示不全，没有看到课程表」——它和
          「智能清单」一起排在侧栏，手机上原来只能从抽屉进，这里补在最上面，开关沿用
-         authStore.timetableEnabled（默认开）。 -->
+         authStore.timetableEnabled（默认开）。
+         提醒@他（用户 2026-10-29）：底部快捷托盘已经有「提醒」图标，这里的重复入口去掉。 -->
     <Transition name="sheet">
       <div v-if="listsSheetOpen" class="lg:hidden">
         <div class="sheet-backdrop" data-lists-sheet-backdrop @click="closeListsSheet"></div>
@@ -507,23 +510,6 @@
               </span>
               <span class="min-w-0 flex-1 truncate">课程表</span>
               <span v-if="route.path === '/admin/timetable'" class="shrink-0 text-brand-500" data-lists-sheet-current aria-label="当前页面">
-                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m5 12.5 4.5 4.5L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </span>
-            </button>
-            <button
-              v-if="authStore.nudgeEnabled"
-              type="button"
-              class="lists-sheet-row"
-              :class="{ 'lists-sheet-row-active': route.path === '/admin/nudges' }"
-              data-lists-sheet-row="nudge"
-              @click="pickNudge"
-            >
-              <span class="nav-symbol h-5 w-5 bg-sky-500/12 text-sky-500">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3.4" stroke-width="1.7"/><path d="M15.4 12v1.6a2.2 2.2 0 0 0 4.4 0V12a7.8 7.8 0 1 0-3.1 6.2" stroke-width="1.7" stroke-linecap="round"/></svg>
-              </span>
-              <span class="min-w-0 flex-1 truncate">提醒@他</span>
-              <span v-if="summary.nudge_pending" class="nav-count">{{ summary.nudge_pending }}</span>
-              <span v-if="route.path === '/admin/nudges'" class="shrink-0 text-brand-500" data-lists-sheet-current aria-label="当前页面">
                 <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m5 12.5 4.5 4.5L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </span>
             </button>
@@ -582,7 +568,7 @@
 
     <!-- 手机端「新建」改成**悬浮按钮**：脱离底部标签栏，右下角悬浮，键盘弹起/滚动时收起 -->
     <button
-      v-if="canCreate && route.name !== 'Trash'"
+      v-if="canCreate && !FAB_HIDE_ROUTES.includes(String(route.name || ''))"
       class="mobile-fab"
       :class="{ 'mobile-fab-hidden': keyboardOpen }"
       :aria-label="fabLabel"
@@ -603,6 +589,7 @@
       :body="currentAlert?.body || ''"
       :created-at="currentAlert?.createdAt || ''"
       :pending-count="pendingAlertCount"
+      :repeat-count="currentAlertRepeatCount"
       :busy="alertBusy"
       :error="alertError"
       :snooze-label="`稍后提醒（${notifyMinutes} 分钟后）`"
@@ -745,6 +732,7 @@ import type { ContextMenuItem } from '../components/ContextMenu.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import UiThemeToggle from '../components/ui/ThemeToggle.vue'
 import ReminderAlert from '../components/ReminderAlert.vue'
+import IosInstallTip from '../components/IosInstallTip.vue'
 import { useAuthStore } from '../stores/auth'
 import {
   completeReminder,
@@ -868,11 +856,6 @@ function closeListsSheet() { listsSheetOpen.value = false }
 function pickTimetable() {
   listsSheetOpen.value = false
   if (route.path !== '/admin/timetable') void router.push('/admin/timetable')
-}
-/** 提醒@他：与课程表一样，内置栏目统一排在手机清单弹层最前面 */
-function pickNudge() {
-  listsSheetOpen.value = false
-  if (route.path !== '/admin/nudges') void router.push('/admin/nudges')
 }
 /** 垃圾箱：始终排在手机清单弹层最后 */
 function pickTrash() {
@@ -1081,6 +1064,8 @@ const listColor = listColorHex
 // 现在叫它的有三处：手机悬浮 +、这里挂的 window 事件 open-quick-add（首页看板标题行右侧
 // 那个「新建提醒」派发的），以及 HomeView 自己的快捷键 N。
 const QUICK_ADD_HOSTS = ['Home', 'Planned', 'AllReminders', 'Completed', 'ReminderList']
+/** 这些页面上没有「新建提醒」的落点，悬浮 + 只会挡住内容，直接不显示。 */
+const FAB_HIDE_ROUTES = ['Trash', 'AdminUsers', 'AdminConfigs', 'AdminAudit', 'Channels', 'Profile', 'Settings', 'Notifications']
 /** 手机悬浮按钮按频道决定动作：提醒@他/信用卡/仪式感打开各自的“新建”，其余进待办新建卡。 */
 type FabAction = 'nudge' | 'credit' | 'ceremony' | 'reminder'
 const fabAction = computed<FabAction>(() => {
@@ -1464,7 +1449,10 @@ function playReminderSound() {
 // 站内提醒弹窗队列：提醒到点可能一次来好几条（多个提醒同一分钟到期），排队逐条
 // 处理，处理完一条自动上下一条。用 notification id 去重，避免重连后重复入队。
 interface DueAlert {
-  notificationID: number
+  /** 同一提醒的多次通知合并成一条；按 reminderID 分组，提醒@他则各自独立。 */
+  key: string
+  notificationIDs: number[]
+  count: number
   reminderID?: number
   /** 通知类型：nudge_* 是「提醒@他」推来的，弹窗文案与按钮不一样 */
   type?: string
@@ -1478,6 +1466,7 @@ const alertBusy = ref(false)
 const alertError = ref('')
 const currentAlert = computed(() => alertQueue.value[0] || null)
 const pendingAlertCount = computed(() => Math.max(alertQueue.value.length - 1, 0))
+const currentAlertRepeatCount = computed(() => currentAlert.value?.count || 1)
 // 提醒频率来自偏好设置（个人偏好）：未处理多久再提醒、点「知道了」后多久再提醒
 const notifyMinutes = computed(() => authStore.reminderNotifyMinutes || 10)
 const ackMinutes = computed(() => authStore.reminderAckMinutes || 0)
@@ -1551,9 +1540,22 @@ async function toggleDND() {
 
 function enqueueDueAlert(notification: ReminderRealtimeEvent['notification']) {
   if (!notification || !ALERT_NOTIFICATION_TYPES.includes(notification.type)) return
-  if (alertQueue.value.some(item => item.notificationID === notification.id)) return
+  if (alertQueue.value.some(item => item.notificationIDs.includes(notification.id))) return
+  const key = notification.reminder_id ? `reminder:${notification.reminder_id}` : `notification:${notification.id}`
+  const existing = alertQueue.value.find(item => item.key === key)
+  if (existing) {
+    // 同一个提醒反复到点：不再排成多个弹窗，只累计次数；知道了/稍后提醒一次处理全部。
+    existing.notificationIDs.push(notification.id)
+    existing.count = existing.notificationIDs.length
+    existing.createdAt = notification.created_at
+    existing.title = notification.title
+    existing.body = notification.body
+    return
+  }
   alertQueue.value.push({
-    notificationID: notification.id,
+    key,
+    notificationIDs: [notification.id],
+    count: 1,
     reminderID: notification.reminder_id,
     type: notification.type,
     title: notification.title,
@@ -1615,7 +1617,7 @@ async function acknowledgeCurrentAlert() {
   const alert = currentAlert.value
   if (!alert) return
   try {
-    await markNotificationRead(alert.notificationID)
+    await Promise.all(alert.notificationIDs.map(id => markNotificationRead(id)))
   } catch {
     // 已读只是角标状态，失败不该拦住「完成 / 稍后提醒」这类主操作。
   }
@@ -1666,8 +1668,11 @@ async function dropAcknowledgedAlerts() {
     const res = await getNotifications()
     const items = (res.data?.data || []) as RealtimeNotification[]
     const unread = new Set(items.filter((item) => !item.read_at).map((item) => item.id))
-    const remaining = alertQueue.value.filter((item) => unread.has(item.notificationID))
-    if (remaining.length !== alertQueue.value.length) {
+    const remaining = alertQueue.value
+      .map(item => ({ ...item, notificationIDs: item.notificationIDs.filter(id => unread.has(id)) }))
+      .map(item => ({ ...item, count: item.notificationIDs.length }))
+      .filter(item => item.count > 0)
+    if (remaining.length !== alertQueue.value.length || remaining.some((item, i) => item.count !== alertQueue.value[i].count)) {
       alertQueue.value = remaining
       alertError.value = ''
     }
@@ -1973,6 +1978,9 @@ onBeforeUnmount(() => {
 .nav-count { @apply min-w-6 rounded-full bg-muted px-1.5 py-0.5 text-center text-[10px] font-bold text-muted-foreground; }
 .tiny-add { @apply flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground; }
 .topbar { @apply sticky top-0 z-30 flex h-12 items-center border-b border-border/70 bg-background/75 px-3.5 backdrop-blur-xl sm:h-16 sm:px-6 lg:h-[76px] lg:px-8 xl:px-10; }
+@media (display-mode: standalone) {
+  .topbar { height: auto; min-height: calc(3rem + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+}
 .avatar { @apply flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-extrabold text-white shadow-sm sm:h-9 sm:w-9; }
 /* 悬浮「新建」：右下角，浮在底部标签栏之上；手机端才有 */
 .mobile-fab { @apply fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-[0_16px_34px_-10px_rgba(59,130,246,.95)] transition-all duration-200 active:scale-95 lg:hidden; bottom: calc(5rem + env(safe-area-inset-bottom)); }

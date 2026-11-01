@@ -140,6 +140,32 @@ func TestInitDefaultConfigsSeedsSystemConfigs(t *testing.T) {
 	}
 }
 
+// 安卓客户端下线后，历史 android_* 配置不能再留在后台设置里。
+func TestInitDefaultConfigsRemovesLegacyAndroidConfigs(t *testing.T) {
+	db := setupTestDB(t)
+	rows := []database.SystemConfig{
+		{UserID: 0, Key: "android_version", Value: "0.1.0"},
+		{UserID: 0, Key: "android_wan_url", Value: "https://example.com/app.apk", Public: true},
+	}
+	if err := db.Create(&rows).Error; err != nil {
+		t.Fatalf("seed legacy configs: %v", err)
+	}
+
+	if err := InitDefaultConfigs(db); err != nil {
+		t.Fatalf("init defaults: %v", err)
+	}
+
+	for _, key := range []string{"android_version", "android_wan_url"} {
+		var count int64
+		if err := db.Model(&database.SystemConfig{}).Where("key = ?", key).Count(&count).Error; err != nil {
+			t.Fatalf("count %s: %v", key, err)
+		}
+		if count != 0 {
+			t.Fatalf("legacy config %q should be removed, got %d rows", key, count)
+		}
+	}
+}
+
 // TestInitDefaultConfigsPreservesAdminEdits runs the seeder twice: values an
 // admin changed between runs must survive, and no duplicate rows may appear.
 func TestInitDefaultConfigsPreservesAdminEdits(t *testing.T) {
@@ -253,7 +279,7 @@ func TestValidateAcceptsValidValues(t *testing.T) {
 
 // 字符串型配置必须能被清空：管理员把「外网下载地址」这类可选地址留空是正常操作。
 // 之前 handleUpdateConfig 给 Value 加了 binding:"required"，空值直接 400，
-// 用户就再也删不掉已经填过的可选地址了（安卓客户端的下载地址踩到过）。
+// 用户就再也删不掉已经填过的可选地址了。
 func TestUpdateConfigAllowsEmptyString(t *testing.T) {
 	db := setupTestDB(t)
 	RegisterConfig(ConfigDef{

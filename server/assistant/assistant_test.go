@@ -133,7 +133,7 @@ func TestNormalizeBaseURL(t *testing.T) {
 		{name: "去掉首尾空格与末尾斜杠", input: " https://api.deepseek.com/v1/ ", want: "https://api.deepseek.com/v1"},
 		{name: "剥掉粘贴进来的完整对话地址", input: "https://api.deepseek.com/v1/chat/completions", want: "https://api.deepseek.com/v1"},
 		{name: "去掉查询串", input: "https://example.com/v1?key=1", want: "https://example.com/v1"},
-		{name: "本地地址保留端口", input: "http://192.168.1.10:11434/v1", want: "http://192.168.1.10:11434/v1"},
+		{name: "本地地址保留端口", input: "http://192.168.3.200:11434/v1", want: "http://192.168.3.200:11434/v1"},
 		{name: "漏了协议要报错", input: "api.deepseek.com/v1", wantErr: true},
 		{name: "非 http(s) 协议要报错", input: "ftp://example.com/v1", wantErr: true},
 		{name: "没有主机名要报错", input: "https:///v1", wantErr: true},

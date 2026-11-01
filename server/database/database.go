@@ -16,7 +16,8 @@ var coreModels = []interface{}{
 	&User{},
 	&SystemConfig{},
 	&UpgradeRecord{},
-	&SecurityQuestion{},
+	&SecurityQuestion{}, // legacy: no longer read/written; kept so account deletion can purge old rows
+	&PasswordResetCode{},
 	&UserSession{},
 	&AuditLog{},
 }
