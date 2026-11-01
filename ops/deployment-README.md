@@ -241,6 +241,8 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 200：备份 `docker-compose.yml.bak-pre0441-20261101-1204` / `data.bak-pre0441-20261101-1204.tgz`（7.6M），旧镜像 `workordernote:0.44.0-keep-20261101-1204`；上传 `pkg/workordernote-0.44.1-amd64.tar.gz` 并 load，compose 文件更新为 0.44.1；容器重建 healthy，`0.44.1 / 52e215b`。
 - 验证：两台 `verify-144` 13/13、`verify-151` 5/5、`verify-154` 8/8；本地镜像 `verify-096` 31/31、`149` 10/10、`150` 10/10、`155` 13/13、`159` 4/4。
 - 离线包 `pkg/WorkOrderNote-0.44.1-offline-amd64.tar.gz`（sha256 `797e8f22f07df3ea32b9fd7ffd44acdfe08e92a8ab670dbfe148fd2c8b9b32f0`）。
+- README 界面截图（首页 / 月历 / 周视图 / 课程表 / 手机）提交 `246c7bb`，Gitea `main` 已推送；Gitea Release `v0.44.1`（id 53）附离线包、单镜像包、bundle、截图包。
+- GitHub 快照 `publish-workordernote` 通过 Git Data API 提交 `bc1423b` 并创建 `v0.44.1` tag；Actions `release`（run 41297442286）成功，Release 附源码包、bundle、镜像包、截图包与 SHA256SUMS；`ghcr.io/magicindex/workordernote:v0.44.1` / `latest` 已发布。旧版本 fpk/截图资产已从该 Release 清理。
 - 源码提交 `52e215b`；后续部署记录单独提交。
 
 ### 2026-11-01：0.44.0（201 生产 / 200 生产上线）—— 周视图重做、邮箱找回与日历同步
