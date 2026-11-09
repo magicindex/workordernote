@@ -254,6 +254,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   ```
   升级前建议先备份 `data`（`sudo cp -a data data.bak-pre0450-$(date +%Y%m%d-%H%M)`）。
 - 未做：离线一键安装包、飞牛 fpk、GitHub 快照、生产全量回归（本轮只跑了与改动相关的 128 与临时实例检查）。
+- 推送：`git push origin main` 失败（`Failed to authenticate user`，仓库里存的是容器仓库的口令，不是 Gitea 的写权限令牌，已确认 `ls-remote` 匿名可读）；提交 `a17cb1b`（发版）、`779d86c`（部署记录）与 tag `v0.45.0` 都在本地，等 Gitea 凭据恢复后补推。
 
 ### 2026-11-01：0.44.1（201 生产 / 200 生产上线）—— 周视图取消今天的底色与流光
 
