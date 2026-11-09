@@ -58,7 +58,10 @@
 
     <div class="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_19rem]">
       <!-- 月历网格 -->
-      <section class="surface flex min-h-0 flex-col overflow-hidden rounded-2xl p-2 sm:p-3">
+      <section
+        class="surface flex min-h-0 flex-col rounded-2xl p-2 sm:p-3"
+        :class="viewMode === 'week' ? 'overflow-visible' : 'overflow-hidden'"
+      >
         <!-- 月 / 周 切换（周视图＝7 列天 × 纵向小时，用户要求） -->
         <div class="mb-2 flex items-center gap-1.5" data-cal-view-toggle>
           <!-- 选中的那个字用**流光**（用户 2026-10-10 要求）：渐变文字 + 位移动画，
@@ -86,9 +89,15 @@
         </div>
 
         <!-- 周视图：左侧时刻列 + 7 天列；任务按时段画块，重叠的并排分栏 -->
-        <div v-if="viewMode === 'week'" class="min-h-0 flex-1 overflow-auto" data-week-grid>
+        <div
+          v-if="viewMode === 'week'"
+          ref="weekGridEl"
+          class="min-h-0 flex-1"
+          :class="weekFitted ? 'overflow-visible' : 'overflow-hidden'"
+          data-week-grid
+        >
           <div class="grid" style="grid-template-columns: 3.25rem repeat(7, minmax(0, 1fr))">
-            <div></div>
+            <div data-week-head></div>
             <div
               v-for="d in weekDays"
               :key="'h' + dayKey(d)"
@@ -100,21 +109,21 @@
               </div>
               {{ ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()] }} <span class="text-muted-foreground">{{ d.getMonth() + 1 }}/{{ d.getDate() }}</span>
             </div>
-            <div class="relative">
-              <div v-for="h in 24" :key="'t' + h" class="pr-1 text-right text-[10px] text-muted-foreground" :style="{ height: HOUR_H + 'px' }">{{ pad(h - 1) }}:00</div>
+            <div class="relative border-b border-border/60">
+              <div v-for="h in 24" :key="'t' + h" class="pr-1 text-right text-[10px] text-muted-foreground" :style="{ height: hourHeight + 'px' }">{{ pad(h - 1) }}:00</div>
             </div>
             <div
               v-for="d in weekDays"
               :key="dayKey(d)"
-              class="relative border-l border-border/60"
-              :style="{ height: 24 * HOUR_H + 'px' }"
+              class="relative border-b border-l border-border/60"
+              :style="{ height: 24 * hourHeight + 'px' }"
               :data-week-col="dayKey(d)"
               @mousemove="onWeekMove($event, d)"
               @mouseleave="hoverTime = null"
               @dblclick="openCreateForSlot(d, $event)"
               title="双击在鼠标所在时分新建任务"
             >
-              <div v-for="h in 24" :key="h" class="border-t border-border/40" :style="{ height: HOUR_H + 'px' }"></div>
+              <div v-for="h in 24" :key="h" class="border-t border-border/40" :style="{ height: hourHeight + 'px' }"></div>
               <!-- 只给今天铺一整天的底色，其他日期没有背景。 -->
               <!-- 每条任务一根工字线：起止横杠 + 中间竖线；跨天只在真起点/真终点封口 -->
               <div
@@ -554,6 +563,44 @@ const weekLabel = computed(() => {
   return `${a.getFullYear()} 年 ${f(a)} – ${f(b)}`
 })
 const HOUR_H = 44
+// 周视图按可用高度铺满一屏：月视图的格子会自动填满剩余高度，周视图也照此处理，
+// 不再固定 44px/小时（那样 24 小时共 1056px，必须滚动才能看到底部）。
+const hourHeight = ref(HOUR_H)
+const weekFitted = ref(false)
+const weekGridEl = ref<HTMLElement | null>(null)
+let weekResizeObserver: ResizeObserver | null = null
+
+function fitWeekGrid() {
+  const el = weekGridEl.value
+  if (!el) return
+  const head = el.querySelector<HTMLElement>('[data-week-head]')?.offsetHeight ?? 0
+  const available = el.clientHeight - head
+  if (available <= 0) return
+  // 向下取整到 0.01px，保证 24 行加上表头不会多出 1px 把容器撑出滚动。
+  hourHeight.value = Math.max(1, Math.floor((available / 24) * 100) / 100)
+  weekFitted.value = true
+}
+
+function observeWeekGrid() {
+  weekResizeObserver?.disconnect()
+  weekResizeObserver = null
+  if (viewMode.value !== 'week') {
+    weekFitted.value = false
+    return
+  }
+  weekFitted.value = false
+  const el = weekGridEl.value
+  if (!el) return
+  weekResizeObserver = new ResizeObserver(() => fitWeekGrid())
+  weekResizeObserver.observe(el)
+  fitWeekGrid()
+}
+
+watch([viewMode, weekGridEl], observeWeekGrid, { flush: 'post' })
+onBeforeUnmount(() => {
+  weekResizeObserver?.disconnect()
+  weekResizeObserver = null
+})
 // 周视图：同一天的提醒先合并成连续色块（最早开始 → 最晚结束，重叠/首尾相接就连续，
 // 中间断开则拆成多块），色块占满当天通道。每条提醒再画一根「工字线」：
 // 起止各一根横杠，中间一根竖线；跨天时只有第一天有上横杠、最后一天有下横杠。
@@ -679,10 +726,10 @@ const weekLayout = computed<Record<string, WeekBlock[]>>(() => {
         }
         for (const seg of group) {
           const overlap = group.filter((o) => o.startMin < seg.endMin && seg.startMin < o.endMin).length
-          const raw = ((seg.endMin - seg.startMin) / 60) * HOUR_H
+          const raw = ((seg.endMin - seg.startMin) / 60) * hourHeight.value
           blocks[key].push({
             item: seg.span.item,
-            top: (seg.startMin / 60) * HOUR_H,
+            top: (seg.startMin / 60) * hourHeight.value,
             height: seg.role === 'single' ? Math.max(22, raw - 2) : Math.max(22, raw),
             lane: laneOf.get(seg) ?? 0,
             lanes: Math.max(1, laneEnds.length),
@@ -706,7 +753,7 @@ const weekLayout = computed<Record<string, WeekBlock[]>>(() => {
     const dayBlocks = blocks[key]
     for (const b of dayBlocks) {
       const chars = [...b.item.title].length
-      const labelMin = (Math.max(2, chars) * 10 * 60) / HOUR_H
+      const labelMin = (Math.max(2, chars) * 10 * 60) / hourHeight.value
       const fits = b.height >= chars * 10 + 4
       if (fits) {
         b.labelMode = 'inline'
@@ -768,11 +815,11 @@ function minutesFromEvent(e: MouseEvent, cols = 4) {
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
   const y = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top))
   const step = 60 / cols
-  return Math.floor((y / HOUR_H) * 60 / step) * step
+  return Math.floor((y / hourHeight.value) * 60 / step) * step
 }
 function onWeekMove(e: MouseEvent, d: Date) {
   const minutes = minutesFromEvent(e)
-  hoverTime.value = { day: dayKey(d), y: (minutes / 60) * HOUR_H, label: `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}` }
+  hoverTime.value = { day: dayKey(d), y: (minutes / 60) * hourHeight.value, label: `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}` }
 }
 function shiftWeek(delta: number) {
   const d = new Date(weekStart.value)

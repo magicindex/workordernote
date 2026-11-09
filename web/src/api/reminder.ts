@@ -28,6 +28,8 @@ export interface CompletedItem {
   repeat_rule: string
   /** 底层提醒是否还在；历史记录本身没有可删的东西，前端据此决定是否给操作按钮 */
   reminder_exists: boolean
+  /** 能否「撤销完成」：记事、信用卡还款记录，以及同一条提醒较早的完成都不行 */
+  undoable: boolean
 }
 
 export interface ReminderList {
@@ -325,6 +327,9 @@ export const updateReminder = (id: number, data: SaveReminderInput) =>
 export const deleteReminder = (id: number) => request.delete(`/api/reminder/items/${id}`)
 export const completeReminder = (id: number) => request.post(`/api/reminder/items/${id}/complete`)
 export const restoreReminder = (id: number) => request.post(`/api/reminder/items/${id}/restore`)
+// 撤销一次「重复提醒」的完成：删掉这条完成历史并把到期时间退回那次排期。
+// 一次性任务走上面的 restoreReminder（清 completed_at），两者对应已完成页的两种来源。
+export const retractCompletion = (id: number) => request.post(`/api/reminder/completions/${id}/retract`)
 export const snoozeReminder = (id: number, until: string) =>
   request.post(`/api/reminder/items/${id}/snooze`, { until })
 

@@ -331,6 +331,13 @@ type CompletedItemDTO struct {
 	// ReminderExists 表示底层提醒是否还在（未被删除）。前端据此决定这一行能否编辑/删除：
 	// 历史记录本身是既成事实，没有可删的东西。
 	ReminderExists bool `json:"reminder_exists"`
+	// Undoable 表示这一行能否「撤销完成」：
+	//   - Source "reminder"：任务（记事除外）都可以，撤销＝清掉 completed_at；
+	//   - Source "history"：只有该提醒**最近一次**完成可以，撤销＝删掉这条历史并把
+	//     due_at 退回那次的排期；信用卡还款记录不行（要连账单的「已还」一起撤回，
+	//     入口在信用卡卡片上）。
+	// 前端据此决定要不要显示「撤销」按钮，避免点了才报错。
+	Undoable bool `json:"undoable"`
 }
 
 // CalendarItemDTO 是日历视图里的一项，有两种来源：

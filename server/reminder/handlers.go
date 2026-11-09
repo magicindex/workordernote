@@ -52,6 +52,8 @@ func setupAuthRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	group.DELETE("/items/:id", handleDeleteReminder(db))
 	group.POST("/items/:id/complete", handleCompleteReminder(db))
 	group.POST("/items/:id/restore", handleRestoreReminder(db))
+	// 撤销一次「重复提醒」的完成（已完成页的「撤销」按钮）：删历史 + due_at 退回那次排期。
+	group.POST("/completions/:id/retract", handleRetractCompletion(db))
 	group.POST("/items/:id/snooze", handleSnoozeReminder(db))
 	// 垃圾箱：软删除的提醒集中在这里，可恢复；「全部」等列表默认不含它们。
 	group.GET("/trash", handleListTrash(db))
@@ -716,6 +718,26 @@ func handleRestoreReminder(db *gorm.DB) gin.HandlerFunc {
 			writeServiceError(c, err)
 			return
 		}
+		publishDataChanged(item.UserID, "reminder", "restored", item.ID, originClientID(c))
+		response.Success(c, item)
+	}
+}
+
+// handleRetractCompletion 撤销一次重复提醒的完成（已完成页的行内「撤销」）。
+// 与 /items/:id/restore 的区别：那条清的是 completed_at（一次性任务），
+// 这条删的是 completions 里的一条历史，并把 due_at 退回那次的排期。
+func handleRetractCompletion(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		item, err := retractCompletion(db, currentUserID(c), id)
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		// 复用 restored 事件：其它设备据此刷新列表与完成记录。
 		publishDataChanged(item.UserID, "reminder", "restored", item.ID, originClientID(c))
 		response.Success(c, item)
 	}

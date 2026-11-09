@@ -448,7 +448,16 @@
     <IosInstallTip />
 
     <nav class="mobile-tabbar" :class="{ 'mobile-tabbar-hidden': keyboardOpen }">
-      <RouterLink to="/admin" class="mobile-tab" :class="{ active: route.path === '/admin' }"><span v-html="smartNav[1].icon"></span><small>待办</small></RouterLink>
+      <!-- 底部顺序（用户 2026-11-09：「把通知改成首页，点击弹出首页，调整位置为左边第一个，
+           同时把待办调整到通知原来位置，重新构建首页图标」）：首页 / 计划 / 清单 / 待办 / 提醒。
+           通知中心仍从顶栏的铃铛进（带未读角标），底部不再占一格。 -->
+      <RouterLink
+        to="/admin/home"
+        class="mobile-tab"
+        :class="{ active: route.path === '/admin/home' }"
+        data-tab-home
+        aria-label="首页"
+      ><span v-html="smartNav[0].icon"></span><small>首页</small></RouterLink>
       <RouterLink to="/admin/planned" class="mobile-tab" :class="{ active: route.path === '/admin/planned' }"><span v-html="smartNav[2].icon"></span><small>计划</small></RouterLink>
       <!-- 手机端中间那个标签：原来是「信用卡账单」的直接入口（只在开了信用卡、且确实有那一栏
            时出现）。用户 2026-10-16 要求改成「清单」——点它弹出**所有清单**的列表，选一个就切
@@ -465,7 +474,7 @@
         <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8.5 6h11m-11 6h11m-11 6h11M4 6h.01M4 12h.01M4 18h.01" stroke-width="1.9" stroke-linecap="round"/></svg></span>
         <small>清单</small>
       </button>
-      <RouterLink to="/admin/notifications" class="mobile-tab" :class="{ active: route.path === '/admin/notifications' }"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke-width="1.8" stroke-linecap="round"/></svg></span><small>通知</small></RouterLink>
+      <RouterLink to="/admin" class="mobile-tab" :class="{ active: route.path === '/admin' }" data-tab-today><span v-html="smartNav[1].icon"></span><small>待办</small></RouterLink>
       <RouterLink
         v-if="authStore.nudgeEnabled"
         to="/admin/nudges"
@@ -960,7 +969,9 @@ const icons = {
 
 const smartNav = [
   // 「首页」排在最上面（用户 2026-10-13：「智能清单：今天上方增加首页」）
-  { to: '/admin/home', label: '首页', key: 'home', tone: 'bg-brand-500/12 text-brand-500', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-5.5h-5V21H5a1 1 0 0 1-1-1v-9.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
+  // 图标重做（用户 2026-11-09「重新构建首页图标」）：屋顶单独一笔、墙体留圆角、
+  // 门做成上圆下方 —— 原来的单笔轮廓在 18px 下屋顶和墙体糊在一起。
+  { to: '/admin/home', label: '首页', key: 'home', tone: 'bg-brand-500/12 text-brand-500', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3.8 10.6 12 3.9l8.2 6.7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.7 9.4V19a1.7 1.7 0 0 0 1.7 1.7h9.2a1.7 1.7 0 0 0 1.7-1.7V9.4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.9 20.7v-4.6a2.1 2.1 0 0 1 4.2 0v4.6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
   { to: '/admin', label: '待办', key: 'today', tone: 'bg-blue-500/12 text-blue-500', icon: icons.today },
   { to: '/admin/planned', label: '计划', key: 'planned', tone: 'bg-amber-500/12 text-amber-500', icon: icons.planned },
   { to: '/admin/all', label: '全部', key: 'all', tone: 'bg-violet-500/12 text-violet-500', icon: icons.all },

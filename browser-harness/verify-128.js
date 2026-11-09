@@ -3,7 +3,9 @@
  * 「手机页面 中间 信用卡 改成 清单，点击清单弹出 所有清单列表，根据选择切换清单列表」）。
  *
  * 钉住这几条：
- *   1. 手机底部标签栏是 待办 / 计划 / **清单** / 通知 / **提醒**，中间那个不再叫「信用卡」；
+ *   1. 手机底部标签栏是 **首页** / 计划 / **清单** / 待办 / **提醒**，中间那个不再叫「信用卡」；
+ *      通知中心改从顶栏铃铛进，底部不再有「通知」标签（用户 2026-11-09「把通知改成首页
+ *      ……调整位置为左边第一个，同时把待办调整到通知原来位置」）；
  *   2. 点「清单」弹出底部弹层（`[data-lists-sheet]`），标题「全部清单」；
  *   3. 弹层里「我的清单」那一段 —— **名字与顺序完全一致**（同一份数据）；
  *      内置频道只留课程表，按开关显示，并排在弹层最前面（用户 2026-10-26
@@ -94,10 +96,24 @@ const readSheet = (page) => page.evaluate(() => {
       const tabs = await readTabs(page);
       check('手机底部标签里有「清单」', tabs.includes('清单'), JSON.stringify(tabs));
       check('中间那个不再叫「信用卡」', !tabs.includes('信用卡'), JSON.stringify(tabs));
-      check('原来的其它标签都还在（待办 / 计划 / 通知 / 提醒）',
-        ['待办', '计划', '通知', '提醒'].every((t) => tabs.includes(t)), JSON.stringify(tabs));
-      check('标签顺序是 待办 / 计划 / 清单 / 通知 / 提醒',
-        tabs.slice(0, 5).join('/') === '待办/计划/清单/通知/提醒', JSON.stringify(tabs));
+      check('原来的其它标签都还在（首页 / 计划 / 待办 / 提醒）',
+        ['首页', '计划', '待办', '提醒'].every((t) => tabs.includes(t)), JSON.stringify(tabs));
+      check('标签顺序是 首页 / 计划 / 清单 / 待办（提醒在最后）',
+        tabs.slice(0, 4).join('/') === '首页/计划/清单/待办', JSON.stringify(tabs));
+      check('通知不再占底部标签（改从顶栏铃铛进）', !tabs.includes('通知'), JSON.stringify(tabs));
+      // 首页标签是左边第一个，点它进首页看板（用户 2026-11-09）。
+      if (tabs[0] === '首页') {
+        await page.click('[data-tab-home]');
+        await sleep(1200);
+        const home = await page.evaluate(() => ({
+          path: location.pathname,
+          active: (document.querySelector('.mobile-tab.active small')?.textContent || '').trim(),
+        }));
+        check('点底部「首页」进首页看板，标签保持选中',
+          home.path === '/admin/home' && home.active === '首页', JSON.stringify(home));
+        await gotoRetry(page, BASE + '/admin');
+        await sleep(1200);
+      }
       if (nudgeEnabled) {
         await page.click('[data-tab-nudges]');
         await sleep(1200);

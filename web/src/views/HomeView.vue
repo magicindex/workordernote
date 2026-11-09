@@ -458,6 +458,45 @@
         </div>
       </section>
 
+      <!-- 历史逾期（用户 2026-11-01）：当前显示月份之前仍未完成的逾期项。
+           只读提醒，不做完成/删除/跳转；与当前列表重复的条目已经在上面的计算里剔除。
+           没有内容（或不是按月页面）时整张卡片不出现。 -->
+      <section
+        v-if="!loading && historyOverdueItems.length"
+        class="day-card mb-3"
+        data-history-overdue
+      >
+        <header class="day-card-head">
+          <span class="day-card-label">
+            <span data-history-overdue-range>{{ historyOverdueRangeLabel }}</span>
+            <span class="ml-2 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">未完成</span>
+          </span>
+          <span class="day-card-count" data-history-overdue-count>逾期 {{ historyOverdueItems.length }} 条</span>
+        </header>
+        <div class="day-card-body">
+          <article
+            v-for="item in historyOverdueItems"
+            :key="`history-${item.id}`"
+            class="reminder-row history-overdue-row"
+            :data-history-overdue-item="item.id"
+          >
+            <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300" aria-hidden="true">
+              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7v5l3 2" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </span>
+            <div class="min-w-0 flex-1">
+              <h3 class="min-w-0 break-words text-sm font-bold leading-5 sm:truncate sm:text-[15px]">{{ item.title }}</h3>
+              <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted-foreground">
+                <span class="font-bold text-amber-600 dark:text-amber-300">{{ historyOverdueDate(item) }}</span>
+                <template v-if="item.list_name">
+                  <span class="h-1 w-1 rounded-full bg-border"></span>
+                  <span>{{ item.list_name }}</span>
+                </template>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section v-if="loading" class="space-y-3">
         <div v-for="n in 4" :key="n" class="h-20 animate-pulse rounded-2xl bg-surface/80"></div>
       </section>
@@ -503,6 +542,20 @@
             </div>
           </button>
           <div class="row-actions">
+            <!-- 撤销完成（用户 2026-11-09：点错了一条未结束的提醒，提前结束了，要求一键撤销）。
+                 一次性任务清掉 completed_at；重复提醒删掉那一次完成并把到期时间退回去。
+                 手机上没有 hover，这个按钮常显，所以带文字而不只是一个图标。 -->
+            <button
+              v-if="canUndoCompleted(entry)"
+              class="row-action !w-auto gap-1 px-2 text-[11px] font-bold text-brand-600 hover:!bg-brand-500/10 hover:!text-brand-600 dark:text-brand-300 dark:hover:!text-brand-300"
+              title="撤销完成，恢复为未完成"
+              data-undo-completed
+              :data-undo-source="entry.source"
+              @click.stop="undoCompleted(entry)"
+            >
+              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="M9 14 4 9l5-5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9h9a7 7 0 1 1-7 7" stroke-width="1.8" stroke-linecap="round"/></svg>
+              <span>撤销</span>
+            </button>
             <button v-if="entry.reminder_exists" class="row-action hover:!text-rose-500" title="删除提醒" @click="removeCompleted(entry)">
               <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
@@ -739,7 +792,7 @@ import { getPublicConfigs } from '../api/config'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import {
   completeReminder, createReminder, deleteReminder, exportReminders, getChannelStatuses, getCompletedHistory, getLists,
-  convertLunarDate, getReminder, getReminderMonths, getReminders, listIdsParam, restoreReminder, snoozeReminder, updateReminder,
+  convertLunarDate, getReminder, getReminderMonths, getReminders, listIdsParam, retractCompletion, restoreReminder, snoozeReminder, updateReminder,
   type ChannelStatus, type CompletedItem, type CompletedRangeOption, type ReminderChannel,
   type ReminderItem, type ReminderKind, type ReminderList, type SaveReminderInput
 } from '../api/reminder'
@@ -763,14 +816,24 @@ function solarYearlyDue(due: Date, now: Date) {
     due.getHours(), due.getMinutes(), due.getSeconds(), due.getMilliseconds())
 }
 
-async function loadCycleDue() {
-  const token = ++cycleDueToken
+// 把年度循环条目的 due_at 换到「当前这一轮」。历史逾期卡片拿到的也是原始
+// due_at（可能停在 2011 年），必须共用这一份换算，否则会把生日算成十几年前逾期。
+function resolveYearlyDue(item: ReminderItem, now: Date, lunarMap: Record<number, string>): ReminderItem {
+  if (item.repeat_rule !== 'yearly' || !item.due_at) return item
+  const due = new Date(item.due_at)
+  if (Number.isNaN(due.getTime()) || due > now) return item
+  const iso = item.calendar === 'lunar' ? lunarMap[item.id] : solarYearlyDue(due, now).toISOString()
+  return iso ? { ...item, due_at: iso } : item
+}
+
+// 农历年度循环要调接口换算；公历不需要请求，所以只有农历条目才走网络。
+async function cycleDueMap(rows: ReminderItem[]): Promise<Record<number, string>> {
   const now = new Date(clockNow.value)
   const out: Record<number, string> = {}
-  const lunarItems = items.value.filter((item) => item.repeat_rule === 'yearly'
+  const lunarItems = rows.filter((item) => item.repeat_rule === 'yearly'
     && item.calendar === 'lunar' && item.lunar_anchor && item.due_at
     && new Date(item.due_at) <= now)
-  if (!lunarItems.length) { cycleDue.value = out; return }
+  if (!lunarItems.length) return out
   let lunarYear = now.getFullYear()
   try {
     const today = await convertLunarDate({ year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() })
@@ -794,17 +857,18 @@ async function loadCycleDue() {
     const due = new Date(rawDue)
     out[item.id] = new Date(c.year, c.month - 1, c.day, due.getHours(), due.getMinutes(), due.getSeconds()).toISOString()
   }
+  return out
+}
+
+async function loadCycleDue() {
+  const token = ++cycleDueToken
+  const out = await cycleDueMap(items.value)
   if (token === cycleDueToken) cycleDue.value = out
 }
 
 const displayItems = computed(() => {
-  const rows = items.value.map((item) => {
-    if (item.repeat_rule !== 'yearly' || !item.due_at) return item
-    const due = new Date(item.due_at)
-    if (Number.isNaN(due.getTime()) || due > new Date(clockNow.value)) return item
-    const iso = item.calendar === 'lunar' ? cycleDue.value[item.id] : solarYearlyDue(due, new Date(clockNow.value)).toISOString()
-    return iso ? { ...item, due_at: iso } : item
-  })
+  const now = new Date(clockNow.value)
+  const rows = items.value.map((item) => resolveYearlyDue(item, now, cycleDue.value))
   return isNoteBucketPage.value && courseNotesOnly.value ? rows.filter(isCourseNote) : rows
 })
 // 「已完成」的数据源与普通列表不同（历史表 ∪ 完成记录），单独存一份。
@@ -939,7 +1003,8 @@ const blankInput = (): SaveReminderInput => ({
 const quick = reactive<SaveReminderInput>(blankInput())
 // 「全部」页的月份游标（YYYY-MM）与可翻范围（有数据的最早/最晚月，用户要求只在
 // 有数据的月份之间翻）。范围由 /items/months 提供，翻到两端时箭头置灰。
-const monthCursor = ref(new Date().toISOString().slice(0, 7))
+// 用本地月份：toISOString 是 UTC，上海月初 0–8 点会被算成上个月。
+const monthCursor = ref(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`)
 const monthRange = ref<{ first: string; last: string }>({ first: '', last: '' })
 const monthLabel = computed(() => {
   const [y, m] = monthCursor.value.split('-')
@@ -1043,6 +1108,83 @@ function setListRange(value: ListRangeOption) {
 // 什么时候按「月」看：全部页（非范围条模式）与普通清单页；记事本页按记录时间倒序
 // 看全部，不分月。
 const monthScoped = computed(() => view.value === 'all' && !isNoteBucketPage.value && (!isAllPage.value || listRange.value === 'month'))
+// 历史逾期卡片（用户 2026-11-01）：按月页面只显示本月，上月及更早的未完成逾期项
+// 会被月份窗口挡掉。这里单独取「今天页」的全时段逾期（服务端口径），再按当前显示
+// 月之前过滤；卡片只读，不提供完成/删除等操作。
+const historyOverdueRaw = ref<ReminderItem[]>([])
+const historyCycleDue = ref<Record<number, string>>({})
+let historyOverdueToken = 0
+
+const historyOverdueItems = computed(() => {
+  if (!monthScoped.value) return []
+  const now = new Date(clockNow.value)
+  // 当前列表里已经显示的项目以列表为准（跨月时间段任务可能同时落在两边）。
+  const shown = new Set(items.value.map((item) => item.id))
+  const rows: ReminderItem[] = []
+  for (const raw of historyOverdueRaw.value) {
+    if (shown.has(raw.id)) continue
+    const item = resolveYearlyDue(raw, now, historyCycleDue.value)
+    if (!isOverdue(item)) continue
+    const stamp = overdueStamp(item)
+    if (stamp === null || Number.isNaN(stamp)) continue
+    const d = new Date(stamp)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    if (key >= monthCursor.value) continue
+    rows.push(item)
+  }
+  return rows.sort((a, b) => (overdueStamp(a) || 0) - (overdueStamp(b) || 0))
+})
+
+const historyOverdueRangeLabel = computed(() => {
+  const rows = historyOverdueItems.value
+  if (!rows.length) return ''
+  const keys = rows.map((item) => {
+    const d = new Date(overdueStamp(item) || 0)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  }).sort()
+  const [fy, fm] = keys[0].split('-').map(Number)
+  const [ly, lm] = keys[keys.length - 1].split('-').map(Number)
+  if (fy === ly && fm === lm) return `${fy} 年 ${fm} 月`
+  return fy === ly
+    ? `${fy} 年 ${fm} 月—${lm} 月`
+    : `${fy} 年 ${fm} 月—${ly} 年 ${lm} 月`
+})
+
+function historyOverdueDate(item: ReminderItem) {
+  const stamp = overdueStamp(item)
+  if (stamp === null) return ''
+  const d = new Date(stamp)
+  const now = new Date(clockNow.value)
+  const monthDay = `${d.getMonth() + 1}月${d.getDate()}日`
+  return d.getFullYear() === now.getFullYear() ? monthDay : `${d.getFullYear()}年${monthDay}`
+}
+
+async function loadHistoryOverdue() {
+  const token = ++historyOverdueToken
+  if (!monthScoped.value) {
+    historyOverdueRaw.value = []
+    historyCycleDue.value = {}
+    return
+  }
+  try {
+    // view=today 会带上所有逾期项（不受月份窗口限制），正是历史卡片要的来源。
+    const res = await getReminders({
+      view: 'today',
+      list_id: selectedListID.value,
+      q: search.value || undefined,
+    })
+    const rows = res.data.data || []
+    const cycle = await cycleDueMap(rows)
+    if (token !== historyOverdueToken) return
+    historyOverdueRaw.value = rows
+    historyCycleDue.value = cycle
+  } catch {
+    if (token === historyOverdueToken) {
+      historyOverdueRaw.value = []
+      historyCycleDue.value = {}
+    }
+  }
+}
 // 只有「全部」页选了非「本月」范围时才带 from/to。导出**不**受它影响。
 const dateWindow = computed(() => (isAllPage.value && listRange.value !== 'month' ? rangeWindow.value : {}))
 // 计划页的输入窗口与今天页不同：只用自定义时间/时间段，没有任何相对快捷项，
@@ -1217,7 +1359,7 @@ const subtitle = computed(() => {
 const overdueCount = computed(() => displayItems.value.filter(isOverdue).length)
 const emptyTitle = computed(() => view.value === 'completed'
   ? (completedRange.value === 'all' ? '还没有完成记录' : '这个时间段没有记录')
-  : view.value === 'today' ? '近 7 天都清空了' : '这里还没有提醒')
+  : view.value === 'today' ? '近 7 天都清空了' : monthScoped.value ? '这个月还没有提醒' : '这里还没有提醒')
 const emptyText = computed(() => view.value === 'completed'
   ? (completedRange.value === 'all' ? '完成的提醒会安静地收在这里。' : '换一个时间段看看，或者选「全部」。')
   : '把脑海里惦记的事情记下来，剩下的交给 Reminder。')
@@ -1331,6 +1473,8 @@ async function loadRouteData() {
 async function loadItems() {
   // 信用卡账单页不显示提醒列表；卡片面板自己会去拉卡片与本周待还。
   if (isCardBucketPage.value) return
+  // 历史卡片与列表并行取；非按月页面（记事本/已完成等）会在这里同步清空。
+  const historyTask = loadHistoryOverdue()
   if (view.value === 'completed') {
     const res = await getCompletedHistory({
       range: completedRange.value,
@@ -1367,6 +1511,7 @@ async function loadItems() {
   })
   items.value = res.data.data || []
   void loadCycleDue()
+  await historyTask
 }
 // 导出对话框：选清单（默认全选，含信用卡/记事本系统栏目）与列（默认全选）。
 // 导出永远是**所有数据**：不带页面上的月份与时间范围（用户要求）。
@@ -1579,6 +1724,25 @@ async function openCompletedEntry(entry: CompletedItem) {
 function removeCompleted(entry: CompletedItem) {
   if (!entry.reminder_exists) return
   removeItem({ id: entry.reminder_id, title: entry.title })
+}
+// 「撤销完成」：用户 2026-11-09 误点了一条未结束的提醒，想在已完成里一键撤回。
+// 能不能撤由后端算（记事、信用卡还款记录、同一条提醒较早的完成都不行），
+// 前端只认 entry.undoable，避免按钮点了才报错。
+function canUndoCompleted(entry: CompletedItem) {
+  return !!entry.undoable && entry.reminder_exists && entry.kind !== 'note'
+}
+async function undoCompleted(entry: CompletedItem) {
+  if (!canUndoCompleted(entry)) return
+  try {
+    // 两种来源两条路：一次性任务清 completed_at，重复提醒删那一次完成并退回排期。
+    if (entry.source === 'history') await retractCompletion(entry.id)
+    else await restoreReminder(entry.reminder_id)
+    await loadItems()
+    changed()
+    showToast('已撤销完成，提醒恢复为未完成')
+  } catch (err: any) {
+    showToast(err.response?.data?.message || '撤销失败', 'error')
+  }
 }
 // 「今天 / 明天 / 本周末」是**选中**语义，不是开关：再点一次不该把日期清掉。
 //
@@ -1990,6 +2154,10 @@ function onShortcut(e: KeyboardEvent) {
 /* 逾期那张卡片的标题行染一点红，与行里的「已逾期」标记呼应 */
 .day-card[data-day-group='overdue'] .day-card-head { @apply bg-rose-500/10; }
 .day-card[data-day-group='overdue'] .day-card-label { @apply text-rose-600 dark:text-rose-400; }
+/* 历史逾期是一张只读提醒卡：用琥珀色区别于本月的「已逾期」，行不响应悬停 */
+.day-card[data-history-overdue] .day-card-head { @apply bg-amber-500/10; }
+.day-card[data-history-overdue] .day-card-label { @apply text-amber-700 dark:text-amber-300; }
+.history-overdue-row { @apply hover:bg-transparent; }
 .day-card-body { @apply divide-y divide-border/55; }
 .reminder-row { @apply relative flex min-h-0 items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-muted/40 sm:gap-3 sm:px-4 sm:py-3; content-visibility: auto; contain-intrinsic-size: 64px; }
 .reminder-row::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 2px; background: transparent; }

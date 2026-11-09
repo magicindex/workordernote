@@ -1002,6 +1002,78 @@ func restoreReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error) 
 	return getReminder(db, userID, reminderID)
 }
 
+// retractCompletion 撤销「重复提醒」的一次完成：删掉那条完成记录（软删，同步会带墓碑），
+// 再把提醒的 due_at 退回到这次完成对应的排期，让它重新回到待办里（用户 2026-11-09：
+// 「点错了一条提醒、提前结束了，想在已完成里一键撤销」）。
+//
+// 只允许撤销**最近一次**完成：更早的那次撤回后，due_at 已经被后面的完成推到更远，
+// 硬退回去会和后面那条历史打架（例如连续完成三天，撤掉中间一天）。
+//
+// 信用卡还款记录不走这里 —— 它还要把账单的「已还」一起撤回，入口在卡片上的
+// 「撤销已还」（见 card_handlers.go 的 retractCardPayment）。
+func retractCompletion(db *gorm.DB, userID, completionID uint) (ReminderDTO, error) {
+	var reminderID uint
+	err := db.Transaction(func(tx *gorm.DB) error {
+		var done Completion
+		if err := tx.Where("id = ? AND user_id = ?", completionID, userID).First(&done).Error; err != nil {
+			return err
+		}
+		var item Reminder
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND user_id = ? AND deleted_at IS NULL", done.ReminderID, userID).First(&item).Error; err != nil {
+			return err
+		}
+		if item.CardID != 0 {
+			return errors.New("信用卡还款记录请到卡片上点「撤销已还」")
+		}
+		if item.Kind == KindNote {
+			return errors.New("记事不需要撤销完成")
+		}
+		// 已经整体完成过的提醒（例如循环任务后来改成一次性并勾掉了），
+		// 这里再撤历史会把「最近一次完成」也搭进去，交给列表里的勾选框处理更稳。
+		if item.CompletedAt != nil {
+			return errors.New("这条提醒已完成，请在列表里取消勾选")
+		}
+		var latest Completion
+		if err := tx.Where("user_id = ? AND reminder_id = ?", userID, item.ID).
+			Order("completed_at DESC, id DESC").First(&latest).Error; err != nil {
+			return err
+		}
+		if latest.ID != done.ID {
+			return errors.New("只能撤销最近一次完成")
+		}
+		if done.ScheduledFor != nil {
+			item.DueAt = done.ScheduledFor
+		}
+		item.SnoozedUntil = nil
+		item.CompletedAt = nil
+		item.Version++
+		if err := tx.Save(&item).Error; err != nil {
+			return err
+		}
+		// 软删（不是硬删）：同步快照要靠这条墓碑把对端的记录一起撤回。
+		if err := tx.Delete(&done).Error; err != nil {
+			return err
+		}
+		var channelRows []ReminderChannel
+		if err := tx.Where("reminder_id = ? AND user_id = ? AND enabled = ?", item.ID, userID, true).Find(&channelRows).Error; err != nil {
+			return err
+		}
+		channels := make([]string, 0, len(channelRows))
+		for _, row := range channelRows {
+			channels = append(channels, row.Channel)
+		}
+		reminderID = item.ID
+		return rebuildJobs(tx, item, channels)
+	})
+	if err != nil {
+		return ReminderDTO{}, err
+	}
+	// 撤销后这条提醒重新变成「待处理」，「提醒@他」存到清单的卡片也退回未完成。
+	syncNudgeFromReminder(db, userID, reminderID, false)
+	return getReminder(db, userID, reminderID)
+}
+
 func snoozeReminder(db *gorm.DB, userID, reminderID uint, until time.Time) (ReminderDTO, error) {
 	if !until.After(time.Now()) {
 		return ReminderDTO{}, errors.New("稍后提醒时间必须晚于当前时间")
@@ -1323,6 +1395,29 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 		}
 	}
 
+	// 「撤销完成」只允许撤最近一次：一次查出这批提醒的最后一次完成，
+	// 供下面的 Undoable 标记使用（按完成时间倒序取每个提醒的第一条）。
+	// 单独查而不是拿页面上的 history 判断：history 已经被时间段与搜索词筛过，
+	// 页面里看不到的那次完成可能才是最近的。
+	latestDone := map[uint]uint{}
+	if len(history) > 0 {
+		ids := make([]uint, 0, len(history))
+		for _, h := range history {
+			ids = append(ids, h.ReminderID)
+		}
+		var doneRows []Completion
+		if err := db.Select("id, reminder_id, completed_at").
+			Where("user_id = ? AND reminder_id IN ?", userID, ids).
+			Order(tsUTC("completed_at") + " DESC, id DESC").Find(&doneRows).Error; err != nil {
+			return nil, err
+		}
+		for _, row := range doneRows {
+			if _, ok := latestDone[row.ReminderID]; !ok {
+				latestDone[row.ReminderID] = row.ID
+			}
+		}
+	}
+
 	// 一次性取回涉及到的清单名，避免逐行查询。
 	wanted := map[uint]struct{}{}
 	for _, r := range rows {
@@ -1368,6 +1463,9 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 		item.Kind = owner.Kind
 		item.RepeatRule = owner.RepeatRule
 		item.ReminderExists = true
+		// 记事不撤销；信用卡还款记录要连账单的「已还」一起撤回（卡片上另入口）；
+		// 同一提醒只有最近一次完成能撤。
+		item.Undoable = owner.Kind != KindNote && owner.CardID == 0 && latestDone[h.ReminderID] == h.ID
 		// 完成时段从这条提醒的录入时间算起（用户 2026-10-22 的示例：
 		// 2 号录入、5 号完成，就要能看到 2 号 → 5 号这一整段）。
 		if !owner.CreatedAt.IsZero() {
@@ -1391,6 +1489,8 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 			CreatedAt: &created,
 			ListID:    r.ListID, ListName: listNames[r.ListID],
 			RepeatRule: r.RepeatRule, ReminderExists: true,
+			// 一次性的完成（以及异常情况下带 completed_at 的循环任务）直接清掉完成态即可。
+			Undoable: r.Kind != KindNote && r.CardID == 0,
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {
