@@ -1,4 +1,4 @@
-# 工作序记 (WorkOrderNote) 0.44.1
+# 工作序记 (WorkOrderNote) 0.45.0
 
 任务、记事与日历一体的提醒应用。飞牛 NAS 上以 Docker 部署。
 
@@ -8,7 +8,7 @@
 ## 访问
 
 - <http://192.168.3.201:8906/>
-- 容器 `workordernote`，镜像 `workordernote:0.44.0`（本地自建）
+- 容器 `workordernote`，镜像 `workordernote:0.45.0`（本地自建）
 - 对比实例：<http://192.168.3.201:8907/> 官方原版 v0.3.0；<http://192.168.3.201:8908/> 沙盒
 
 ## 仓库与镜像地址（2026-10-22 起）
@@ -216,9 +216,10 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 版本与迭代
 
-- 软件版本见根目录 `VERSION`，当前 `0.44.1`，规则为 `主版本号.小版本号.修正号`。
-  **部署状态（2026-11-01 12:04）**：**201 生产 8906 / 200 生产 均已升级到 `0.44.1`**
-  （提交 `52e215b`，镜像 `workordernote:0.44.1` = `sha256:5ae23756b356…`）。
+- 软件版本见根目录 `VERSION`，当前 `0.45.0`，规则为 `主版本号.小版本号.修正号`。
+  **部署状态（2026-11-09 23:01）**：**201 生产 8906 已升级到 `0.45.0`**（提交 `a17cb1b`，
+  镜像 `workordernote:0.45.0` = `sha256:33c7e1e50aa5…`）；**200 生产仍是 `0.44.1`**，
+  镜像已放到 200 的 `pkg/`，等执行 load + 改 tag（本机没有 200 的 SSH 凭据）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
   **公开设置 9 项三台一致**；**个人偏好 201 与 200 一致，沙箱单独一套**（开始提醒时间 `00:00`、
@@ -231,6 +232,28 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 应用内「侧栏 → 关于 → 版本信息」可查看迭代说明与原项目信息。
 
 ## 变更记录
+
+### 2026-11-09：0.45.0（201 生产上线；200 待手动执行）—— 已完成撤销、手机底部换首页、历史逾期卡片、周视图铺满
+
+> **发版记录**（VERSION 0.45.0，源码提交 `a17cb1b`，镜像 `workordernote:0.45.0` =
+> `sha256:33c7e1e50aa5f683a8ae93c45dd9bbba8ca521f34856178aec4486abe5388309`，
+> 92,037,846 B，构建于 2026-11-09T14:53:00Z）
+
+- 本版合并攒批第 81–84 条：已完成页「撤销」按钮（一次性任务恢复未完成、重复提醒删那次完成并退回排期，只允许撤最近一次）；手机底部标签改为 首页 / 计划 / 清单 / 待办（通知改从顶栏铃铛进，首页图标重画）；待办页「历史逾期」只读卡片；周视图按可用高度铺满一屏。
+- 201：备份 `docker-compose.yml.bak-pre0450-20261109-2253` / `data.bak-pre0450-20261109-2253.tgz`（23M），旧镜像保留 `workordernote:0.44.1-keep-20261109-2253`；compose 镜像 tag 改 `0.45.0`，23:01:17 `docker compose up -d` 重建，healthy，`/api/version` = `0.45.0 / a17cb1b`。
+- 数据体检（升级后）：`integrity_check = ok`、25 张表、108 条未删除提醒、83 个清单、3 个账号。
+- 验证：生产 8906 跑 `verify-128` **34/34**（新底部顺序、首页可点、通知不在底部、清单弹层）；临时实例 8921（生产库拷贝）验了「历史逾期」卡片（造 9 月逾期任务 → 出现、范围 2026 年 9 月、点击只读）与周视图铺满（1440×1000 下 `scrollHeight 709 ≤ clientHeight 708`）；Go `vet` + `go test ./...` 全绿（新增撤销用例 3 个）；前端 `vue-tsc` + `vite build` 通过。
+- **200（192.168.3.200）尚未升级**：本机没有该机的 SSH 凭据。镜像包 `pkg/workordernote-0.45.0-amd64.tar.gz`（47M，sha256 `77b73433173cd74b55c7230ff6d0c6835931849a86e654b8f007a9e47cf3ee79`）已通过 CIFS 放到 200 的 `/vol1/1000/Docker/workordernote/pkg/`；在 200 上执行：
+  ```bash
+  cd /vol1/1000/Docker/workordernote
+  cp docker-compose.yml docker-compose.yml.bak-pre0450-$(date +%Y%m%d-%H%M)
+  sudo docker load -i pkg/workordernote-0.45.0-amd64.tar.gz
+  sudo sed -i 's#workordernote:0.44.1#workordernote:0.45.0#' docker-compose.yml
+  sudo docker compose up -d
+  curl -s http://127.0.0.1:8906/api/version
+  ```
+  升级前建议先备份 `data`（`sudo cp -a data data.bak-pre0450-$(date +%Y%m%d-%H%M)`）。
+- 未做：离线一键安装包、飞牛 fpk、GitHub 快照、生产全量回归（本轮只跑了与改动相关的 128 与临时实例检查）。
 
 ### 2026-11-01：0.44.1（201 生产 / 200 生产上线）—— 周视图取消今天的底色与流光
 
