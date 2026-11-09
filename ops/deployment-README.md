@@ -217,9 +217,8 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 ## 版本与迭代
 
 - 软件版本见根目录 `VERSION`，当前 `0.45.0`，规则为 `主版本号.小版本号.修正号`。
-  **部署状态（2026-11-09 23:01）**：**201 生产 8906 已升级到 `0.45.0`**（提交 `a17cb1b`，
-  镜像 `workordernote:0.45.0` = `sha256:33c7e1e50aa5…`）；**200 生产仍是 `0.44.1`**，
-  镜像已放到 200 的 `pkg/`，等执行 load + 改 tag（本机没有 200 的 SSH 凭据）。
+  **部署状态（2026-11-09 23:14）**：**201 生产 8906 / 200 生产均已升级到 `0.45.0`**
+  （提交 `a17cb1b`，镜像 `workordernote:0.45.0` = `sha256:33c7e1e50aa5…`）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
   **公开设置 9 项三台一致**；**个人偏好 201 与 200 一致，沙箱单独一套**（开始提醒时间 `00:00`、
@@ -233,7 +232,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
-### 2026-11-09：0.45.0（201 生产上线；200 待手动执行）—— 已完成撤销、手机底部换首页、历史逾期卡片、周视图铺满
+### 2026-11-09：0.45.0（201 生产 / 200 生产上线）—— 已完成撤销、手机底部换首页、历史逾期卡片、周视图铺满
 
 > **发版记录**（VERSION 0.45.0，源码提交 `a17cb1b`，镜像 `workordernote:0.45.0` =
 > `sha256:33c7e1e50aa5f683a8ae93c45dd9bbba8ca521f34856178aec4486abe5388309`，
@@ -243,16 +242,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 201：备份 `docker-compose.yml.bak-pre0450-20261109-2253` / `data.bak-pre0450-20261109-2253.tgz`（23M），旧镜像保留 `workordernote:0.44.1-keep-20261109-2253`；compose 镜像 tag 改 `0.45.0`，23:01:17 `docker compose up -d` 重建，healthy，`/api/version` = `0.45.0 / a17cb1b`。
 - 数据体检（升级后）：`integrity_check = ok`、25 张表、108 条未删除提醒、83 个清单、3 个账号。
 - 验证：生产 8906 跑 `verify-128` **34/34**（新底部顺序、首页可点、通知不在底部、清单弹层）；临时实例 8921（生产库拷贝）验了「历史逾期」卡片（造 9 月逾期任务 → 出现、范围 2026 年 9 月、点击只读）与周视图铺满（1440×1000 下 `scrollHeight 709 ≤ clientHeight 708`）；Go `vet` + `go test ./...` 全绿（新增撤销用例 3 个）；前端 `vue-tsc` + `vite build` 通过。
-- **200（192.168.3.200）尚未升级**：本机没有该机的 SSH 凭据。镜像包 `pkg/workordernote-0.45.0-amd64.tar.gz`（47M，sha256 `77b73433173cd74b55c7230ff6d0c6835931849a86e654b8f007a9e47cf3ee79`）已通过 CIFS 放到 200 的 `/vol1/1000/Docker/workordernote/pkg/`；在 200 上执行：
-  ```bash
-  cd /vol1/1000/Docker/workordernote
-  cp docker-compose.yml docker-compose.yml.bak-pre0450-$(date +%Y%m%d-%H%M)
-  sudo docker load -i pkg/workordernote-0.45.0-amd64.tar.gz
-  sudo sed -i 's#workordernote:0.44.1#workordernote:0.45.0#' docker-compose.yml
-  sudo docker compose up -d
-  curl -s http://127.0.0.1:8906/api/version
-  ```
-  升级前建议先备份 `data`（`sudo cp -a data data.bak-pre0450-$(date +%Y%m%d-%H%M)`）。
+- 200：备份 `docker-compose.yml.bak-pre0450-20261109-2313` / `data.bak-pre0450-20261109-2313.tgz`（7.2M），旧镜像保留 `workordernote:0.44.1-keep-20261109-2315`；`docker load` 镜像包（sha256 `77b73433173cd74b55c7230ff6d0c6835931849a86e654b8f007a9e47cf3ee79`）→ compose 改 `0.45.0` → 旧容器不是 compose 创建的、报名称冲突，`docker rm -f workordernote` 后 `docker compose up -d`，23:14 healthy，`/api/version` = `0.45.0 / a17cb1b`。
+- 200 数据体检：`integrity_check = ok`、25 张表、117 条未删除提醒、59 个清单、2 个账号；跑 `verify-128` **34/34**。
+- **顺带修好双机同步**：两台 `sync_token` 不一致（201 `aada…` / 200 `bd66…`），双向同步从某个时点起一直 401「同步令牌不正确」。已把 200 的令牌改成 201 的值（`PUT /api/reminder/admin/sync`：方向 both、对端 `http://192.168.3.201:8906`、间隔 5 分钟），两边手动 `POST /sync/run` 都返回 ok。账号集合仍不一致：201 多 `tt017887` / `tt259608`（测试账号），200 多 `郭朋飞`，同步会跳过「对端有、本机没有」的账号（数据不过去）。
 - 未做：离线一键安装包、飞牛 fpk、GitHub 快照、生产全量回归（本轮只跑了与改动相关的 128 与临时实例检查）。
 - 推送：`git push origin main` 失败（`Failed to authenticate user`，仓库里存的是容器仓库的口令，不是 Gitea 的写权限令牌，已确认 `ls-remote` 匿名可读）；提交 `a17cb1b`（发版）、`779d86c`（部署记录）与 tag `v0.45.0` 都在本地，等 Gitea 凭据恢复后补推。
 
