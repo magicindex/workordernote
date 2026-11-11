@@ -113,16 +113,18 @@
 
         <!-- 本期应还 + 还款闭环 -->
         <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] font-semibold" data-card-current="period">
-          <span class="text-muted-foreground">本期（{{ card.current?.period || '—' }}）</span>
+          <!-- 手机端只留「本期应还」这一项（用户 2026-11-11：「手机版……有个第x期，
+               取消显示，只保留本期应还」）：账期标签与「第 x 期」徽标在窄屏隐藏，sm 以上照旧。 -->
+          <span class="hidden text-muted-foreground sm:inline">本期（{{ card.current?.period || '—' }}）</span>
           <!-- 循环周期：这是这张卡的第几期（按开卡月份算，第 1 期就是开卡那个月） -->
-          <span v-if="periodIndex(card) > 0" class="tiny-badge" :data-card-period-index="card.id">第 {{ periodIndex(card) }} 期</span>
+          <span v-if="periodIndex(card) > 0" class="tiny-badge hidden sm:inline-flex" :data-card-period-index="card.id">第 {{ periodIndex(card) }} 期</span>
           <span v-if="card.current?.paid_at" class="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400" data-card-paid>
             <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="m5 13 4 4L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             已还 ¥{{ formatCents(card.current.paid_amount_cents || card.current.amount_cents) }}
             <span v-if="card.current.paid_at" class="text-muted-foreground">· {{ card.current.paid_at.slice(0, 10) }}</span>
           </span>
           <span v-else class="text-foreground" data-card-amount>
-            应还 <b class="text-[14px]">¥{{ formatCents(card.current?.amount_cents) }}</b>
+            <span class="sm:hidden">本期</span>应还 <b class="text-[14px]">¥{{ formatCents(card.current?.amount_cents) }}</b>
             <span v-if="!card.current?.amount_cents" class="text-[11px] font-medium text-muted-foreground">（还没填金额）</span>
           </span>
           <span class="inline-flex items-center gap-1.5" style="color: #e11d48" data-card-due-countdown>
