@@ -155,6 +155,7 @@
             :data-card-pay="card.id"
             @click="pay(card)"
           >标记已还</button>
+          <button class="btn-secondary !h-8 !px-3 !text-[11px]" :data-card-installment="card.id" @click="openInstallment(card)">分期还款</button>
           <button class="btn-secondary !h-8 !px-3 !text-[11px]" :data-card-set-amount="card.id" @click="openAmount(card)">
             {{ card.current?.amount_cents ? '改本期金额' : '填本期金额' }}
           </button>
@@ -216,6 +217,68 @@
       </div>
     </Modal>
 
+    <!-- 分期还款估算（用户 2026-11-11）：选期数、填已还期数 → 剩余期数/剩余本金/手续费 -->
+    <Modal v-model="installmentOpen" size="md" :title="`分期还款${installmentCard ? ' · ' + installmentCard.bank : ''}`">
+      <div class="space-y-3">
+        <p class="rounded-xl bg-muted/60 px-3 py-2 text-[11px] font-semibold text-muted-foreground" data-installment-rule>
+          {{ installmentRule.name }}
+          <span :class="installmentRule.verified ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'">
+            {{ installmentRule.verified ? '官网费率' : '通用参考（未收录）' }}
+          </span>
+          <span v-if="installmentRule.note" class="font-normal"> · {{ installmentRule.note }}</span>
+        </p>
+
+        <label class="block">
+          <span class="text-xs font-bold text-foreground">分期本金（元）</span>
+          <input v-model="installmentPrincipalYuan" class="input-field mt-1.5 !py-2" inputmode="decimal" data-installment-principal />
+        </label>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block">
+            <span class="text-xs font-bold text-foreground">分期期数</span>
+            <select v-model.number="installmentPeriods" class="input-field mt-1.5 !py-2" data-installment-periods>
+              <option v-for="p in installmentRule.periods" :key="p" :value="p">{{ p }} 期</option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="text-xs font-bold text-foreground">已还期数</span>
+            <input
+              v-model.number="installmentPaid"
+              type="number" min="0" :max="installmentPeriods"
+              class="input-field mt-1.5 !py-2"
+              data-installment-paid
+            />
+          </label>
+        </div>
+
+        <div class="rounded-xl border border-border/70 bg-surface px-3 py-2.5 text-[12px] font-semibold" data-installment-result>
+          <p class="flex items-baseline gap-2">
+            <span class="text-muted-foreground">剩余</span>
+            <b class="font-display text-2xl text-brand-600 dark:text-brand-300" data-installment-remaining>{{ installmentEstimate.remaining }}</b>
+            <span class="text-muted-foreground">期 · 剩余本金 ¥{{ formatCents(installmentEstimate.remainingPrincipal.min) }}</span>
+          </p>
+          <div class="mt-2 space-y-1 text-[11px] font-medium text-muted-foreground">
+            <p>每期手续费 <b class="text-foreground">¥{{ formatCents(installmentEstimate.perPeriodFee.min) }}<template v-if="installmentEstimate.perPeriodFee.max !== installmentEstimate.perPeriodFee.min">–{{ formatCents(installmentEstimate.perPeriodFee.max) }}</template></b>
+              <span>（每期费率 {{ fmtRate(installmentEstimate.perPeriodRate) }}）</span></p>
+            <p>全部手续费 <b class="text-foreground">¥{{ formatCents(installmentEstimate.totalFee.min) }}<template v-if="installmentEstimate.totalFee.max !== installmentEstimate.totalFee.min">–{{ formatCents(installmentEstimate.totalFee.max) }}</template></b>
+              <span v-if="installmentEstimate.upfront">（一次性收取）</span>
+              <span v-else>（分期收取）</span></p>
+            <p>剩余未出 <b class="text-foreground">¥{{ formatCents(installmentEstimate.remainingFee.min) }}<template v-if="installmentEstimate.remainingFee.max !== installmentEstimate.remainingFee.min">–{{ formatCents(installmentEstimate.remainingFee.max) }}</template></b></p>
+          </div>
+          <p class="mt-2 text-[11px] font-medium text-muted-foreground">提前结清：{{ installmentEstimate.earlyNote }}</p>
+          <p v-if="installmentEstimate.warning" class="mt-1 text-[11px] font-bold text-amber-600 dark:text-amber-400" data-installment-warning>{{ installmentEstimate.warning }}</p>
+        </div>
+
+        <p class="text-[11px] font-medium text-muted-foreground">
+          费率来自银行公开口径，实际以当期账单为准。
+          <a v-if="installmentRule.source" :href="installmentRule.source" target="_blank" rel="noopener" class="underline">查看来源</a>
+        </p>
+        <div class="flex justify-end gap-2">
+          <button class="btn-secondary" @click="installmentOpen = false">关闭</button>
+        </div>
+      </div>
+    </Modal>
+
     <CardEditorDialog
       v-model="editorOpen"
       :card="editingCard"
@@ -260,6 +323,9 @@ import {
 import { bankFaceLabelOf, bankLogoOf } from '../utils/banks'
 import { daysFromToday, urgencyOf } from '../utils/card-urgency'
 import { cardTail, daysUntil, formatCardDate, formatCents, graceDays, nextDayOccurrence, parseYuanToCents } from '../utils/card'
+import {
+  estimateInstallment, findInstallmentRule, type InstallmentEstimate, type RateRange,
+} from '../data/card-installment-rules'
 
 const props = defineProps<{ list: ReminderList }>()
 const emit = defineEmits<{
@@ -287,6 +353,33 @@ const scheduleOpen = ref(false)
 const scheduleCard = ref<CreditCard | null>(null)
 const deleteOpen = ref(false)
 const deleteTarget = ref<CreditCard | null>(null)
+
+// 分期还款估算（用户 2026-11-11）：输入已还期数，算出剩余期数/剩余本金/手续费。
+// 规则来自 data/card-installment-rules.ts，按卡片上的银行名匹配；没收录的银行走通用参考。
+const installmentOpen = ref(false)
+const installmentCard = ref<CreditCard | null>(null)
+const installmentPeriods = ref(12)
+const installmentPaid = ref(0)
+const installmentPrincipalYuan = ref('')
+
+const installmentRule = computed(() => findInstallmentRule(installmentCard.value?.bank || ''))
+const installmentEstimate = computed<InstallmentEstimate>(() => {
+  const cents = parseYuanToCents(installmentPrincipalYuan.value)
+  return estimateInstallment(installmentRule.value, cents, installmentPeriods.value, installmentPaid.value)
+})
+function fmtRate(range: RateRange | null) {
+  if (!range) return '—'
+  const pct = (v: number) => `${(v * 100).toFixed(2)}%`
+  return range.min === range.max ? pct(range.min) : `${pct(range.min)}–${pct(range.max)}`
+}
+function openInstallment(card: CreditCard) {
+  installmentCard.value = card
+  const rule = findInstallmentRule(card.bank)
+  installmentPeriods.value = rule.periods.includes(12) ? 12 : rule.periods[0]
+  installmentPaid.value = 0
+  installmentPrincipalYuan.value = card.current?.amount_cents ? (card.current.amount_cents / 100).toFixed(2) : ''
+  installmentOpen.value = true
+}
 
 /** 这张卡的「第几期」：从开卡那个月算到当前账单期（同月 = 第 1 期）。
     账单期的期号本身是 YYYY-MM，两者相减就是期数；拿不到月份时返回 0（不显示角标）。 */
