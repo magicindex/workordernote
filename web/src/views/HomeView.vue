@@ -112,7 +112,7 @@
               maxlength="200"
               @keydown.enter.prevent="submitQuick"
             />
-            <p v-if="quick.notes" class="mt-1 break-words text-xs leading-4 text-muted-foreground sm:truncate">{{ quick.notes }}</p>
+            <p v-if="quick.notes && !quickNotesOpen" class="mt-1 break-words text-xs leading-4 text-muted-foreground sm:truncate">{{ quick.notes }}</p>
           </div>
           <button v-if="quick.title" class="btn-primary !h-9 !px-4" :disabled="saving" @click="submitQuick">{{ saving ? '保存中' : quick.kind === 'note' ? '记下' : '添加' }}</button>
         </div>
@@ -201,6 +201,14 @@
           <div v-else class="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button class="quick-chip" :class="{ active: quick.kind !== 'note' }" @click="setQuickKind('task')">任务</button>
             <button class="quick-chip" :class="{ active: quick.kind === 'note' }" @click="setQuickKind('note')">记事</button>
+            <!-- 记事只有标题太单薄（用户 2026-11-11）：给一个「备注」开关，默认收起，点开写详细内容 -->
+            <button
+              v-if="quick.kind === 'note'"
+              class="quick-chip"
+              :class="{ active: quickNotesOpen }"
+              data-quick-note-toggle
+              @click="quickNotesOpen = !quickNotesOpen"
+            >备注</button>
             <span v-if="quick.kind !== 'note'" class="mx-0.5 h-4 w-px bg-border"></span>
             <template v-if="quick.kind !== 'note'">
               <button class="quick-chip" :class="{ active: preset === 'today' }" @click="setPreset('today')">今天</button>
@@ -256,6 +264,20 @@
             </template>
             <span v-if="quick.kind === 'note'" class="ml-auto text-xs font-semibold text-muted-foreground">记事保存后进入「随手记事本」</span>
           </div>
+
+          <!-- 记事备注：默认收起，点「备注」展开；多行输入，和标题一起保存 -->
+          <Transition name="expand">
+            <div v-if="quick.kind === 'note' && quickNotesOpen" class="mt-2.5">
+              <textarea
+                v-model="quick.notes"
+                rows="3"
+                maxlength="5000"
+                class="compact-input w-full resize-y !py-2 text-sm leading-5"
+                placeholder="写点详细内容…"
+                data-quick-note-notes
+              ></textarea>
+            </div>
+          </Transition>
 
           <!-- 无日期提示：保存前就让用户看到「这条不会进今天/计划」（0.15.4 的 bug）。
                0.18.2 起从「更多」面板搬到这里 —— 面板默认收起时也要能看到，两条分支都覆盖。 -->
@@ -960,6 +982,8 @@ function quickOpenByDefault() {
 }
 const quickOpen = ref(quickOpenByDefault())
 const quickExpanded = ref(false)
+// 记事备注：默认收起（用户 2026-11-11），点「备注」展开写详细内容
+const quickNotesOpen = ref(false)
 const preset = ref('today')
 // 「清空」是**明确**动作：按过之后，这一次新建才是真正的「无日期」；
 // 只要又选了日期（芯片或日期选择器）就复位。提交时的兜底用它区分
@@ -996,6 +1020,7 @@ function applyQuickDefaults() {
   quick.end_at = null
   quickDueCleared.value = false
   quickExpanded.value = false
+  quickNotesOpen.value = false
   preset.value = planned ? '' : 'today'
 }
 // 「任务过期多久算逾期」按**分钟**存，前端从公开配置读（系统级设置，公开接口里的就是权威值）。
@@ -1646,6 +1671,7 @@ async function submitQuick() {
     preset.value = isNote || planned ? '' : 'today'
     quickDueCleared.value = false
     quickExpanded.value = false
+    quickNotesOpen.value = false
     quickOpen.value = quickOpenByDefault()
     if (isNote) {
       // 记事本页要立刻把新记的这条显示出来（其它视图它本来就不出现）。
@@ -1670,6 +1696,8 @@ async function submitQuick() {
 // 一并清掉，免得界面上留下选不了也删不掉的残留值；后端保存时还会再清一次。
 function setQuickKind(kind: ReminderKind) {
   quick.kind = kind
+  // 备注面板只在记事模式有意义：切走就收起，切回来也是收起态（用户要求默认收起）
+  quickNotesOpen.value = false
   if (kind === 'note') {
     quick.due_at = null
     quick.priority = 0
