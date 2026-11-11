@@ -1,8 +1,9 @@
 /**
  * 这一批（用户 2026-10-10 第三次反馈）的三件事：
  *
- *   1) **新建控件收成一个「新建提醒」按钮**（2026-10-16 改名，原来叫「新建」）：默认收起，点一下才展开；
- *      **刷新、切换页面都回到收起**；快捷键 N 能展开；Esc（没写标题时）能收起。
+ *   1) **新建卡片**（2026-11-11 用户：「待办、计划 页面中 新建提醒 默认展开，不要折叠，手机版保持现状」）：
+ *      桌面端「待办 / 计划」默认展开，刷新、切页都保持展开；点左上角圆圈＋可收起成「新建提醒」按钮，
+ *      点按钮能再展开；快捷键 N 能展开；Esc（没写标题时）能收起；**手机端仍是默认收起**。
  *   2) **「全部」页取消新建提醒**：那一页没有新建入口（连空状态的「添加第一条提醒」也没有）；
  *      在这一页按 N 会先去「今天」页再展开。
  *   3) **信用卡页头部与卡面**：
@@ -53,45 +54,57 @@ const quickShape = (page) => page.evaluate(() => ({
     await page.setViewport({ width: 1440, height: 1000 });
     await login(page, BASE);
 
-    // ================= 1. 新建按钮：收起 / 展开 / 刷新 / 切页 / 快捷键 =================
+    // ============ 1. 新建卡片：桌面默认展开 / 收起 / 快捷键 / 手机收起 ============
     await gotoRetry(page, BASE + '/admin');
     await sleep(2200);
     let st = await quickShape(page);
-    check('今天页：新建控件默认**收成一个「新建提醒」按钮**（没有整块表单、没有输入框）',
-      st.addBlock === true && st.newButton === true && st.newButtonText === '新建提醒' && st.card === false && st.input === false,
+    check('桌面端待办页：新建卡片**默认展开**（输入框与芯片行直接可见，没有「新建提醒」按钮）',
+      st.addBlock === true && st.card === true && st.input === true && st.chips >= 9 && st.newButton === false,
       JSON.stringify(st));
+    check('默认展开不抢焦点（光标没落在输入框里）', st.focusedPlaceholder === '', st.focusedPlaceholder);
+
+    await page.evaluate(() => document.querySelector('[data-quick-collapse]')?.click());
+    await sleep(600);
+    st = await quickShape(page);
+    check('点左上角圆圈＋能收起成「新建提醒」按钮',
+      st.card === false && st.newButton === true && st.newButtonText === '新建提醒', JSON.stringify(st));
 
     await page.evaluate(() => document.querySelector('[data-quick-new]')?.click());
     await sleep(600);
     st = await quickShape(page);
-    check('点「新建提醒」后展开：出现输入框与芯片行，按钮消失',
-      st.card === true && st.input === true && st.chips >= 9 && st.newButton === false, JSON.stringify(st));
-    check('展开后光标在标题输入框里', /提醒|记一笔/.test(st.focusedPlaceholder), st.focusedPlaceholder);
+    check('收起后点「新建提醒」重新展开', st.card === true && st.input === true && st.newButton === false, JSON.stringify(st));
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await sleep(2200);
     st = await quickShape(page);
-    check('**刷新**后回到收起状态（还是那个「新建提醒」按钮）',
-      st.newButton === true && st.card === false, JSON.stringify(st));
+    check('**刷新**后仍是展开的（默认形态）',
+      st.card === true && st.input === true && st.newButton === false, JSON.stringify(st));
 
-    await page.evaluate(() => document.querySelector('[data-quick-new]')?.click());
-    await sleep(500);
     await gotoRetry(page, BASE + '/admin/planned');
     await sleep(2000);
     st = await quickShape(page);
-    check('**切换页面**后回到收起状态（今天页展开着，进计划页也是收起的）',
-      st.newButton === true && st.card === false, JSON.stringify(st));
+    check('**计划页**同样默认展开（切页不再收起）',
+      st.card === true && st.input === true && st.newButton === false, JSON.stringify(st));
 
     await page.keyboard.press('n');
     await sleep(700);
     st = await quickShape(page);
-    check('快捷键 N 也能展开（计划页）', st.card === true && st.input === true, JSON.stringify(st));
+    check('快捷键 N 展开（已在展开态则保持）', st.card === true && st.input === true, JSON.stringify(st));
 
     await page.keyboard.press('Escape');
     await sleep(600);
     st = await quickShape(page);
     check('没写标题时按 Esc 收起（内容不丢的前提：标题是空的）',
       st.newButton === true && st.card === false, JSON.stringify(st));
+
+    // 手机端保持现状（用户 2026-11-11「手机版保持现状」）
+    await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+    await gotoRetry(page, BASE + '/admin');
+    await sleep(2000);
+    st = await quickShape(page);
+    check('手机端待办页仍是收起的「新建提醒」按钮（保持现状）',
+      st.newButton === true && st.card === false && st.input === false, JSON.stringify(st));
+    await page.setViewport({ width: 1440, height: 1000 });
 
     // ================= 2. 「全部」页没有新建入口 =================
     await gotoRetry(page, BASE + '/admin/all');

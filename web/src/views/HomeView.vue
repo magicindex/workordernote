@@ -83,9 +83,9 @@
         </div>
       </section>
 
-      <!-- 展开后的新建卡片（用户 2026-10-10 要求）：默认收起成上面那个「新建」按钮，
-           点按钮展开；**刷新、切换页面都回到收起状态**。全部页不给新建入口（见 canQuickAdd）。
-           卡片左上角那个圆形「＋」现在是**收起**按钮（用户要求：点圆圈＋号图标折叠）。 -->
+      <!-- 新建卡片：桌面端「待办 / 计划」默认展开（用户 2026-11-11：「默认展开，不要折叠」），
+           手机端与其它页面仍是上面那个「新建提醒」按钮，点开才展开；收起后也是它。
+           全部页不给新建入口（见 canQuickAdd）。卡片左上角那个圆形「＋」是**收起**按钮。 -->
       <section v-if="canQuickAdd && quickOpen" data-quick-add>
         <!-- 流光边框挂在**新建任务卡片**上（用户 2026-10-10 要求：原来错挂在「更多」面板里，
              反了）。外面这层 shell 负责 .flow-frame/.flow-glow：卡片自己有 overflow-hidden
@@ -783,6 +783,7 @@ import CreditCardPanel from '../components/CreditCardPanel.vue'
 import CeremonyPanel from '../components/CeremonyPanel.vue'
 import { listColorHex } from '../utils/list-colors'
 import { remainingText } from '../utils/remaining'
+import { useIsNarrow } from '../utils/use-narrow'
 import {
   overdueStamp as overdueStampShared,
   overdueDeadlineAt,
@@ -800,6 +801,8 @@ import {
 const authStore = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+// 手机端统一判定（≤640px）：新建卡片的默认形态要按它分桌面/手机，见 quickOpenByDefault。
+const isNarrow = useIsNarrow()
 // 「首页」看板点某条任务 → 跳到它所在的清单，并带上 ?highlight=<id>：
 // 这里把那条滚进视野 + 闪一下底色，用户一眼能找到（用户 2026-10-14：「首页点击提醒定位到对应清单」）。
 const highlightedId = ref(0)
@@ -943,13 +946,18 @@ const loading = ref(true)
 const saving = ref(false)
 const search = ref('')
 const quickInput = ref<HTMLInputElement | null>(null)
-// 新建入口的形态（用户 2026-10-10 要求）：
-//   · **默认收起成一个「新建」按钮**（quickOpen = false）：不占地方，页面干净；
-//     点一下（或侧栏「新建提醒」/ 手机悬浮 + / 快捷键 N）才展开整块输入窗口；
-//   · **刷新、切换页面都回到收起状态**（见 route.fullPath 的 watcher）；
-//   · **「全部」页没有新建入口**（见 canQuickAdd）。
+// 新建入口的形态（用户 2026-10-10 要求，2026-11-11 又调了一次）：
+//   · **桌面端「待办 / 计划」两页默认展开整块输入窗口**（用户 2026-11-11：「待办、计划 页面中
+//     新建提醒 默认展开，不要折叠」）——刷新、切页后仍然展开，只有点左上角圆圈＋或按 Esc
+//     （标题为空时）才收起；收起后是一个「新建提醒」按钮，点它再展开。
+//   · **手机端保持原样**（用户同一句：「手机版保持现状」）：默认收成一个「新建提醒」按钮，
+//     小屏常驻表单会把列表顶下去。见 quickOpenByDefault。
+//   · **「全部」页没有新建入口**（见 canQuickAdd）；其它清单页沿用原来的收起形态。
 //   · 展开后：「芯片行」可见、「更多」面板仍默认收起（quickExpanded = false）。
-const quickOpen = ref(false)
+function quickOpenByDefault() {
+  return !isNarrow.value && (route.name === 'Home' || route.name === 'Planned')
+}
+const quickOpen = ref(quickOpenByDefault())
 const quickExpanded = ref(false)
 const preset = ref('today')
 // 「清空」是**明确**动作：按过之后，这一次新建才是真正的「无日期」；
@@ -1403,8 +1411,9 @@ function debouncedLoad() {
 }
 
 watch(() => route.fullPath, () => {
-  // 切换页面（或换清单 / 换查询参数）时，新建窗口**回到收起状态**（用户要求）。
-  quickOpen.value = false
+  // 切换页面（或换清单 / 换查询参数）时，新建窗口回到**这一页的默认形态**：
+  // 桌面端「待办 / 计划」展开，其它页面（以及手机端）收起（见 quickOpenByDefault）。
+  quickOpen.value = quickOpenByDefault()
   quickExpanded.value = false
   loadRouteData()
   openRequestedEditor()
@@ -1602,12 +1611,13 @@ async function submitQuick() {
     planPeriod.value = 'days'
     planDays.value = 1
     // 归位到「今天」：新建提醒默认带当天「过期时间」，芯片状态也要跟着点亮。
-    // 保存后**自动收起**（用户 2026-10-11 要求：新建提交后自动隐藏）——
-    // 收起成一个「新建」按钮，「更多」面板也一并回到默认收起状态。
+    // 保存后回到这一页的默认形态：桌面端「待办 / 计划」继续展开（用户 2026-11-11：
+    // 「不要折叠」，方便连着建几条）；手机端与其它页面仍按原来的「提交后自动收起」
+    // （用户 2026-10-11 要求，小屏常驻表单会顶掉列表）。
     preset.value = isNote || planned ? '' : 'today'
     quickDueCleared.value = false
     quickExpanded.value = false
-    quickOpen.value = false
+    quickOpen.value = quickOpenByDefault()
     if (isNote) {
       // 记事本页要立刻把新记的这条显示出来（其它视图它本来就不出现）。
       await loadItems()

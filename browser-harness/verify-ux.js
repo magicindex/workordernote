@@ -110,8 +110,9 @@ withTab(async (page) => {
   // 这里只看列表页自己的「新建」入口还在 —— 「全部」页 0.18.3 起本来就不给新建入口，
   // 所以拿「计划」页看。
   await goto(page, '/admin/planned');
-  const listNewVisible = await page.evaluate(() => !!document.querySelector('[data-quick-new]'));
-  check('列表视图下仍有新建入口（「新建」按钮）', listNewVisible);
+  // 2026-11-11 起桌面「计划」页的新建卡片默认展开（不再是收起的按钮），两种形态都算入口在
+  const listNewVisible = await page.evaluate(() => !!document.querySelector('[data-quick-new]') || !!document.querySelector('.quick-card'));
+  check('列表视图下仍有新建入口（展开的卡片或收起的按钮）', listNewVisible);
 
   // ---------- 3) 新建提醒默认今天 ----------
   // 用**具体清单页**（不受「默认首页」设置影响）；「全部」页 0.18.3 起不再有新建入口。

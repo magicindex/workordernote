@@ -8,13 +8,14 @@
  * 这里的用例**必须走真正的 UI 登录**（在登录页填表提交、SPA 换路由进工作台），
  * 不能用 API 注入 token 后再整页打开 —— 后者等于「刷新一次」，正好绕过了要查的路径。
  *
- * 0.18.3 起口径变了（用户新要求）：新建控件**默认收成一个「新建」按钮**，点一下才展开；
- * 刷新、切页都回到收起。所以断言改成：
- *   1) 登录进工作台后，新建入口是**收起的「新建」按钮**（没有输入框/芯片行/更多面板）；
- *   2) 点「新建」后展开：芯片行直接可见、日期默认是**今天**（今天芯片点亮、日期是今天 HH:MM）；
- *   3) 保存后**自动收起**（用户 2026-10-11 要求）；再点开时日期仍默认今天；
+ * 2026-11-11 起口径又变了一次（用户：「待办、计划 页面中 新建提醒 默认展开，不要折叠，手机版保持现状」）：
+ * 桌面端「待办 / 计划」页的新建卡片**默认展开**，刷新、切页、保存之后都保持展开；手机端仍是收起的按钮。
+ * 所以断言改成：
+ *   1) 登录进工作台（桌面待办页）后，新建卡片是**展开的**（输入框与芯片行都在，没有「新建」按钮）；
+ *   2) 展开态下芯片行直接可见、日期默认是**今天**（今天芯片点亮、日期是今天 HH:MM）；
+ *   3) 保存后**仍保持展开**（桌面待办不折叠），日期回到今天、「更多」收起；
  *   4) 只有明确按「清空」才会是无日期（提示条出现）；
- *   5) 刷新后回到收起；
+ *   5) 刷新后仍是展开的；
  *   6) 服务端版本号变化时弹「已更新，点刷新」提示（平时不弹）。
  *
  * 用法：APP_URL=http://127.0.0.1:8918 node verify-106.js
@@ -104,22 +105,21 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
     await uiLogin(page);
 
-    // ---------- 1. 登录后：新建入口收成一个「新建」按钮 ----------
+    // ---------- 1. 登录后：桌面待办页的新建卡片默认展开 ----------
     const st = await quickState(page);
-    check('登录进工作台后，新建入口是**收起的「新建」按钮**（不再直接铺开整块表单）',
-      st.card === true && st.newButton === true && st.cardOpen === false && st.chipsVisible === false, JSON.stringify(st));
-    check('收起态下确实没有输入框、「更多」面板与无日期提示',
-      st.hasInput === false && st.panelOpen === false && st.undatedHint === false, JSON.stringify(st));
+    check('登录进工作台后，桌面待办页的新建卡片**默认展开**（输入框与芯片行直接可见）',
+      st.card === true && st.cardOpen === true && st.newButton === false && st.hasInput === true && st.chipsVisible === true, JSON.stringify(st));
+    check('默认展开态下「更多」面板与无日期提示都收着',
+      st.panelOpen === false && st.undatedHint === false, JSON.stringify(st));
 
-    // 点一下「新建」→ 展开；日期默认今天
-    await page.evaluate(() => document.querySelector('[data-quick-new]')?.click());
-    await sleep(700);
     const op = await quickState(page);
-    check('点「新建」后展开出输入框与芯片行', op.cardOpen === true && op.hasInput === true && op.chipsVisible === true, JSON.stringify(op));
+    check('展开态下输入框与芯片行都在', op.cardOpen === true && op.hasInput === true && op.chipsVisible === true, JSON.stringify(op));
     check('展开后「更多」面板仍然是**隐藏**的（日期时间/重复/备注等字段收起来）', op.panelOpen === false, JSON.stringify(op));
     check('「今天」芯片默认点亮', op.todayChipActive === true, JSON.stringify(op));
-    check('芯片行右侧直接显示默认日期「今天 HH:MM」',
-      /今天 \d{2}:\d{2}/.test(op.headerDate), JSON.stringify(op));
+    // 日期芯片现在显示完整日期（formatFullDue）：断言「今天 + 23:59」，不再依赖「今天 HH:MM」文案
+    const todayLabel = (() => { const d = new Date(); return `${d.getMonth() + 1}月${d.getDate()}日`; })();
+    check('芯片行的日期显示就是今天 23:59',
+      op.dateFieldText.includes(todayLabel) && op.dateFieldText.includes('23:59'), JSON.stringify(op.dateFieldText));
     check('没有「没有日期」提示（默认有日期）', op.undatedHint === false, JSON.stringify(op));
 
     // ---------- 2. 直接建一条（不点输入框），应当带今天 ----------
@@ -168,15 +168,13 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     check('刚建的任务（到期时间=现在）不会立刻被标「已逾期」',
       graceInfo.rowOverdue === false && graceInfo.inOverdueCard === false, JSON.stringify(graceInfo));
 
-    // ---------- 3. 保存之后**自动收起**；再点开时日期回到今天 ----------
+    // ---------- 3. 保存之后**仍保持展开**（桌面待办）；日期回到今天 ----------
     const after = await quickState(page);
-    check('保存后自动收起成一个「新建」按钮（不再保持展开）',
-      after.newButton === true && after.cardOpen === false, JSON.stringify(after));
-    // 再点开：芯片行回来了、日期回到今天、「更多」仍是收起
-    await page.evaluate(() => document.querySelector('[data-quick-new]')?.click());
-    await sleep(700);
+    check('保存后仍保持展开（桌面待办不折叠，方便连着建）',
+      after.newButton === false && after.cardOpen === true && after.hasInput === true, JSON.stringify(after));
+    // 表单复位：日期回到今天、「更多」仍是收起
     const reopened = await quickState(page);
-    check('再点「新建」展开后：日期回到今天、「更多」重新收起',
+    check('保存后表单复位：日期回到今天、「更多」重新收起',
       reopened.cardOpen === true && reopened.chipsVisible === true && reopened.todayChipActive === true && reopened.panelOpen === false,
       JSON.stringify(reopened));
     // 需要更多字段时点「更多」还能展开，并且日期字段就是「今天 + 后台过期时间」
@@ -268,10 +266,10 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     await sleep(2000);
     check('刷新后提示消失',
       (await page.evaluate(() => !!document.querySelector('[data-stale-bundle]'))) === false, '');
-    // 刷新（＝重新打开软件）后新建入口回到收起状态（用户要求）
+    // 刷新（＝重新打开软件）后新建卡片仍是默认展开（用户 2026-11-11）
     const afterReload = await quickState(page);
-    check('刷新后新建入口回到收起的「新建」按钮',
-      afterReload.newButton === true && afterReload.cardOpen === false, JSON.stringify(afterReload));
+    check('刷新后新建卡片仍是展开的（不再回到收起）',
+      afterReload.cardOpen === true && afterReload.newButton === false, JSON.stringify(afterReload));
 
     // ---------- 清理 ----------
     const del = await api(page, `/api/reminder/items/${saved?.id}`, 'DELETE');

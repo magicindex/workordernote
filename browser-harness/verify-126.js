@@ -127,11 +127,17 @@ const created = [];
       check('对照组：「自检·九天后」在计划页找得到', onPlanned === true);
 
       // ============ 5. 按钮文案：待办 / 计划 页都是「新建提醒」 ============
-      const btnPlanned = await page.evaluate(() => (document.querySelector('[data-quick-new]')?.textContent || '').trim());
+      // 2026-11-11 起桌面这两页默认展开，按钮只在收起态出现：先点圆圈＋收起再读文案
+      const collapseAndRead = () => page.evaluate(async () => {
+        document.querySelector('[data-quick-collapse]')?.click();
+        await new Promise((r) => setTimeout(r, 350));
+        return (document.querySelector('[data-quick-new]')?.textContent || '').trim();
+      });
+      const btnPlanned = await collapseAndRead();
       check('计划页收起按钮写着「新建提醒」', /新建提醒/.test(btnPlanned), btnPlanned);
       await gotoRetry(page, BASE + '/admin');
       await sleep(2200);
-      const btnToday = await page.evaluate(() => (document.querySelector('[data-quick-new]')?.textContent || '').trim());
+      const btnToday = await collapseAndRead();
       check('待办页收起按钮写着「新建提醒」', /新建提醒/.test(btnToday), btnToday);
 
       // ============ 6. 手机底部标签 ============

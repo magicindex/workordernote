@@ -142,6 +142,9 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
     // =============== 2. 新建按钮：实线边框 + 流光 ===============
     await gotoTodo(page);
     await sleep(2200);
+    // 2026-11-11 起桌面待办页默认展开，按钮只在收起态出现：先点圆圈＋收起再量样式
+    await page.evaluate(() => document.querySelector('[data-quick-collapse]')?.click());
+    await sleep(500);
     const newBtn = await page.evaluate(() => {
       const el = document.querySelector('[data-quick-new]');
       if (!el) return null;
