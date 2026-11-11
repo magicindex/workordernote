@@ -12,7 +12,7 @@
  * 桌面端「待办 / 计划」页的新建卡片**默认展开**，刷新、切页、保存之后都保持展开；手机端仍是收起的按钮。
  * 所以断言改成：
  *   1) 登录进工作台（桌面待办页）后，新建卡片是**展开的**（输入框与芯片行都在，没有「新建」按钮）；
- *   2) 展开态下芯片行直接可见、日期默认是**今天**（今天芯片点亮、日期是今天 HH:MM）；
+ *   2) 展开态下芯片行直接可见、日期默认是**今天当前时刻**（今天芯片点亮、时间≈现在）；
  *   3) 保存后**仍保持展开**（桌面待办不折叠），日期回到今天、「更多」收起；
  *   4) 只有明确按「清空」才会是无日期（提示条出现）；
  *   5) 刷新后仍是展开的；
@@ -116,10 +116,15 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     check('展开态下输入框与芯片行都在', op.cardOpen === true && op.hasInput === true && op.chipsVisible === true, JSON.stringify(op));
     check('展开后「更多」面板仍然是**隐藏**的（日期时间/重复/备注等字段收起来）', op.panelOpen === false, JSON.stringify(op));
     check('「今天」芯片默认点亮', op.todayChipActive === true, JSON.stringify(op));
-    // 日期芯片现在显示完整日期（formatFullDue）：断言「今天 + 23:59」，不再依赖「今天 HH:MM」文案
-    const todayLabel = (() => { const d = new Date(); return `${d.getMonth() + 1}月${d.getDate()}日`; })();
-    check('芯片行的日期显示就是今天 23:59',
-      op.dateFieldText.includes(todayLabel) && op.dateFieldText.includes('23:59'), JSON.stringify(op.dateFieldText));
+    // 2026-11-11 起默认是「今天 + 当前时间」（不再是 23:59）：断言日期是今天、时刻与现在相差不大
+    const nowD = new Date();
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const toMins = (s) => { const m = /(\d{2}):(\d{2})/.exec(s || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : -1; };
+    const todayLabel = `${nowD.getMonth() + 1}月${nowD.getDate()}日`;
+    const chipMins = toMins(op.dateFieldText);
+    check('芯片行的日期是今天、时间是当前时刻（不再是 23:59）',
+      op.dateFieldText.includes(todayLabel) && chipMins >= 0 && Math.abs(chipMins - (nowD.getHours() * 60 + nowD.getMinutes())) <= 10,
+      JSON.stringify(op.dateFieldText));
     check('没有「没有日期」提示（默认有日期）', op.undatedHint === false, JSON.stringify(op));
 
     // ---------- 2. 直接建一条（不点输入框），应当带今天 ----------
@@ -192,17 +197,17 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     });
     const today2 = new Date();
     const label2 = `${today2.getFullYear()}年${today2.getMonth() + 1}月${today2.getDate()}日`;
-    // 默认时刻现在**写死 23:59**（用户 2026-10-13；原来的 task_expire_time 配置已删）
-    const expireCfg = '23:59';
+    // 2026-11-11 起默认是「今天当前时间」（不再是 23:59）：比较与现在相差不超过 10 分钟
     const mins = (s) => {
       const m = /(\d{2}):(\d{2})/.exec(s || '');
       return m ? Number(m[1]) * 60 + Number(m[2]) : -1;
     };
+    const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
     check('点「更多」能展开（只剩备注/农历/频率/通知方式），日期照旧在芯片行显示',
       opened.open === true && opened.labels.length === 4
         && !opened.labels.includes('日期时间') && !opened.labels.includes('重复')
-        && mins(opened.date) === mins(expireCfg),
-      JSON.stringify({ opened, label2, expireCfg }));
+        && mins(opened.date) >= 0 && Math.abs(mins(opened.date) - nowMins) <= 10,
+      JSON.stringify({ opened, label2 }));
 
     // ---------- 4. 只有明确「清空」才是无日期 ----------
     await page.evaluate(() => {

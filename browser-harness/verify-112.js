@@ -4,7 +4,7 @@
  *   1) **计划页周期**：天 / 周 / 月 / 年**都保留数量输入框**（原来只有「天」能调数量），
  *      下拉标签也跟着显示 N；「年终 / 自定义」不显示数量框（年终锚定 12-31，自定义自己挑结束）。
  *   2) **今天 / 计划页的「新建」按钮**：实线边框 + **流光**（.flow-frame 的旋转光带）。
- *   3) **后台「任务过期时间」**（默认 23:59）：新建提醒默认预填当天这个时间；
+ *   3) 新建提醒默认预填「今天当前时刻」（2026-11-11 起，不再写死 23:59）；
  *      逾期口径 = **当天到这个点才算过期**，再叠加「过期多久算逾期」的宽限分钟数。
  *   4) **后台「周起始日」显示中文**（周一 / 周日，原来直接显示 monday/sunday）。
  *   5) **偏好设置里已删掉「清单顺序」**（用户 2026-10-16：与侧栏重复），侧栏那一套见 verify-121；
@@ -217,18 +217,20 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
     await page.keyboard.press('Escape').catch(() => {});
     await sleep(500);
 
-    // =============== 3. 新建默认时间（写死 23:59）+ 逾期口径 ===============
-    // 用户 2026-10-13：「今天/明天/本周末这些芯片的时间一律 23:59，除非自己手动改」——
-    // 默认时刻写死在前端，后台那个「新建提醒默认结束时间」配置项已经删掉。
-    const expire = '23:59';
-
+    // =============== 3. 新建默认时间（今天当前时刻）+ 逾期口径 ===============
+    // 用户 2026-11-11：「默认选择今天当前时间」（2026-10-13 的「芯片一律 23:59」仍适用于
+    // 今天/明天/本周末这些芯片，只改默认值）。
     await openQuickAdd(page);
     await sleep(600);
     const chipText = await page.evaluate(() => document.querySelector('[data-quick-date]')?.textContent.replace(/\s+/g, ' ').trim() || '');
     const today = new Date();
-    const wantSuffix = `${today.getMonth() + 1}月${today.getDate()}日 ${expire}`;
-    check('新建提醒的默认时间写死 23:59（不再跟任何后台配置联动）',
-      chipText.includes(wantSuffix), `${chipText} vs ${wantSuffix}`);
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const minsOf = (s) => { const m = /(\d{2}):(\d{2})/.exec(s || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : -1; };
+    const wantDate = `${today.getMonth() + 1}月${today.getDate()}日`;
+    const chipMins = minsOf(chipText);
+    check('新建提醒默认今天当前时刻（不再是 23:59）',
+      chipText.includes(wantDate) && chipMins >= 0 && Math.abs(chipMins - (today.getHours() * 60 + today.getMinutes())) <= 10,
+      `${chipText} vs 今天 ${pad2(today.getHours())}:${pad2(today.getMinutes())}`);
 
     // 逾期口径：昨天 23:00 的 → 已逾期；今天 09:00 的 → **还没逾期**（要等今天 23:59 + 宽限）
     const mk = async (title, iso) => {

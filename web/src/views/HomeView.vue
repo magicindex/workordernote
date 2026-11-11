@@ -977,11 +977,26 @@ const toast = reactive<{ message: string; type: 'success' | 'error' }>({ message
 // 逾期判定看的是个人偏好「逾期提醒时间」（task_overdue_time，见 overdueTimeParts），
 // 与这里的默认时刻互不影响。
 const DEFAULT_DUE_TIME = '23:59'
+// 默认到期时间（用户 2026-11-11）：「默认选择今天当前时间」——不再用当天 23:59。
+// 芯片（今天/明天/本周末）仍按 23:59 走（2026-10-13 的口径没变），只有默认值改了。
+// 计划页的「开始时间」也用这个：同样默认当前时间，结束时间留给用户手选。
 function defaultQuickDue(): string {
   const d = new Date()
-  const { h, m } = clockParts(DEFAULT_DUE_TIME)
-  d.setHours(h, m, 0, 0)
+  d.setSeconds(0, 0)
   return toLocalIso(d)
+}
+
+// 新建卡片的默认值：待办页 = 今天当前时间到期；计划页 = 开始时间当前、结束留空。
+// 用户 2026-11-11 原话：「默认选择今天当前时间，计划开始时间也是默认选择当前时间，
+// 结束时间需要手工选择」。
+function applyQuickDefaults() {
+  const planned = isPlanned.value
+  quick.due_at = planned ? null : defaultQuickDue()
+  quick.start_at = planned ? defaultQuickDue() : null
+  quick.end_at = null
+  quickDueCleared.value = false
+  quickExpanded.value = false
+  preset.value = planned ? '' : 'today'
 }
 // 「任务过期多久算逾期」按**分钟**存，前端从公开配置读（系统级设置，公开接口里的就是权威值）。
 const overdueGraceMinutes = ref(30)
@@ -1263,8 +1278,9 @@ const planEndPicked = computed({
 })
 function commitPlanStart() {
   planStartOpen.value = false
-  // 选完开始时间就把周期算成结束时间（默认 1 天 = 当天 23:59；周期选自定义时不动）
-  applyPlanPeriod()
+  // 用户 2026-11-11：「结束时间需要手工选择」——只选开始时间时**不自动补结束**；
+  // 只有之前已经选过结束（或点过周期）才跟着重算，避免结束时间早于新的开始时间。
+  if (quick.end_at) applyPlanPeriod()
 }
 function commitPlanEnd() { planEndOpen.value = false }
 function clearPlanEnd() { quick.end_at = null; planPeriod.value = 'none' }
@@ -1411,11 +1427,21 @@ function debouncedLoad() {
   searchTimer = setTimeout(loadItems, 250)
 }
 
+let lastQuickPage = ''
+function quickPageKey() {
+  return route.name === 'Home' || route.name === 'Planned' ? String(route.name) : ''
+}
 watch(() => route.fullPath, () => {
   // 切换页面（或换清单 / 换查询参数）时，新建窗口回到**这一页的默认形态**：
   // 桌面端「待办 / 计划」展开，其它页面（以及手机端）收起（见 quickOpenByDefault）。
   quickOpen.value = quickOpenByDefault()
   quickExpanded.value = false
+  // 只在「待办 ↔ 计划 ↔ 其它页」之间切换时重置默认值，避免换查询参数把用户正在填的内容冲掉。
+  const page = quickPageKey()
+  if (page !== lastQuickPage) {
+    lastQuickPage = page
+    applyQuickDefaults()
+  }
   loadRouteData()
   openRequestedEditor()
 })
@@ -1605,8 +1631,10 @@ async function submitQuick() {
     Object.assign(quick, blankInput(), {
       kind: isNote ? 'note' : 'task',
       list_id: quickTargetListID.value,
-      // 计划页默认不带「今天 20:00」，免得一进页面就误以为是今天的事
+      // 计划页：开始时间回到当前时刻、结束留空；待办页：到期回到「今天当前时间」
       due_at: planned ? null : defaultQuickDue(),
+      start_at: planned ? defaultQuickDue() : null,
+      end_at: null,
     })
     // 任务周期跟着复位（下一条重新选开始时间时按默认 1 天算）
     planPeriod.value = 'days'
@@ -2102,6 +2130,8 @@ function applyHighlightFromRoute() {
 }
 
 onMounted(() => {
+  lastQuickPage = quickPageKey()
+  applyQuickDefaults()
   loadData()
   void loadOverdueGrace()
   openRequestedEditor()
