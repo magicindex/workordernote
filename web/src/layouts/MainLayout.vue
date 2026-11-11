@@ -67,8 +67,9 @@
             <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-600 dark:text-brand-300">
               <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m12 3.6 1.9 4.4 4.4 1.9-4.4 1.9L12 16.2l-1.9-4.4-4.4-1.9 4.4-1.9L12 3.6Z" stroke-width="1.7" stroke-linejoin="round"/><path d="M18.6 15.4l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8.8-1.9Z" stroke-width="1.5" stroke-linejoin="round"/></svg>
             </span>
-            <span class="rail-hide">呼叫{{ assistantName }}</span>
-            <span class="rail-hide ml-auto rounded-md bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-bold text-brand-600 dark:text-brand-300">AI</span>
+            <span class="rail-hide ml-2">呼叫{{ assistantName }}</span>
+            <!-- 用户 2026-11-11：AI 标志紧挨名称、不留间隔；整行居中、去掉外框与底色 -->
+            <span class="rail-hide rounded-md bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-bold text-brand-600 dark:text-brand-300">AI</span>
           </button>
         </div>
 
@@ -1966,8 +1967,9 @@ onBeforeUnmount(() => {
 .logo-mark { @apply flex h-11 w-11 items-center justify-center rounded-[15px] bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_10px_30px_-10px_rgba(59,130,246,.75)]; }
 .version-badge { @apply rounded-full border border-brand-500/25 bg-brand-500/10 px-2 py-0.5 text-[11px] font-bold leading-none text-brand-600 dark:text-brand-300; }
 /* 「呼叫小秘」：侧栏顶部的入口（「新建提醒」已挪到首页看板，见 HomeDashboardView）。
-   用品牌色低透明度底 + 描边，浅深主题都不刺眼。 */
-.assistant-button { @apply flex h-12 items-center gap-3 rounded-2xl border border-brand-500/25 bg-brand-500/10 px-3.5 text-sm font-bold text-brand-700 transition hover:bg-brand-500/15 active:scale-[0.99] dark:text-brand-200; }
+   用户 2026-11-11：取消外框与底色、内容居中、AI 标志紧挨名称（不再用 ml-auto 推到右边）；
+   只保留文字色与轻微按压反馈。 */
+.assistant-button { @apply flex h-12 items-center justify-center rounded-2xl border border-transparent bg-transparent px-3.5 text-sm font-bold text-brand-700 transition hover:text-brand-600 active:scale-[0.99] dark:text-brand-200; }
 /* 折叠「设置」入口：平时不选（透明底、透明描边），鼠标移上去/键盘聚焦才亮成选中态；
    展开时保持浅蓝底，表示这一组正在展开（用户 2026-10-20）。 */
 .nav-settings-toggle {
