@@ -44,7 +44,7 @@
         v-for="card in sortedCards"
         :key="card.id"
         class="surface relative rounded-2xl p-3"
-        :class="{ 'z-30': drawerOpen === card.id }"
+        :class="{ 'z-50': drawerOpen === card.id }"
         :data-card-item="card.id"
       >
         <!-- 卡面：所有卡默认同一套配色 + 银行标志区分；
@@ -131,8 +131,8 @@
             <i class="h-2 w-2 rounded-full" style="background: #f43f5e"></i>
             还款日 {{ summaryOf(card).dueText }}（{{ summaryOf(card).daysToDue === 0 ? '就是今天' : `还有 ${summaryOf(card).daysToDue} 天` }}）
           </span>
-          <!-- 刚还过的那一期：当期已经跳到下一期了，这里保留一行「已还 + 撤销」，
-               否则点完还款就没法撤销（用户报过点完已还款之后的状态问题）。 -->
+          <!-- 刚还过的那一期：当期已经跳到下一期了，这里保留一行「已还」记录；
+               撤销入口收进下面的「⋯ 更多」（用户 2026-11-11）。 -->
           <span
             v-if="card.last_paid"
             class="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"
@@ -141,13 +141,6 @@
             <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="m5 13 4 4L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             {{ card.last_paid.period }} 已还 ¥{{ formatCents(card.last_paid.paid_amount_cents || card.last_paid.amount_cents) }}
           </span>
-          <button
-            v-if="card.last_paid"
-            class="!h-6 rounded-full border border-border px-2 text-[11px] font-semibold text-muted-foreground hover:text-rose-500"
-            :disabled="busyId === card.id"
-            :data-card-unpay="card.id"
-            @click="unpay(card)"
-          >撤销已还</button>
           <span v-if="card.unpaid_count > 1" class="rounded-full bg-amber-500/12 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400" data-card-unpaid>
             另有 {{ card.unpaid_count - 1 }} 期未还 · 合计 ¥{{ formatCents(card.unpaid_total_cents) }}
           </span>
@@ -166,7 +159,9 @@
             {{ card.current?.amount_cents ? '改本期金额' : '填本期金额' }}
           </button>
           <!-- 次要操作收进抽屉：点「⋯ 更多」打开，点页面任意其他地方收起
-               （用户 2026-10-24：不再用鼠标悬停展开）。 -->
+               （用户 2026-10-24：不再用鼠标悬停展开）。抽屉**向上**展开：按钮贴在卡片底部，
+               往下弹会被视口底边/底部标签栏挡住，「撤销已还」挪进来后手机上一度点不到
+               （2026-11-11 实测抽屉 top 848 > 视口 844）。 -->
           <div class="relative ml-auto" data-card-actions>
             <button
               class="btn-secondary !h-8 !px-3 !text-[11px]"
@@ -176,9 +171,17 @@
             >⋯ 更多</button>
             <div
               v-show="drawerOpen === card.id"
-              class="absolute right-0 top-full z-20 mt-1 flex min-w-max flex-col gap-1 rounded-xl border border-border bg-surface p-1 shadow-xl"
+              class="absolute bottom-full right-0 z-20 mb-1 flex min-w-max flex-col gap-1 rounded-xl border border-border bg-surface p-1 shadow-xl"
               data-card-drawer
             >
+              <!-- 撤销已还：用户 2026-11-11 要求从「已还」那一行挪进「⋯ 更多」，行里只留还款记录 -->
+              <button
+                v-if="card.last_paid"
+                class="btn-secondary !h-8 !justify-start !px-3 !text-[11px]"
+                :disabled="busyId === card.id"
+                :data-card-unpay="card.id"
+                @click="drawerOpen = null; unpay(card)"
+              >撤销已还</button>
               <button class="btn-secondary !h-8 !justify-start !px-3 !text-[11px]" :data-card-schedule="card.id" @click="openSchedule(card)">还款计划</button>
               <button class="btn-secondary !h-8 !justify-start !px-3 !text-[11px]" :data-card-edit="card.id" @click="openEdit(card)">编辑</button>
               <button class="btn-ghost !h-8 !justify-start !px-3 !text-[11px] text-rose-500" :data-card-delete="card.id" @click="askDelete(card)">删除</button>
