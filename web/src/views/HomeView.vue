@@ -190,7 +190,7 @@
                 <option v-for="list in navLists" :key="list.id" :value="list.id">{{ list.name }}</option>
               </select>
             </label>
-            <button class="quick-chip !h-8" :class="{ active: quickExpanded }" @click="quickExpanded = !quickExpanded">
+            <button class="quick-chip !h-8" :class="{ active: quickExpanded }" @click="toggleQuickMore">
               <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 6v.01M12 12v.01M12 18v.01" stroke-width="3" stroke-linecap="round"/></svg>
               更多
             </button>
@@ -257,7 +257,7 @@
                   <option v-for="list in navLists" :key="list.id" :value="list.id">{{ list.name }}</option>
                 </select>
               </label>
-              <button class="quick-chip" :class="{ active: quickExpanded }" @click="quickExpanded = !quickExpanded">
+              <button class="quick-chip" :class="{ active: quickExpanded }" @click="toggleQuickMore">
                 <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M12 6v.01M12 12v.01M12 18v.01" stroke-width="3" stroke-linecap="round"/></svg>
                 更多
               </button>
@@ -1936,6 +1936,15 @@ async function expandQuickAdd() {
 function collapseQuickAdd() {
   quickOpen.value = false
   quickExpanded.value = false
+}
+// 「更多」展开：手机键盘打开时视口只有一半高，面板会落在键盘下面，看起来像「点了没反应」
+// （用户 2026-11-11 报的就是这个）。先收起键盘，再把面板滚进可见区域。
+async function toggleQuickMore() {
+  quickExpanded.value = !quickExpanded.value
+  if (!quickExpanded.value) return
+  if (isNarrow.value) (document.activeElement as HTMLElement | null)?.blur?.()
+  await nextTick()
+  document.querySelector('[data-quick-panel]')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 }
 /** 逾期判定用的「生效时间」：稍后提醒优先；**有时间段的任务看最后一天**（用户要求：
     「计时最后一天遵守后台偏好设置的过期时间」—— 3 天期的任务要到第 3 天过完、
