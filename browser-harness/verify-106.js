@@ -66,7 +66,7 @@ const quickState = (page) => page.evaluate(() => {
   // 0.18.3 起新建控件默认收成一个「新建」按钮：cardOpen 表示整块表单是否展开
   const chip = (t) => card ? [...card.querySelectorAll('button')].find((b) => b.textContent.trim() === t) : null;
   const todayChip = chip('今天');
-  // 0.18.2 起日期芯片在芯片行（「更多」里只留备注/农历/过期提醒频率/通知方式）
+  // 0.18.2 起日期芯片在芯片行；2026-11-11 起「更多」里只剩备注一项
   const dateField = card?.querySelector('[data-quick-date]');
   return {
     card: true,
@@ -203,8 +203,8 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       return m ? Number(m[1]) * 60 + Number(m[2]) : -1;
     };
     const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
-    check('点「更多」能展开（只剩备注/农历/频率/通知方式），日期照旧在芯片行显示',
-      opened.open === true && opened.labels.length === 4
+    check('点「更多」能展开（只剩备注一项），日期照旧在芯片行显示',
+      opened.open === true && opened.labels.length === 1 && opened.labels[0] === '备注'
         && !opened.labels.includes('日期时间') && !opened.labels.includes('重复')
         && mins(opened.date) >= 0 && Math.abs(mins(opened.date) - nowMins) <= 10,
       JSON.stringify({ opened, label2 }));

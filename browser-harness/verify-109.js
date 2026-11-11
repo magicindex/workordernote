@@ -7,8 +7,8 @@
  *      六种周期状态各量一遍（切周期时多/少控件，最容易又错位）。
  *   2) 计划页的「开始 / 周期 / 重复」都是「标题在上、控件在下」的竖排字段。
  *   3) 今天页芯片行同样对齐：日期芯片与重复下拉搬到芯片行后不再高低不齐。
- *   4) 「更多」面板只剩四项：备注 / 按农历循环 / 过期提醒频率 / 通知方式
- *      （日期时间、重复已经搬走，不该再出现）。
+ *   4) 「更多」面板只剩一项：备注（3 行文本域）—— 按农历循环 / 过期提醒频率 / 通知方式
+ *      已于 2026-11-11 撤掉；日期时间、重复更早就搬到芯片行了，都不该再出现。
  *
  * 只量排版、不新建数据，跑完把面板收起来、周期复位，「今天」芯片复位。
  *
@@ -160,7 +160,7 @@ const setPlanPeriod = (page, value) => page.evaluate(async (v) => {
     check('日期芯片显示今天并且是点亮态', dateChip.active === true && dateChip.text.includes(dateChip.expect),
       JSON.stringify(dateChip));
 
-    // ---------- 3. 「更多」面板只剩四项 ----------
+    // ---------- 3. 「更多」面板只剩一项（备注） ----------
     const panel = await page.evaluate(async () => {
       const card = document.querySelector('.quick-card');
       const more = [...card.querySelectorAll('button')].find((b) => b.textContent.trim() === '更多');
@@ -176,19 +176,22 @@ const setPlanPeriod = (page, value) => page.evaluate(async (v) => {
         panelBefore,
         beforeVisible,
         labels: [...p.querySelectorAll('.field-label')].map((l) => (l.childNodes[0]?.textContent || '').trim()).filter(Boolean),
-        hasNotesBox: [...p.querySelectorAll('input')].some((i) => (i.placeholder || '') === '可选'),
+        // 2026-11-11 起备注是 textarea（3 行），不再是单行 input
+        hasNotesBox: (() => {
+          const ta = p.querySelector('textarea');
+          return !!ta && ta.getAttribute('rows') === '3';
+        })(),
         submit: [...p.querySelectorAll('button')].some((b) => ['添加', '添加提醒', '保存中'].includes(b.textContent.trim())),
         text: (p.textContent || '').replace(/\s+/g, ' ').trim(),
       };
     });
     check('「更多」面板默认收起（点「更多」才展开）', panel.panelBefore === false && panel.open === true,
       JSON.stringify({ panelBefore: panel.panelBefore, open: panel.open }));
-    check('「更多」里只剩四项：备注 / 按农历循环 / 过期提醒频率 / 通知方式',
-      panel.labels.length === 4 && ['备注', '按农历循环', '过期提醒频率', '通知方式'].every((t) => panel.labels.includes(t)),
-      JSON.stringify(panel.labels));
+    check('「更多」里只剩一项：备注',
+      panel.labels.length === 1 && panel.labels[0] === '备注', JSON.stringify(panel.labels));
     check('日期时间 / 重复 已经搬出「更多」',
       !panel.text.includes('日期时间') && !panel.labels.includes('重复'), panel.text.slice(0, 120));
-    check('「更多」里仍有备注输入框与提交按钮', panel.hasNotesBox === true && panel.submit === true,
+    check('「更多」里仍有备注（3 行文本域）与提交按钮', panel.hasNotesBox === true && panel.submit === true,
       JSON.stringify({ hasNotesBox: panel.hasNotesBox, submit: panel.submit }));
 
     // ---------- 收尾：收起「更多」，周期复位 ----------

@@ -266,13 +266,14 @@
           </div>
 
           <!-- 记事备注：默认收起，点「备注」展开；多行输入，和标题一起保存 -->
+          <!-- `!h-auto` 不能省：.compact-input 自带 h-9（36px），会把 rows=3 压成一行。 -->
           <Transition name="expand">
             <div v-if="quick.kind === 'note' && quickNotesOpen" class="mt-2.5">
               <textarea
                 v-model="quick.notes"
                 rows="3"
                 maxlength="5000"
-                class="compact-input w-full resize-y !py-2 text-sm leading-5"
+                class="compact-input w-full resize-y !h-auto !py-2 text-sm leading-5"
                 placeholder="写点详细内容…"
                 data-quick-note-notes
               ></textarea>
@@ -298,21 +299,23 @@
               class="quick-panel relative mt-3 grid gap-2.5 rounded-2xl bg-muted/65 p-3 sm:mt-4 sm:grid-cols-2 sm:gap-3 sm:p-4 lg:grid-cols-4"
               data-quick-panel
             >
-              <!-- 「更多」里只保留这四项（用户要求）：备注 / 按农历循环 / 过期提醒频率 / 通知方式。
-                   日期与重复已经搬到上面的芯片行，随时可点。 -->
-              <label class="field-label">备注<input v-model="quick.notes" class="compact-input" placeholder="可选" maxlength="5000" /></label>
-              <label class="field-label">按农历循环<select v-model="quick.calendar" class="compact-input" @change="upgradeCalendarToYearly(quick)"><option value="solar">公历</option><option value="lunar">农历</option></select></label>
-              <label class="field-label">过期提醒频率<RepeatNotifySelect :model-value="quick.repeat_notify_minutes ?? 0" @update:model-value="quick.repeat_notify_minutes = $event" /></label>
-              <p v-if="quick.calendar === 'lunar'" class="text-[10px] leading-4 text-muted-foreground sm:col-span-2 lg:col-span-4">已按农历循环：提醒按所选日期的农历月/日重复，腊月三十遇小年自动改为除夕当天，闰月日期遇无闰月年份自动用对应平月。</p>
-              <div class="sm:col-span-2 lg:col-span-4">
-                <p class="field-label mb-2">通知方式</p>
-                <div class="flex flex-wrap gap-2">
-                  <button v-for="channel in selectableChannels" :key="channel.channel" class="channel-pill" :class="{ selected: isQuickChannelSelected(channel.channel) }" :disabled="channel.channel !== 'inapp' && (!channel.bound || channel.status !== 'active')" @click="toggleQuickChannel(channel.channel)">
-                    {{ channel.label }}
-                  </button>
-                </div>
-              </div>
-              <!-- 底部提交按钮：手机端填完下方字段后无需滚回顶部再点添加 -->
+              <!-- 「更多」里只剩「备注」一项（用户 2026-11-11 截图：「只保留备注，其他都取消，
+                   备注尺寸增大 3 行」）：按农历循环 / 过期提醒频率 / 通知方式三块从快速新建里撤掉，
+                   需要时点开这条的编辑面板（ReminderEditor）再改；日期与重复在上面的芯片行。
+                   备注从单行输入换成 3 行文本域（`!h-auto` 盖掉 .compact-input 的 h-9，rows=3 才生效），
+                   整行铺满 —— 手机端也不会被压成一行的窄条。 -->
+              <label class="field-label sm:col-span-2 lg:col-span-4">
+                备注
+                <textarea
+                  v-model="quick.notes"
+                  rows="3"
+                  maxlength="5000"
+                  class="compact-input w-full resize-y !h-auto !py-2 text-sm leading-5"
+                  placeholder="可选"
+                  data-quick-panel-notes
+                ></textarea>
+              </label>
+              <!-- 底部提交按钮：手机端填完备注后无需滚回顶部再点添加 -->
               <div class="sm:col-span-2 lg:col-span-4">
                 <button class="btn-primary w-full" :disabled="saving || !quick.title?.trim()" @click="submitQuick">{{ saving ? '保存中…' : '添加提醒' }}</button>
               </div>
@@ -799,7 +802,6 @@ import ListFilter from '../components/ListFilter.vue'
 import ListIcon from '../components/ListIcon.vue'
 import BillingStrip from '../components/BillingStrip.vue'
 import LunarDatePicker from '../components/LunarDatePicker.vue'
-import RepeatNotifySelect from '../components/RepeatNotifySelect.vue'
 import PrintDialog from '../components/PrintDialog.vue'
 import ExportDialog from '../components/ExportDialog.vue'
 import CreditCardPanel from '../components/CreditCardPanel.vue'
@@ -1078,7 +1080,6 @@ async function loadMonthRange() {
   } catch { /* 拿不到范围就保持现状：箭头置灰、只看当月 */ }
 }
 const editingId = ref<number | null>(null)
-let quickChannelsTouched = false
 
 const view = computed(() => String(route.meta.reminderView || 'today'))
 // 「全部」页的时间范围条。默认「本月」（＝原来的按月翻页），其余范围用 from/to 请求。
@@ -1494,12 +1495,12 @@ async function loadData() {
     const [listRes, channelRes] = await Promise.all([getLists(), getChannelStatuses()])
     lists.value = listRes.data.data || []
     selectableChannels.value = channelRes.data.data || []
-    if (!quickChannelsTouched) {
-      quick.channels = selectableChannels.value
-        .filter(channel => channel.channel === 'inapp' || (channel.bound && channel.status === 'active'))
-        .map(channel => channel.channel)
-      if (!quick.channels.length) quick.channels = ['inapp']
-    }
+    // 快速新建不再提供「通知方式」开关（用户 2026-11-11：「更多」只留备注），
+    // 渠道一律按「已绑定且启用」默认全选；想给某一条单独改渠道，到条目的编辑面板里改。
+    quick.channels = selectableChannels.value
+      .filter(channel => channel.channel === 'inapp' || (channel.bound && channel.status === 'active'))
+      .map(channel => channel.channel)
+    if (!quick.channels.length) quick.channels = ['inapp']
     // 清单选择框的默认值由 quickTargetListID 的 watcher 统一负责（进具体清单跟随、其余用后台默认）
     // 「全部」页要按月翻：每次（含首屏 onMounted → loadData 这条路径）先拿一次可用月份范围，
     // 否则首屏进来 monthRange 是空的、两个箭头都置灰（翻月点击无效）。
@@ -1652,7 +1653,6 @@ async function submitQuick() {
       }
     }
     await createReminder(payload)
-    quickChannelsTouched = false
     Object.assign(quick, blankInput(), {
       kind: isNote ? 'note' : 'task',
       list_id: quickTargetListID.value,
@@ -1835,22 +1835,10 @@ function clearQuickDue() {
   quick.due_at = null
   quickDueCleared.value = true
 }
-function toggleQuickChannel(channel: ReminderChannel) {
-  quickChannelsTouched = true
-  const list = quick.channels || []
-  quick.channels = list.includes(channel) ? list.filter(x => x !== channel) : [...list, channel]
-  if (!quick.channels.length) quick.channels = ['inapp']
-}
-function isQuickChannelSelected(channel: ReminderChannel) { return (quick.channels || []).includes(channel) }
 
-// 农历循环只对每月/每年重复生效（后端会拒绝其余组合）。用户直接选农历时
-// 自动把重复规则升到每年（农历生日等纪念日的默认用法）；反之把重复规则
-// 切走时回退公历，避免残留 lunar 导致保存被拒。
-function upgradeCalendarToYearly(target: SaveReminderInput) {
-  if (target.calendar === 'lunar' && target.repeat_rule !== 'monthly' && target.repeat_rule !== 'yearly') {
-    target.repeat_rule = 'yearly'
-  }
-}
+// 「按农历循环」的快速新建入口已于 2026-11-11 撤掉（「更多」只留备注），
+// 这里只保留回退：重复规则不是每月/每年时，把残留的 lunar 拉回公历，
+// 避免旧草稿带着 lunar + 每天 这种组合被后端拒绝。
 watch(() => quick.repeat_rule, rule => {
   if (rule !== 'monthly' && rule !== 'yearly') quick.calendar = 'solar'
 })
