@@ -619,8 +619,9 @@
                     <span v-else-if="item.kind === 'note'" class="tiny-badge">记事</span>
                     <span v-if="item.repeat_rule !== 'none'" class="tiny-badge">{{ repeatBadge(item) }}</span>
                     <span v-if="item.repeat_notify_minutes" class="tiny-badge">过期提醒</span>
-                    <!-- 循环周期：其余页面仍显示第几次。 -->
-                    <span v-if="item.cycle_index" class="tiny-badge !text-brand-600 dark:!text-brand-300" data-cycle-badge>
+                    <!-- 循环周期：其余页面仍显示第几次。手机端隐藏（用户 2026-11-11：
+                         「每月后边哪个第x次也是」——跟着「第 x 期」一起收掉，只留「每月」）。 -->
+                    <span v-if="item.cycle_index" class="tiny-badge hidden !text-brand-600 dark:!text-brand-300 sm:inline-flex" data-cycle-badge>
                       第 {{ item.cycle_index }} 次
                     </span>
                   </template>
