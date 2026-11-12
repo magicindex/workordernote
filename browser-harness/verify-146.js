@@ -73,8 +73,13 @@ async function waitRow(page, id, timeout = 10000) {
       await page.evaluate(() => [...document.querySelectorAll('button')].find((b) => /新建提醒/.test(b.textContent || ''))?.click());
     });
     await sleep(700);
+    // 2026-11-12：`.modal-panel` 早就没有了（创建走的是新建卡片 / .editor-panel），
+    // 原来那句 `!!panel && …` 在 panel=null 时恒为 false，等于什么都没验。
     const editorHasCreated = await page.evaluate(() => {
-      const panel = document.querySelector('.modal-panel') || document.querySelector('[role="dialog"]');
+      const panel = document.querySelector('.editor-panel')
+        || document.querySelector('[data-quick-add] .quick-card')
+        || document.querySelector('.quick-card')
+        || document.querySelector('[role="dialog"]');
       return !!panel && /创建时间/.test(panel.innerText || '');
     });
     check('创建页面不显示创建时间', !editorHasCreated);

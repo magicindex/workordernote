@@ -91,6 +91,7 @@ const api = (page, p, method = 'GET', body = null, extraHeaders = null) => page.
       const img = card.querySelector('.ceremony-bg-img');
       return {
         imageAttr: card.getAttribute('data-ceremony-image'),
+        bgAttr: card.getAttribute('data-ceremony-bg'),
         cardBg: getComputedStyle(card.querySelector('.ceremony-bg-fill') || card).backgroundImage,
         cardColor: getComputedStyle(card).color,
         heroBg: getComputedStyle(hero).backgroundImage,
@@ -101,9 +102,12 @@ const api = (page, p, method = 'GET', body = null, extraHeaders = null) => page.
     }, cardId);
     check('卡片渲染出来了（带背景图那张）', !!cardState, '没找到卡片');
     if (cardState) {
-      // ① 颜色一致：整卡与倒计时是同一套靛蓝渐变（同一组色值），字色也相同
-      const hasIndigo = (bg) => bg.includes('79, 70, 229') && bg.includes('55, 48, 163');
-      check('整张卡片用的就是倒计时那套配色（靛蓝两端都在）', hasIndigo(cardState.cardBg), cardState.cardBg.slice(0, 120));
+      // ① 配色：卡面渐变由 accent + 蒙板现算（叠了蒙板后具体 rgb 会变），所以看
+      // data-ceremony-bg 是不是 indigo、卡面确实是渐变、且字色是白字（-ink=#fff）。
+      check('整张卡片用的是「靛蓝」那套配色（data-ceremony-bg=indigo + 渐变 + 白字）',
+        cardState.bgAttr === 'indigo' && /linear-gradient/.test(cardState.cardBg)
+          && /255, 255, 255/.test(cardState.cardColor),
+        JSON.stringify({ bgAttr: cardState.bgAttr, bg: cardState.cardBg.slice(0, 120), color: cardState.cardColor }));
       // 用户 2026-10-13：「倒计时不增加卡片效果，直接显示在大卡片中」→ 它自己没有底色块了
       check('倒计时没有自己的底色块（直接显示在卡片上）',
         !cardState.heroBg || cardState.heroBg === 'none' || /rgba\(0, 0, 0, 0\)/.test(cardState.heroBg),

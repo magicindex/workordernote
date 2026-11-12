@@ -59,6 +59,7 @@ withTab(async (page, ctx) => {
       themes: document.querySelectorAll('[data-version-theme]').length,
       firstTheme: document.querySelector('[data-version-theme]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       cards: cards.length,
+      rawCount: Number(document.querySelector('[data-release-count]')?.getAttribute('data-release-count') || 0),
       versions: cards.slice(0, 3).map((el) => el.getAttribute('data-release-version')),
       ranged: cards.map((el) => el.getAttribute('data-release-version')).filter((v) => String(v).includes(' – ')).length,
       openCount: cards.filter((el) => el.querySelector('[data-release-body]')).length,
@@ -73,8 +74,11 @@ withTab(async (page, ctx) => {
     return String(body?.data?.version || '');
   });
   check('弹窗先给「迭代主线」', notes.themes >= 5 && notes.firstTheme.includes('起步'), JSON.stringify(notes).slice(0, 200));
+  // 卡片数要跟**合并前的原始版本条数**比（弹窗上挂着 data-release-count）：
+  // 写死「< 45」这种绝对数，版本一多就假红（2026-11-12 踩到：95 个版本、46 张卡）。
   check('版本卡片按小版本合并，只差修正号的并成一张（带「起 – 止」）',
-    notes.cards > 10 && notes.cards < 45 && notes.ranged >= 8, `卡片=${notes.cards} 合并=${notes.ranged}`);
+    notes.cards > 10 && notes.rawCount > notes.cards && notes.ranged >= 8,
+    `卡片=${notes.cards} 原始版本=${notes.rawCount} 合并=${notes.ranged}`);
   // 最新一版要跟当前版本对得上（以前写死 0.33.0，0.34.0 一发版就红）
   // 同一小版本的修正版会合并成「0.43.0 – 0.43.2」这种范围，所以比对范围的右端。
   const firstRange = String(notes.versions[0] || '').split(' – ')

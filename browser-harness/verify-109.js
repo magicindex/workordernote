@@ -202,7 +202,11 @@ const setPlanPeriod = (page, value) => page.evaluate(async (v) => {
       const more = [...card.querySelectorAll('button')].find((b) => b.textContent.trim() === '更多');
       if (document.querySelector('[data-quick-panel]')) more?.click();
     });
-    await sleep(400);
+    // 收起面板有过渡动画，400ms 固定等待在忙的浏览器上会读到还没移除的节点；轮询到收起为止。
+    for (let i = 0; i < 10; i += 1) {
+      if (!(await page.evaluate(() => !!document.querySelector('[data-quick-panel]')))) break;
+      await sleep(300);
+    }
     const restored = await page.evaluate(() => ({
       panel: !!document.querySelector('[data-quick-panel]'),
       todayActive: (() => {

@@ -252,6 +252,8 @@ type syncApplyStats struct {
 	RemindersUpdated   int `json:"reminders_updated"`
 	RemindersDeleted   int `json:"reminders_deleted"`
 	CompletionsCreated int `json:"completions_created"`
+	// CompletionsUpdated：只补备注（完成记录本身不做合并，见 applySyncCompletions）。
+	CompletionsUpdated int `json:"completions_updated"`
 	CompletionsDeleted int `json:"completions_deleted"`
 
 	CardsCreated          int      `json:"cards_created"`
@@ -282,6 +284,7 @@ func (s *syncApplyStats) add(other syncApplyStats) {
 	s.RemindersUpdated += other.RemindersUpdated
 	s.RemindersDeleted += other.RemindersDeleted
 	s.CompletionsCreated += other.CompletionsCreated
+	s.CompletionsUpdated += other.CompletionsUpdated
 	s.CompletionsDeleted += other.CompletionsDeleted
 	s.CardsCreated += other.CardsCreated
 	s.CardsUpdated += other.CardsUpdated
@@ -316,7 +319,7 @@ func (s *syncApplyStats) add(other syncApplyStats) {
 func (s syncApplyStats) total() int {
 	return s.ListsCreated + s.ListsUpdated + s.ListsDeleted +
 		s.RemindersCreated + s.RemindersUpdated + s.RemindersDeleted +
-		s.CompletionsCreated + s.CompletionsDeleted +
+		s.CompletionsCreated + s.CompletionsUpdated + s.CompletionsDeleted +
 		s.CardsCreated + s.CardsUpdated + s.CardsDeleted +
 		s.CardStatementsCreated + s.CardStatementsUpdated + s.CardStatementsDeleted +
 		s.TimetablesCreated + s.TimetablesUpdated + s.TimetablesDeleted +

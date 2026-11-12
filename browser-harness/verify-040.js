@@ -199,7 +199,9 @@ function csvLines(body) {
       const aside = document.querySelector('aside.surface');
       if (!aside) return null;
       const articles = [...aside.querySelectorAll('article')].map((a) => ({
-        text: a.innerText.replace(/\s+/g, ' ').slice(0, 80),
+        // 别截到 80 字：标题很长（用户库里真有一条 JSON 标题的记事）时，
+        // 「记录 HH:MM」会被截掉，正则就永远不匹配。
+        text: a.innerText.replace(/\s+/g, ' ').slice(0, 400),
         hasNoteMark: !!a.querySelector('.cal-note-mark'),
         // 任务行的勾选按钮：未完成时标签是「完成提醒」，已完成时是「恢复提醒」——
         // 只认「完成」会在这一格里有已完成任务时假红（生产上就踩到过）。
@@ -207,7 +209,10 @@ function csvLines(body) {
       }));
       return { articles, text: aside.innerText.replace(/\s+/g, ' ').slice(0, 200) };
     });
-    const noteRow = panel?.articles.find((a) => a.hasNoteMark);
+    // 别取「第一条带『记』标记的」：用户库里可能本来就有一条标题很长的记事（实测踩到过，
+    // 标题是一坨 JSON），赌第一条会把断言带偏。优先挑真的写着「记录 HH:MM」的那条。
+    const noteRow = panel?.articles.find((a) => a.hasNoteMark && /记录\s*\d{1,2}:\d{2}/.test(a.text))
+      || panel?.articles.find((a) => a.hasNoteMark);
     check('详情面板里记事行带「记事」标记', !!noteRow, panel ? panel.text : 'no panel');
     check('记事行显示「记录 HH:MM」', !!noteRow && /记录\s*\d{1,2}:\d{2}/.test(noteRow.text),
       noteRow ? noteRow.text : '');

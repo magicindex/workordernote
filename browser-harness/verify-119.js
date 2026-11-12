@@ -92,7 +92,9 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     await gotoRetry(page, BASE + '/admin');
     await sleep(1500);
     const alertNow = () => page.evaluate(() => ({
-      alert: !!document.querySelector('[data-alert-popup], [data-reminder-alert]'),
+      // 弹窗根节点没有 data-*；用 role="alertdialog"（ReminderAlert.vue）+「知道了」按钮上的
+      // data-alert-dismiss 判断。原来那两个选择器早已不存在，这条断言等于恒真 —— 真弹了也抓不到。
+      alert: !!document.querySelector('[role="alertdialog"], [data-alert-dismiss]'),
       ack: [...document.querySelectorAll('button')].some((b) => /^知道了/.test((b.innerText || '').trim())),
     }));
     const before = await alertNow();

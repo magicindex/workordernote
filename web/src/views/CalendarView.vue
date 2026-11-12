@@ -1076,11 +1076,6 @@ const tint = listTint
 function taskInk(item: CalendarItem) {
   return weekColorMap.value.get(item.id) || listInk(item.color || 'blue')
 }
-/** 线段太短时文字竖排放不下，挪到线段上方横排。 */
-function labelFits(b: { item: CalendarItem; height: number }) {
-  const chars = Array.from(b.item.title || '').length
-  return b.height >= Math.min(140, Math.max(22, chars * 10 + 4))
-}
 function sameToday(d: Date) {
   const n = clockNow.value
   return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate()
@@ -1374,6 +1369,12 @@ async function loadEditorContext() {
       getLists(), getChannelStatuses(), getAllConfigs(),
     ])
     lists.value = listRes.data?.data || []
+    // 清单筛选存在 localStorage 里，清单被删掉后还会残留它的 id：这时候日历里「新建」
+    // 会拿那个已经不存在的清单当默认清单，服务端直接 404「提醒或清单不存在」。
+    // 拿到真实清单后把失效的 id 剔掉（剔掉会同等于「全部」，watch 会顺手重拉一次）。
+    const alive = new Set(lists.value.map((l) => l.id))
+    const pruned = listFilter.value.filter((id) => alive.has(id))
+    if (pruned.length !== listFilter.value.length) listFilter.value = pruned
     channels.value = channelRes.data?.data || []
     const key = configRes.data?.data?.calendar_font_size
     if (key && FONT_SIZES[key]) fontSizeKey.value = key

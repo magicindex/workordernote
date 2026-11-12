@@ -370,7 +370,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 				BgBlur:              incoming.BgBlur,
 				BgMask:              incoming.BgMask,
 				RepeatNotifyMinutes: incoming.RepeatNotifyMinutes,
-				CompletedAt:         incoming.CompletedAt, CompletedNote: incoming.CompletedNote, SnoozedUntil: incoming.SnoozedUntil,
+				CompletedAt:         incoming.CompletedAt, CompletedNote: normalizeCompletionNote(incoming.CompletedNote), SnoozedUntil: incoming.SnoozedUntil,
 				Position: incoming.Position, Version: incoming.Version,
 				CreatedAt: incoming.CreatedAt, UpdatedAt: incoming.UpdatedAt,
 			}
@@ -449,6 +449,14 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 			}
 			listID = fallback.ID
 		}
+		// 完成备注是 2026-11-12 才有的字段：旧版本对端回传的快照里它永远是空串。
+		// 「已完成 + 空备注」不能当成「对端把备注清空了」，否则混版本同步会静默擦掉备注
+		// （本机写一句，下次同步被老版本那台覆盖成空）。真正要清备注只有两条路：
+		// 撤销完成（completed_at 也变空）和类型切换，两条都不满足「completed_at 非空 + 备注为空」。
+		completedNote := normalizeCompletionNote(incoming.CompletedNote)
+		if completedNote == "" && incoming.CompletedAt != nil {
+			completedNote = existing.CompletedNote
+		}
 		// 用 map 而不是结构体更新：结构体更新会跳过零值（清不掉 completed_at、
 		// snoozed_until、deleted_at），而且会顺手把 updated_at 改成「现在」，
 		// 那会让本机的时间戳凭空领先对端，双向同步时对方的每次修改都被判成更旧。
@@ -469,7 +477,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 				"bg_blur":               incoming.BgBlur,
 				"bg_mask":               incoming.BgMask,
 				"repeat_notify_minutes": incoming.RepeatNotifyMinutes,
-				"completed_at":          incoming.CompletedAt, "completed_note": incoming.CompletedNote, "snoozed_until": incoming.SnoozedUntil,
+				"completed_at":          incoming.CompletedAt, "completed_note": completedNote, "snoozed_until": incoming.SnoozedUntil,
 				"position": incoming.Position, "version": incoming.Version,
 				"deleted_at": nil, "purged_at": nil, "updated_at": incoming.UpdatedAt,
 			}).Error; err != nil {
@@ -525,6 +533,15 @@ func applySyncCompletions(tx *gorm.DB, snap syncSnapshot, users map[string]datab
 				}
 				stats.CompletionsDeleted++
 				stats.AffectedUsers = append(stats.AffectedUsers, existing.UserID)
+			} else if incoming.Note != "" && existing.Note == "" {
+				// 完成记录本身不做合并，但备注是后来才加的字段：升级前同步过来、
+				// 或首轮「先到」的那条历史不会有备注。这里补写一次（只补空、不覆盖）。
+				if err := tx.Model(&Completion{}).Where("id = ?", existing.ID).
+					Update("note", normalizeCompletionNote(incoming.Note)).Error; err != nil {
+					return err
+				}
+				stats.CompletionsUpdated++
+				stats.AffectedUsers = append(stats.AffectedUsers, existing.UserID)
 			} else {
 				stats.Skipped++
 			}
@@ -550,7 +567,7 @@ func applySyncCompletions(tx *gorm.DB, snap syncSnapshot, users map[string]datab
 		row := Completion{
 			SyncUID: incoming.UID, ReminderID: reminderID, UserID: owner.ID,
 			ScheduledFor: incoming.ScheduledFor, CompletedAt: incoming.CompletedAt,
-			TitleSnapshot: incoming.TitleSnapshot, Note: incoming.Note,
+			TitleSnapshot: incoming.TitleSnapshot, Note: normalizeCompletionNote(incoming.Note),
 		}
 		if err := tx.Create(&row).Error; err != nil {
 			return err
@@ -635,6 +652,10 @@ func sameList(local *List, incoming syncList) bool {
 }
 
 func sameReminder(local *Reminder, incoming syncReminder, listID uint, channels []string) bool {
+	// 空备注 + 已完成 = 旧版本对端不认识这个字段（见 update 分支的说明），
+	// 不算「不一样」，免得每次同步都把整行重写一遍。
+	incomingNote := normalizeCompletionNote(incoming.CompletedNote)
+	sameNote := local.CompletedNote == incomingNote || (incomingNote == "" && incoming.CompletedAt != nil)
 	return local.ListID == listID &&
 		local.Title == incoming.Title &&
 		local.Notes == incoming.Notes &&
@@ -656,7 +677,7 @@ func sameReminder(local *Reminder, incoming syncReminder, listID uint, channels 
 		local.BgMask == incoming.BgMask &&
 		local.RepeatNotifyMinutes == incoming.RepeatNotifyMinutes &&
 		equalTimePtr(local.CompletedAt, incoming.CompletedAt) &&
-		local.CompletedNote == incoming.CompletedNote &&
+		sameNote &&
 		equalTimePtr(local.SnoozedUntil, incoming.SnoozedUntil) &&
 		local.Position == incoming.Position &&
 		local.Version == incoming.Version &&

@@ -281,16 +281,21 @@ function parseCsv(text) {
       allRows.some((t) => t.includes(noteATitle)), JSON.stringify(allRows.slice(0, 6)));
 
     // 「全部」页里记事同样用图标（同一支模板），而**任务行仍是勾选框** —— 这次改动不该带跑它。
+    // 只量**带勾选框的行**：只读的历史/汇总行本来就没有 .complete-button，
+    // 以前把它们也算进来（拿到空的 borderWidth/width）会假红。
     const allSlots = await page.evaluate(() =>
-      [...document.querySelectorAll('.reminder-row')].map((r) => {
-        const btn = r.querySelector('.complete-button');
-        return {
-          note: /记事/.test(r.textContent),
-          noteClass: btn ? btn.className.includes('complete-button-note') : false,
-          borderWidth: btn ? getComputedStyle(btn).borderTopWidth : '',
-          width: btn ? getComputedStyle(btn).width : '',
-        };
-      }));
+      [...document.querySelectorAll('.reminder-row')]
+        .map((r) => {
+          const btn = r.querySelector('.complete-button');
+          if (!btn) return null;
+          return {
+            note: /记事/.test(r.textContent),
+            noteClass: btn.className.includes('complete-button-note'),
+            borderWidth: getComputedStyle(btn).borderTopWidth,
+            width: getComputedStyle(btn).width,
+          };
+        })
+        .filter(Boolean));
     const noteSlots = allSlots.filter((x) => x.note);
     const taskSlots = allSlots.filter((x) => !x.note);
     check('「全部」页里记事行也是图标（无边框、不是勾选框）',
@@ -317,10 +322,18 @@ function parseCsv(text) {
       && await page.evaluate(() => !!document.querySelector('[data-range-to]'));
     check('范围条也给出「自定义」的起止日期输入', customInputs, '');
     await page.evaluate(() => document.querySelector('[data-range="month"]')?.click());
-    await sleep(1200);
-
-    const monthRows = await page.evaluate(() =>
-      [...document.querySelectorAll('.reminder-row')].map((r) => r.textContent.replace(/\s+/g, ' ')));
+    // 列表是异步重拉的：固定 1200ms 在慢机器上会读到上一轮（「今年」）的行，改成轮询到状态对上为止。
+    // 2026-11-01 起「全部」页多了一张**只读的历史逾期卡**：本月窗口之外、还没做完的
+    // 逾期项会集中出现在这里（设计如此）。它不是「本月条目」，量之前要把它排掉。
+    let monthRows = [];
+    for (let i = 0; i < 15; i += 1) {
+      monthRows = await page.evaluate(() =>
+        [...document.querySelectorAll('.reminder-row')]
+          .filter((r) => !r.closest('[data-history-overdue]'))
+          .map((r) => r.textContent.replace(/\s+/g, ' ')));
+      if (monthRows.some((t) => t.includes(thisTaskTitle)) && !monthRows.some((t) => t.includes(otherTaskTitle))) break;
+      await sleep(500);
+    }
     check('「本月」范围只有本月条目（他月的不出现）',
       monthRows.some((t) => t.includes(thisTaskTitle)) && !monthRows.some((t) => t.includes(otherTaskTitle)),
       JSON.stringify(monthRows.slice(0, 6)));
@@ -329,6 +342,7 @@ function parseCsv(text) {
     await sleep(1800);
     const yearRows = await page.evaluate(() =>
       [...document.querySelectorAll('.reminder-row')].map((r) => r.textContent.replace(/\s+/g, ' ')));
+    void 0;
     check('切到「今年」能多出其它月份的条目',
       yearRows.some((t) => t.includes(thisTaskTitle)) && yearRows.some((t) => t.includes(otherTaskTitle)),
       JSON.stringify(yearRows.slice(0, 8)));

@@ -92,7 +92,12 @@ const itemsOf = (res) => {
     const originalDefaultView = (await api(page, '/api/configs')).body?.data?.default_view ?? 'home';
     await api(page, '/api/configs', 'PUT', { key: 'default_view', value: 'home' });
     await gotoRetry(page, BASE + '/');
-    await sleep(3200);
+    // 看板是懒加载组件（路由 chunk 要下载），固定 3.2s 在冷启动/忙时会读到还没挂载的页面。
+    for (let i = 0; i < 20; i += 1) {
+      if (await page.evaluate(() => !!document.querySelector('[data-home-dashboard]'))) break;
+      await sleep(400);
+    }
+    await sleep(300);
     const landed = await page.evaluate(() => ({
       path: location.pathname.replace(/\/$/, ''),
       dashboard: !!document.querySelector('[data-home-dashboard]'),
@@ -257,12 +262,17 @@ const itemsOf = (res) => {
       return true;
     }, todayId);
     check('看板上的条目点得动', gotoOk === true);
-    await sleep(3000);
-    const gotoState = await page.evaluate(() => ({
-      path: location.pathname,
-      query: location.search,
-      highlighted: [...document.querySelectorAll('.reminder-highlight')].map((el) => el.getAttribute('data-reminder-row')),
-    }));
+    // 跳清单后列表要重新拉一次，高亮类只在 4 秒窗口内存在 —— 轮询，别赌 3 秒这个点。
+    let gotoState = { path: '', query: '', highlighted: [] };
+    for (let i = 0; i < 20; i += 1) {
+      gotoState = await page.evaluate(() => ({
+        path: location.pathname,
+        query: location.search,
+        highlighted: [...document.querySelectorAll('.reminder-highlight')].map((el) => el.getAttribute('data-reminder-row')),
+      }));
+      if (gotoState.highlighted.length) break;
+      await sleep(300);
+    }
     check('点击后定位到它所在的清单（/admin/list/<清单 id>?highlight=<任务 id>）',
       !!todayListId && gotoState.path === `/admin/list/${todayListId}` && gotoState.query.includes(`highlight=${todayId}`),
       JSON.stringify({ gotoState, todayListId }));

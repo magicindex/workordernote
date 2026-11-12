@@ -233,8 +233,11 @@ async function waitSavedChip(page, name, timeout = 12000) {
       // ---------------- 3. 界面：预置问法 + 时间范围 + 常用查询 ----------------
       await gotoRetry(page, BASE + '/admin');
       await sleep(2800);
+      // 别写死「呼叫小秘」：AI 助手是个人配置、可以改名（改了名的机器上按文字找不到），
+      // 用稳定的 data 钩子。
       const opened = await page.evaluate(() => {
-        const btn = [...document.querySelectorAll('button')].find((b) => /呼叫小秘/.test(b.textContent || ''));
+        const btn = document.querySelector('[data-assistant-trigger]')
+          || [...document.querySelectorAll('button')].find((b) => /呼叫/.test(b.textContent || ''));
         if (btn) btn.click();
         return !!btn;
       });
@@ -369,7 +372,8 @@ async function waitSavedChip(page, name, timeout = 12000) {
       await page.evaluate(() => document.querySelector('[data-assistant-close]')?.click());
       await sleep(600);
       await page.evaluate(() => {
-        const btn = [...document.querySelectorAll('button')].find((b) => /呼叫小秘/.test(b.textContent || ''));
+        const btn = document.querySelector('[data-assistant-trigger]')
+          || [...document.querySelectorAll('button')].find((b) => /呼叫/.test(b.textContent || ''));
         if (btn) btn.click();
       });
       await waitSavedChip(page, queryName);
@@ -478,7 +482,8 @@ async function waitSavedChip(page, name, timeout = 12000) {
       await page.evaluate(() => document.querySelector('[data-assistant-close]')?.click());
       await sleep(500);
       await page.evaluate(() => {
-        const btn = [...document.querySelectorAll('button')].find((b) => /呼叫小秘/.test(b.textContent || ''));
+        const btn = document.querySelector('[data-assistant-trigger]')
+          || [...document.querySelectorAll('button')].find((b) => /呼叫/.test(b.textContent || ''));
         if (btn) btn.click();
       });
       await sleep(900);

@@ -69,7 +69,8 @@ async function waitSel(page, sel, timeout = 20000) {
     const a2 = new Date(a1.getTime() + 60 * 60e3);
     const b1 = new Date(a1.getTime() + 30 * 60e3);
     const b2 = new Date(b1.getTime() + 60 * 60e3);
-    const expectedTop = (a1.getHours() + a1.getMinutes() / 60) * 44;
+    // 0.44.0 起周视图不再固定 44px/小时：一天 24 小时按可用高度均分（见 CalendarView 的
+    // hourHeight）。所以「几点的块应该落在哪」要等**进了周视图量出列高**再算。
 
     const seed = async (title, start, end) => {
       for (let i = 0; i < 3; i += 1) {
@@ -115,6 +116,17 @@ async function waitSel(page, sel, timeout = 20000) {
     check('周视图有 7 天列', grid.cols === 7, JSON.stringify(grid));
     check('周视图有周区间标签与上一周/下一周', !!grid.label, JSON.stringify(grid));
 
+    // 每小时的像素高 = 列高 / 24（不再写死 44px）
+    const weekMetrics = await page.evaluate(() => {
+      const col = document.querySelector('[data-week-col]');
+      const r = col ? col.getBoundingClientRect() : null;
+      return { h: r ? r.height : 0, top: r ? r.top : 0 };
+    });
+    const hourH = weekMetrics.h > 0 ? weekMetrics.h / 24 : 0;
+    check('周视图的列高按可用空间均分（24 小时占满一列）',
+      hourH > 10 && hourH < 60, JSON.stringify({ colH: weekMetrics.h, hourH }));
+    const expectedTop = (a1.getHours() + a1.getMinutes() / 60) * hourH;
+
     // 2) 导航
     const before = grid.label;
     await page.evaluate(() => document.querySelector('[data-week-next]')?.click());
@@ -152,9 +164,14 @@ async function waitSel(page, sel, timeout = 20000) {
       };
     });
     check('两条时间段任务都画成了块', blocks.mineCount === 2, JSON.stringify(blocks));
-    check('重叠的任务并排分栏（按重叠数均分列宽）',
+    // 实例上用户自己的日程可能正好和这两块同一时段（实测踩到：当天还有别的任务，
+    // 分栏会多留一条道，宽度不再等于 colW/overlap）。所以只钉「并排」这件事本身：
+    // 两块一样宽、都没铺满整列、且至少按 overlap 条道分过。
+    check('重叠的任务并排分栏（两块等宽、不铺满整列、按重叠数分道）',
       blocks.widths.length === 2 && blocks.colW > 0 && blocks.overlap[0] > 1
-      && blocks.widths.every((w) => Math.abs(w - blocks.colW / blocks.overlap[0]) <= 3),
+      && Math.abs(blocks.widths[0] - blocks.widths[1]) <= 1
+      && blocks.widths.every((w) => w > 0 && w < blocks.colW - 3)
+      && blocks.widths.every((w) => blocks.colW / w >= blocks.overlap[0] - 0.2),
       JSON.stringify(blocks));
     check('重叠时给出重叠提示（data-overlap ≥ 2）',
       blocks.overlap.every((n) => n >= 2), JSON.stringify(blocks.overlap));
@@ -162,22 +179,36 @@ async function waitSel(page, sel, timeout = 20000) {
       blocks.regions.length === 0, JSON.stringify(blocks.regions));
     check('工字线首尾都有横杠',
       blocks.caps.length === 2 && blocks.caps.every((c) => c[0] === '1' && c[1] === '1'), JSON.stringify(blocks.caps));
-    check('任务块画在开始时刻那一行（top ≈ 开始时间×44）',
-      blocks.tops.some((t) => Math.abs(t - expectedTop) <= 3), JSON.stringify({ tops: blocks.tops, expectedTop }));
+    check('任务块画在开始时刻那一行（top ≈ 开始时间 × 每小时的像素高）',
+      hourH > 0 && blocks.tops.some((t) => Math.abs(t - expectedTop) <= 3),
+      JSON.stringify({ tops: blocks.tops, expectedTop, hourH }));
 
     // 4) 悬停显示时分
-    const colBox = await page.evaluate(() => {
+    // 悬停与「双击新建」都要落在**空白的时段**上：库里已经有任务块的地方，双击是打开那条，
+    // 不是新建（这是对的行为）。所以扫一遍 07:00–21:00，挑第一个没有被 data-week-block 占住的格子。
+    const slot = await page.evaluate(() => {
       const col = document.querySelector('[data-week-col]');
       const r = col.getBoundingClientRect();
-      return { x: r.left + r.width / 2, top: r.top, h: r.height };
+      const hourH = r.height / 24;
+      for (let h = 7; h < 21; h += 1) {
+        const x = r.left + r.width * 0.78;
+        const y = r.top + (h + 0.3) * hourH;
+        const el = document.elementFromPoint(x, y);
+        if (el && el.closest('[data-week-col]') === col && !el.closest('[data-week-block]')) {
+          return { x, y, hour: h, hourH };
+        }
+      }
+      return null;
     });
-    await page.mouse.move(colBox.x, colBox.top + 10 * 44 + 20);
+    check('周视图里找得到一段空白时段（用于悬停/双击新建）', !!slot, JSON.stringify(slot));
+    await page.mouse.move(slot.x, slot.y);
     await sleep(400);
     const hover = await page.evaluate(() => document.querySelector('[data-week-hover]')?.innerText.trim() || '');
-    check('鼠标放到时间线上显示时分（≈10:30）', /^10:(15|30|45|00)$/.test(hover), hover);
+    const hhmm = `${String(slot.hour).padStart(2, '0')}:15`;
+    check(`鼠标放到时间线上显示时分（${hhmm}）`, hover === hhmm, `${hover}（每小时 ${slot.hourH.toFixed(1)}px）`);
 
     // 5) 双击时间线按所在时分新建（1 小时时段）
-    await page.mouse.click(colBox.x, colBox.top + 9 * 44 + 10, { clickCount: 2, delay: 60 });
+    await page.mouse.click(slot.x, slot.y, { clickCount: 2, delay: 60 });
     await waitSel(page, '.editor-panel, [role="dialog"]', 12000);
     await sleep(1200);
     const preset = await page.evaluate(() => {
@@ -187,7 +218,7 @@ async function waitSel(page, sel, timeout = 20000) {
       return { text: text.slice(0, 120), time: time ? time[3] : '', hasEnd: /结束时间/.test(text) };
     });
     check('双击时间线打开新建面板', !!preset.text, preset.text.slice(0, 60));
-    check('新建面板预填了鼠标所在的时分（≈09:15）', /09:(00|15|30|45)/.test(preset.time), preset.time);
+    check(`新建面板预填了鼠标所在的时分（${hhmm}）`, preset.time === hhmm, preset.time);
     check('新建面板同时带上结束时间（1 小时时段）', preset.hasEnd === true, preset.text.slice(0, 80));
     await page.keyboard.press('Escape').catch(() => {});
     await sleep(600);

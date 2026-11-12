@@ -129,7 +129,16 @@ async function api(token, apiPath, method = 'GET', body = null) {
 
       const gapBeams = Object.values(data.days[gapDay]?.beams || {});
       check('断档任务仍各画一条工字线', gapBeams.length === 2, JSON.stringify(gapBeams.map((b) => b.top)));
-      check('断档工字线分别在 09:00 与 12:00', gapBeams.some((b) => near(b.top, 396)) && gapBeams.some((b) => near(b.top, 528)), JSON.stringify(gapBeams.map((b) => b.top)));
+      // 每小时多少像素：0.44.0 起周视图把 24 小时按可用列高均分，不再固定 44px。
+      // 用当天列的实测高度算期望位置，别再写死 396 / 528。
+      const colH = await page.evaluate((key) => {
+        const col = document.querySelector(`[data-week-col="${key}"]`);
+        return col ? col.getBoundingClientRect().height : 0;
+      }, gapDay);
+      const hourH = colH / 24;
+      check('断档工字线分别在 09:00 与 12:00',
+        hourH > 10 && gapBeams.some((b) => near(b.top, 9 * hourH)) && gapBeams.some((b) => near(b.top, 12 * hourH)),
+        JSON.stringify({ tops: gapBeams.map((b) => b.top), hourH }));
 
       check('跨天任务每天都有工字线', !!data.span.start && !!data.span.mid && !!data.span.end, JSON.stringify(data.span));
       const overlapCollision = [];

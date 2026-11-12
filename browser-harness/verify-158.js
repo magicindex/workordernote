@@ -43,7 +43,12 @@ async function api(token, p, method = 'GET', body = null) {
           return { line: getComputedStyle(line).backgroundColor, label: label ? getComputedStyle(label).color : '', cap: caps[0] ? getComputedStyle(caps[0]).backgroundColor : '', text: el.innerText };
         };
         const out = { done: null, others: [] };
-        for (const el of els) (el.dataset.weekBlock === done ? out.done = pick(el) : out.others.push(pick(el)));
+        // 一个任务可能被拆成多段（跨天/按天画），每段的颜色本来就应该一样；
+        // 所以带上 id，「彼此颜色不同」按**不同任务**判，而不是按 DOM 元素个数。
+        for (const el of els) {
+          if (el.dataset.weekBlock === done) out.done = pick(el);
+          else out.others.push({ id: el.dataset.weekBlock, ...pick(el) });
+        }
         return out;
       }, doneId);
       check('已完成任务仍有线段和标签', !!info.done?.line && !!info.done?.label, JSON.stringify(info.done));
@@ -51,7 +56,9 @@ async function api(token, p, method = 'GET', body = null) {
       check('已完成标签统一灰色', info.done?.label === 'rgb(148, 163, 184)', info.done?.label);
       check('已完成横杠也是灰色', info.done?.cap === 'rgb(148, 163, 184)', info.done?.cap);
       check('未完成任务不是灰色', info.others.every(x => x.line !== 'rgb(148, 163, 184)'), JSON.stringify(info.others));
-      check('未完成任务彼此颜色不同', new Set(info.others.map(x => x.line)).size === info.others.length, JSON.stringify(info.others.map(x => x.line)));
+      const byTask = new Map(info.others.map((x) => [x.id, x.line]));
+      check('未完成任务彼此颜色不同（同一任务的多段是同色）',
+        byTask.size >= 2 && new Set(byTask.values()).size === byTask.size, JSON.stringify([...byTask]));
       await page.screenshot({ path: path.join(__dirname, 'shots', 'verify-158-done-gray.png') });
     }, { width: 1440, height: 1000 });
   } finally {

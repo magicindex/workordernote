@@ -18,8 +18,14 @@ SUITES=(
   verify-ux verify-filters verify-013 verify-017 verify-icon verify-print verify-export
   verify-040 verify-050 verify-052 verify-060 verify-070 verify-080
   verify-090 verify-091 verify-092 verify-093 verify-094 verify-096
-  verify-097 verify-099 verify-100 verify-101 verify-102 verify-103 verify-104 verify-105 verify-106 verify-107 verify-108 verify-109 verify-110 verify-111 verify-112 verify-113 verify-114 verify-115 verify-116 verify-117 verify-118 verify-119 verify-120 verify-121 verify-122 verify-123 verify-124 verify-125 verify-126 verify-127 verify-128 verify-129 verify-130 verify-131 verify-132 verify-133 verify-134 verify-135 verify-136 verify-137 verify-138 verify-139 verify-140 verify-141 verify-142 verify-143 verify-144 verify-145 verify-146 verify-147 verify-148 verify-149 verify-150 verify-151 verify-152 verify-154 verify-155 verify-156 verify-157 verify-158 verify-reminders
+  verify-097 verify-099 verify-100 verify-101 verify-102 verify-103 verify-104 verify-105 verify-106 verify-107 verify-108 verify-109 verify-110 verify-111 verify-112 verify-113 verify-114 verify-115 verify-116 verify-117 verify-118 verify-119 verify-120 verify-121 verify-122 verify-123 verify-124 verify-125 verify-126 verify-127 verify-128 verify-129 verify-130 verify-131 verify-132 verify-133 verify-134 verify-135 verify-136 verify-137 verify-138 verify-139 verify-140 verify-141 verify-142 verify-143 verify-144 verify-145 verify-146 verify-147 verify-148 verify-149 verify-150 verify-151 verify-152 verify-154 verify-155 verify-156 verify-157 verify-158 verify-159 verify-160 verify-162 verify-163
+  verify-reminders
 )
+# 故意不进这份清单的：
+#   verify-098（要 verify-098.sh 起两台实例：老机 + 空库新机）
+#   verify-sync / verify-sync-e2e.sh / verify-sync-local.sh（双机同步，需要两个实例）
+#   verify-124-model / verify-124-ollama（同一个用例的两条模型分支，手动跑）
+#   verify-bank-logos（一次性核对银行标志裁图，不是回归项）
 
 # 先探一下目标在不在：目标没起来的话每个套件都会「登录失败/全红」，白跑十几分钟
 # （本轮就因为迭代容器被收尾删掉，连吃了两次「Failed to fetch」）。

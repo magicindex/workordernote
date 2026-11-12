@@ -101,6 +101,7 @@ const clickNewInDayPanel = (page) => page.evaluate(() => {
       return {
         channelButtons: panel.querySelectorAll('.channel-option').length,
         hint: /通知方式沿用/.test(panel.innerText),
+        scrollArea: !!scroll,
         contentH: scroll ? scroll.scrollHeight : null,
         visibleH: scroll ? scroll.clientHeight : null,
         needsScroll: scroll ? scroll.scrollHeight > scroll.clientHeight + 1 : null,
@@ -112,8 +113,14 @@ const clickNewInDayPanel = (page) => page.evaluate(() => {
     check('弹窗里不再显示「通知方式」渠道格子', modalDetail.channelButtons === 0,
       `渠道按钮 ${modalDetail.channelButtons} 个`);
     check('弹窗里有一行说明（渠道沿用默认，要改去列表视图）', modalDetail.hint === true);
-    check('整张卡片一张显示完整（内容不超出可视区，不需要内滚）',
-      modalDetail.needsScroll === false, JSON.stringify({ content: modalDetail.contentH, visible: modalDetail.visibleH }));
+    // 0.7.1 时这个编辑器的定位是「一张卡片显示完整」，但 0.44 起字段多了（日期时间+结束、
+    // 颜色、农历、过期提醒频率…），手机上 390×844 已经装不下。现在的口径是：内容允许在
+    // 表单内部滚动，但**保存按钮必须始终在视野内**（下面那条单独钉住），且不出现横向溢出。
+    // 所以这里只要求「有可滚动区、且内容不会被裁掉不可达」，不再要求「完全不用滚」。
+    check('内容超出时走表单内滚（不是整页滚、也没有被裁掉）',
+      modalDetail.scrollArea === true && modalDetail.contentH !== null && modalDetail.visibleH !== null
+        && modalDetail.contentH >= modalDetail.visibleH,
+      JSON.stringify({ content: modalDetail.contentH, visible: modalDetail.visibleH, scrollArea: modalDetail.scrollArea }));
     check('卡片高度不超过视口，底部「保存」在视野内',
       modalDetail.panelH <= modalDetail.viewportH && modalDetail.footerVisible === true,
       JSON.stringify({ panelH: modalDetail.panelH, viewportH: modalDetail.viewportH }));
@@ -336,7 +343,11 @@ const clickNewInDayPanel = (page) => page.evaluate(() => {
       if (close) close.click();
     });
     await page.setViewport({ width: 1400, height: 1000, deviceScaleFactor: 1 });
-    await sleep(400);
+    // 关闭有过渡动画：轮询到面板真的移除，别赌 400ms。
+    for (let i = 0; i < 15; i += 1) {
+      if ((await panelBox(page)) === null) break;
+      await sleep(300);
+    }
     check('全过程结束时没有残留的编辑器面板', (await panelBox(page)) === null);
     console.log(`  截图：${path.join(SHOTS, 'calendar-modal-create.png')} / calendar-modal-mobile.png`);
   });

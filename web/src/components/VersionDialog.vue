@@ -45,7 +45,7 @@
       <h4 class="text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground">迭代说明</h4>
       <span class="text-[11px] font-medium text-muted-foreground">按小版本合并 · 点标题展开</span>
     </div>
-    <ol class="mt-2 space-y-2">
+    <ol class="mt-2 space-y-2" :data-release-count="releaseVersionCount">
       <li
         v-for="(note, index) in releaseNotes"
         :key="note.version"
@@ -101,7 +101,7 @@
 import { ref } from 'vue'
 import Modal from './Modal.vue'
 import InstallAppCard from './InstallAppCard.vue'
-import { PROJECT, UPSTREAM, iterationThemes, releaseNotes } from '../data/release-notes'
+import { PROJECT, UPSTREAM, iterationThemes, releaseNotes, releaseVersionCount } from '../data/release-notes'
 
 defineProps<{
   modelValue: boolean

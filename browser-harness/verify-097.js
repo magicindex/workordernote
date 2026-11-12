@@ -200,12 +200,14 @@ const setSelect = (page, sel, value) => page.evaluate(({ sel, value }) => {
       await sleep(1200);
       const calChips = await page.evaluate(() => [...document.querySelectorAll('button.quick-chip')]
         .map((b) => b.textContent.trim()));
-      check('日历的清单筛选里有「信用卡账单」', calChips.includes('信用卡账单'), JSON.stringify(calChips));
+      // 0.44.0 起清单芯片后面跟着未完成条数（同一个按钮里两个 span），
+      // textContent 会拼成「信用卡账单11」，所以按「包含」判断，别再要求整串相等。
+      check('日历的清单筛选里有「信用卡账单」', calChips.some((t) => t.includes('信用卡账单')), JSON.stringify(calChips));
       await page.goto(ROOT + '/admin/completed', { waitUntil: 'domcontentloaded' });
       await sleep(1400);
       const doneChips = await page.evaluate(() => [...document.querySelectorAll('button.quick-chip')]
         .map((b) => b.textContent.trim()));
-      check('已完成页的清单筛选里有「信用卡账单」', doneChips.includes('信用卡账单'), JSON.stringify(doneChips));
+      check('已完成页的清单筛选里有「信用卡账单」', doneChips.some((t) => t.includes('信用卡账单')), JSON.stringify(doneChips));
       await page.goto(ROOT + `/admin/list/${bucketId}`, { waitUntil: 'domcontentloaded' });
       await waitSel(page, '[data-card-panel]', 20000);
       await sleep(600);

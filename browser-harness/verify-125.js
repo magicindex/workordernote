@@ -61,8 +61,10 @@ const visible = (page, sel) => page.evaluate((sel) => {
       };
     });
     check('侧栏最上面不再有「新建提醒」按钮', sidebar.newCount === 0, `还在 ${sidebar.newCount} 个`);
-    check('侧栏「呼叫小秘」还在（原来与它上下并排的那个）',
-      sidebar.assistant === 1 && /呼叫小秘/.test(sidebar.assistantText), JSON.stringify(sidebar));
+    // AI 入口的名字在「系统配置 → AI 助手」里能改（默认「望舒」），这里只认「呼叫」前缀，
+    // 不再写死「呼叫小秘」—— 那是最早的默认名，改了名这条就假红。
+    check('侧栏 AI 入口还在（原来与它上下并排的那个）',
+      sidebar.assistant === 1 && /^呼叫\S+/.test(sidebar.assistantText), JSON.stringify(sidebar));
 
     // ============ 2. 首页看板：标题行右侧的新建按钮 ============
     const header = await page.evaluate(() => {

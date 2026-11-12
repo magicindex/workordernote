@@ -470,7 +470,12 @@ const overflowFinder = () => {
 
     await page.evaluate(() => { localStorage.removeItem('reminders.token'); sessionStorage.removeItem('reminders.token'); });
     await gotoRetry(page, ROOT + '/login');
-    await sleep(1500);
+    // 登录页是懒加载 chunk，1500ms 在冷启动/忙时会读到空页面；
+    // 后面直接对 input 调 value setter，拿到 null 就是 "Illegal invocation" 崩在半路。
+    for (let i = 0; i < 20; i += 1) {
+      if (await page.evaluate(() => !!document.querySelector('input[type="password"]'))) break;
+      await sleep(300);
+    }
     const fields = await page.evaluate(() => {
       const pw = document.querySelector('input[type="password"]');
       const user = document.querySelector('input[autocomplete="username"], input[name="username"]');
@@ -494,8 +499,11 @@ const overflowFinder = () => {
         const s = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
         s.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true }));
       };
-      set(document.querySelector('input[autocomplete="username"], input[name="username"]'), u);
-      set(document.querySelector('input[type="password"]'), p);
+      const user = document.querySelector('input[autocomplete="username"], input[name="username"]');
+      const pwd = document.querySelector('input[type="password"]');
+      if (!user || !pwd) return;   // 没渲染出来就别硬 set（会抛 Illegal invocation）
+      set(user, u);
+      set(pwd, p);
       document.querySelector('form button[type="submit"]')?.click();
     }, { u: APP_USER, p: APP_PASS });
     for (let i = 0; i < 60; i += 1) {

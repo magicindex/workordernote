@@ -1236,3 +1236,10 @@ function groupPatchReleases(notes: ReleaseNote[]): ReleaseNoteEntry[] {
 }
 
 export const releaseNotes: ReleaseNoteEntry[] = groupPatchReleases(versionHistory)
+
+/**
+ * 合并前的原始版本条数。版本弹窗把它挂成 `data-release-count`：
+ * 「按小版本合并」这件事只能跟原始条数比才有意义（用例原来写死「卡片 < 45」，
+ * 版本一多就假红 —— 2026-11-12 修）。
+ */
+export const releaseVersionCount = versionHistory.length

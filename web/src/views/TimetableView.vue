@@ -694,11 +694,6 @@ const slots = computed(() => {
   })
 })
 
-const sectionsWithSlots = computed(() => SECTIONS.map((section) => ({
-  ...section,
-  slots: slots.value.filter((slot) => slot.section === section.key),
-})))
-
 function minutesOf(hhmm: string) {
   const [h, m] = (hhmm || '00:00').split(':').map(Number)
   return (h || 0) * 60 + (m || 0)

@@ -335,11 +335,13 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
     }));
     check('选的与当前在用的不一样时提示「未保存」', pending.shown && pending.text.includes('verify124-pending-model'),
       JSON.stringify(pending));
+    // 「有未保存的改动」要在**改过之后**立刻看：填回 deepseek-chat 如果正好等于已存的值，
+    // dirty 会正确地变回 false（保存按钮也会禁用），这条就会假红 —— 2026-11-12 踩到。
+    check('改了模型名后提示「有未保存的改动」',
+      await page.evaluate(() => document.body.innerText.includes('有未保存的改动')));
 
     await fill(page, '[data-ai-model]', 'deepseek-chat');
     await sleep(500);
-    check('改了模型名后提示「有未保存的改动」',
-      await page.evaluate(() => document.body.innerText.includes('有未保存的改动')));
 
     // 测试连接：拨一个必然拨不通的地址，面板必须说实话。
     // 先把「启用」勾掉：这台机器要是本来就配好并启用了模型，带着「启用 + 没填密钥」
@@ -375,12 +377,20 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       if (box && box.checked) box.click();
     });
     await fill(page, '[data-ai-base-url]', '');
-    await fill(page, '[data-ai-model]', 'deepseek-chat');
+    // 保存按钮 `:disabled="!dirty"`：填回已存的那个模型名等于没改，按钮点不动。
+    // 这里故意写一个不同的名字，保证「有改动 → 能点 → 出现『已保存』」这条链路真的走一遍。
+    await fill(page, '[data-ai-model]', 'verify124-saved-model');
     await sleep(400);
     await clickEl(page, '[data-ai-save]');
     await sleep(2500);
     const savedText = await textOf(page, '[data-ai-notice]');
     check('参数填齐后保存成功', /已保存/.test(savedText), savedText || '(没有提示)');
+    // 再把模型名写回 deepseek-chat 存一次：此刻服务端存的是上面那个临时名字，所以这算「有改动」，
+    // 后面的「读回来一致」才期望 deepseek-chat。
+    await fill(page, '[data-ai-model]', 'deepseek-chat');
+    await sleep(400);
+    await clickEl(page, '[data-ai-save]');
+    await sleep(2000);
     // 顺手把档位改成「详细思考过程」再存一次，确认后台偏好真的落库了
     await page.select('[data-ai-thinking-mode]', 'full');
     await sleep(400);
@@ -541,6 +551,10 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
     await api(page, '/api/assistant/prompts', 'PUT', { system_prompt: '' });
     await page.goto(`${BASE}/admin/settings`, { waitUntil: 'networkidle2' });
     await sleep(1200);
+    // 「AI 提示词」在偏好设置的「更多」标签页里（页面改成四个标签之后，默认在「常用」页，
+    // 隐藏的 textarea 宽高为 0、点不动）。这里先切到「更多」，再动里面的控件。
+    await page.evaluate(() => document.querySelector('[data-settings-tab="more"]')?.click());
+    await sleep(500);
     const prefShape = await page.evaluate(() => {
       const box = document.querySelector('[data-ai-pref-prompt]');
       return {
@@ -562,6 +576,8 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
     check('没写过时标「用默认」', prefShape.state.includes('用默认'), prefShape.state);
 
     const USER_PROMPT = '回答时先给结论，再用三行以内说明';
+    await page.evaluate(() => document.querySelector('[data-ai-pref-prompt]')?.scrollIntoView({ block: 'center' }));
+    await sleep(300);
     await page.click('[data-ai-pref-prompt]');
     await page.keyboard.down('Control');
     await page.keyboard.press('A');
@@ -604,9 +620,17 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       await api(page, `/api/reminder/lists/${target.id}`, 'PATCH', { ai_prompt: '' });
       await page.reload({ waitUntil: 'networkidle2' });
       await sleep(900);
+      // reload 之后偏好设置回到默认的「常用」标签，「各栏目提示词」在「更多」里藏着 ——
+      // 不切回去的话下面 scrollIntoView/focus 拿到的是 0×0 的隐藏节点，直接抛不可点击。
+      await page.evaluate(() => document.querySelector('[data-settings-tab="more"]')?.click());
+      await sleep(500);
       const PROMPT = '按基站/线路分组，多说进度';
       const targetSel = `[data-ai-list-prompt=${JSON.stringify(target.name)}]`;
-      await page.click(targetSel);
+      // 这段在「更多」里，常见情况是滚下去才看得见；puppeteer 的 click 对不可见/被遮挡
+      // 的节点会直接抛 "Node is either not clickable"（2026-11-12 踩到）。先滚到中间再聚焦。
+      await page.evaluate((sel) => document.querySelector(sel)?.scrollIntoView({ block: 'center' }), targetSel);
+      await sleep(250);
+      await page.focus(targetSel);
       await page.keyboard.down('Control');
       await page.keyboard.press('A');
       await page.keyboard.up('Control');
@@ -614,7 +638,11 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       await sleep(250);
       const dirtyRow = await page.evaluate((name) => (document.querySelector(`[data-ai-list-prompt-row=${JSON.stringify(name)}]`)?.textContent || '').replace(/\s+/g, ' '), target.name);
       check('改过之后那一行标「未保存」', /未保存/.test(dirtyRow), dirtyRow.slice(0, 80));
-      await page.click(`[data-ai-list-prompt-save=${JSON.stringify(target.name)}]`);
+      await page.evaluate((sel) => {
+        const el = document.querySelector(sel);
+        el?.scrollIntoView({ block: 'center' });
+        el?.click();
+      }, `[data-ai-list-prompt-save=${JSON.stringify(target.name)}]`);
       await sleep(1000);
       const savedState = await page.evaluate((name) => {
         const row = document.querySelector(`[data-ai-list-prompt-row=${JSON.stringify(name)}]`);

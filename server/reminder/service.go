@@ -440,6 +440,11 @@ func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) 
 		} else if in.Kind == KindTask && wasNote {
 			existing.CompletedAt = nil
 		}
+		// 类型一换，「完成备注」就失去归属（记事没有完成这回事；任务重新变回未完成），
+		// 与撤销完成（restoreReminder）同一口径清掉，别让未完成的行还挂着上一条备注。
+		if wasNote != (in.Kind == KindNote) {
+			existing.CompletedNote = ""
+		}
 		existing.ListID = in.ListID
 		if in.Color != nil {
 			existing.Color = *in.Color
@@ -972,8 +977,13 @@ func completeReminderWithNote(db *gorm.DB, userID, reminderID uint, note string)
 			item.CompletedNote = ""
 			item.SnoozedUntil = nil
 		} else {
+			// 重复 POST（客户端重试/双击）时别用空备注冲掉已有的备注：
+			// 只有这次真带了备注、或者这条本来就没完成，才写这一列。
+			wasCompleted := item.CompletedAt != nil
 			item.CompletedAt = &now
-			item.CompletedNote = note
+			if note != "" || !wasCompleted {
+				item.CompletedNote = note
+			}
 		}
 		item.Version++
 		if err := tx.Save(&item).Error; err != nil {

@@ -112,7 +112,7 @@
               maxlength="200"
               @keydown.enter.prevent="submitQuick"
             />
-            <p v-if="quick.notes && !quickNotesOpen" class="mt-1 break-words text-xs leading-4 text-muted-foreground sm:truncate">{{ quick.notes }}</p>
+            <p v-if="quick.notes && !quickNotesOpen && !quickExpanded" class="mt-1 break-words text-xs leading-4 text-muted-foreground sm:truncate">{{ quick.notes }}</p>
           </div>
           <button v-if="quick.title" class="btn-primary !h-9 !px-4" :disabled="saving" @click="submitQuick">{{ saving ? '保存中' : quick.kind === 'note' ? '记下' : '添加' }}</button>
         </div>
@@ -1473,6 +1473,15 @@ const quickDatePicked = computed({
       preset.value = ''
       return
     }
+    // 手机端「取消」会把打开时的旧值再 emit 一遍；同一天就当作没改 ——
+    // 否则「取消」反而把 15:54 改写成 23:59，还把亮着的「今天」熄掉。
+    const current = quick.due_at ? new Date(quick.due_at) : null
+    if (current
+      && current.getFullYear() === value.getFullYear()
+      && current.getMonth() === value.getMonth()
+      && current.getDate() === value.getDate()) {
+      return
+    }
     const { h, m } = clockParts(DEFAULT_DUE_TIME)
     const d = new Date(value.getFullYear(), value.getMonth(), value.getDate(), h, m, 0, 0)
     quick.due_at = toLocalIso(d)
@@ -1766,7 +1775,9 @@ function setQuickKind(kind: ReminderKind) {
 // 记事本页快速新建默认就是「记事」：这一页做的主要是记一笔。离开时恢复「任务」。
 watch(isNoteBucketPage, (on) => {
   if (on) setQuickKind('note')
-  else if (quick.kind === 'note') quick.kind = 'task'
+  // 这里必须走 setQuickKind：直接 `quick.kind = 'task'` 会把日期留在 null，
+  // 从一个清单页跳到另一个清单页时 applyQuickDefaults 不会跑，芯片就一个都不亮。
+  else if (quick.kind === 'note') setQuickKind('task')
 }, { immediate: true })
 // 已完成页的时间段选项。「全部」放第一个并作为默认，这样角标数字和列表条数
 // 从一开始就是一致的；其余按时间由近到远排；自定义需要选完起止日期再点查询。
@@ -2354,10 +2365,7 @@ function onShortcut(e: KeyboardEvent) {
 .empty-ring { @apply absolute inset-2 rounded-full border border-brand-500/20 bg-brand-500/5; }
 .empty-check { @apply absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_16px_35px_-12px_rgba(59,130,246,.65)]; }
 .empty-dot { @apply absolute h-2.5 w-2.5 rounded-full; }.dot-one { @apply left-0 top-5 bg-amber-400; }.dot-two { @apply right-1 top-1 bg-violet-400; }.dot-three { @apply bottom-0 right-6 bg-emerald-400; }
-/* 「过期提醒频率」是子组件，scoped 样式穿不进去；快速新建这排字段用的是
-   .compact-input（h-9 + text-xs），所以把它对齐成同一套，避免这一格比
-   旁边的「清单 / 重复 / 按农历循环」高一截。 */
-.field-label :deep(.repeat-notify) { @apply mt-1.5; }
-.field-label :deep(.repeat-notify select), .field-label :deep(.repeat-notify input) { @apply h-9 w-full rounded-xl border border-border bg-surface px-3 text-xs font-medium text-foreground outline-none focus:border-brand-500/50; }
+/* 2026-11-12：「更多」里的「过期提醒频率」撤掉后，这里原来那两条
+   `.field-label :deep(.repeat-notify)` 对齐规则就没有对象了，一起删掉。 */
 .expand-enter-active, .expand-leave-active { transition: all .2s ease; }.expand-enter-from, .expand-leave-to { opacity: 0; transform: translateY(-6px); }
 </style>
