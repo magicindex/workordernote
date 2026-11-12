@@ -370,7 +370,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 				BgBlur:              incoming.BgBlur,
 				BgMask:              incoming.BgMask,
 				RepeatNotifyMinutes: incoming.RepeatNotifyMinutes,
-				CompletedAt:         incoming.CompletedAt, SnoozedUntil: incoming.SnoozedUntil,
+				CompletedAt:         incoming.CompletedAt, CompletedNote: incoming.CompletedNote, SnoozedUntil: incoming.SnoozedUntil,
 				Position: incoming.Position, Version: incoming.Version,
 				CreatedAt: incoming.CreatedAt, UpdatedAt: incoming.UpdatedAt,
 			}
@@ -469,7 +469,7 @@ func applySyncReminders(tx *gorm.DB, snap syncSnapshot, users map[string]databas
 				"bg_blur":               incoming.BgBlur,
 				"bg_mask":               incoming.BgMask,
 				"repeat_notify_minutes": incoming.RepeatNotifyMinutes,
-				"completed_at":          incoming.CompletedAt, "snoozed_until": incoming.SnoozedUntil,
+				"completed_at":          incoming.CompletedAt, "completed_note": incoming.CompletedNote, "snoozed_until": incoming.SnoozedUntil,
 				"position": incoming.Position, "version": incoming.Version,
 				"deleted_at": nil, "purged_at": nil, "updated_at": incoming.UpdatedAt,
 			}).Error; err != nil {
@@ -550,7 +550,7 @@ func applySyncCompletions(tx *gorm.DB, snap syncSnapshot, users map[string]datab
 		row := Completion{
 			SyncUID: incoming.UID, ReminderID: reminderID, UserID: owner.ID,
 			ScheduledFor: incoming.ScheduledFor, CompletedAt: incoming.CompletedAt,
-			TitleSnapshot: incoming.TitleSnapshot,
+			TitleSnapshot: incoming.TitleSnapshot, Note: incoming.Note,
 		}
 		if err := tx.Create(&row).Error; err != nil {
 			return err
@@ -656,6 +656,7 @@ func sameReminder(local *Reminder, incoming syncReminder, listID uint, channels 
 		local.BgMask == incoming.BgMask &&
 		local.RepeatNotifyMinutes == incoming.RepeatNotifyMinutes &&
 		equalTimePtr(local.CompletedAt, incoming.CompletedAt) &&
+		local.CompletedNote == incoming.CompletedNote &&
 		equalTimePtr(local.SnoozedUntil, incoming.SnoozedUntil) &&
 		local.Position == incoming.Position &&
 		local.Version == incoming.Version &&

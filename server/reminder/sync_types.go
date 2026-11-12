@@ -210,8 +210,11 @@ type syncReminder struct {
 	// 老版本对端不认这两个字段，忽略即可（本机保持自己的值）。
 	BgBlur       int        `json:"bg_blur,omitempty"`
 	BgMask       int        `json:"bg_mask,omitempty"`
-	CompletedAt  *time.Time `json:"completed_at,omitempty"`
-	SnoozedUntil *time.Time `json:"snoozed_until,omitempty"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	// CompletedNote 是一次性任务的完成备注（2026-11-12 新增）。旧版本对端不认
+	// 这个字段，忽略即可：它只在完成的那一刻写一次，不影响任何调度语义。
+	CompletedNote string     `json:"completed_note,omitempty"`
+	SnoozedUntil  *time.Time `json:"snoozed_until,omitempty"`
 	Position     int        `json:"position"`
 	Version      uint       `json:"version"`
 	// Channels 只带渠道名（inapp/email/...），不带 Targets：Targets 存的是本机
@@ -232,6 +235,8 @@ type syncCompletion struct {
 	TitleSnapshot string     `json:"title_snapshot"`
 	ScheduledFor  *time.Time `json:"scheduled_for,omitempty"`
 	CompletedAt   time.Time  `json:"completed_at"`
+	// Note 是这一次完成的完成备注（2026-11-12 新增）。同样是对端可忽略的附加信息。
+	Note string `json:"note,omitempty"`
 	// Deleted 是墓碑：这条完成记录在源端被撤回了（例如「撤销已还」），
 	// 对端收到后要把自己那份也撤回。老版本不认识这个字段，收到也只是当普通记录跳过，
 	// 不会把「撤销」当成「又完成了一次」。

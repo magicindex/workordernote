@@ -30,6 +30,8 @@ export interface CompletedItem {
   reminder_exists: boolean
   /** 能否「撤销完成」：记事、信用卡还款记录，以及同一条提醒较早的完成都不行 */
   undoable: boolean
+  /** 这一次完成时填的备注（空串＝没填） */
+  note?: string
 }
 
 export interface ReminderList {
@@ -81,6 +83,8 @@ export interface ReminderItem {
   calendar: string
   lunar_anchor?: string
   completed_at: string | null
+  /** 完成时填的备注（一次性任务；循环任务每次记在完成记录上），空串＝没填 */
+  completed_note?: string
   snoozed_until: string | null
   version: number
   channels: ReminderChannel[]
@@ -325,7 +329,12 @@ export const createReminder = (data: SaveReminderInput) => request.post('/api/re
 export const updateReminder = (id: number, data: SaveReminderInput) =>
   request.put(`/api/reminder/items/${id}`, data)
 export const deleteReminder = (id: number) => request.delete(`/api/reminder/items/${id}`)
-export const completeReminder = (id: number) => request.post(`/api/reminder/items/${id}/complete`)
+/**
+ * 完成一条提醒。`note` 是勾完成时在弹窗里填的完成备注（用户 2026-11-12）：
+ * 一次性任务存到这条提醒上、循环任务存到这一次的完成记录上；留空就只是完成。
+ */
+export const completeReminder = (id: number, note?: string) =>
+  request.post(`/api/reminder/items/${id}/complete`, note ? { note } : undefined)
 export const restoreReminder = (id: number) => request.post(`/api/reminder/items/${id}/restore`)
 // 撤销一次「重复提醒」的完成：删掉这条完成历史并把到期时间退回那次排期。
 // 一次性任务走上面的 restoreReminder（清 completed_at），两者对应已完成页的两种来源。

@@ -136,6 +136,12 @@ type Reminder struct {
 	// 只作用于卡片的背景层（配色渐变 / 背景图 / 蒙板），文字、图标、按钮不受影响。
 	BgAlpha      int        `gorm:"not null;default:100" json:"bg_alpha,omitempty"`
 	CompletedAt  *time.Time `gorm:"index:idx_reminders_user_completed" json:"completed_at"`
+	// CompletedNote 是勾选完成时顺手填的「完成备注」（用户 2026-11-12 要求：
+	// 点完成先弹窗写备注再确认，不要直接完成）。只对**一次性**任务有意义：
+	// 随 completed_at 一起清掉（撤销完成、改回未完成），不会带到下一条；
+	// 循环任务每次完成各自记在 completions 上（见 Completion.Note），
+	// 免得这条备注被下一次沿用。
+	CompletedNote string     `gorm:"size:500;not null;default:''" json:"completed_note"`
 	SnoozedUntil *time.Time `json:"snoozed_until"`
 	Position     int        `gorm:"not null;default:0" json:"position"`
 	Version      uint       `gorm:"not null;default:1" json:"version"`
@@ -170,6 +176,9 @@ type Completion struct {
 	ScheduledFor  *time.Time `json:"scheduled_for"`
 	CompletedAt   time.Time  `gorm:"index" json:"completed_at"`
 	TitleSnapshot string     `gorm:"size:200;not null" json:"title"`
+	// Note 是这一次完成时填的完成备注（用户 2026-11-12）。历史行是「一次完成」，
+	// 备注天然属于这一次；循环任务下一次完成会写一条新行，互不影响。
+	Note string `gorm:"size:500;not null;default:''" json:"note"`
 
 	// DeletedAt 让完成记录可以「撤回」：标记已还之后又点撤销时，这一步写下的历史
 	// 要能跟着撤回（见 card_handlers.go 的 retractCardPayment）。
@@ -338,6 +347,9 @@ type CompletedItemDTO struct {
 	//     入口在信用卡卡片上）。
 	// 前端据此决定要不要显示「撤销」按钮，避免点了才报错。
 	Undoable bool `json:"undoable"`
+	// Note 是这次完成时填的完成备注（用户 2026-11-12）：history 行取
+	// completions.note，reminder 行取 reminders.completed_note。为空表示没填。
+	Note string `json:"note"`
 }
 
 // CalendarItemDTO 是日历视图里的一项，有两种来源：

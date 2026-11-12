@@ -486,6 +486,14 @@
       :list-label="printListLabel"
     />
 
+    <!-- 完成备注弹窗：日历里点圆扣也不直接完成，与列表页同一套交互 -->
+    <CompleteNoteDialog
+      v-model="completeVisible"
+      :title="completeTarget?.title || ''"
+      :loading="completing"
+      @confirm="confirmComplete"
+    />
+
     <Toast :message="toast.message" :type="toast.type" />
   </div>
 </template>
@@ -500,6 +508,7 @@ import ReminderEditor from '../components/ReminderEditor.vue'
 import ReminderViewDialog from '../components/ReminderViewDialog.vue'
 import Toast from '../components/Toast.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import CompleteNoteDialog from '../components/CompleteNoteDialog.vue'
 import ContextMenu from '../components/ContextMenu.vue'
 import CalendarPrintDialog from '../components/CalendarPrintDialog.vue'
 import type { ContextMenuItem } from '../components/ContextMenu.vue'
@@ -1220,18 +1229,45 @@ function goToday() {
   load()
 }
 
+// 完成备注弹窗（用户 2026-11-12 要求：勾完成时先填备注再确认，不要直接完成）。
+// 恢复提醒是反向操作，仍是一键恢复、不写备注。
+const completeVisible = ref(false)
+const completeTarget = ref<CalendarItem | null>(null)
+const completing = ref(false)
+
 async function toggle(item: CalendarItem) {
   if (saving.value) return
+  if (!item.completed) {
+    completeTarget.value = item
+    completeVisible.value = true
+    return
+  }
   saving.value = true
   try {
-    if (item.completed) await restoreReminder(item.id)
-    else await completeReminder(item.id)
+    await restoreReminder(item.id)
     await load()
-    showToast(item.completed ? '已恢复提醒' : item.repeat_rule !== 'none' ? '已完成，下一次提醒已安排' : '做得好，已完成')
+    showToast('已恢复提醒')
   } catch (err: any) {
     showToast(err.response?.data?.message || '操作失败', 'error')
   } finally {
     saving.value = false
+  }
+}
+
+/** 弹窗里点「确定」：带备注完成（备注可留空）。 */
+async function confirmComplete(note: string) {
+  const item = completeTarget.value
+  if (!item || completing.value) return
+  completing.value = true
+  try {
+    await completeReminder(item.id, note)
+    completeVisible.value = false
+    await load()
+    showToast(item.repeat_rule !== 'none' ? '已完成，下一次提醒已安排' : '做得好，已完成')
+  } catch (err: any) {
+    showToast(err.response?.data?.message || '操作失败', 'error')
+  } finally {
+    completing.value = false
   }
 }
 

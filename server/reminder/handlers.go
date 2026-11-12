@@ -697,7 +697,13 @@ func handleCompleteReminder(db *gorm.DB) gin.HandlerFunc {
 		if !ok {
 			return
 		}
-		item, err := completeReminder(db, currentUserID(c), id)
+		// 完成备注是可选的：不传 body（或 body 里没有 note）就是「不带备注完成」，
+		// 与旧版客户端的行为一致。body 里的空串同样当成没填。
+		var body struct {
+			Note string `json:"note"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		item, err := completeReminderWithNote(db, currentUserID(c), id, body.Note)
 		if err != nil {
 			writeServiceError(c, err)
 			return

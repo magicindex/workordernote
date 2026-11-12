@@ -150,6 +150,7 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 			BgMask:              r.BgMask,
 			RepeatNotifyMinutes: r.RepeatNotifyMinutes,
 			CompletedAt:         r.CompletedAt,
+			CompletedNote:       r.CompletedNote,
 			SnoozedUntil:        r.SnoozedUntil,
 			Position:            r.Position,
 			Version:             r.Version,
@@ -180,6 +181,7 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 			TitleSnapshot: c.TitleSnapshot,
 			ScheduledFor:  c.ScheduledFor,
 			CompletedAt:   c.CompletedAt,
+			Note:          c.Note,
 			Deleted:       c.DeletedAt.Valid,
 		})
 	}

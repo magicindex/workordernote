@@ -915,7 +915,35 @@ func deleteReminder(db *gorm.DB, userID, reminderID uint) error {
 	return nil
 }
 
+// completeReminder 是不带完成备注的入口：信用卡还款、同步等内部路径都用它。
+// 用户从界面上勾任务时走 completeReminderWithNote（见 handleCompleteReminder）。
 func completeReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error) {
+	return completeReminderWithNote(db, userID, reminderID, "")
+}
+
+// completionNoteMaxRunes 限制完成备注的长度：与列宽（varchar 500）对齐，
+// 超出的部分直接截断而不是报错——用户在一个小弹窗里顺手写的东西，
+// 因为太长被整条拒绝完成是最糟的体验。
+const completionNoteMaxRunes = 500
+
+// normalizeCompletionNote 去掉首尾空白并截断到上限。空备注是允许的
+// （用户 2026-11-12：「空备注也允许直接完成」）。
+func normalizeCompletionNote(note string) string {
+	note = strings.TrimSpace(note)
+	if runes := []rune(note); len(runes) > completionNoteMaxRunes {
+		note = string(runes[:completionNoteMaxRunes])
+	}
+	return note
+}
+
+// completeReminderWithNote 完成一条提醒，并把用户填的完成备注一起存下来
+// （用户 2026-11-12 要求：勾完成时先弹窗写备注，确定才完成，取消就不动）。
+//
+// 备注落在哪，取决于这条是不是循环：
+//   - 循环任务：写进这一次的 completions 行（Note），下次完成是另一行，不会互相污染；
+//   - 一次性任务：写进 reminders.completed_note，撤销完成时一起清掉。
+func completeReminderWithNote(db *gorm.DB, userID, reminderID uint, note string) (ReminderDTO, error) {
+	note = normalizeCompletionNote(note)
 	err := db.Transaction(func(tx *gorm.DB) error {
 		var item Reminder
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND user_id = ? AND deleted_at IS NULL", reminderID, userID).First(&item).Error; err != nil {
@@ -929,7 +957,7 @@ func completeReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error)
 		}
 		now := time.Now()
 		if item.RepeatRule != "" && item.RepeatRule != "none" && item.DueAt != nil {
-			history := Completion{ReminderID: item.ID, UserID: userID, ScheduledFor: item.DueAt, CompletedAt: now, TitleSnapshot: item.Title}
+			history := Completion{ReminderID: item.ID, UserID: userID, ScheduledFor: item.DueAt, CompletedAt: now, TitleSnapshot: item.Title, Note: note}
 			if err := tx.Create(&history).Error; err != nil {
 				return err
 			}
@@ -939,9 +967,13 @@ func completeReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error)
 			}
 			item.DueAt = &next
 			item.CompletedAt = nil
+			// 顺手清掉可能残留的上一次完成备注（例如这条原来是已完成的一次性任务，
+			// 后来被改成循环）：循环任务的备注只属于那一次完成，不该挂在提醒上。
+			item.CompletedNote = ""
 			item.SnoozedUntil = nil
 		} else {
 			item.CompletedAt = &now
+			item.CompletedNote = note
 		}
 		item.Version++
 		if err := tx.Save(&item).Error; err != nil {
@@ -980,6 +1012,9 @@ func restoreReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error) 
 			return errors.New("记事无需恢复，请先改为任务")
 		}
 		item.CompletedAt = nil
+		// 撤销完成就把这次写的完成备注一起清掉，否则「未完成」的任务会带着
+		// 上一条完成记录的文字，等下一个人（或下一次）看见。
+		item.CompletedNote = ""
 		item.Version++
 		if err := tx.Save(&item).Error; err != nil {
 			return err
@@ -1457,6 +1492,7 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 			ID: h.ID, Source: "history", ReminderID: h.ReminderID,
 			Title: h.TitleSnapshot, CompletedAt: h.CompletedAt,
 			ScheduledFor: h.ScheduledFor, Kind: KindTask,
+			Note: h.Note,
 		}
 		item.ListID = owner.ListID
 		item.ListName = listNames[owner.ListID]
@@ -1489,6 +1525,7 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 			CreatedAt: &created,
 			ListID:    r.ListID, ListName: listNames[r.ListID],
 			RepeatRule: r.RepeatRule, ReminderExists: true,
+			Note:       r.CompletedNote,
 			// 一次性的完成（以及异常情况下带 completed_at 的循环任务）直接清掉完成态即可。
 			Undoable: r.Kind != KindNote && r.CardID == 0,
 		})

@@ -554,6 +554,14 @@
                 <span>提醒已删除</span>
               </template>
             </div>
+            <p
+              v-if="entry.note"
+              class="mt-1.5 inline-flex max-w-full items-start gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-1 text-[11px] leading-4 font-medium text-emerald-700 dark:text-emerald-300"
+              data-completed-note
+            >
+              <span class="shrink-0 font-extrabold">完成备注</span>
+              <span class="break-words">{{ entry.note }}</span>
+            </p>
             <!-- 完成时段（用户 2026-10-22）：录入时间 → 完成时间，并给出一共多久。
                  记事创建即完成，没有「做完」的过程，所以只给任务显示。 -->
             <div
@@ -705,6 +713,16 @@
                     >{{ itemRemaining(item) }}</span>
                   </template>
                 </div>
+                <!-- 完成备注（用户 2026-11-12）：勾完成时在弹窗里填的那句话，
+                     只在已完成的行上显示；循环任务每次一条，不会带到下一次。 -->
+                <p
+                  v-if="item.completed_at && item.completed_note"
+                  class="mt-1.5 inline-flex max-w-full items-start gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-1 text-[11px] leading-4 font-medium text-emerald-700 dark:text-emerald-300"
+                  data-completed-note
+                >
+                  <span class="shrink-0 font-extrabold">完成备注</span>
+                  <span class="break-words">{{ item.completed_note }}</span>
+                </p>
                 <!-- 完成时段（用户 2026-10-22）：接口连已完成的条目一起返回时，
                      已完成任务后边同样补上「录入 → 完成 · 共多久」。 -->
                 <div
@@ -778,6 +796,15 @@
 
       <Toast :message="toast.message" :type="toast.type" />
 
+      <!-- 完成备注弹窗：点前边的圆扣不再直接完成，先在这里写一句备注（可留空）。
+           回车确定、Esc 取消、默认聚焦备注框，见 CompleteNoteDialog。 -->
+      <CompleteNoteDialog
+        v-model="completeVisible"
+        :title="completeTarget?.title || ''"
+        :loading="completing"
+        @confirm="confirmComplete"
+      />
+
       <ConfirmDialog
         v-model="removeVisible"
         danger
@@ -798,6 +825,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import Toast from '../components/Toast.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import CompleteNoteDialog from '../components/CompleteNoteDialog.vue'
 import ListFilter from '../components/ListFilter.vue'
 import ListIcon from '../components/ListIcon.vue'
 import BillingStrip from '../components/BillingStrip.vue'
@@ -1859,17 +1887,50 @@ async function onEditorDeleted() {
   changed()
   showToast('提醒已删除')
 }
-async function toggleComplete(item: ReminderItem) {
+// 完成备注弹窗的状态（用户 2026-11-12）：点圆扣 → 记下要完成的这条 → 弹窗。
+// 取消只是关窗，什么都不发；确定才真的调完成接口（备注可留空）。
+const completeVisible = ref(false)
+const completeTarget = ref<ReminderItem | null>(null)
+const completing = ref(false)
+
+function toggleComplete(item: ReminderItem) {
   // 记事默认就是完成，没有「完成 / 恢复」这回事：恢复会把它变成一个没有
   // 日期的未完成任务。要改类型请用编辑器里的「类型」切换。
   if (item.kind === 'note') return
+  if (item.completed_at) {
+    // 「恢复提醒」是反向操作，不写备注，保持原来的一键恢复。
+    void restoreCompleted(item)
+    return
+  }
+  completeTarget.value = item
+  completeVisible.value = true
+}
+
+async function restoreCompleted(item: ReminderItem) {
   try {
-    if (item.completed_at) await restoreReminder(item.id)
-    else await completeReminder(item.id)
+    await restoreReminder(item.id)
     await loadItems()
     changed()
-    showToast(item.completed_at ? '已恢复提醒' : item.repeat_rule !== 'none' ? '已完成，下一次提醒已安排' : '做得好，已完成')
+    showToast('已恢复提醒')
   } catch (err: any) { showToast(err.response?.data?.message || '操作失败', 'error') }
+}
+
+/** 弹窗里点「确定」：带备注完成。空备注也照样完成（用户要求）。 */
+async function confirmComplete(note: string) {
+  const item = completeTarget.value
+  if (!item || completing.value) return
+  completing.value = true
+  try {
+    await completeReminder(item.id, note)
+    completeVisible.value = false
+    await loadItems()
+    changed()
+    showToast(item.repeat_rule !== 'none' ? '已完成，下一次提醒已安排' : '做得好，已完成')
+  } catch (err: any) {
+    showToast(err.response?.data?.message || '操作失败', 'error')
+  } finally {
+    completing.value = false
+  }
 }
 // 删除确认走应用内浮层（见 ConfirmDialog）：原生 confirm 在飞牛 App 的网页
 // 视图里是系统级弹窗，与应用样式割裂，手机端也容易被当成浏览器提示忽略。
