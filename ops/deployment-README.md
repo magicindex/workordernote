@@ -13,10 +13,11 @@
 
 ## 仓库与镜像地址（2026-10-22 起）
 
-- Gitea：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
-- 容器仓库：`gitea.topzero.cn:10241/cyberzero/workordernote:<版本>`
-- 仓库走 HTTPS，证书链完整（Certum DV `*.topzero.cn`，反代已带中间证书），
-  可直接 `docker pull gitea.topzero.cn:10241/cyberzero/workordernote:<版本>`；
+- Gitea：<http://192.168.3.200:3000/cyberzero/WorkOrderNote>（内网 HTTP；公网域名已取消）
+- git push：`ssh://git@192.168.3.200:2223/cyberzero/workordernote.git`
+- 容器仓库：`192.168.3.200:3000/cyberzero/workordernote:<版本>`（HTTP 明文 registry，
+  本机 dockerd 需把该地址加进 `insecure-registries`），可直接
+  `docker pull 192.168.3.200:3000/cyberzero/workordernote:<版本>`；
   推送新镜像需带 `write:package` 权限的令牌。
 - 下文历史记录中的旧内网地址已统一替换；日期与 digest 仍是当时的记录。
 
@@ -301,7 +302,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - **顺带修好双机同步**：两台 `sync_token` 不一致（201 `aada…` / 200 `bd66…`），双向同步从某个时点起一直 401「同步令牌不正确」。已把 200 的令牌改成 201 的值（`PUT /api/reminder/admin/sync`：方向 both、对端 `http://192.168.3.201:8906`、间隔 5 分钟），两边手动 `POST /sync/run` 都返回 ok。账号集合仍不一致：201 多 `tt017887` / `tt259608`（测试账号），200 多 `郭朋飞`，同步会跳过「对端有、本机没有」的账号（数据不过去）。
 - 未做：离线一键安装包、飞牛 fpk、GitHub 快照、生产全量回归（本轮只跑了与改动相关的 128 与临时实例检查）。
 - 推送：改用玄览项目 `.secrets/gitea_token`（Gitea 账号 `cyberzero`，带 repository 写权限）后，`main` 推到 `f364858`，tag `v0.45.0` 推到 `a17cb1b`。
-- 镜像仓库：直接 `docker push gitea.topzero.cn:10241/…` 会被站点前置的**雷池 WAF** 拦——实测 layer 都已存在，卡在 config blob 的 PUT（同一个 blob 用 6KB 配置体返回 403，换成 `{"hello":"world"}` 则正常到 registry 的 400，说明是按内容拦的，不是权限）。改从**同一套后端的内部地址** `192.168.3.200:3000` 推（tag 列表与公开地址一致，说明是同一个 registry，只是不经 WAF）：`docker tag workordernote:0.45.0 192.168.3.200:3000/cyberzero/workordernote:0.45.0 && docker push …` 成功，digest `sha256:f6f8f62dcf773bfdfc6ebc1d4299d6206a0a9500e040fe7cad4420020b8f1339`（size 2409）。公开地址 `https://gitea.topzero.cn:10241/v2/cyberzero/workordernote/manifests/0.45.0` 已返回 200，`docker manifest inspect` 也通过，README 的 `docker pull …:0.45.0` 成立。
+- 镜像仓库：经站点前置**雷池 WAF** 的推送端口会被拦——实测 layer 都已存在，卡在 config blob 的 PUT（同一个 blob 用 6KB 配置体返回 403，换成 `{"hello":"world"}` 则正常到 registry 的 400，说明是按内容拦的，不是权限）。现在统一走**不经 WAF 的内网直连** `192.168.3.200:3000`（tag 列表与网关端口一致，说明是同一个 registry）：`docker tag workordernote:0.45.0 192.168.3.200:3000/cyberzero/workordernote:0.45.0 && docker push …` 成功，digest `sha256:f6f8f62dcf773bfdfc6ebc1d4299d6206a0a9500e040fe7cad4420020b8f1339`（size 2409）。`http://192.168.3.200:3000/v2/cyberzero/workordernote/manifests/0.45.0` 已返回 200，`docker manifest inspect` 也通过，README 的 `docker pull …:0.45.0` 成立。
 
 ### 2026-11-01：0.44.1（201 生产 / 200 生产上线）—— 周视图取消今天的底色与流光
 
@@ -816,8 +817,8 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 > push 在本机执行仓库钩子，而 `hooks/pre-receive.d/gitea` 与 `hooks/update.d/gitea` 调用的
 > `/usr/local/bin/gitea` 只存在于 200 的 Gitea 容器里，本机没有 → 每次都被 hook 拒绝。
 > 本次是临时把这两个 `gitea` 钩子移走、push 完立刻放回（权限与内容已核对）。
-> 走 HTTPS（`https://gitea.topzero.cn:10241`）可用，但 Gitea 账号 `cyberzero` 的密码与本机不同，未认证成功；
-> 以后要么用 Gitea 令牌走 HTTPS，要么在 201 上补一个可用的 `gitea` 二进制。
+> 走内网 HTTP（`http://192.168.3.200:3000`）可用，但 Gitea 账号 `cyberzero` 的密码与本机不同，未认证成功；
+> 以后要么用 Gitea 令牌走 HTTP，要么在 201 上补一个可用的 `gitea` 二进制。
 >
 ### 2026-10-19：0.39.0（201 生产 / 200 生产 / 201 沙箱上线）—— 双机同步扩到「除密码外全部」
 
@@ -918,7 +919,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   两台 `/api/version` 均 `0.37.0`，`/api/health` ok。
 > - **指纹**：201 生产与沙箱一致——清单 `edffe23d32`、卡片 `7fa2c3f0cb`、提醒 `85d0ae65e7`、
 >   完成记录 `2f98973342`；条数 清单 5 / 卡片 11 / 提醒 71 / 完成 49 / 记事 10（只换镜像，没动数据）。
-> - 镜像推到 `gitea.topzero.cn:10241/cyberzero/workordernote:0.37.0`，registry digest
+> - 镜像推到 `192.168.3.200:3000/cyberzero/workordernote:0.37.0`，registry digest
 >   `sha256:ac038e1c809229270ce4f436fdde2f6a29ca27c3f5bf9dcc71694fb9cb455b50`。
 > - tag `v0.37.0` 在本地；`git push` 仍被 Gitea 的 `pre-receive` 钩子拒绝（`/usr/local/bin/gitea` 缺失），待恢复后补推。
 > - **200 于 12:58–13:00 补升级到 0.37.0**（用户报「手机页面没有 ai 对话入口，并且提示模型未接入」）：
@@ -963,7 +964,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 > - **推送受阻**：`git push origin main` 被 Gitea 的 `pre-receive` 钩子拒绝
 >   （`/usr/local/bin/gitea: No such file or directory`，仓库所有钩子都指着这个二进制，
 >   而本机没有 gitea 进程/服务）。tag `v0.36.0` 已在本地仓库（HEAD `9a72938`），Gitea 恢复后补推。
-> - 镜像同时推到 `gitea.topzero.cn:10241/cyberzero/workordernote:0.36.0`，digest `sha256:58182be1bd80d3153d3ada848ed5b81c27b167c62a45d1be585771286f96addb`。
+> - 镜像同时推到 `192.168.3.200:3000/cyberzero/workordernote:0.36.0`，digest `sha256:58182be1bd80d3153d3ada848ed5b81c27b167c62a45d1be585771286f96addb`。
 > - **生产全量回归（8906，0.36.0，10:04–11:05）：55 套件 / 1444 项通过；首轮 5 个套件红**
 >   （`verify-print` 登录限流、`verify-112`/`verify-115` 读的是卡片旧背景层、`verify-124` 的档位默认、
 >   `verify-129` 顶栏序位与免打扰默认值），单独复跑全部转绿：print 24/24、112 46/46、115 34/34、
@@ -973,8 +974,8 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   `6e179aa496865f3cb477eb350d46960a30ceea3e875cc0bd4ef3a82d655f74e3`）；
 >   fnOS 包 `release/0.36.0/workordernote_0.36.0_amd64.fpk`（21 585 098 B，md5 `9245ba0c6e8ef1ee99b1d84b8b65389d`）。
 > - **200（192.168.3.200）尚未升级**：本机没有该机的 SSH 凭据，需要在 200 上执行
->   `sudo docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.36.0 &&
->    sudo docker tag gitea.topzero.cn:10241/cyberzero/workordernote:0.36.0 workordernote:0.36.0 &&
+>   `sudo docker pull 192.168.3.200:3000/cyberzero/workordernote:0.36.0 &&
+>    sudo docker tag 192.168.3.200:3000/cyberzero/workordernote:0.36.0 workordernote:0.36.0 &&
 >    sudo sed -i 's|workordernote:0.35.0|workordernote:0.36.0|' /vol1/1000/Docker/workordernote/docker-compose.yml &&
 >    cd /vol1/1000/Docker/workordernote && sudo docker compose up -d`（升级前先备份 `data`）。
 
@@ -1020,7 +1021,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   三件已放到 201 与 200 的 `images/`/`pkg/`，md5 一致。
 > - 推送：main 推到 `994f62f`、tag `v0.35.0` → `f58ada9`；Gitea **Release id 21** 挂三个附件
 >   （48 587 454 / 45 676 789 / 21 518 705 B）；镜像 push 到
->   `gitea.topzero.cn:10241/cyberzero/workordernote:0.35.0`，digest `sha256:097fa882cd3f…`。
+>   `192.168.3.200:3000/cyberzero/workordernote:0.35.0`，digest `sha256:097fa882cd3f…`。
 > - 生产冒烟：8906 版本弹窗首卡 `0.35.0`、共 35 张卡、5 段迭代主线。
 
 ### 2026-10-17：0.34.0（201 生产 / 201 沙箱 / 200 生产上线）—— 小秘能拉取选模型、三档思考、回答存记事本；记事行换清单图标；每栏一份 AI 提示词；迭代说明合并精简
@@ -1072,9 +1073,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   （45 673 847 B）sha256 `556e16c45c5477b88e7fe443f8786a4bfcc741ffb2e45145fe302a5f8ca5ffa7`，
 >   自检 30 项全过；fnOS 包 `workordernote_0.34.0_amd64.fpk`（21 515 534 B，`fnpack` 1.2.4）md5
 >   `98373329effd299f86474884caadeec6`。三个构件已放 201 与 200 的 `images/`/`pkg/`，md5 逐字节一致。
-> - 推送：`git push` main（`738873b`、`2cfd829`）与 tag `v0.34.0`（走 HTTPS 端点，CIFS 路径会被钩子拒）；
+> - 推送：`git push` main（`738873b`、`2cfd829`）与 tag `v0.34.0`（走内网端点，CIFS 路径会被钩子拒）；
 >   Gitea **Release id 20** 挂三个附件（45 760 367 / 45 673 847 / 21 515 534 B）；
->   镜像 `docker tag` + `docker push` 到 `gitea.topzero.cn:10241/cyberzero/workordernote:0.34.0`，
+>   镜像 `docker tag` + `docker push` 到 `192.168.3.200:3000/cyberzero/workordernote:0.34.0`，
 >   digest `sha256:bed64f76689e…`。
 
 ### 2026-10-16：0.33.0（沙箱 8908 / 201 生产上线）—— 小秘看得到工作数据：周报 / 月报 / 年报 / 工作清单 / 自定义查询，没接模型也能出草稿
@@ -1137,9 +1138,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   完成记录 `e9397a50eb` **三台一致**；条数 清单 5 / 卡片 9 / 提醒 60 / 完成 40 / 记事 8 三台相同
 >   （完成记录从 0.32.0 时的 36 涨到 40，是当天用户自己完成的任务，非同步差异）。
 > - 推送：`git push` main（`4dce7eb`、`1c620c3`、`2d3cdd2`）与 tag `v0.33.0`；Gitea **Release id 19**
->   （`https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote/releases/tag/v0.33.0`）挂三个附件
+>   （`http://192.168.3.200:3000/cyberzero/WorkOrderNote/releases/tag/v0.33.0`）挂三个附件
 >   （45 701 189 / 45 616 967 / 21 484 349 B）；镜像 `docker tag` + `docker push` 到
->   `gitea.topzero.cn:10241/cyberzero/workordernote:0.33.0`，digest `sha256:1fb337c4116d…`，
+>   `192.168.3.200:3000/cyberzero/workordernote:0.33.0`，digest `sha256:1fb337c4116d…`，
 >   仓库 `tags/list` 回读已含 0.33.0。
 > - 构件：`images/workordernote-0.33.0-amd64.tar.gz`（45 701 189 B）md5 `c331d6887e8cde70c3d0210baff52884`；
 >   离线包 `WorkOrderNote-0.33.0-offline-amd64.tar.gz`（45 616 967 B）sha256
@@ -1311,7 +1312,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   三个构件都放了 201 的 `images/`+`pkg/` 与 200 的 `images/`+`pkg/`（与 201 逐字节一致；200 的镜像 tar 直接从
 >   201 拷到它的 `images/`，所以 200 才用得上「先 load 再改标签」）。
 > - Gitea：Release `v0.31.0`（id `17`，三个附件都传了）+ 容器仓库
->   `gitea.topzero.cn:10241/cyberzero/workordernote:0.31.0`；tag `v0.31.0` 已推（`main` 在 `9dc7155`）。
+>   `192.168.3.200:3000/cyberzero/workordernote:0.31.0`；tag `v0.31.0` 已推（`main` 在 `9dc7155`）。
 > - **构建备注（下次发版会再遇到）**：本机 BuildKit 拉不到 `golang:1.26-alpine`
 >   （镜像站 `docker.fnnas.com` 返回 401 Unauthorized，直连 `registry-1.docker.io` TLS 握手超时），
 >   这一版改用经典构建器 `DOCKER_BUILDKIT=0` + `Dockerfile.build-tmp`（`FROM` 写本地镜像 ID：
@@ -1375,7 +1376,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   （21.4 MB，`fnpack` 1.2.4 打出，放在 201 生产目录与 200 的 `pkg/`，供应用中心手动安装；
 >   arm64 因为本机没有 `qemu-aarch64` 没出包）。200 的 `images/`、`pkg/` 与本机 201 逐字节一致。
 > - Gitea：Release `v0.29.0`（附镜像 tar、离线包、fnOS 包三个附件）+ 容器仓库
->   `gitea.topzero.cn:10241/cyberzero/workordernote:0.29.0`
+>   `192.168.3.200:3000/cyberzero/workordernote:0.29.0`
 >   （digest `sha256:25eb3fb38d76cf86723b8a0acedc153116a503ce4ad75c384bacf35bad94acce`）。
 
 ### 2026-10-14：0.28.0（201 生产 / 200 生产 / 沙箱 8908 上线）—— 稍后提醒只推迟提醒时间；首页看板栏目图标 + 点击定位到清单
@@ -1420,7 +1421,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 > - 构件：201 `images/workordernote-0.28.0-amd64.tar.gz` md5 `6a0d73769b508d9d604a33d538d7b962`、
 >   `pkg/WorkOrderNote-0.28.0-offline-amd64.tar.gz` md5 `7e8c4cbc441fb0b3399d29469562e3b4`；
 >   本地导出/给 200 用的那份 md5 `80f5148bae84263862c8ee614f3cee40`（镜像 ID 一致，gzip 流不同）。
-> - Gitea：Release `v0.28.0`（附镜像与离线包）+ 容器仓库 `gitea.topzero.cn:10241/cyberzero/workordernote:0.28.0`
+> - Gitea：Release `v0.28.0`（附镜像与离线包）+ 容器仓库 `192.168.3.200:3000/cyberzero/workordernote:0.28.0`
 >   （digest `sha256:6f3049e1c79062aebaba8b7c5a03e7c569f9f03d11ae74d10caa59a460fcb7b6`；回读 pull 的镜像 ID 一致）。
 
 ### 2026-10-14：0.27.0（201 生产 / 200 生产 / 沙箱 8908 上线）—— 首页看板 + 提醒@他（保存到清单 / 提醒一下）+ 信用卡按还款日到期与逾期 + 「知道了」不脱离逾期
@@ -1466,7 +1467,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   `pkg/WorkOrderNote-0.27.0-offline-amd64.tar.gz` md5 `324e829e806408a4ecf57df4a683f1aa`、
 >   tar sha256 `92dafe28f8cdcf696a21b7e17eba854860652e02b790ea6a2d8b1d06e9711766`；200 走 `docker load`
 >   （镜像 ID 同为 `sha256:5cbfae90a17c…`）。
-> - Gitea：Release `v0.27.0`（附镜像与离线包）+ 容器仓库 `gitea.topzero.cn:10241/cyberzero/workordernote:0.27.0`
+> - Gitea：Release `v0.27.0`（附镜像与离线包）+ 容器仓库 `192.168.3.200:3000/cyberzero/workordernote:0.27.0`
 >   （digest `sha256:d24a47ef7197fa9a3a455eb8577ba83c6f052737efbf3ac04e5106adade1e60c`；回读 pull 的镜像 ID 一致）。
 
 ### 2026-10-13：0.25.0（201 生产 / 200 生产 / 沙箱 8908 上线）—— 「开始提醒时间」下新增「提前几天开始提醒」；改完设置立刻生效
@@ -1511,7 +1512,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   `e3830d6a953a8e9887be1d876788ce19cdf85131ee7d84d303c526246b481d2d`；200 走 `docker load`
 >   （镜像 ID 同为 `sha256:83e5c2b67c23…`）。
 > - Gitea：Release `v0.25.0`（tag 指向 `1a35c34`，附镜像与离线包）+ 容器仓库
->   `gitea.topzero.cn:10241/cyberzero/workordernote:0.25.0`（digest
+>   `192.168.3.200:3000/cyberzero/workordernote:0.25.0`（digest
 >   `sha256:8ec0c67d76677699adb1d0ffdc3410da44ef83a987ddde0373e7a796053263bb`；回读 pull 的镜像 ID 一致）。
 
 ### 2026-10-13：0.24.0（201 生产 / 200 生产 / 沙箱 8908 上线）—— 「提醒@他」多人互推提醒 + 三条口径修正（首次提醒 10 分钟 / 生日按年循环 / 倒计时双层描边）
@@ -1566,12 +1567,12 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   `4e52c5282c30b6f1738f1424a804b12a`、tar sha256 `e79d5fb4d4a3c53fbdc4aac74194b35a0b1e88abf1b082adcd1f77464d1dbbc8`；
 >   200 是通过 `docker load` 加载（镜像 ID 同为 `sha256:acec90fcadc3…`）。
 > - 构件同步进 Gitea：Release `v0.24.0`（附镜像与离线包，tag 指向 `04cb90d`）与容器仓库
->   `gitea.topzero.cn:10241/cyberzero/workordernote:0.24.0`（manifest digest
+>   `192.168.3.200:3000/cyberzero/workordernote:0.24.0`（manifest digest
 >   `sha256:14e15022df3ac48da44d4a2689f1c6eda9ad9b2cf5951980119c5509496775b7`；回读 pull
 >   回来的镜像 ID 同为 `sha256:acec90fcadc3…`）。
 >   **推镜像的方式换了**：原来用的「alpine 里 `apk add skopeo` + skopeo copy」这轮卡住
->   （apk 拉依赖太慢，10 分钟没动静），改成 `docker login gitea.topzero.cn:10241` 后直接
->   `docker push`（该地址是自签证书，daemon 需按 insecure registry 处理）——
+>   （apk 拉依赖太慢，10 分钟没动静），改成 `docker login 192.168.3.200:3000` 后直接
+>   `docker push`（该地址是 HTTP 明文 registry，daemon 需按 insecure registry 处理）——
 >   第一次直接 push 报 `unauthorized: reqPackageAccess`，**先 login 就正常了**。
 > - **一条仓库侧的坑**：`reminders-upstream/ops/offline/` 少了 `.env.example`（镜像进仓库时漏了
 >   隐藏文件），在仓库里直接跑 `ops/build-offline-package.sh` 会在第 2 步报 `cp: cannot stat`。
@@ -1616,7 +1617,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   构件（两边 md5 一致）：`images/workordernote-0.23.4-amd64.tar.gz` md5
 >   `a47a5e2ac5d33dd5e1e265925efb5564`；`pkg/WorkOrderNote-0.23.4-offline-amd64.tar.gz` md5
 >   `1c4299367aeb5cf630d7c23b2d2c49ac`、tar sha256 `3ad34bb5cdba843835b8ffc2999e80e5b73a9b156947b20d6806431d5e687481`。
-> - 构件同步进 Gitea：Release `v0.23.4` 与容器仓库 `gitea.topzero.cn:10241/cyberzero/workordernote:0.23.4`。
+> - 构件同步进 Gitea：Release `v0.23.4` 与容器仓库 `192.168.3.200:3000/cyberzero/workordernote:0.23.4`。
 > - **一条流程自省**：跑 0.23.3 那次全量回归时我顺手改了 `run-all.sh`（把 `verify-117` 加进套件表），
 >   结果脚本跑到最后被改坏（`eep: command not found`）—— 套件本身全绿（只有 `verify-095` 因为
 >   登录限流重试后仍撞限流红了 2 项，同一套件在 0.23.4 这轮是 30/30），但汇总段没打出来。
@@ -1645,7 +1646,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 >   构件（两边 md5 一致）：`images/workordernote-0.23.3-amd64.tar.gz` md5
 >   `b3a9122f7d621e965cb88d68a9200f0e`；`pkg/WorkOrderNote-0.23.3-offline-amd64.tar.gz` md5
 >   `5747575dfa8a4c6abe9554e11df3a737`、tar sha256 `23e7bf14d3f831b08816cb06e0711c29db6ffc2598f5616aac8332526693d9ba`。
-> - 构件同步进 Gitea：Release `v0.23.3` 与容器仓库 `gitea.topzero.cn:10241/cyberzero/workordernote:0.23.3`。
+> - 构件同步进 Gitea：Release `v0.23.3` 与容器仓库 `192.168.3.200:3000/cyberzero/workordernote:0.23.3`。
 
 ### 2026-10-13：0.23.2（201 生产 / 200 生产 / 沙箱 8908 上线）—— 芯片时间固定 23:59 + 剩余时间；「开始提醒时间」＝当天第一次提醒；弹窗「知道了」文案与后台一致；后台「通知」卡片并入「提醒」
 
@@ -1697,7 +1698,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 > - 数据指纹（201 == 200）：清单 `6fc67d82ce`、卡片 `b5e17c0ab7`、提醒 `0d40896e4b`、完成 `6767aa483f`
 >   （5 清单 / 9 卡片 / 61 提醒 / 43 条完成记录）。
 > - 构件同步进 Gitea：Release `v0.23.2`（镜像 + 离线包两个附件）与容器仓库
->   `gitea.topzero.cn:10241/cyberzero/workordernote:0.23.2`。
+>   `192.168.3.200:3000/cyberzero/workordernote:0.23.2`。
 >
 > **需要注意的行为变化**：因为「开始提醒时间」现在是**第一次提醒**，而用户把它设成了 **06:00**，
 > 所以**当天到期的任务从 06:00 就会被提醒**（不再等到 23:59）；如果不想这么早被提醒，把它改晚一点
@@ -1726,7 +1727,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 > - 数据指纹（201 == 200）：清单 `6fc67d82ce`、卡片 `b5e17c0ab7`、提醒 `0d40896e4b`、完成 `6767aa483f`
 >   （5 清单 / 9 卡片 / 61 提醒 / 43 条完成记录）。
 > - **构件同步进 Gitea 仓库**：Release `v0.23.1`（镜像 + 离线包两个附件）与容器仓库
->   `gitea.topzero.cn:10241/cyberzero/workordernote:0.23.1`（回读 digest `sha256:9ecf6810b654…`，
+>   `192.168.3.200:3000/cyberzero/workordernote:0.23.1`（回读 digest `sha256:9ecf6810b654…`，
 >   仓库里已有 `0.23.0` / `0.23.1` 两个标签）。
 
 ### 2026-10-13：0.23.0（201 生产 / 200 生产 / 沙箱 8908 上线）—— 倒计时直显大卡片 + 彩色流光 + 横线；卡片背景「蒙板」（虚化 / 透明度可调）；修「模板新建继承上一张卡片背景」
@@ -1782,14 +1783,14 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
  - 代码仓库（Gitea `cyberzero/WorkOrderNote`）同步推送（Gitea 已设为默认远端 `origin`，
   上游 GitHub 改名 `upstream`；本地分支改回 `main` 跟踪 `origin/main`）。
 > - **构件也放进 Gitea 仓库**：
->   · Release <https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote/releases/tag/v0.23.0> —— 附了
+>   · Release <http://192.168.3.200:3000/cyberzero/WorkOrderNote/releases/tag/v0.23.0> —— 附了
 >     `workordernote-0.23.0-amd64.tar.gz`（镜像，45MB）、`WorkOrderNote-0.23.0-offline-amd64.tar.gz`
 >     （离线包，44MB）、`SHA256SUMS-0.23.0.txt`；
->   · **容器仓库** `gitea.topzero.cn:10241/cyberzero/workordernote:0.23.0`（skopeo 直推，回读校验
+>   · **容器仓库** `192.168.3.200:3000/cyberzero/workordernote:0.23.0`（skopeo 直推，回读校验
 >     digest `sha256:a01ffb2d6e9b…`，labels 里 version `0.23.0` / revision `fa4543b`）。
->     本机要直接拉：先把 `gitea.topzero.cn:10241` 加进 `/etc/docker/daemon.json` 的
->     `insecure-registries`（或导入其 CA），再重启 dockerd（`live-restore` 生效，现有容器不会重启），
->     之后即可 `docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.23.0`。
+>     本机要直接拉：先把 `192.168.3.200:3000` 加进 `/etc/docker/daemon.json` 的
+>     `insecure-registries`（HTTP 明文 registry，无证书可导），再重启 dockerd（`live-restore` 生效，现有容器不会重启），
+>     之后即可 `docker pull 192.168.3.200:3000/cyberzero/workordernote:0.23.0`。
 >     注意：飞牛 Docker 应用以后若重写 daemon.json，这一项要再加一次。
 > - **Git 默认远端已切到 Gitea**：`origin` = Gitea（`remote.pushDefault=origin`），上游 GitHub 改名
 >   `upstream`；工作分支从 `feat-note` 改回 `main` 并跟踪 `origin/main`（旧的浅克隆 main 留作

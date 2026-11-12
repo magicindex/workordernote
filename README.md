@@ -3,10 +3,10 @@
 任务、记事与日历一体的提醒应用。清单管理、定时提醒、记事归档、月历总览，
 支持站内消息、电子邮件、短信、飞书机器人和 QQ 机器人通知。
 
-- 仓库：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote>
-- 发布与安装包：<https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote/releases>
+- 仓库：<http://192.168.3.200:3000/cyberzero/WorkOrderNote>
+- 发布与安装包：<http://192.168.3.200:3000/cyberzero/WorkOrderNote/releases>
 - GitHub 镜像：<https://github.com/magicindex/workordernote>
-- 当前版本：`0.46.3`
+- 当前版本：`0.47.0`
 
 > **本项目是衍生作品。** 基于开源项目
 > [TechFunWay/reminders](https://github.com/TechFunWay/reminders)（MIT 许可）衍生开发，
@@ -62,16 +62,16 @@
 镜像发布在仓库自带的容器仓库，可直接拉取：
 
 ```bash
-docker pull gitea.topzero.cn:10241/cyberzero/workordernote:0.46.3
+docker pull 192.168.3.200:3000/cyberzero/workordernote:0.47.0
 ```
 
-同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.46.3`；Gitea 容器仓库不可用时可直接改用。
+同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.47.0`；Gitea 容器仓库不可用时可直接改用。
 
 ### 用仓库里的 compose 文件安装
 
 ```bash
 mkdir -p ~/workordernote && cd ~/workordernote
-curl -fsSLO https://gitea.topzero.cn:10241/cyberzero/WorkOrderNote/raw/branch/main/docker-compose.yml
+curl -fsSLO http://192.168.3.200:3000/cyberzero/WorkOrderNote/raw/branch/main/docker-compose.yml
 docker compose up -d
 ```
 
@@ -90,7 +90,7 @@ curl -fsSLO https://raw.githubusercontent.com/magicindex/workordernote/main/dock
 ```yaml
 services:
   workordernote:
-    image: gitea.topzero.cn:10241/cyberzero/workordernote:0.46.3
+    image: 192.168.3.200:3000/cyberzero/workordernote:0.47.0
     container_name: workordernote
     # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
     user: "1000:1001"
@@ -158,7 +158,7 @@ docker build -f Dockerfile.custom \
   --build-arg VERSION=$(cat VERSION) \
   --build-arg BUILD_TIME=$(date +%Y-%m-%dT%H:%M:%S) \
   --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) \
-  -t gitea.topzero.cn:10241/cyberzero/workordernote:$(cat VERSION) .
+  -t 192.168.3.200:3000/cyberzero/workordernote:$(cat VERSION) .
 ```
 
 > tzdata 不是可选项：服务端多处调用 `time.LoadLocation("Asia/Shanghai")`，
