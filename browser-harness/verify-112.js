@@ -9,7 +9,13 @@
  *   4) **后台「周起始日」显示中文**（周一 / 周日，原来直接显示 monday/sunday）。
  *   5) **偏好设置里已删掉「清单顺序」**（用户 2026-10-16：与侧栏重复），侧栏那一套见 verify-121；
  *      同页的「默认清单」还在。
- *   6) **人生要有仪式感卡片**：倒计时放最上面、字号放大，卡片加高。
+ *   6) **人生要有仪式感卡片**：倒计时放最上面、字号放大，卡片加高；卡面跟着所选过渡色变，
+ *      浅色档自动配深字。倒计时**自 2026-10-28 改版**：纯色大数字 + 一层柔和落影，
+ *      不再用「渐变字 + 彩色流光 + 双层黑白描边」那一套（所以这里的断言按现状写，
+ *      紫罗兰档也只比「和默认卡不同」，不钉死调色板的 rgb）。
+ *
+ * 2026-11-12 顺手把第 6 组里 10 条**陈旧断言**按现在的设计改掉了（原来一直假红：
+ * 期望 64px 图标 / 徽标 ≥11.5px / 渐变字 / 流光动画 / 双层描边 / 写死的 violet rgb）。
  *
  * 用法：APP_URL=http://127.0.0.1:8918 node verify-112.js
  */
@@ -387,8 +393,14 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
         const it = items.find((i) => i.title === t);
         const hero = [...document.querySelectorAll('[data-ceremony-countdown]')]
           .find((h) => (h.closest('[data-ceremony-card]')?.textContent || '').includes(t));
+        // 同一页里找一张「没挑颜色」的卡片做对照：颜色跟不跟着 accent 变，比钉死 rgb 值稳
+        // （调色板换过几次色值，旧断言就是死在写死了 #7c3aed 的 rgb 上）。
+        const allCards = [...document.querySelectorAll('[data-ceremony-card]')];
+        const other = allCards.find((c) => !(c.textContent || '').includes(t));
         return {
           id: it?.id, apiAccent: it?.accent,
+          bgKey: hero ? hero.closest('[data-ceremony-card]')?.getAttribute('data-ceremony-bg') : '',
+          otherBg: other ? getComputedStyle(other.querySelector('.ceremony-bg-fill') || other).backgroundImage : '',
           // 倒计时已经没有自己的底色块（2026-10-13 起直接压在卡面上）：
           // 看卡片的渐变，以及倒计时用的字色变量。
           cardBg: hero ? getComputedStyle(hero.closest('[data-ceremony-card]').querySelector('.ceremony-bg-fill') || hero.closest('[data-ceremony-card]')).backgroundImage : '',
@@ -397,7 +409,6 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
         };
       }, { b: BASE, t: accentTitle });
       if (accented.id) createdIds.push(accented.id);
-      // 紫罗兰档的深色渐变两端（#7c3aed → #5b21b6，0.21.0 起把色板换深以保证白字对比度）
       check('色板里有金属四档（白银/黄金/青铜/黑铁）',
         ['silver', 'golden', 'bronze', 'iron'].every((k) => swatches.some((x) => x.key === k)),
         JSON.stringify(swatches.map((x) => x.key)));
@@ -405,11 +416,12 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
         ['light-sky', 'light-violet', 'light-rose', 'light-amber', 'light-emerald', 'light-teal']
           .every((k) => swatches.some((x) => x.key === k)),
         JSON.stringify(swatches.map((x) => x.key)));
-      check('选「紫罗兰」保存后：接口里 accent=violet、整张卡片换成对应渐变（倒计时同色）',
-        accented.apiAccent === 'violet' && /linear-gradient/.test(accented.cardBg)
-          && /124, 58, 237/.test(accented.cardBg) && /91, 33, 182/.test(accented.cardBg)
+      // 卡面渐变由 cardStyle 现算（叠蒙板后具体 rgb 会变），所以只钉「确实是渐变 + 与默认档不同 + 白字」。
+      check('选「紫罗兰」保存后：接口里 accent=violet、卡面换成紫罗兰的渐变（与默认浅色卡不同）',
+        accented.apiAccent === 'violet' && accented.bgKey === 'violet'
+          && /linear-gradient/.test(accented.cardBg) && !!accented.otherBg && accented.cardBg !== accented.otherBg
           // CSS 变量里存的是内联写的原值（#ffffff），不是计算后的 rgb()，两种写法都认
-          && /^#fff(fff)?$/i.test(accented.heroInk) || accented.heroInk === 'rgb(255, 255, 255)',
+          && (/^#fff(fff)?$/i.test(accented.heroInk) || accented.heroInk === 'rgb(255, 255, 255)'),
         JSON.stringify(accented));
       // 再打开编辑：色板应选中 violet；改成「默认」保存 → accent 清空
       await page.evaluate((t) => {
@@ -581,78 +593,46 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
         contrast.length > 0 && contrast.every((c) => c.hero === null || c.hero >= 3.5),
         JSON.stringify(contrast.map((c) => [c.accent, c.hero, c.heroInk])));
 
-      // 流光：数字是渐变字 + background-clip:text + 扫光动画（用户 2026-10-13 要求）
-      const flow = await page.evaluate(() => {
-        const b = document.querySelector('[data-ceremony-countdown] b');
+      // 倒计时改版（2026-10-28，CSS 里写着「不再用描边 + 流光动画，改成大号、克制的数字」）：
+      // 现在的设计是**纯色大数字 + 一层柔和落影**。下面按现状钉住，别再按旧版的
+      // 「渐变字 + 彩色流光 + 双层黑白描边」断言（那几条会一直假红）。
+      const heroNumber = await page.evaluate(() => {
+        const b = document.querySelector('[data-ceremony-countdown] b[data-count]')
+          || document.querySelector('[data-ceremony-countdown] b');
         if (!b) return null;
-        const style = getComputedStyle(b);
+        const s = getComputedStyle(b);
+        const before = getComputedStyle(b, '::before');
         return {
-          bg: style.backgroundImage.slice(0, 90),
-          size: style.backgroundSize,
-          clip: style.webkitBackgroundClip || style.backgroundClip,
-          fill: style.webkitTextFillColor || style.color,
-          anim: style.animationName,
-          duration: style.animationDuration,
+          bg: s.backgroundImage,
+          clip: s.webkitBackgroundClip || s.backgroundClip,
+          fill: s.webkitTextFillColor || s.color,
+          color: s.color,
+          anim: s.animationName,
+          stroke: s.getPropertyValue('-webkit-text-stroke-width') || s.webkitTextStrokeWidth || '',
+          shadow: s.textShadow,
+          beforeContent: before.content,
+          beforeStroke: before.getPropertyValue('-webkit-text-stroke-width') || '',
         };
       });
-      check('倒计时数字是渐变字并裁在文字里（流光的前提）',
-        !!flow && /linear-gradient/.test(flow.bg) && flow.clip === 'text', JSON.stringify(flow));
-      check('数字有持续跑动的流光动画',
-        !!flow && /ceremony-countdown-flow/.test(flow.anim) && parseFloat(flow.duration) > 0.2,
-        JSON.stringify(flow));
-      // 用户 2026-10-13 追加：「使用彩色流光」—— 渐变里要有多种颜色（不是单色白光扫过）
-      const flowColors = await page.evaluate(() => {
-        const b = document.querySelector('[data-ceremony-countdown] b');
-        if (!b) return null;
-        const stops = [...getComputedStyle(b).backgroundImage.matchAll(/rgb\([^)]+\)/g)].map((m) => m[0]);
-        return { stops, distinct: new Set(stops).size };
-      });
-      check('流光是彩色的（渐变里至少三种不同颜色，不是单色）',
-        !!flowColors && flowColors.distinct >= 3, JSON.stringify(flowColors));
+      check('倒计时是纯色大数字（不再用渐变字裁在文字里）',
+        !!heroNumber && heroNumber.bg === 'none' && heroNumber.clip !== 'text',
+        JSON.stringify(heroNumber));
+      check('数字没有跑动动画（流光已撤，字是静的）',
+        !!heroNumber && heroNumber.anim === 'none', JSON.stringify(heroNumber));
+      check('数字有一层柔和落影（层次来自阴影，而不是描边）',
+        !!heroNumber && !!heroNumber.shadow && heroNumber.shadow !== 'none', JSON.stringify(heroNumber));
+      check('数字没有描边、也没有 ::before 复制层（旧版的双层描边已删）',
+        !!heroNumber && parseFloat(heroNumber.stroke || '0') === 0
+          && (heroNumber.beforeContent === 'none' || heroNumber.beforeContent === '')
+          && parseFloat(heroNumber.beforeStroke || '0') === 0,
+        JSON.stringify(heroNumber));
       await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
       const reduced = await page.evaluate(() => {
         const b = document.querySelector('[data-ceremony-countdown] b');
         return b ? getComputedStyle(b).animationName : null;
       });
-      check('系统开了「减少动态效果」时流光停下（只留静态亮色数字）', reduced === 'none', String(reduced));
+      check('「减少动态效果」下同样没有动画（现在的数字本来就是静态）', reduced === 'none', String(reduced));
       await page.emulateMediaFeatures([]);
-
-      // 用户 2026-10-13：「倒计时 背景暗时看不清，增加白边」→ 随后又要求
-      // 「白色边内侧加黑边衬托数字更清晰」。现在是**两层描边**：
-      //   <b> 自己是内圈（细，深色卡面=黑边）；
-      //   ::before 那层是外圈（粗，深色卡面=白边），露在内圈外侧。
-      const stroke = await page.evaluate(() => {
-        // 取一张**带数字**的卡片：「就是今天」那张的 <b> 里是文字、没有 data-count，
-        // 外圈那层复制不出东西（content 会是空串），拿它断言会假红。
-        const b = document.querySelector('[data-ceremony-countdown] b[data-count]')
-          || document.querySelector('[data-ceremony-countdown] b');
-        const hero = b?.closest('[data-ceremony-countdown]');
-        if (!b) return null;
-        const read = (decl) => ({
-          width: decl.getPropertyValue('-webkit-text-stroke-width') || decl.webkitTextStrokeWidth || '',
-          color: decl.getPropertyValue('-webkit-text-stroke-color') || decl.webkitTextStrokeColor || '',
-        });
-        const outerDecl = getComputedStyle(b, '::before');
-        return {
-          inner: read(getComputedStyle(b)),
-          outer: { ...read(outerDecl), content: outerDecl.content, fill: outerDecl.getPropertyValue('-webkit-text-fill-color') || '' },
-          count: b.getAttribute('data-count') || '',
-          ink: hero ? getComputedStyle(hero).getPropertyValue('--ceremony-ink').trim() : '',
-        };
-      });
-      check('倒计时数字有内圈描边（宽度 > 0）',
-        !!stroke && parseFloat(stroke.inner.width) > 0, JSON.stringify(stroke));
-      check('外圈描边比内圈粗（白边才会露在黑边外侧）',
-        !!stroke && parseFloat(stroke.outer.width) > parseFloat(stroke.inner.width), JSON.stringify(stroke));
-      check('外圈那层复制了同一串数字（content = 数字本身、只描边不填色）',
-        !!stroke && !!stroke.count && stroke.outer.content === `"${stroke.count}"`
-          && /transparent|rgba\(0, 0, 0, 0\)/.test(stroke.outer.fill),
-        JSON.stringify(stroke));
-      check('深色卡面：内圈是黑边、外圈是白边',
-        !!stroke && (stroke.ink === '#ffffff'
-          ? /2, 6, 23/.test(stroke.inner.color) && /255, 255, 255/.test(stroke.outer.color)
-          : true),
-        JSON.stringify(stroke));
       check('每张卡的标题字色与卡面底色对比度足够（≥4.5，浅色卡面不会被白字糊住）',
         contrast.length > 0 && contrast.every((c) => c.title === null || c.title >= 4.5),
         JSON.stringify(contrast.map((c) => [c.accent, c.title, c.titleInk])));
@@ -699,10 +679,12 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
       check('图标在内容**左侧**、整组（图标 + 文字）居中',
         !!layout && layout.iconRight <= layout.titleLeft + 1 && Math.abs(layout.bodyMid - layout.cardMid) <= 2,
         JSON.stringify(layout));
-      check('图标放大到约 2 倍（44px 图标 / 64px 底盘，原来 22px / 36px）',
-        !!layout && layout.iconSvg >= 40 && /64x64/.test(layout.iconBox), JSON.stringify(layout));
-      check('名称 / 时间 / 循环次数徽标都放大（≥18 / ≥13 / ≥11.5px）',
-        !!layout && layout.titleFont >= 18 && layout.dateFont >= 13 && (layout.badgeFont === 0 || layout.badgeFont >= 11.5),
+      // 2026-10-28 起图标只显示图形、不带方框，底盘 112px（h-28）、图形 88px。
+      check('图标放大到约 2 倍（88px 图标 / 112px 底盘，原来 22px / 36px）',
+        !!layout && layout.iconSvg >= 80 && /112x112/.test(layout.iconBox), JSON.stringify(layout));
+      // 名称 20px / 时间 13px / 徽标 11px（.ceremony-title、.ceremony-date、卡面 .tiny-badge）
+      check('名称 / 时间 / 循环次数徽标都放大（≥20 / ≥13 / ≥11px）',
+        !!layout && layout.titleFont >= 20 && layout.dateFont >= 13 && (layout.badgeFont === 0 || layout.badgeFont >= 11),
         JSON.stringify(layout));
     }
 
