@@ -233,7 +233,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
-### 2026-11-12：0.47.0（201 生产上线；200 待上线）—— 完成备注、新建框精简、日期芯片只选日期
+### 2026-11-12：0.47.0（201 生产 / 200 生产均已上线）—— 完成备注、新建框精简、日期芯片只选日期
 
 > **发版记录**（VERSION 0.47.0，源码提交 `ff4f36c`，镜像 `workordernote:0.47.0` =
 > `sha256:d320d7cd376feed54c1b183e125dd6dbd6a1eb4dcbcf20064e453bda4482aa65`，
@@ -246,11 +246,11 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 数据体检（201）：`integrity_check = ok`、25 张表、129 条未删除提醒；`reminders.completed_note` 与 `completions.note` 两列已由 AutoMigrate 加上（WAL 里，checkpoint 后进主库）。
 - 镜像：Gitea `192.168.3.200:3000/cyberzero/workordernote:0.47.0` 与 `:latest`、GHCR `ghcr.io/magicindex/workordernote:0.47.0` 与 `:latest` 都已推（manifest `sha256:c9520ef4…`）。
 - 201 生产回归：`verify-128` **34/34**。
-- 200：**未部署**（本机没有到 200 的 SSH 凭据：`ssh -p 9527 王耀辉@192.168.3.200` 公钥被拒、也没有密码；镜像已在 registry 上，拿到权限后按下面三步即可）。
-  1. `ssh -p 9527 王耀辉@192.168.3.200`
-  2. 备份：`cp docker-compose.yml docker-compose.yml.bak-pre0470-$(date +%Y%m%d-%H%M)` + `tar czf data.bak-pre0470-$(date +%Y%m%d-%H%M).tgz data`
-  3. `sudo docker pull 127.0.0.1:3000/cyberzero/workordernote:0.47.0 && sudo docker tag 127.0.0.1:3000/cyberzero/workordernote:0.47.0 workordernote:0.47.0`；compose 里 image 改 `workordernote:0.47.0`；`sudo docker compose up -d`；`curl -s http://127.0.0.1:8906/api/version` 应为 `0.47.0 / ff4f36c`。
+- 200：备份 `docker-compose.yml.bak-pre0470-20261112-2310` / `data.bak-pre0470-20261112-2310.tgz`（7.5M），旧镜像保留 `workordernote:0.46.3-keep-20261112-2310`；从 `127.0.0.1:3000` 拉取 0.47.0、tag 成 `workordernote:0.47.0`，compose 改 tag 后 `docker compose up -d`，23:10:18 healthy，`/api/version` = `0.47.0 / ff4f36c`。
+- 200 数据：126 条未删除提醒（11 条记事），summary `all 17 / completed 193 / overdue 1 / trash 35`，与同步节奏一致（201 为 129 条／`all 20`）；**200 的未读通知为 0、201 为 32**，是两台各自的通知状态，属正常差异。
+- 200 生产回归：`verify-128` **34/34**。
 - 沙箱 8908：本机当前**没有**这个容器（只有在 8918 的临时验证容器），未部署。
+- 权限备注：本机没有到 200 的 SSH 公钥；用 NAS 账号 `王耀辉` + 该账号密码（`sshpass`）登录，`sudo` 密码相同。**别把密码写进仓库或脚本**。
 - 未做：离线一键安装包、飞牛 fpk、GitHub 快照、生产全量回归。
 
 ### 2026-11-11：0.46.3（201 生产 / 200 生产上线）—— 修「更多」在手机上点了没反应
