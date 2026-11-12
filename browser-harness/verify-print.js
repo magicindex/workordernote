@@ -90,7 +90,8 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
     check('打印弹窗打开且存在打印区 #print-root', !!opened);
 
     const chipCount = await page.evaluate(() => document.querySelectorAll('.channel-pill').length);
-    check('可选的列共 8 项', chipCount === 8, String(chipCount));
+    // 2026-11-12 起多了一列「完成备注」（默认不勾）
+    check('可选的列共 9 项', chipCount === 9, String(chipCount));
 
     const defaultLabels = await headerLabels('#print-root', page);
     check('默认打印 5 列（序号/标题/类型/清单/完成时间）',
@@ -185,7 +186,7 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
     check('打印区包含全部记录行', printLayout.rows >= 1, `${printLayout.rows} 行`);
     await page.screenshot({ path: path.join(SHOTS, 'print-preview.png') });
 
-    // 全选 8 列（最宽的情况）再量一次：字号应自动收小、仍然不溢出、页数不失控
+    // 全选 9 列（最宽的情况）再量一次：字号应自动收小、仍然不溢出、页数不失控
     await page.evaluate(() => {
       const btn = [...document.querySelectorAll('button')].find((b) => (b.textContent || '').trim() === '全选');
       if (btn) btn.click();
@@ -203,8 +204,8 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
         overflow,
       };
     });
-    console.log('    全选 8 列：' + JSON.stringify(all));
-    check('全选 8 列后字号自动=小', all.columns === 8 && all.font === 'small', JSON.stringify(all));
+    console.log('    全选 9 列：' + JSON.stringify(all));
+    check('全选 9 列后字号自动=小', all.columns === 9 && all.font === 'small', JSON.stringify(all));
     check('8 列时仍然不超纸面、单元格不溢出',
       all.width <= all.printable && all.overflow === 0, JSON.stringify(all));
 

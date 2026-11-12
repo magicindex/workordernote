@@ -119,7 +119,7 @@ RECUR_ID=$(json "$(api "$B_PORT" POST /api/reminder/items \
   "$TOKEN_B")" "d['data']['id']")
 api "$B_PORT" POST /api/reminder/items \
   "{\"title\":\"B 的记事\",\"list_id\":$LIST_B,\"kind\":\"note\",\"repeat_rule\":\"none\"}" "$TOKEN_B" >/dev/null
-api "$B_PORT" POST "/api/reminder/items/$RECUR_ID/complete" "" "$TOKEN_B" >/dev/null
+api "$B_PORT" POST "/api/reminder/items/$RECUR_ID/complete" '{"note":"B 端的完成备注"}' "$TOKEN_B" >/dev/null
 check_eq "$(json "$(api "$B_PORT" GET /api/reminder/items?view=all "" "$TOKEN_B")" "len(d['data'])")" "2" "B 端有 2 条进行中的任务（另有 1 条记事，见「已完成」）"
 check_eq "$(json "$(api "$B_PORT" GET /api/reminder/completed "" "$TOKEN_B")" "len(d['data']['items'])")" "2" "B 端「已完成」2 条（1 条完成历史 + 1 条记事）"
 
@@ -149,6 +149,8 @@ check_eq "$(json "$(api "$A_PORT" GET /api/reminder/items?view=all "" "$TOKEN_A"
 check_eq "$(json "$(api "$A_PORT" GET /api/reminder/completed "" "$TOKEN_A")" "[x['title'] for x in d['data']['items'] if x['kind']=='note'][0]")" "B 的记事" "记事（note）也同步过来了"
 check_eq "$(json "$(api "$A_PORT" GET /api/reminder/completed "" "$TOKEN_A")" "len(d['data']['items'])")" "2" "A 端「已完成」里能看到拉来的完成历史与记事"
 check_eq "$(json "$(api "$A_PORT" GET /api/reminder/items?view=all "" "$TOKEN_A")" "sorted(x['list_name'] for x in d['data'])[0]")" "项目现场" "清单归属也同步过来了"
+# 完成备注（2026-11-12 加的字段）：完成历史同步过来时必须带着，否则用户写的那句话就丢了。
+check_eq "$(json "$(api "$A_PORT" GET /api/reminder/completed "" "$TOKEN_A")" "[x.get('note') for x in d['data']['items'] if x['title']=='B 的重复任务'][0]")" "B 端的完成备注" "完成备注随完成历史一起同步到 A"
 
 step "4. 重复同步是幂等的（不会重复造数据）"
 AGAIN=$(api "$A_PORT" POST /api/reminder/admin/sync/run "" "$TOKEN_A")
@@ -170,6 +172,17 @@ BOTH=$(api "$A_PORT" POST /api/reminder/admin/sync/run "" "$TOKEN_A")
 check_eq "$(json "$BOTH" "d['data']['status']")" "ok" "A 端发起双向同步成功"
 check_eq "$(json "$(api "$A_PORT" GET /api/reminder/items?view=all "" "$TOKEN_A")" "len(d['data'])")" "4" "A 端 4 条进行中的任务（2 + A 新建 + B 新建）"
 check_eq "$(json "$(api "$B_PORT" GET /api/reminder/items?view=all "" "$TOKEN_B")" "len(d['data'])")" "4" "B 端 4 条（双向后两边一致）"
+
+step "5b. 完成备注跨机：一次性任务写完同步过去，回传也不被空值擦掉"
+api "$A_PORT" POST /api/reminder/items \
+  "{\"title\":\"带备注的一次性任务\",\"due_at\":\"$DUE_B\",\"repeat_rule\":\"none\",\"channels\":[\"inapp\"]}" "$TOKEN_A" >/dev/null
+NOTE_ID=$(json "$(api "$A_PORT" GET /api/reminder/items?view=all "" "$TOKEN_A")" "[x['id'] for x in d['data'] if x['title']=='带备注的一次性任务'][0]")
+api "$A_PORT" POST "/api/reminder/items/$NOTE_ID/complete" '{"note":"现场已换好，旧件在车库"}' "$TOKEN_A" >/dev/null
+api "$A_PORT" POST /api/reminder/admin/sync/run "" "$TOKEN_A" >/dev/null
+check_eq "$(json "$(api "$B_PORT" GET "/api/reminder/items?view=all&status=all" "" "$TOKEN_B")" "[x.get('completed_note') for x in d['data'] if x['title']=='带备注的一次性任务'][0]")" "现场已换好，旧件在车库" "完成备注同步到了 B"
+# 从 B 再同步回 A：备注不能被「对端没有这个字段」冲掉（旧版本对端的空值口径）
+api "$B_PORT" POST /api/reminder/admin/sync/run "" "$TOKEN_B" >/dev/null
+check_eq "$(json "$(api "$A_PORT" GET "/api/reminder/items?view=all&status=all" "" "$TOKEN_A")" "[x.get('completed_note') for x in d['data'] if x['title']=='带备注的一次性任务'][0]")" "现场已换好，旧件在车库" "回传一次后备注还在（没被空值擦掉）"
 
 step "6. 冲突：同一条数据两边都改，改得晚的一方生效"
 TARGET_ID=$(json "$(api "$A_PORT" GET /api/reminder/items?view=all "" "$TOKEN_A")" "[x['id'] for x in d['data'] if x['title']=='B 的单向任务'][0]")

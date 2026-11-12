@@ -1006,7 +1006,7 @@ func completeReminderWithNote(db *gorm.DB, userID, reminderID uint, note string)
 		return ReminderDTO{}, err
 	}
 	// 「提醒@他」存到清单的那条任务：勾完以后卡片状态也要跟着变（用户 2026-10-13）。
-	syncNudgeFromReminder(db, userID, reminderID, true)
+	syncNudgeFromReminder(db, userID, reminderID, true, note)
 	return getReminder(db, userID, reminderID)
 }
 
@@ -1043,7 +1043,7 @@ func restoreReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error) 
 		return ReminderDTO{}, err
 	}
 	// 撤销完成时，存到清单的那条也回到「待处理」（与完成同一套同步）。
-	syncNudgeFromReminder(db, userID, reminderID, false)
+	syncNudgeFromReminder(db, userID, reminderID, false, "")
 	return getReminder(db, userID, reminderID)
 }
 
@@ -1115,7 +1115,7 @@ func retractCompletion(db *gorm.DB, userID, completionID uint) (ReminderDTO, err
 		return ReminderDTO{}, err
 	}
 	// 撤销后这条提醒重新变成「待处理」，「提醒@他」存到清单的卡片也退回未完成。
-	syncNudgeFromReminder(db, userID, reminderID, false)
+	syncNudgeFromReminder(db, userID, reminderID, false, "")
 	return getReminder(db, userID, reminderID)
 }
 
@@ -1397,7 +1397,9 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 		hq = hq.Where(tsUTC("completed_at")+" < datetime(?)", sqlTimeArg(*rng.End))
 	}
 	if query = strings.TrimSpace(query); query != "" {
-		hq = hq.Where("title_snapshot LIKE ?", "%"+query+"%")
+		// 完成备注也算「搜得到」的内容（用户 2026-11-12 体检：写了备注却搜不到）。
+		like := "%" + query + "%"
+		hq = hq.Where("(title_snapshot LIKE ? OR note LIKE ?)", like, like)
 	}
 	if err := hq.Order(tsUTC("completed_at") + " DESC").Find(&history).Error; err != nil {
 		return nil, err
@@ -1417,7 +1419,7 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 	}
 	if query != "" {
 		like := "%" + query + "%"
-		rq = rq.Where("(title LIKE ? OR notes LIKE ?)", like, like)
+		rq = rq.Where("(title LIKE ? OR notes LIKE ? OR completed_note LIKE ?)", like, like, like)
 	}
 	if err := rq.Order(tsUTC("completed_at") + " DESC").Find(&rows).Error; err != nil {
 		return nil, err

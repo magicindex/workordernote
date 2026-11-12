@@ -201,7 +201,9 @@ func completedExportCells(items []CompletedItemDTO, loc *time.Location) []export
 			due:       formatExportTime(item.ScheduledFor, false, loc),
 			completed: formatExportTime(&completedAt, false, loc),
 			repeat:    repeatRuleLabel(item.RepeatRule, ""),
-			notes:     "",
+			// 完成备注填进「备注」列：完成记录没有条目的原始备注（历史行连条目都可能删了），
+			// 用户真正写下来的那句话就是完成备注（用户 2026-11-12 体检发现这列一直空着）。
+			notes: strings.ReplaceAll(item.Note, "\r\n", "\n"),
 		})
 	}
 	return rows

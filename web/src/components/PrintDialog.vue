@@ -164,6 +164,8 @@ const columns = [
   { key: 'list', label: '清单', cls: 'col-tight', defaultValue: true, value: (i: CompletedItem) => i.list_name || '—' },
   { key: 'completed', label: '完成时间', cls: 'col-time', defaultValue: true, value: (i: CompletedItem) => formatTime(i.completed_at) },
   { key: 'scheduled', label: '原定时间', cls: 'col-time', defaultValue: false, value: (i: CompletedItem) => formatTime(i.scheduled_for) || '—' },
+  // 完成备注（2026-11-12）：默认不选，勾上就多一列；没写备注的行显示「—」。
+  { key: 'note', label: '完成备注', cls: '', defaultValue: false, value: (i: CompletedItem) => i.note || '—' },
   { key: 'repeat', label: '重复', cls: 'col-tight', defaultValue: false, value: (i: CompletedItem) => repeatLabel(i.repeat_rule) },
   { key: 'source', label: '记录来源', cls: 'col-tight', defaultValue: false, value: (i: CompletedItem) => sourceLabel(i) },
 ]

@@ -573,7 +573,10 @@ func notifyNudge(db *gorm.DB, userID uint, kind, title, body string) {
 //
 // 只认「这条任务确实是从我收到的那条提醒存出来的」：用 reminder_id + to_user_id 双重限定，
 // 免得别的账号的任务恰好对上 id。
-func syncNudgeFromReminder(db *gorm.DB, ownerID, reminderID uint, completed bool) {
+// syncNudgeFromReminder 把「提醒@他」存到清单的那条任务与勾选状态对齐。
+// note 是这次完成时填的完成备注：非空时一并写进回执，让发起人知道对方做了什么
+// （用户 2026-11-12 体检：回执只带状态、看不到备注）。
+func syncNudgeFromReminder(db *gorm.DB, ownerID, reminderID uint, completed bool, note string) {
 	var rows []Nudge
 	if err := db.Where("reminder_id = ? AND to_user_id = ?", reminderID, ownerID).Find(&rows).Error; err != nil {
 		return
@@ -596,8 +599,12 @@ func syncNudgeFromReminder(db *gorm.DB, ownerID, reminderID uint, completed bool
 			if err := db.Model(&Nudge{}).Where("id = ?", row.ID).Updates(updates).Error; err != nil {
 				continue
 			}
+			receipt := truncateRunes(row.Content, nudgeNotifyTitleRunes)
+			if note = normalizeCompletionNote(note); note != "" {
+				receipt = receipt + " · 完成备注：" + truncateRunes(note, 80)
+			}
 			notifyNudge(db, row.FromUserID, "nudge_done",
-				"「"+owner.Username+"」已完成你提醒的事", truncateRunes(row.Content, nudgeNotifyTitleRunes))
+				"「"+owner.Username+"」已完成你提醒的事", receipt)
 			publishDataChanged(row.FromUserID, "nudge", "done", row.ID, "")
 			publishDataChanged(row.ToUserID, "nudge", "done", row.ID, "")
 			continue

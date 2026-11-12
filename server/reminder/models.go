@@ -134,20 +134,24 @@ type Reminder struct {
 	// BgAlpha 是**整张卡片背景的透明度**（用户 2026-10-19 要求：「增加卡片透明度调整，
 	// 可以把整个卡片调整为透明（不含文字）」）：100 = 不透明，0 = 只留文字。
 	// 只作用于卡片的背景层（配色渐变 / 背景图 / 蒙板），文字、图标、按钮不受影响。
-	BgAlpha      int        `gorm:"not null;default:100" json:"bg_alpha,omitempty"`
-	CompletedAt  *time.Time `gorm:"index:idx_reminders_user_completed" json:"completed_at"`
+	BgAlpha     int        `gorm:"not null;default:100" json:"bg_alpha,omitempty"`
+	CompletedAt *time.Time `gorm:"index:idx_reminders_user_completed" json:"completed_at"`
+	// 列宽 500 **按字符计**（SQLite 不校验；MySQL/PostgreSQL 的 varchar(500) 也是字符数，
+	// utf8mb4 下 500 个汉字照样装得下），服务端在 normalizeCompletionNote 里也是按
+	// rune 截断到 500 —— 两边口径一致，不会出现「按字节截断把汉字切成半个」的问题。
+	//
 	// CompletedNote 是勾选完成时顺手填的「完成备注」（用户 2026-11-12 要求：
 	// 点完成先弹窗写备注再确认，不要直接完成）。只对**一次性**任务有意义：
 	// 随 completed_at 一起清掉（撤销完成、改回未完成），不会带到下一条；
 	// 循环任务每次完成各自记在 completions 上（见 Completion.Note），
 	// 免得这条备注被下一次沿用。
 	CompletedNote string     `gorm:"size:500;not null;default:''" json:"completed_note"`
-	SnoozedUntil *time.Time `json:"snoozed_until"`
-	Position     int        `gorm:"not null;default:0" json:"position"`
-	Version      uint       `gorm:"not null;default:1" json:"version"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	DeletedAt    *time.Time `gorm:"index" json:"-"`
+	SnoozedUntil  *time.Time `json:"snoozed_until"`
+	Position      int        `gorm:"not null;default:0" json:"position"`
+	Version       uint       `gorm:"not null;default:1" json:"version"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	DeletedAt     *time.Time `gorm:"index" json:"-"`
 	// PurgedAt 是「已从垃圾箱清空」的墓碑时间。软删除后仍保留 deleted_at 参与双机同步；
 	// 清空只打这个标记，让两端都隐藏，而不会因硬删除被对端快照重新带回。
 	PurgedAt *time.Time        `gorm:"index" json:"-"`
@@ -176,6 +180,8 @@ type Completion struct {
 	ScheduledFor  *time.Time `json:"scheduled_for"`
 	CompletedAt   time.Time  `gorm:"index" json:"completed_at"`
 	TitleSnapshot string     `gorm:"size:200;not null" json:"title"`
+	// 列宽 500 与 reminders.completed_note 同口径（按字符、服务端按 rune 截断）。
+	//
 	// Note 是这一次完成时填的完成备注（用户 2026-11-12）。历史行是「一次完成」，
 	// 备注天然属于这一次；循环任务下一次完成会写一条新行，互不影响。
 	Note string `gorm:"size:500;not null;default:''" json:"note"`

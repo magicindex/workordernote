@@ -699,10 +699,18 @@ func handleCompleteReminder(db *gorm.DB) gin.HandlerFunc {
 		}
 		// 完成备注是可选的：不传 body（或 body 里没有 note）就是「不带备注完成」，
 		// 与旧版客户端的行为一致。body 里的空串同样当成没填。
+		//
+		// 但**写了 body 却解析不了**（比如把 note 写成数字）必须报错：静默当成没填，
+		// 用户那行字就无声消失了（2026-11-12 体检发现的坑）。
 		var body struct {
 			Note string `json:"note"`
 		}
-		_ = c.ShouldBindJSON(&body)
+		if c.Request.ContentLength > 0 {
+			if err := c.ShouldBindJSON(&body); err != nil {
+				response.ErrorBadRequest(c, "备注格式不对，应为 {\"note\":\"…\"}")
+				return
+			}
+		}
 		item, err := completeReminderWithNote(db, currentUserID(c), id, body.Note)
 		if err != nil {
 			writeServiceError(c, err)

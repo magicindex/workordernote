@@ -163,9 +163,20 @@ const colLabels = (page) => page.evaluate(() => [...document.querySelectorAll('[
       await page.evaluate(() => document.querySelector('[data-print-toggle="notes"]').click());
       await sleep(500);
       const noNotes = await docState(page, '#print-root');
+      // 别看整段文本里有没有「记录」两个字：条目标题里本来就可能有（这份数据里就有），
+      // 而且「记录来源」列也带这词。只数「状态」列等于「记录」的行。
+      const noteCells = await page.evaluate(() => {
+        const table = document.querySelector('#print-root table');
+        if (!table) return -1;
+        const heads = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+        const idx = heads.indexOf('状态');
+        if (idx < 0) return -1;
+        return [...table.querySelectorAll('tbody tr')]
+          .filter((tr) => (tr.children[idx]?.textContent || '').trim() === '记录').length;
+      });
       check('关掉「记事」后列表里没有「记录」行了',
-        noNotes.rows === expectAll - bar.notes && !(await page.evaluate(() => document.querySelector('#print-root').textContent.includes('记录'))),
-        `${listDoc.rows} → ${noNotes.rows}（记事 ${bar.notes}）`);
+        noNotes.rows === expectAll - bar.notes && noteCells === 0,
+        `${listDoc.rows} → ${noNotes.rows}（记事 ${bar.notes}，状态=记录的行 ${noteCells}）`);
       await page.evaluate(() => document.querySelector('[data-print-toggle="notes"]').click());
       await sleep(400);
     } else {

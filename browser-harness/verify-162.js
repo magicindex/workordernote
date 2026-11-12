@@ -212,6 +212,37 @@ const completedRows = (page) => page.evaluate(() => [...document.querySelectorAl
     check('已完成页这条带「完成备注」', !!onceRow && onceRow.note.includes(note), JSON.stringify(onceRow));
     await page.screenshot({ path: path.join(SHOTS, 'completed-note-row.png') });
 
+    // ---------- 7b. 「已完成」的搜索能搜到完成备注 ----------
+    const searchBox = 'input[placeholder*="搜索提醒"]';
+    await page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(el, '电瓶');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, searchBox);
+    await sleep(1500);
+    const hitRows = await completedRows(page);
+    check('「已完成」里按完成备注也能搜到', hitRows.some((r) => r.text.includes(T_ONCE)), JSON.stringify(hitRows.slice(0, 2)));
+    await page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(el, '完全不存在的词');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, searchBox);
+    await sleep(1500);
+    const missRows = await completedRows(page);
+    check('搜不到时列表是空的', missRows.length === 0, JSON.stringify(missRows.slice(0, 2)));
+    await page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(el, '');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, searchBox);
+    await sleep(1500);
+
     // ---------- 8. 撤销完成后备注一起清掉 ----------
     const undo = await page.evaluate(async (title) => {
       const row = [...document.querySelectorAll('.reminder-row')].find((r) => r.textContent.includes(title));
@@ -270,6 +301,27 @@ const completedRows = (page) => page.evaluate(() => [...document.querySelectorAl
     // ---------- 10. 日历里点圆扣也是先弹窗（只开窗 + Esc，不改数据） ----------
     await page.goto(BASE + '/admin/calendar', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await sleep(2500);
+    // 日历详情面板里列的是「那一天」的任务，但用户库里的格子可能全是已完成的
+    // （只显示「恢复提醒」）。为确定性：造一条今天到期的任务，再点今天那格。
+    const calTitle = `完成备注日历自检-${STAMP}`;
+    const nowCal = new Date();
+    nowCal.setHours(nowCal.getHours() + 1, 0, 0, 0);
+    const calDue = `${nowCal.getFullYear()}-${String(nowCal.getMonth() + 1).padStart(2, '0')}-${String(nowCal.getDate()).padStart(2, '0')}T${String(nowCal.getHours()).padStart(2, '0')}:${String(nowCal.getMinutes()).padStart(2, '0')}:00+08:00`;
+    const calCreated = await api(page, '/api/reminder/items', 'POST', {
+      title: calTitle, due_at: calDue, repeat_rule: 'none', channels: ['inapp'],
+    });
+    const calID = calCreated.json?.data?.id;
+    await page.goto(BASE + '/admin/calendar', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await sleep(2200);
+    // 格子上的 date 属性就是它代表的那天（data-cal-date=YYYY-MM-DD）；点今天那格，
+    // 别随手点第一格 —— 那会把详情面板切到别的日期，看不到刚建的任务。
+    await page.evaluate(() => {
+      const now = new Date();
+      const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const cell = document.querySelector(`[data-cal-date="${key}"]`);
+      if (cell) cell.click();
+    });
+    await sleep(900);
     const calClicked = await page.evaluate(() => {
       const btn = [...document.querySelectorAll('button[aria-label="完成提醒"]')].find((b) => b.offsetParent !== null);
       if (!btn) return false;
@@ -287,6 +339,7 @@ const completedRows = (page) => page.evaluate(() => [...document.querySelectorAl
     check('日历弹窗 Esc 后关闭', (await dialogState(page)).open === false);
 
     // ---------- 收尾：删掉自检数据 ----------
+    if (calID) await api(page, `/api/reminder/items/${calID}`, 'DELETE');
     for (const id of Object.values(created)) {
       await api(page, `/api/reminder/items/${id}`, 'DELETE');
     }
