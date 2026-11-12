@@ -214,17 +214,23 @@
               <button class="quick-chip" :class="{ active: preset === 'today' }" @click="setPreset('today')">今天</button>
               <button class="quick-chip" :class="{ active: preset === 'tomorrow' }" @click="setPreset('tomorrow')">明天</button>
               <button class="quick-chip" :class="{ active: preset === 'weekend' }" @click="setPreset('weekend')">本周末</button>
-              <!-- 日期与重复从「更多」里搬出来（用户要求：「更多」只留备注/农历/过期提醒频率/通知方式）：
-                   日期芯片点开就是完整的选择器，右边跟着「清空」；重复直接是个小下拉。 -->
+              <!-- 日期芯片只负责「自己挑一天」（用户 2026-11-12 截图：「默认选择今天，
+                   本周末后边日期不应该被选择，同时选中今天和时间，容易出现冲突，
+                   这个时间控件删除不保留」）：
+                     · 默认只有「今天」是亮的，这个芯片**不选中**、显示「选择日期」；
+                     · 点它挑了具体某天，今天/明天/本周末才全灭、只亮它一个；
+                     · 时间部分整个去掉（原来 with-time，芯片上还会显示 15:54 那种时刻，
+                       和「今天」芯片的 23:59 打架）。挑了哪天，就落到那天 23:59。
+                   「清空」保留：那是「这条不要日期」，与选哪天是两件事。 -->
               <span class="relative inline-flex items-center gap-1">
                 <button
                   ref="quickDateAnchor"
                   type="button"
                   class="quick-chip"
-                  :class="{ active: !!quick.due_at, '!border-brand-500/50': quickDateOpen }"
+                  :class="{ active: !preset && !!quick.due_at, '!border-brand-500/50': quickDateOpen }"
                   data-quick-date
                   @click="quickDateOpen = !quickDateOpen"
-                >{{ quick.due_at ? formatFullDue(quick.due_at) : '选择日期' }}</button>
+                >{{ !preset && quick.due_at ? formatDayOnly(quick.due_at) : '选择日期' }}</button>
                 <button
                   v-if="quick.due_at"
                   type="button"
@@ -233,7 +239,7 @@
                   data-quick-clear-due
                   @click="clearQuickDue"
                 >清空</button>
-                <LunarDatePicker v-if="quickDateOpen" v-model="quickDatePicked" with-time :anchor-el="quickDateAnchor" @commit="quickDateOpen = false" />
+                <LunarDatePicker v-if="quickDateOpen" v-model="quickDatePicked" :anchor-el="quickDateAnchor" @commit="quickDateOpen = false" />
               </span>
               <select v-model="quick.repeat_rule" class="quick-chip max-w-[6.5rem] !px-2 !text-[11px]" data-quick-repeat aria-label="重复">
                 <option value="none">不重复</option>
@@ -1457,10 +1463,19 @@ watch([selectedListID, defaultListID], () => {
   quick.list_id = quickTargetListID.value
 }, { immediate: true })
 
+// 自己挑具体日期：只取「年月日」，时间统一补到 23:59（与今天/明天/本周末同一口径），
+// 然后把预设芯片全灭 —— 选中状态永远只有一个来源，不会「今天 + 某个时间」同时亮。
 const quickDatePicked = computed({
   get: () => (quick.due_at ? new Date(quick.due_at) : null),
   set: value => {
-    quick.due_at = value ? toLocalIso(value) : null
+    if (!value) {
+      quick.due_at = null
+      preset.value = ''
+      return
+    }
+    const { h, m } = clockParts(DEFAULT_DUE_TIME)
+    const d = new Date(value.getFullYear(), value.getMonth(), value.getDate(), h, m, 0, 0)
+    quick.due_at = toLocalIso(d)
     preset.value = ''
   },
 })
@@ -1734,10 +1749,18 @@ function setQuickKind(kind: ReminderKind) {
     quick.repeat_notify_minutes = 0
     preset.value = ''
     quickExpanded.value = false
-  } else if (isNoteBucketPage.value) {
-    // 记事本页的目标清单是栏目本身（不在下拉的普通清单里）；改成任务时要挪回
-    // 默认清单，否则下拉框显示不出选中项。
-    quick.list_id = defaultListID.value
+  } else {
+    // 记事 → 任务：切到记事时日期被清空了，切回来得补一个默认的「今天」，
+    // 否则芯片一个都不亮（提交虽然会按今天兜底，但界面上看起来像没选日期）。
+    if (!quick.due_at && !quick.start_at && !isPlanned.value) {
+      quick.due_at = defaultQuickDue()
+      preset.value = 'today'
+    }
+    if (isNoteBucketPage.value) {
+      // 记事本页的目标清单是栏目本身（不在下拉的普通清单里）；改成任务时要挪回
+      // 默认清单，否则下拉框显示不出选中项。
+      quick.list_id = defaultListID.value
+    }
   }
 }
 // 记事本页快速新建默认就是「记事」：这一页做的主要是记一笔。离开时恢复「任务」。
@@ -2019,6 +2042,12 @@ function formatFullDue(value: string | null | undefined) {
   const d = new Date(value)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+/** 只要「年/月/日」，给新建卡片那个日期芯片用（用户 2026-11-12：不要时间）。 */
+function formatDayOnly(value: string | null | undefined) {
+  if (!value) return ''
+  const d = new Date(value)
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 function formatDue(value: string | null | undefined) {
   if (!value) return ''

@@ -68,22 +68,44 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     await sleep(2400);
     await openQuickAdd(page);
     await sleep(900);
-    const chipTimes = {};
-    for (const kind of ['today', 'tomorrow', 'weekend']) {
-      await page.evaluate((k) => {
-        const btns = [...document.querySelectorAll('.quick-chip')];
-        const hit = btns.find((b) => (b.textContent || '').trim() === ({ today: '今天', tomorrow: '明天', weekend: '本周末' })[k]);
-        hit?.click();
-      }, kind);
-      await sleep(400);
-      chipTimes[kind] = await page.evaluate(() => document.querySelector('[data-quick-date]')?.textContent.replace(/\s+/g, ' ').trim() || '');
-    }
-    check('「今天」芯片的时间是 23:59',
-      /23:59$/.test(chipTimes.today), JSON.stringify(chipTimes));
-    check('「明天」芯片的时间是 23:59',
-      /23:59$/.test(chipTimes.tomorrow), JSON.stringify(chipTimes));
-    check('「本周末」芯片的时间是 23:59',
-      /23:59$/.test(chipTimes.weekend), JSON.stringify(chipTimes));
+    // 2026-11-12 起新建卡片上的日期芯片只写「选择日期」、不显示时分（用户要求去掉时间控件），
+    // 所以「芯片的时间一律 23:59」改成**存一条再读接口**：点「明天」→ 保存 → due 必须是明天 23:59。
+    const chipTitle = `自检芯片时间-${STAMP}`;
+    const savedChip = await page.evaluate(async ({ title, base }) => {
+      const btns = [...document.querySelectorAll('.quick-chip')];
+      btns.find((b) => (b.textContent || '').trim() === '明天')?.click();
+      await new Promise((r) => setTimeout(r, 300));
+      const card = document.querySelector('.quick-card');
+      const input = card?.querySelector('input');
+      if (!input) return { error: '找不到新建输入框' };
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(input, title);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      [...card.querySelectorAll('button')].find((b) => /^(添加提醒|添加)$/.test(b.textContent.trim()))?.click();
+      await new Promise((r) => setTimeout(r, 1600));
+      const token = localStorage.getItem('reminders.token') || sessionStorage.getItem('reminders.token');
+      const json = await (await fetch(base + '/api/reminder/items?view=all&q=' + encodeURIComponent(title), {
+        headers: { Authorization: 'Bearer ' + token },
+      })).json();
+      const item = (json?.data || []).find((x) => x.title === title);
+      if (item) {
+        await fetch(base + '/api/reminder/items/' + item.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+      }
+      return { due: item?.due_at || null };
+    }, { title: chipTitle, base: BASE });
+    const chipDue = savedChip?.due ? new Date(savedChip.due) : null;
+    const expectTomorrow = new Date();
+    expectTomorrow.setDate(expectTomorrow.getDate() + 1);
+    const sameDay = !!chipDue && chipDue.toDateString() === expectTomorrow.toDateString();
+    check('「明天」芯片存出来是明天 23:59',
+      sameDay && chipDue.getHours() === 23 && chipDue.getMinutes() === 59,
+      JSON.stringify({ due: savedChip?.due, expectTomorrow: expectTomorrow.toDateString() }));
+    check('日期芯片上不再出现时分（时间控件已去掉）',
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-quick-date]');
+        return !!el && !/\d{1,2}:\d{2}/.test(el.textContent || '');
+      }));
 
     // ---------------- 2. 新建窗口不再显示剩余时间/右侧「今天 23:59」 ----------------
     check('新建窗口不再显示剩余时间', await page.evaluate(() => !document.querySelector('[data-quick-remaining]')));

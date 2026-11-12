@@ -147,17 +147,19 @@ const setPlanPeriod = (page, value) => page.evaluate(async (v) => {
       JSON.stringify(today.items.map((i) => i.attr || i.text)));
     checkRow('今天页', today, 9);
 
-    // 「今天」芯片点亮时，日期芯片上写着今天的日期
+    // 2026-11-12（用户：「默认选择今天，本周末后边日期不应该被选择」）：
+    // 默认只亮「今天」，日期芯片不选中、也不显示时分。
     const dateChip = await page.evaluate(() => {
       const el = document.querySelector('[data-quick-date]');
-      const today = new Date();
+      const todayChip = [...document.querySelectorAll('.quick-chip')].find((b) => (b.textContent || '').trim() === '今天');
       return {
         text: el ? el.textContent.replace(/\s+/g, ' ').trim() : '',
         active: el ? el.classList.contains('active') : null,
-        expect: `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`,
+        todayActive: todayChip ? todayChip.classList.contains('active') : null,
       };
     });
-    check('日期芯片显示今天并且是点亮态', dateChip.active === true && dateChip.text.includes(dateChip.expect),
+    check('默认只亮「今天」，日期芯片不选中（写着「选择日期」、没有时分）',
+      dateChip.todayActive === true && dateChip.active === false && dateChip.text === '选择日期',
       JSON.stringify(dateChip));
 
     // ---------- 3. 「更多」面板只剩一项（备注） ----------
@@ -203,10 +205,13 @@ const setPlanPeriod = (page, value) => page.evaluate(async (v) => {
     await sleep(400);
     const restored = await page.evaluate(() => ({
       panel: !!document.querySelector('[data-quick-panel]'),
-      date: document.querySelector('[data-quick-date]')?.textContent.replace(/\s+/g, ' ').trim() || '',
+      todayActive: (() => {
+        const b = [...document.querySelectorAll('.quick-chip')].find((x) => (x.textContent || '').trim() === '今天');
+        return b ? b.classList.contains('active') : null;
+      })(),
     }));
-    check('收尾：「更多」已收起、日期仍是今天（没有把「无日期」状态留给后面的用例）',
-      restored.panel === false && restored.date.length > 0, JSON.stringify(restored));
+    check('收尾：「更多」已收起、「今天」仍亮着（没有把「无日期」状态留给后面的用例）',
+      restored.panel === false && restored.todayActive === true, JSON.stringify(restored));
   });
 
   console.log(`\n结果：${passed} 项通过，${failed} 项失败`);

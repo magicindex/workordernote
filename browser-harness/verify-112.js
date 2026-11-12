@@ -222,15 +222,35 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
     // 今天/明天/本周末这些芯片，只改默认值）。
     await openQuickAdd(page);
     await sleep(600);
-    const chipText = await page.evaluate(() => document.querySelector('[data-quick-date]')?.textContent.replace(/\s+/g, ' ').trim() || '');
-    const today = new Date();
-    const pad2 = (n) => String(n).padStart(2, '0');
-    const minsOf = (s) => { const m = /(\d{2}):(\d{2})/.exec(s || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : -1; };
-    const wantDate = `${today.getMonth() + 1}月${today.getDate()}日`;
-    const chipMins = minsOf(chipText);
+    // 2026-11-12 起新建卡片上不再显示日期时间（芯片只写「选择日期」、默认由「今天」表达），
+    // 默认到期时刻改成「真的存一条再看接口回来的 due_at」：今天 + 当前时刻（±10 分钟）。
+    const defaultTitle = `自检默认时间-${STAMP}`;
+    const defaultDue = await page.evaluate(async ({ title, base }) => {
+      const card = document.querySelector('.quick-card');
+      const input = card?.querySelector('input');
+      if (!input) return { error: '找不到新建输入框' };
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(input, title);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      [...card.querySelectorAll('button')].find((b) => /^(添加提醒|添加)$/.test(b.textContent.trim()))?.click();
+      await new Promise((r) => setTimeout(r, 1600));
+      const token = localStorage.getItem('reminders.token') || sessionStorage.getItem('reminders.token');
+      const json = await (await fetch(base + '/api/reminder/items?view=all&q=' + encodeURIComponent(title), {
+        headers: { Authorization: 'Bearer ' + token },
+      })).json();
+      const item = (json?.data || []).find((x) => x.title === title);
+      if (item) {
+        await fetch(base + '/api/reminder/items/' + item.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+      }
+      // 待办页回来的是 due_at；如果此刻停在计划页，新建的是「开始/结束」→ 取 start_at
+      return { due: item?.due_at || item?.start_at || null };
+    }, { title: defaultTitle, base: BASE });
+    const dt = defaultDue?.due ? new Date(defaultDue.due) : null;
+    const sameDay = !!dt && dt.toDateString() === new Date().toDateString();
+    const diffMin = dt ? Math.abs(dt.getTime() - Date.now()) / 60000 : 999;
     check('新建提醒默认今天当前时刻（不再是 23:59）',
-      chipText.includes(wantDate) && chipMins >= 0 && Math.abs(chipMins - (today.getHours() * 60 + today.getMinutes())) <= 10,
-      `${chipText} vs 今天 ${pad2(today.getHours())}:${pad2(today.getMinutes())}`);
+      sameDay && diffMin <= 12, JSON.stringify({ due: defaultDue?.due, diffMin }));
 
     // 逾期口径：昨天 23:00 的 → 已逾期；今天 09:00 的 → **还没逾期**（要等今天 23:59 + 宽限）
     const mk = async (title, iso) => {

@@ -91,13 +91,18 @@ const createdIds = [];
       input0.focus();
       await new Promise((r) => setTimeout(r, 300));
       const panel = () => document.querySelector('[data-quick-panel]');
-      // 0.18.2 起日期芯片在**芯片行**（「更多」里只留备注/农历/过期提醒频率/通知方式）
+      // 0.18.2 起日期芯片在**芯片行**；2026-11-12 起它只写「选择日期」、默认不亮，
+      // 所以「选中了哪一天」只能看芯片（今天/明天/本周末）的 active 状态。
+      const chipOn = (t) => {
+        const b = [...document.querySelectorAll('.quick-chip')].find((x) => (x.textContent || '').trim() === t);
+        return b ? b.classList.contains('active') : false;
+      };
       const dateText = () => document.querySelector('[data-quick-date]')?.textContent.trim() || '';
       // 「更多」面板在 0.16.3 起默认展开；它是 toggle，收起时才需要点（点两下会收起来）
       if (!panel()) clickText('更多');
       await new Promise((r) => setTimeout(r, 400));
-      const first = (() => { clickText('今天'); return dateText(); })();
-      const second = (() => { clickText('今天'); return dateText(); })();
+      const first = (() => { clickText('今天'); return chipOn('今天'); })();
+      const second = (() => { clickText('今天'); return chipOn('今天'); })();
       const hasClear = !!document.querySelector('[data-quick-clear-due]');
       // 现在真正清空：应该出现「没有日期」的提示
       document.querySelector('[data-quick-clear-due]')?.click();
@@ -107,7 +112,7 @@ const createdIds = [];
       // 再点「今天」把日期要回来，随后按正常路径建一条
       clickText('今天');
       await new Promise((r) => setTimeout(r, 200));
-      const restored = dateText();
+      const restored = chipOn('今天');
       // 流光边框：0.18.3 起挂在**新建任务卡片**上（原来错挂在「更多」面板里）。
       // 卡片外面套了一层 .quick-shell 承载 .flow-frame/.flow-glow（卡片自己 overflow-hidden
       // 会把柔光裁掉），所以这里读 shell 的样式，「更多」面板则要求**没有**流光。
@@ -142,12 +147,11 @@ const createdIds = [];
       return { first, second, hasClear, hint, clearedText, restored, typed: !!input, flow };
     }, titles.today);
     check('「今天」芯片连点两次仍是今天（不再把日期清空）',
-      !!chipFlow.first && chipFlow.first === chipFlow.second && /今天|月/.test(chipFlow.second),
-      JSON.stringify(chipFlow));
+      chipFlow.first === true && chipFlow.second === true, JSON.stringify(chipFlow));
     check('有专门的「清空」按钮，清空后出现「没有日期」提示',
-      chipFlow.hasClear && chipFlow.hint && chipFlow.clearedText.includes('选择日期'),
+      chipFlow.hasClear === true && chipFlow.hint === true && chipFlow.clearedText === '选择日期',
       JSON.stringify(chipFlow));
-    check('清空后再点「今天」能把日期要回来', /今天|月/.test(chipFlow.restored), JSON.stringify(chipFlow));
+    check('清空后再点「今天」能把日期要回来', chipFlow.restored === true, JSON.stringify(chipFlow));
 
     const afterCreate = await api(page, '/api/reminder/items?view=all&status=all');
     const todayItem = (afterCreate.body?.data || []).find((i) => i.title === titles.today);

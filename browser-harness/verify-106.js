@@ -66,7 +66,8 @@ const quickState = (page) => page.evaluate(() => {
   // 0.18.3 起新建控件默认收成一个「新建」按钮：cardOpen 表示整块表单是否展开
   const chip = (t) => card ? [...card.querySelectorAll('button')].find((b) => b.textContent.trim() === t) : null;
   const todayChip = chip('今天');
-  // 0.18.2 起日期芯片在芯片行；2026-11-11 起「更多」里只剩备注一项
+  // 0.18.2 起日期芯片在芯片行；2026-11-11 起「更多」里只剩备注一项；
+  // 2026-11-12 起日期芯片只显示日期、默认不点亮（日期由「今天」芯片表达）
   const dateField = card?.querySelector('[data-quick-date]');
   return {
     card: true,
@@ -77,6 +78,7 @@ const quickState = (page) => page.evaluate(() => {
     panelOpen: !!panel,
     todayChipActive: todayChip ? todayChip.classList.contains('active') : null,
     dateFieldText: dateField ? dateField.textContent.replace(/\s+/g, ' ').trim() : '',
+    dateChipActive: dateField ? dateField.classList.contains('active') : null,
     headerDate: card ? [...card.querySelectorAll('span')].map((s) => s.textContent.trim())
       .find((t) => /^今天 \d{2}:\d{2}$|^\d+月\d+日/.test(t)) || '' : '',
     undatedHint: !!document.querySelector('[data-quick-undated-hint]'),
@@ -116,15 +118,13 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     check('展开态下输入框与芯片行都在', op.cardOpen === true && op.hasInput === true && op.chipsVisible === true, JSON.stringify(op));
     check('展开后「更多」面板仍然是**隐藏**的（日期时间/重复/备注等字段收起来）', op.panelOpen === false, JSON.stringify(op));
     check('「今天」芯片默认点亮', op.todayChipActive === true, JSON.stringify(op));
-    // 2026-11-11 起默认是「今天 + 当前时间」（不再是 23:59）：断言日期是今天、时刻与现在相差不大
-    const nowD = new Date();
-    const pad2 = (n) => String(n).padStart(2, '0');
-    const toMins = (s) => { const m = /(\d{2}):(\d{2})/.exec(s || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : -1; };
-    const todayLabel = `${nowD.getMonth() + 1}月${nowD.getDate()}日`;
-    const chipMins = toMins(op.dateFieldText);
-    check('芯片行的日期是今天、时间是当前时刻（不再是 23:59）',
-      op.dateFieldText.includes(todayLabel) && chipMins >= 0 && Math.abs(chipMins - (nowD.getHours() * 60 + nowD.getMinutes())) <= 10,
-      JSON.stringify(op.dateFieldText));
+    // 2026-11-12（用户：「同时选中今天和时间容易冲突」）：默认只亮「今天」，
+    // 那个日期芯片不再同时选中、也不再显示时分。
+    check('日期芯片默认不选中、只写着「选择日期」（不和「今天」同时亮）',
+      op.dateChipActive === false && op.dateFieldText === '选择日期',
+      JSON.stringify({ active: op.dateChipActive, text: op.dateFieldText }));
+    check('新建卡片上没有「HH:mm」这种时间显示',
+      !/(\d{1,2}:\d{2})/.test(op.dateFieldText), JSON.stringify(op.dateFieldText));
     check('没有「没有日期」提示（默认有日期）', op.undatedHint === false, JSON.stringify(op));
 
     // ---------- 2. 直接建一条（不点输入框），应当带今天 ----------
@@ -192,22 +192,18 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       return {
         open: !!panel,
         labels: panel ? [...panel.querySelectorAll('.field-label')].map((l) => (l.childNodes[0]?.textContent || '').trim()).filter(Boolean) : [],
-        date: card.querySelector('[data-quick-date]')?.textContent.replace(/\s+/g, ' ').trim() || '',
+        todayActive: (() => {
+          const b = [...card.querySelectorAll('button.quick-chip')].find((x) => x.textContent.trim() === '今天');
+          return b ? b.classList.contains('active') : null;
+        })(),
+        dateActive: card.querySelector('[data-quick-date]')?.classList.contains('active') ?? null,
       };
     });
-    const today2 = new Date();
-    const label2 = `${today2.getFullYear()}年${today2.getMonth() + 1}月${today2.getDate()}日`;
-    // 2026-11-11 起默认是「今天当前时间」（不再是 23:59）：比较与现在相差不超过 10 分钟
-    const mins = (s) => {
-      const m = /(\d{2}):(\d{2})/.exec(s || '');
-      return m ? Number(m[1]) * 60 + Number(m[2]) : -1;
-    };
-    const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
-    check('点「更多」能展开（只剩备注一项），日期照旧在芯片行显示',
+    check('点「更多」能展开（只剩备注一项），日期仍由芯片行的「今天」表达',
       opened.open === true && opened.labels.length === 1 && opened.labels[0] === '备注'
         && !opened.labels.includes('日期时间') && !opened.labels.includes('重复')
-        && mins(opened.date) >= 0 && Math.abs(mins(opened.date) - nowMins) <= 10,
-      JSON.stringify({ opened, label2 }));
+        && opened.todayActive === true && opened.dateActive === false,
+      JSON.stringify(opened));
 
     // ---------- 4. 只有明确「清空」才是无日期 ----------
     await page.evaluate(() => {
