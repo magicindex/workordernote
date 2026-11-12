@@ -233,6 +233,26 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-12：0.47.0（201 生产上线；200 待上线）—— 完成备注、新建框精简、日期芯片只选日期
+
+> **发版记录**（VERSION 0.47.0，源码提交 `ff4f36c`，镜像 `workordernote:0.47.0` =
+> `sha256:d320d7cd376feed54c1b183e125dd6dbd6a1eb4dcbcf20064e453bda4482aa65`，
+> 92.1MB，构建于 2026-11-12T14:42:39Z；registry（Gitea/GHCR）manifest
+> `sha256:c9520ef4795df3a18e707597146c70a600d7e8939623316843ea90d7d202be5d`）
+
+- 本版合并攒批第 94–99 条：勾完成先弹「完成备注」（默认聚焦、回车确定、Esc 取消、空备注可确定；已完成页/行内显示，导出、搜索、打印可选列、「提醒@他」回执都带上）；新建框「更多」只剩备注（3 行文本域）；日期芯片只选日期、默认不选中、去掉时间；侧栏 AI 入口去掉名称后的「AI」小标签；顺手修了备注重复显示、日期选择器取消改写时间、记事→任务日期丢失、日历清单筛选残留 id；完成备注参与双机同步且旧对端空值不再擦备注，完成接口坏 body 返回 400。
+- 发布前置验证：用**生产库拷贝**在临时容器 8918 上跑 0.47.0 —— `/api/version` = 0.47.0 / ff4f36c，数据条数与生产一致（129 条、11 条记事、summary 完全相同），`verify-162` 28/28、`verify-163` 13/13、`verify-160` 20/20。
+- 201：备份 `docker-compose.yml.bak-pre0470-20261112-2247`（仓库 `tmp/` 与 `/vol1/1000/Docker/workordernote/` 各一份）/ `tmp/data.bak-pre0470-20261112-2247.tgz`（15M），旧镜像保留 `workordernote:0.46.3-keep-20261112-2248`；compose 改 `0.47.0` 后 22:48:47 重建，healthy，`/api/version` = `0.47.0 / ff4f36c`。
+- 数据体检（201）：`integrity_check = ok`、25 张表、129 条未删除提醒；`reminders.completed_note` 与 `completions.note` 两列已由 AutoMigrate 加上（WAL 里，checkpoint 后进主库）。
+- 镜像：Gitea `192.168.3.200:3000/cyberzero/workordernote:0.47.0` 与 `:latest`、GHCR `ghcr.io/magicindex/workordernote:0.47.0` 与 `:latest` 都已推（manifest `sha256:c9520ef4…`）。
+- 201 生产回归：`verify-128` **34/34**。
+- 200：**未部署**（本机没有到 200 的 SSH 凭据：`ssh -p 9527 王耀辉@192.168.3.200` 公钥被拒、也没有密码；镜像已在 registry 上，拿到权限后按下面三步即可）。
+  1. `ssh -p 9527 王耀辉@192.168.3.200`
+  2. 备份：`cp docker-compose.yml docker-compose.yml.bak-pre0470-$(date +%Y%m%d-%H%M)` + `tar czf data.bak-pre0470-$(date +%Y%m%d-%H%M).tgz data`
+  3. `sudo docker pull 127.0.0.1:3000/cyberzero/workordernote:0.47.0 && sudo docker tag 127.0.0.1:3000/cyberzero/workordernote:0.47.0 workordernote:0.47.0`；compose 里 image 改 `workordernote:0.47.0`；`sudo docker compose up -d`；`curl -s http://127.0.0.1:8906/api/version` 应为 `0.47.0 / ff4f36c`。
+- 沙箱 8908：本机当前**没有**这个容器（只有在 8918 的临时验证容器），未部署。
+- 未做：离线一键安装包、飞牛 fpk、GitHub 快照、生产全量回归。
+
 ### 2026-11-11：0.46.3（201 生产 / 200 生产上线）—— 修「更多」在手机上点了没反应
 
 > **发版记录**（VERSION 0.46.3，源码提交 `00750f9`，镜像 `workordernote:0.46.3` =
