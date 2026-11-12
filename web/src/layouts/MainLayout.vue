@@ -68,8 +68,9 @@
               <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m12 3.6 1.9 4.4 4.4 1.9-4.4 1.9L12 16.2l-1.9-4.4-4.4-1.9 4.4-1.9L12 3.6Z" stroke-width="1.7" stroke-linejoin="round"/><path d="M18.6 15.4l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8.8-1.9Z" stroke-width="1.5" stroke-linejoin="round"/></svg>
             </span>
             <span class="rail-hide ml-2">呼叫{{ assistantName }}</span>
-            <!-- 用户 2026-11-11：AI 标志紧挨名称、不留间隔；整行居中、去掉外框与底色 -->
-            <span class="rail-hide rounded-md bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-bold text-brand-600 dark:text-brand-300">AI</span>
+            <!-- 用户 2026-11-12：「首页 名称后边的 ai图标去掉」——
+                 名称后面那个「AI」小标签整个删掉（2026-11-11 曾要求它紧挨名称，
+                 现在不要了）。按钮的图标与 tooltip 里的「AI 助手」说明保留。 -->
           </button>
         </div>
 
