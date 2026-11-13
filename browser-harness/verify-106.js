@@ -205,30 +205,17 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
         && opened.todayActive === true && opened.dateActive === false,
       JSON.stringify(opened));
 
-    // ---------- 4. 只有明确「清空」才是无日期 ----------
-    await page.evaluate(() => {
-      const card = document.querySelector('.quick-card');
-      const more = [...card.querySelectorAll('button')].find((b) => b.textContent.trim() === '更多');
-      if (more && !document.querySelector('[data-quick-panel]')) more.click();
-    });
-    await sleep(400);
-    const cleared = await page.evaluate(() => {
-      const btn = document.querySelector('[data-quick-clear-due]');
-      if (!btn) return { found: false };
-      btn.click();
-      return { found: true };
-    });
-    await sleep(400);
-    const clearedState = await quickState(page);
-    check('按「清空」后才是无日期，并且出现提示',
-      cleared.found === true && clearedState.undatedHint === true, JSON.stringify({ cleared, clearedState }));
-    // 收尾：把日期要回来，别把「无日期」状态留给后面的用例
-    await page.evaluate(() => {
-      const card = document.querySelector('.quick-card');
-      const todayChip = [...card.querySelectorAll('button')].find((b) => b.textContent.trim() === '今天');
-      todayChip?.click();
-    });
-    await sleep(300);
+    // ---------- 4. 「清空」按钮已撤掉：日期不再能清成空 ----------
+    // 用户 2026-11-13：「清空没有意义，删除清空按钮，前端逻辑也清理」。
+    // 现在日期只有三个来源（自动默认 / 今天明天本周末 / 自己挑），提交时总有一个日期。
+    const noClear = await page.evaluate(() => ({
+      button: !!document.querySelector('[data-quick-clear-due]'),
+      hint: !!document.querySelector('[data-quick-undated-hint]'),
+      dateChip: document.querySelector('[data-quick-date]')?.textContent.trim() || '',
+    }));
+    check('「清空」按钮已去掉，芯片行不再有无日期入口',
+      noClear.button === false && noClear.hint === false && noClear.dateChip === '选择日期',
+      JSON.stringify(noClear));
 
     // ---------- 5. 服务端换版本时才提示刷新 ----------
     const before = await page.evaluate(() => ({

@@ -103,16 +103,10 @@ const createdIds = [];
       await new Promise((r) => setTimeout(r, 400));
       const first = (() => { clickText('今天'); return chipOn('今天'); })();
       const second = (() => { clickText('今天'); return chipOn('今天'); })();
+      // 用户 2026-11-13：「清空」按钮去掉（没有意义）—— 芯片只负责选中，日期永远有来源。
       const hasClear = !!document.querySelector('[data-quick-clear-due]');
-      // 现在真正清空：应该出现「没有日期」的提示
-      document.querySelector('[data-quick-clear-due]')?.click();
-      await new Promise((r) => setTimeout(r, 300));
-      const hint = !!document.querySelector('[data-quick-undated-hint]');
-      const clearedText = dateText();
-      // 再点「今天」把日期要回来，随后按正常路径建一条
-      clickText('今天');
-      await new Promise((r) => setTimeout(r, 200));
-      const restored = chipOn('今天');
+      const dateTextAfterChips = dateText();
+      const undatedHint = !!document.querySelector('[data-quick-undated-hint]');
       // 流光边框：0.18.3 起挂在**新建任务卡片**上（原来错挂在「更多」面板里）。
       // 卡片外面套了一层 .quick-shell 承载 .flow-frame/.flow-glow（卡片自己 overflow-hidden
       // 会把柔光裁掉），所以这里读 shell 的样式，「更多」面板则要求**没有**流光。
@@ -144,14 +138,14 @@ const createdIds = [];
       await new Promise((r) => setTimeout(r, 200));
       clickText('添加提醒');
       await new Promise((r) => setTimeout(r, 1500));
-      return { first, second, hasClear, hint, clearedText, restored, typed: !!input, flow };
+      return { first, second, hasClear, dateTextAfterChips, undatedHint, typed: !!input, flow };
     }, titles.today);
     check('「今天」芯片连点两次仍是今天（不再把日期清空）',
       chipFlow.first === true && chipFlow.second === true, JSON.stringify(chipFlow));
-    check('有专门的「清空」按钮，清空后出现「没有日期」提示',
-      chipFlow.hasClear === true && chipFlow.hint === true && chipFlow.clearedText === '选择日期',
-      JSON.stringify(chipFlow));
-    check('清空后再点「今天」能把日期要回来', chipFlow.restored === true, JSON.stringify(chipFlow));
+    check('「清空」按钮已去掉（2026-11-13 用户要求，日期不再能清成空）',
+      chipFlow.hasClear === false, JSON.stringify(chipFlow));
+    check('芯片行里日期芯片仍显示「选择日期」，也没有出现「无日期」提示',
+      chipFlow.dateTextAfterChips === '选择日期' && chipFlow.undatedHint === false, JSON.stringify(chipFlow));
 
     const afterCreate = await api(page, '/api/reminder/items?view=all&status=all');
     const todayItem = (afterCreate.body?.data || []).find((i) => i.title === titles.today);

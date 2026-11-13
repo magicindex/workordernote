@@ -8,7 +8,7 @@
  *   2) 日期芯片打开的选择器**没有时间**这一项；
  *   3) 自己挑一天：芯片显示「YYYY年M月D日」并且是唯一亮着的，今天/明天/本周末全灭；
  *      挑的日子落到那天 23:59（与三个芯片同一口径）；
- *   4) 「清空」仍然可用（那是「这条不要日期」），清空后提示出现、芯片回到「选择日期」。
+ *   4) 「清空」按钮 2026-11-13 已撤掉：日期只能从芯片或日期选择器来，不会再清成空。
  *
  * 用法：APP_URL=http://127.0.0.1:8918 node verify-163.js
  * 数据：自建 1 条提醒，跑完删掉。
@@ -149,7 +149,7 @@ const clickChip = (page, text) => page.evaluate((t) => {
     check('保存后到期时间就是挑的那天 23:59', dueKey === `${iso} 23:59`, dueKey);
     if (item) await api(page, `/api/reminder/items/${item.id}`, 'DELETE');
 
-    // ---------- 4. 三个芯片各自独占，且「清空」还能用 ----------
+    // ---------- 4. 三个芯片各自独占，「清空」已撤掉 ----------
     await page.goto(BASE + '/admin', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await sleep(1500);
     await openQuickAdd(page);
@@ -160,22 +160,17 @@ const clickChip = (page, text) => page.evaluate((t) => {
     check('点「明天」后只有明天亮着，日期芯片熄灭',
       tomorrow.tomorrow === true && tomorrow.today === false && tomorrow.dateActive === false,
       JSON.stringify(tomorrow));
-    const clearOk = await page.evaluate(() => {
-      const btn = document.querySelector('[data-quick-clear-due]');
-      if (!btn) return false;
-      btn.click();
-      return true;
-    });
-    await sleep(400);
-    const cleared = await chipState(page);
-    check('「清空」仍然可用：清空后回到「选择日期」并出现无日期提示',
-      clearOk === true && cleared.dateText === '选择日期' && cleared.undatedHint === true,
-      JSON.stringify(cleared));
+    // 用户 2026-11-13：「清空」按钮去掉（没有意义）。
+    const afterTomorrow = await chipState(page);
+    check('「清空」按钮已去掉，日期不再能清成空',
+      afterTomorrow.clearVisible === false && afterTomorrow.undatedHint === false
+        && afterTomorrow.tomorrow === true,
+      JSON.stringify(afterTomorrow));
     await clickChip(page, '今天');
     await sleep(300);
     const restored = await chipState(page);
-    check('再点「今天」后恢复：今天亮、提示消失',
-      restored.today === true && restored.undatedHint === false, JSON.stringify(restored));
+    check('点「今天」后今天亮、日期芯片熄灭',
+      restored.today === true && restored.dateText === '选择日期' && restored.undatedHint === false, JSON.stringify(restored));
 
     // ---------- 5. 手机端 390px：这一排不塌 ----------
     await page.setViewport({ width: 390, height: 844 });

@@ -221,7 +221,8 @@
                      · 点它挑了具体某天，今天/明天/本周末才全灭、只亮它一个；
                      · 时间部分整个去掉（原来 with-time，芯片上还会显示 15:54 那种时刻，
                        和「今天」芯片的 23:59 打架）。挑了哪天，就落到那天 23:59。
-                   「清空」保留：那是「这条不要日期」，与选哪天是两件事。 -->
+                   「清空」按钮已撤掉（用户 2026-11-13：「清空没有意义」）：日期只能从
+                   三个相对芯片或日期选择器来，提交时总有一个日期。 -->
               <span class="relative inline-flex items-center gap-1">
                 <button
                   ref="quickDateAnchor"
@@ -231,14 +232,6 @@
                   data-quick-date
                   @click="quickDateOpen = !quickDateOpen"
                 >{{ !preset && quick.due_at ? formatDayOnly(quick.due_at) : '选择日期' }}</button>
-                <button
-                  v-if="quick.due_at"
-                  type="button"
-                  class="quick-chip"
-                  title="清空日期：这条会变成「无日期」，只在「全部」里出现"
-                  data-quick-clear-due
-                  @click="clearQuickDue"
-                >清空</button>
                 <LunarDatePicker v-if="quickDateOpen" v-model="quickDatePicked" :anchor-el="quickDateAnchor" @commit="quickDateOpen = false" />
               </span>
               <select v-model="quick.repeat_rule" class="quick-chip max-w-[6.5rem] !px-2 !text-[11px]" data-quick-repeat aria-label="重复">
@@ -1018,17 +1011,13 @@ const quickExpanded = ref(false)
 // 记事备注：默认收起（用户 2026-11-11），点「备注」展开写详细内容
 const quickNotesOpen = ref(false)
 const preset = ref('today')
-// 「清空」是**明确**动作：按过之后，这一次新建才是真正的「无日期」；
-// 只要又选了日期（芯片或日期选择器）就复位。提交时的兜底用它区分
-// 「用户故意不要日期」与「状态里没日期」（后者补今天）。
-const quickDueCleared = ref(false)
 // 到期时间是从哪来的：'auto' = 打开表单时按「今天当前时刻」自动填的；'preset' = 点了
-// 今天/明天/本周末；'custom' = 自己挑了具体某天；'cleared' = 明确不要日期。
+// 今天/明天/本周末；'custom' = 自己挑了具体某天。
 //
 // 为什么要记：新建卡片会**在页面上挂很久**（用户 2026-11-13 报的：待办页放着不动，
 // 过一会再提交，弹「结束时间不能早于现在」）。auto 的到期时刻是打开那一刻算的，
 // 放置一会儿就过期了；提交时按当前时刻重算才不会假报错。计划页的开始时间同理。
-const quickDueSource = ref<'auto' | 'preset' | 'custom' | 'cleared'>('auto')
+const quickDueSource = ref<'auto' | 'preset' | 'custom'>('auto')
 const quickStartSource = ref<'auto' | 'custom'>('auto')
 const editorOpen = ref(false)
 const clockNow = ref(Date.now())
@@ -1059,7 +1048,6 @@ function applyQuickDefaults() {
   quick.due_at = planned ? null : defaultQuickDue()
   quick.start_at = planned ? defaultQuickDue() : null
   quick.end_at = null
-  quickDueCleared.value = false
   quickDueSource.value = 'auto'
   quickStartSource.value = 'auto'
   quickExpanded.value = false
@@ -1478,12 +1466,8 @@ watch([selectedListID, defaultListID], () => {
 const quickDatePicked = computed({
   get: () => (quick.due_at ? new Date(quick.due_at) : null),
   set: value => {
-    if (!value) {
-      quick.due_at = null
-      preset.value = ''
-      quickDueSource.value = 'cleared'
-      return
-    }
+    // 没有「清空日期」入口了：选择器回传 null 时保持原值，别把日期意外抹掉
+    if (!value) return
     // 手机端「取消」会把打开时的旧值再 emit 一遍；同一天就当作没改 ——
     // 否则「取消」反而把 15:54 改写成 23:59，还把亮着的「今天」熄掉。
     const current = quick.due_at ? new Date(quick.due_at) : null
@@ -1714,13 +1698,11 @@ async function submitQuick() {
         quick.due_at = presetDue(preset.value)
       }
     }
-    // 明确「这条要不要日期」：按清空过的口径算（刷新之后 due 一般都有值）。
-    const undated = !quick.due_at && !quick.start_at
     // 计划页：只用时间段（结束留空＝单点），due_at 由后端按开始时间归位。
-    // 非计划页：日期为空只可能是「用户按了清空」（quickDueCleared）或状态里没日期。
-    // 后者按今天兜底 —— 否则又会存出「无日期」的任务：保存成功、今天页里却找不到
-    // （用户报过的那个 bug）。记事由后端统一清空日期，这里给不给都不影响。
-    const fallbackDue = quick.due_at || (quickDueCleared.value ? null : defaultQuickDue())
+    // 非计划页：日期只有「自动默认 / 芯片 / 自己挑」三种来源，状里没有日期时按今天兜底
+    // —— 否则会存出「无日期」的任务：保存成功、今天页里却找不到（用户报过的那个 bug）。
+    // 记事由后端统一清空日期，这里给不给都不影响。
+    const fallbackDue = quick.due_at || defaultQuickDue()
     const payload: SaveReminderInput = planned
       ? { ...quick, kind: 'task', title: quick.title.trim(), due_at: null, end_at: quick.end_at || null }
       : { ...quick, title: quick.title.trim(), due_at: isNote ? null : fallbackDue }
@@ -1762,7 +1744,6 @@ async function submitQuick() {
     // 「不要折叠」，方便连着建几条）；手机端与其它页面仍按原来的「提交后自动收起」
     // （用户 2026-10-11 要求，小屏常驻表单会顶掉列表）。
     preset.value = isNote || planned ? '' : 'today'
-    quickDueCleared.value = false
     quickDueSource.value = 'auto'
     quickStartSource.value = 'auto'
     quickExpanded.value = false
@@ -1772,9 +1753,6 @@ async function submitQuick() {
       // 记事本页要立刻把新记的这条显示出来（其它视图它本来就不出现）。
       await loadItems()
       showToast('记事已保存到「随手记事本」')
-    } else if (undated && !selectedListID.value && (view.value === 'today' || view.value === 'planned')) {
-      await router.push({ name: 'AllReminders' })
-      showToast('已保存到「全部」：这条提醒没有设置日期')
     } else {
       await loadItems()
       showToast(planned ? '计划任务已添加' : '提醒已添加')
@@ -1922,7 +1900,7 @@ async function undoCompleted(entry: CompletedItem) {
 // 0.15.4 上线当天踩到的真 bug：这三个芯片原来是 toggle，用户在「今天」页点了
 // 已经亮着的「今天」，`due_at` 被清成 null，任务就存成「无日期」——今天页里
 // 找不到，去「全部」看只显示「无日期」。用户报的正是这一条。
-// 要「不要日期」请用清空按钮（clearQuickDue），芯片永远只负责选中。
+// 芯片永远只负责选中（用户 2026-11-13 把「清空」按钮撤掉了）。
 /** 「今天 / 明天 / 本周末」对应的到期时刻（当天 23:59）。提交时也会用它重算一次。 */
 function presetDue(kind: string): string {
   const d = new Date()
@@ -1936,18 +1914,9 @@ function presetDue(kind: string): string {
 }
 function setPreset(kind: string) {
   preset.value = kind
-  quickDueCleared.value = false
   quickDueSource.value = 'preset'
   quick.due_at = presetDue(kind)
 }
-/** 明确「这条不要日期」。只有这里会把日期清空，并且立刻给出可见提示。 */
-function clearQuickDue() {
-  preset.value = ''
-  quick.due_at = null
-  quickDueCleared.value = true
-  quickDueSource.value = 'cleared'
-}
-
 // 「按农历循环」的快速新建入口已于 2026-11-11 撤掉（「更多」只留备注），
 // 这里只保留回退：重复规则不是每月/每年时，把残留的 lunar 拉回公历，
 // 避免旧草稿带着 lunar + 每天 这种组合被后端拒绝。
