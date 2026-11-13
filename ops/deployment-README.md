@@ -233,6 +233,19 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-13：0.47.5（201 生产 / 200 生产均已上线）—— AI 对话超时说清楚，不再只回 502
+
+> **发版记录**（VERSION 0.47.5，源码提交 `5879239`，镜像 `workordernote:0.47.5` =
+> `sha256:c7961596da0bae4c365d5bda4e5516e224756b0833b9da9231b04826102cf433`；registry manifest `sha256:1017e0cf47a52abcc44997fe4f5f4131f6c8c5c6616df8cb9c432883893366a2`）
+
+- 第 106 条：排查用户截图里的「这次没答上来：Request failed with status code 502」——200 的 AI 面板，日志 `502 | 1m0.05s | POST /api/assistant/chat`。根因：本机 Ollama 的 qwen3:8b-64k 生成「周报」这类长回答要 90 秒左右（冷加载 93.6s），后台 `ai_timeout_seconds` 是默认 60 → 必超时；且前端在 HTTP 502 时只抛 axios 通用文案，服务端 body 里的中文说明（「等待 … 响应超时」）被吞掉。
+- 修：前端 `chatWithAssistant` 的 catch 走 `unwrapError`，显示服务端 message；后端超时文案带出配置的秒数并提示去「系统配置 → AI 助手」调大。
+- **配置调整（数据）**：201/200 的 `ai_timeout_seconds` 从 60 → **180**（前端等待上限也是 180 秒）。实测：200 问「写这周的周报」95.6 秒出结果、201「你好」7.3 秒。
+- 201：备份 `docker-compose.yml.bak-pre0475-20261113-1531` + `tmp/data.bak-pre0475-20261113-1531.tgz`，旧镜像保留 `workordernote:0.47.4-keep-20261113-1531`；15:31 重建，`0.47.5 / 5879239`。
+- 200：备份 `docker-compose.yml.bak-pre0475-20261113-1532` / `data.bak-pre0475-20261113-1532.tgz`，旧镜像保留 `workordernote:0.47.4-keep-20261113-1532`；15:32 重建，`0.47.5 / 5879239`。
+- 回归：201/200 `verify-128` 各 **34/34**；双机 `verify-sync-local` **15/15**；两台 AI 对话均实测成功（mode=model）。
+- 镜像已推 Gitea 与 GHCR 的 `0.47.5` / `latest`（manifest `sha256:1017e0cf…`）。
+
 ### 2026-11-13：0.47.4（201 生产 / 200 生产均已上线）—— 信用卡期数只给分期卡看，费率可手工改
 
 > **发版记录**（VERSION 0.47.4，源码提交 `c1e2bd6`，镜像 `workordernote:0.47.4` =
