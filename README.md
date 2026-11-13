@@ -6,7 +6,7 @@
 - 仓库：<http://192.168.3.200:3000/cyberzero/WorkOrderNote>
 - 发布与安装包：<http://192.168.3.200:3000/cyberzero/WorkOrderNote/releases>
 - GitHub 镜像：<https://github.com/magicindex/workordernote>
-- 当前版本：`0.47.5`
+- 当前版本：`0.47.6`
 
 > **本项目是衍生作品。** 基于开源项目
 > [TechFunWay/reminders](https://github.com/TechFunWay/reminders)（MIT 许可）衍生开发，
@@ -50,6 +50,59 @@
 上游自带的能力（到点催办、重复提醒、多邮箱通知、飞牛一键登录等）全部保留。
 
 ---
+
+## 最近更新（0.47.1 → 0.47.6）
+
+> 逐条的开发记录在 [`ops/待发布改动.md`](ops/待发布改动.md)，部署记录在
+> [`ops/deployment-README.md`](ops/deployment-README.md)。
+
+| 版本 | 迭代内容 | 修的问题 |
+| --- | --- | --- |
+| 0.47.1 | 「新建备注 / 完成备注」按时间戳拼接：列表已完成行、已完成页、编辑面板、导出都能看到两段 | 新建卡片久置后提交误报「结束时间不能早于现在」（到期时间按提交时刻重算）；logo 与主按钮补纯色兜底底（渐变失效时不再变白块）；导出 CSV 支持单元格内换行 |
+| 0.47.2 | 备注真正合成一处：编辑属性里一条可编辑的合并文本（保存时拆回两处），打印新增合并「备注」列且默认勾选 | 编辑面板与打印里两条备注分离、只能编辑一条 |
+| 0.47.3 | — | 打开编辑面板还没加载完就按回车会提交空表单，把新建备注清空；现改为未加载完不保存（并从备份恢复了被清空的备注） |
+| 0.47.4 | 信用卡分期：只有做了分期的卡显示「分期 第 x/N 期」，已还清不显示；分期弹窗可手工改每期费率（默认官方口径），「保存到卡片」后卡面显示进度 | 原来按开卡月份算的「第 N 期」全部取消（跟分期无关，容易误读） |
+| 0.47.5 | — | AI 对话超时只回「Request failed with status code 502」：前端改为显示服务端原因，超时文案带出秒数并提示调大；两台超时 60 → 180 秒（qwen3:8b 写周报实测 90 秒级） |
+| 0.47.6 | 文档与发行：README 增加「最近更新」与「边界关系」，补全 CHANGELOG；打 Linux 发行包与新镜像 | 代码无功能性改动 |
+
+## 边界关系
+
+本仓库是「工作序记」的应用本体，负责从代码到部署的全部实现。下面说清它改了什么、
+不碰什么，以及发版时要同步哪些仓库。
+
+### 本仓库负责（随本仓库提交变化）
+
+| 范围 | 内容 |
+| --- | --- |
+| 后端 | `server/` Go 服务：提醒/清单、信用卡、课程表、双机同步、备份恢复、AI 助手代理、打印与导出 |
+| 前端 | `web/` Vue 3 应用：列表、日历/周视图、首页看板、信用卡、课程表、仪式感、设置与 AI 面板 |
+| 构建与部署 | `Dockerfile*`、`docker-compose.yml`、`scripts/`、`ops/`（部署记录、离线包模板、数据校验脚本） |
+| 回归测试 | `browser-harness/`（同仓库维护的浏览器用例，随功能同步更新） |
+| 发行产物 | `release/`（本地产物，已 git 忽略）、`publish-assets/`（README 截图） |
+
+### 本仓库不负责 / 只读
+
+| 对象 | 关系 |
+| --- | --- |
+| `reminders-upstream/` | 上游 [TechFunWay/reminders](https://github.com/TechFunWay/reminders) 的只读快照，是衍生的来源；不向上游提交、也不改它 |
+| 外部模型服务 | 本机 Ollama（`http://192.168.3.201:11434/v1`）或各云厂商 API，由「系统配置 → AI 助手」配置，不属于本仓库代码 |
+| fnOS 系统与统一网关 | 通过 `fnpack/` 打包接入，系统本身不修改 |
+
+### 依赖的其他仓库需要同步什么
+
+| 仓库 / 镜像 | 同步内容 | 触发时机 |
+| --- | --- | --- |
+| `origin`（Gitea `cyberzero/WorkOrderNote`） | 本仓库全部提交与 tag（主来源） | 每次提交 / 发版 |
+| `github`（`magicindex/workordernote`） | 同一个 commit（镜像仓库） | 发版后 `git push github main` |
+| GHCR `ghcr.io/magicindex/workordernote` | 镜像 `:<版本>` 与 `:latest` | 发版构建后推送 |
+| Gitea Registry `192.168.3.200:3000/cyberzero/workordernote` | 同一镜像（两台生产机从这里拉） | 同上 |
+| 两台生产机的 `docker-compose.yml`（`/vol1/1000/Docker/workordernote/`） | 镜像 tag 改为新版本 | 发版时同步 |
+| `README.md` / `CHANGELOG.md` / `web/src/data/release-notes.ts` / `ops/deployment-README.md` | 版本号与更新说明 | 每次发版 |
+
+发版标准顺序：改 `VERSION` → 核对四处版本号一致（`VERSION` / `docker-compose.yml` /
+`README.md` / `web/src/data/release-notes.ts`）→ 构建镜像 → 推两个 registry →
+两台容器拉取重建 → `verify-128` + 双机同步校验 → 写 `ops/deployment-README.md` →
+提交并推 `origin` 与 `github`。
 
 ## 技术栈
 

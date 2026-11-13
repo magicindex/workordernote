@@ -32,6 +32,16 @@ export const UPSTREAM = {
 
 const versionHistory: ReleaseNote[] = [
   {
+    version: '0.47.6',
+    date: '2026-11-13',
+    title: '发行与文档：README 补「最近更新」与「边界关系」，打新镜像',
+    items: [
+      'README 新增「最近更新（0.47.1 → 0.47.6）」与「边界关系」：本仓库负责什么、不碰什么（上游只读快照 / 外部模型服务 / fnOS 系统），以及发版时要同步的仓库与镜像（Gitea、GitHub 镜像、GHCR、Gitea Registry、两台生产机的 compose）。',
+      '补全 CHANGELOG：0.47.1–0.47.5 的迭代与修复都补进去了，和 README 对齐。',
+      '本次没有功能性代码改动；镜像与 Linux 发行包重新构建，版本号递增到 0.47.6。',
+    ],
+  },
+  {
     version: '0.47.5',
     date: '2026-11-13',
     title: 'AI 对话超时不再只回一个 502：说清楚等了多少秒、该去调哪里',
