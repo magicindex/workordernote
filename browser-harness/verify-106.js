@@ -273,6 +273,52 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       afterReload.cardOpen === true && afterReload.newButton === false, JSON.stringify(afterReload));
 
     // ---------- 清理 ----------
+    // ---------- 8. 页面放很久再提交：自动填的日期要按提交时刻重算 ----------
+    // 用户 2026-11-13：「待办页面打开 放着没动，过了一会 在新建创建，提示结束时间不能早于现在」。
+    // 模拟方式：页面加载完之后把浏览器里的 Date 拨快 2 小时（到期时间是打开那一刻算的，
+    // 一拨快它就「已经是过去」了），再走一次新建提交。
+    const idleTitle = `自检久置提交-${STAMP}`;
+    await page.evaluate(() => {
+      const Real = Date;
+      const shift = 2 * 3600 * 1000;
+      class ShiftedDate extends Real {
+        constructor(...args) {
+          if (args.length === 0) super(Real.now() + shift);
+          else super(...args);
+        }
+        static now() { return Real.now() + shift; }
+      }
+      window.Date = ShiftedDate;
+    });
+    const idleSubmit = await page.evaluate(async (title) => {
+      const card = document.querySelector('.quick-card');
+      const input = card?.querySelector('input');
+      if (!input) return { ok: false, why: '找不到新建输入框' };
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(input, title);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      [...card.querySelectorAll('button')].find((b) => /^(添加提醒|添加)$/.test(b.textContent.trim()))?.click();
+      await new Promise((r) => setTimeout(r, 1800));
+      return { ok: true, toast: (document.body.innerText.match(/[^\n]*(不能早于现在|结束时间|到期时间)[^\n]*/) || [''])[0] };
+    }, idleTitle);
+    const idleItem = await api(page, `/api/reminder/items?view=all&status=all&q=${encodeURIComponent(idleTitle)}`);
+    const idleRow = (idleItem.body?.data || []).find((r) => r.title === idleTitle);
+    check('页面放置一段时间后提交，不再误报「结束时间不能早于现在」',
+      idleSubmit.ok === true && !/不能早于现在/.test(idleSubmit.toast) && !!idleRow,
+      JSON.stringify({ idleSubmit, found: !!idleRow, toast: idleSubmit.toast }));
+    if (idleRow) {
+      // 到期时间应当≈「提交时刻」（浏览器里已经拨快 2 小时），不是打开页面那一刻
+      const dueMs = new Date(idleRow.due_at).getTime();
+      const shiftedNow = Date.now() + 2 * 3600 * 1000;
+      check('补上的到期时间按提交时刻重算（不是打开页面那一刻）',
+        Math.abs(dueMs - shiftedNow) <= 10 * 60 * 1000,
+        JSON.stringify({ due: idleRow.due_at, diffMin: Math.round((dueMs - shiftedNow) / 60000) }));
+      await api(page, `/api/reminder/items/${idleRow.id}`, 'DELETE');
+    }
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await sleep(1200);
+
     const del = await api(page, `/api/reminder/items/${saved?.id}`, 'DELETE');
     check('自检任务已清理', del.status === 200, JSON.stringify({ id: saved?.id, status: del.status }));
   });

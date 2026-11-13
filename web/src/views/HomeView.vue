@@ -1022,6 +1022,14 @@ const preset = ref('today')
 // 只要又选了日期（芯片或日期选择器）就复位。提交时的兜底用它区分
 // 「用户故意不要日期」与「状态里没日期」（后者补今天）。
 const quickDueCleared = ref(false)
+// 到期时间是从哪来的：'auto' = 打开表单时按「今天当前时刻」自动填的；'preset' = 点了
+// 今天/明天/本周末；'custom' = 自己挑了具体某天；'cleared' = 明确不要日期。
+//
+// 为什么要记：新建卡片会**在页面上挂很久**（用户 2026-11-13 报的：待办页放着不动，
+// 过一会再提交，弹「结束时间不能早于现在」）。auto 的到期时刻是打开那一刻算的，
+// 放置一会儿就过期了；提交时按当前时刻重算才不会假报错。计划页的开始时间同理。
+const quickDueSource = ref<'auto' | 'preset' | 'custom' | 'cleared'>('auto')
+const quickStartSource = ref<'auto' | 'custom'>('auto')
 const editorOpen = ref(false)
 const clockNow = ref(Date.now())
 const toast = reactive<{ message: string; type: 'success' | 'error' }>({ message: '', type: 'success' })
@@ -1052,6 +1060,8 @@ function applyQuickDefaults() {
   quick.start_at = planned ? defaultQuickDue() : null
   quick.end_at = null
   quickDueCleared.value = false
+  quickDueSource.value = 'auto'
+  quickStartSource.value = 'auto'
   quickExpanded.value = false
   quickNotesOpen.value = false
   preset.value = planned ? '' : 'today'
@@ -1327,7 +1337,10 @@ const planStartAnchor = ref<HTMLElement | null>(null)
 const planEndAnchor = ref<HTMLElement | null>(null)
 const planStartPicked = computed({
   get: () => (quick.start_at ? new Date(quick.start_at) : null),
-  set: value => { quick.start_at = value ? toLocalIso(value) : null },
+  set: value => {
+    quick.start_at = value ? toLocalIso(value) : null
+    quickStartSource.value = value ? 'custom' : 'auto'
+  },
 })
 const planEndPicked = computed({
   get: () => (quick.end_at ? new Date(quick.end_at) : null),
@@ -1468,6 +1481,7 @@ const quickDatePicked = computed({
     if (!value) {
       quick.due_at = null
       preset.value = ''
+      quickDueSource.value = 'cleared'
       return
     }
     // 手机端「取消」会把打开时的旧值再 emit 一遍；同一天就当作没改 ——
@@ -1483,6 +1497,7 @@ const quickDatePicked = computed({
     const d = new Date(value.getFullYear(), value.getMonth(), value.getDate(), h, m, 0, 0)
     quick.due_at = toLocalIso(d)
     preset.value = ''
+    quickDueSource.value = 'custom'
   },
 })
 
@@ -1678,6 +1693,28 @@ async function submitQuick() {
     // 并且保持「记事」模式不变，方便连着记好几条。
     const isNote = quick.kind === 'note'
     const planned = isPlanned.value
+    // 提交前按**当前时刻**校正「自动填的日期」：新建卡片可能已经挂了很久，
+    // 打开那一刻算出来的到期/开始时间早就过去了；不重算会误报
+    // 「结束时间不能早于现在」（用户 2026-11-13 报的 bug）。
+    if (planned) {
+      if (quickStartSource.value === 'auto') {
+        const fresh = defaultQuickDue()
+        if (quick.start_at && quick.end_at) {
+          // 结束时间跟着平移，保住用户选的周期长度（本来就没结束时间就仍是单点）
+          const delta = new Date(fresh).getTime() - new Date(quick.start_at).getTime()
+          if (delta > 0) quick.end_at = toLocalIso(new Date(new Date(quick.end_at).getTime() + delta))
+        }
+        quick.start_at = fresh
+      }
+    } else if (!isNote) {
+      if (quickDueSource.value === 'auto') {
+        quick.due_at = defaultQuickDue()
+      } else if (quickDueSource.value === 'preset' && preset.value) {
+        // 芯片是**相对日期**：午夜之后「今天」就该是新的今天，提交时重算一次。
+        quick.due_at = presetDue(preset.value)
+      }
+    }
+    // 明确「这条要不要日期」：按清空过的口径算（刷新之后 due 一般都有值）。
     const undated = !quick.due_at && !quick.start_at
     // 计划页：只用时间段（结束留空＝单点），due_at 由后端按开始时间归位。
     // 非计划页：日期为空只可能是「用户按了清空」（quickDueCleared）或状态里没日期。
@@ -1694,10 +1731,17 @@ async function submitQuick() {
         showToast('结束时间要晚于开始时间', 'error')
         return
       }
-      const endMs = payload.end_at ? new Date(payload.end_at).getTime() : (payload.due_at ? new Date(payload.due_at).getTime() : 0)
+      // 报错要说准是哪一格：只有结束时间才叫「结束时间」，单点任务的是「到期时间」。
+      const endMs = payload.end_at ? new Date(payload.end_at).getTime() : 0
+      const dueMs = payload.due_at ? new Date(payload.due_at).getTime() : 0
       if (endMs && endMs < Date.now() - 60_000) {
         saving.value = false
         showToast('结束时间不能早于现在', 'error')
+        return
+      }
+      if (!payload.end_at && dueMs && dueMs < Date.now() - 60_000) {
+        saving.value = false
+        showToast('到期时间不能早于现在', 'error')
         return
       }
     }
@@ -1719,6 +1763,8 @@ async function submitQuick() {
     // （用户 2026-10-11 要求，小屏常驻表单会顶掉列表）。
     preset.value = isNote || planned ? '' : 'today'
     quickDueCleared.value = false
+    quickDueSource.value = 'auto'
+    quickStartSource.value = 'auto'
     quickExpanded.value = false
     quickNotesOpen.value = false
     quickOpen.value = quickOpenByDefault()
@@ -1761,6 +1807,7 @@ function setQuickKind(kind: ReminderKind) {
     if (!quick.due_at && !quick.start_at && !isPlanned.value) {
       quick.due_at = defaultQuickDue()
       preset.value = 'today'
+      quickDueSource.value = 'auto'
     }
     if (isNoteBucketPage.value) {
       // 记事本页的目标清单是栏目本身（不在下拉的普通清单里）；改成任务时要挪回
@@ -1876,9 +1923,8 @@ async function undoCompleted(entry: CompletedItem) {
 // 已经亮着的「今天」，`due_at` 被清成 null，任务就存成「无日期」——今天页里
 // 找不到，去「全部」看只显示「无日期」。用户报的正是这一条。
 // 要「不要日期」请用清空按钮（clearQuickDue），芯片永远只负责选中。
-function setPreset(kind: string) {
-  preset.value = kind
-  quickDueCleared.value = false
+/** 「今天 / 明天 / 本周末」对应的到期时刻（当天 23:59）。提交时也会用它重算一次。 */
+function presetDue(kind: string): string {
   const d = new Date()
   d.setSeconds(0, 0)
   if (kind === 'tomorrow') d.setDate(d.getDate() + 1)
@@ -1886,13 +1932,20 @@ function setPreset(kind: string) {
   // 所有芯片的时间一律 23:59（用户 2026-10-13；原来今天＝20:00、明天/本周末＝09:00）
   const { h, m } = clockParts(DEFAULT_DUE_TIME)
   d.setHours(h, m, 0, 0)
-  quick.due_at = toLocalIso(d)
+  return toLocalIso(d)
+}
+function setPreset(kind: string) {
+  preset.value = kind
+  quickDueCleared.value = false
+  quickDueSource.value = 'preset'
+  quick.due_at = presetDue(kind)
 }
 /** 明确「这条不要日期」。只有这里会把日期清空，并且立刻给出可见提示。 */
 function clearQuickDue() {
   preset.value = ''
   quick.due_at = null
   quickDueCleared.value = true
+  quickDueSource.value = 'cleared'
 }
 
 // 「按农历循环」的快速新建入口已于 2026-11-11 撤掉（「更多」只留备注），
