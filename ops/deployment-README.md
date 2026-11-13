@@ -233,6 +233,19 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-13：0.47.4（201 生产 / 200 生产均已上线）—— 信用卡期数只给分期卡看，费率可手工改
+
+> **发版记录**（VERSION 0.47.4，源码提交 `c1e2bd6`，镜像 `workordernote:0.47.4` =
+> `sha256:f43266ca9040c1f29110bcb411ac660cccb8552acdc6afe4581e94bd57359fa7`；registry manifest `sha256:8ea491f55dcdcb9378cc1de30a03906bc5e1918a2d6f70e4f5dc1bc48dc74c63`）
+
+- 第 105 条：卡面取消按开卡月份算的「第 N 期」；只有存了分期计划的卡显示「分期 第 x/N 期」，已还清（paid ≥ periods）不显示。分期弹窗新增「每期费率（%）」（默认银行官方口径、可手工改）与「保存到卡片 / 取消分期」。
+- **schema 变更**：`cards` 表新增 `installment_periods / installment_paid / installment_principal / installment_rate` 四列（自动迁移，现有 11 张卡数据不变，全部为 0）；分期计划随卡片双向同步。
+- 前置验证（生产库拷贝 + 0.47.4 镜像，8918）：`0.47.4 / c1e2bd6`，11 张卡迁移后全部 0 期，`verify-164` 12/12、`verify-097` 109/109。
+- 201：备份 `docker-compose.yml.bak-pre0474-20261113-1409` + `tmp/data.bak-pre0474-20261113-1409.tgz`，旧镜像保留 `workordernote:0.47.3-keep-20261113-1409`；14:09 重建，`/api/version` = `0.47.4 / c1e2bd6`，integrity ok，11 张卡。
+- 200：备份 `docker-compose.yml.bak-pre0474-20261113-1410` / `data.bak-pre0474-20261113-1410.tgz`，旧镜像保留 `workordernote:0.47.3-keep-20261113-1410`；拉取后重建，`/api/version` = `0.47.4 / c1e2bd6`。
+- 回归：201/200 `verify-128` 各 **34/34**；双机 `verify-sync-local` **15/15**；生产卡片页实测 11 张卡、期数徽标 **0** 个。
+- 镜像已推 Gitea 与 GHCR 的 `0.47.4` / `latest`（manifest `sha256:8ea491f5…`）。
+
 ### 2026-11-13：0.47.3（201 生产 / 200 生产均已上线）—— 修「未加载完保存清空备注」的竞态
 
 > **发版记录**（VERSION 0.47.3，源码提交 `ef79b7a`，镜像 `workordernote:0.47.3` =
