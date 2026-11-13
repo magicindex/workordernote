@@ -247,7 +247,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 201：备份 `docker-compose.yml.bak-pre0476-20261113-1737` + `tmp/data.bak-pre0476-20261113-1737.tgz`（15M），旧镜像保留 `workordernote:0.47.5-keep-20261113-1737`；17:38 重建，`0.47.6 / bf37a69`。
 - 200：备份 `docker-compose.yml.bak-pre0476-20261113-1740` / `data.bak-pre0476-20261113-1740.tgz`，旧镜像保留 `workordernote:0.47.5-keep-20261113-1740`；17:41 重建，`0.47.6 / bf37a69`。
 - 回归：201/200 `verify-128` 各 **34/34**；双机 `verify-sync-local` **15/15**。
-- 镜像已推 Gitea 与 GHCR 的 `0.47.6` / `latest`；git 推送 origin（Gitea）与 github（GitHub 镜像）。
+- 镜像已推 Gitea 与 GHCR 的 `0.47.6` / `latest`；git 推送到 origin（Gitea）成功，并打了 tag `v0.47.6`。
+- Gitea 发布页：<http://192.168.3.200:3000/cyberzero/WorkOrderNote/releases/tag/v0.47.6>（附件：`workordernote-0.47.6-linux-amd64.tar.gz`、`docker-compose.yml`）。
+- GitHub 镜像（`magicindex/workordernote`）：tag `v0.47.6` 已推上；`main` 分支推送被网络 TLS 中断且远端已分叉（非 fast-forward），本次**未**同步成功——需要后续用 GitHub token 强推或先 fetch 合并，详见下方说明。
 
 ### 2026-11-13：0.47.5（201 生产 / 200 生产均已上线）—— AI 对话超时说清楚，不再只回 502
 
