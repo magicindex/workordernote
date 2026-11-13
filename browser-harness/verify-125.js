@@ -63,6 +63,45 @@ const visible = (page, sel) => page.evaluate((sel) => {
     check('侧栏最上面不再有「新建提醒」按钮', sidebar.newCount === 0, `还在 ${sidebar.newCount} 个`);
     // AI 入口的名字在「系统配置 → AI 助手」里能改（默认「望舒」），这里只认「呼叫」前缀，
     // 不再写死「呼叫小秘」—— 那是最早的默认名，改了名这条就假红。
+    // 用户 2026-11-13：「给 ai 名称前边图标加上流光圆边，让效果看起来像是在呼吸」。
+    // 量三件事：有一圈会转的流光（conic + 角度动画）、外圈柔光在缩放/明暗（呼吸）、
+    // 系统开「减少动态效果」时两个动画都停。
+    const orb = await page.evaluate(async () => {
+      const el = document.querySelector('[data-assistant-trigger] .orb-flow');
+      if (!el) return null;
+      const ring = getComputedStyle(el, '::before');
+      const glow = getComputedStyle(el, '::after');
+      const frame = () => ({ scale: glow.transform, opacity: Number(glow.opacity) });
+      const one = frame();
+      await new Promise((r) => setTimeout(r, 900));
+      const two = frame();
+      return {
+        ringAnim: ring.animationName, ringDur: ring.animationDuration,
+        glowAnim: glow.animationName,
+        conic: /conic-gradient/.test(ring.backgroundImage),
+        breathing: one.scale !== two.scale || Math.abs(one.opacity - two.opacity) > 0.05,
+        frames: [one, two],
+      };
+    });
+    check('AI 图标外圈有流光圆边（conic 光带在转）',
+      !!orb && orb.conic === true && /flow-frame-rotate/.test(orb.ringAnim) && parseFloat(orb.ringDur) > 1,
+      JSON.stringify(orb).slice(0, 200));
+    check('外圈柔光在「呼吸」（缩放/明暗随时间变化）',
+      !!orb && /orb-glow-breathe/.test(orb.glowAnim) && orb.breathing === true,
+      JSON.stringify(orb && orb.frames));
+    await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+    await sleep(400);
+    const orbReduced = await page.evaluate(() => {
+      const el = document.querySelector('[data-assistant-trigger] .orb-flow');
+      return el ? {
+        ring: getComputedStyle(el, '::before').animationName,
+        glow: getComputedStyle(el, '::after').animationName,
+      } : null;
+    });
+    check('「减少动态效果」时流光/呼吸都停下',
+      !!orbReduced && orbReduced.ring === 'none' && orbReduced.glow === 'none', JSON.stringify(orbReduced));
+    await page.emulateMediaFeatures([]);
+
     check('侧栏 AI 入口还在（原来与它上下并排的那个）',
       sidebar.assistant === 1 && /^呼叫\S+/.test(sidebar.assistantText), JSON.stringify(sidebar));
 

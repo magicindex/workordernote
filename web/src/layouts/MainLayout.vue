@@ -64,7 +64,9 @@
             data-assistant-trigger
             @click="openAssistant"
           >
-            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-600 dark:text-brand-300">
+            <!-- 图标外圈：一圈绕走的流光 + 外圈呼吸柔光（用户 2026-11-13：
+                 「给 ai 名称前边图标加上流光圆边，让效果看起来像是在呼吸」）。 -->
+            <span class="orb-flow flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-600 dark:text-brand-300">
               <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m12 3.6 1.9 4.4 4.4 1.9-4.4 1.9L12 16.2l-1.9-4.4-4.4-1.9 4.4-1.9L12 3.6Z" stroke-width="1.7" stroke-linejoin="round"/><path d="M18.6 15.4l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8.8-1.9Z" stroke-width="1.5" stroke-linejoin="round"/></svg>
             </span>
             <span class="rail-hide ml-2">呼叫{{ assistantName }}</span>

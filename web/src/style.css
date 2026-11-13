@@ -73,6 +73,70 @@
   .flow-frame::before { animation: none; }
 }
 
+/* AI 入口的图标圆环（用户 2026-11-13：「给 ai 名称前边图标加上流光圆边，
+   让效果看起来像是在呼吸」）：
+   · ::before 是一圈 conic 光带（复用 flow-frame 的角度动画机制，转速放慢）；
+   · ::after 是图标背后的一团柔光，跟着同一周期缩放/明暗，看起来像在「呼吸」；
+   · 只动 transform / opacity，不触发重排；系统开了「减少动态效果」就整体停住。 */
+.orb-flow {
+  position: relative;
+  isolation: isolate;
+  /* 静态的一圈细边：光带只照亮一段，底色浅（浅色主题）时靠它把「圆」托出来。 */
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.22), 0 0 12px -4px rgba(99, 102, 241, 0.55);
+}
+.orb-flow::before {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  z-index: 1;
+  border-radius: 9999px;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--bd-angle),
+    transparent 0%,
+    rgba(99, 102, 241, 0) 14%,
+    #6366f1 28%,
+    #a855f7 42%,
+    #22d3ee 56%,
+    rgba(34, 211, 238, 0) 72%,
+    transparent 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  filter: drop-shadow(0 0 4px rgba(124, 92, 255, 0.55));
+  animation: flow-frame-rotate 4.2s linear infinite, orb-ring-breathe 4.2s ease-in-out infinite;
+  pointer-events: none;
+}
+.orb-flow::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  z-index: 0;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.6), rgba(99, 102, 241, 0) 70%);
+  filter: blur(6px);
+  animation: orb-glow-breathe 4.2s ease-in-out infinite;
+  pointer-events: none;
+}
+.orb-flow > svg {
+  position: relative;
+  z-index: 2;
+}
+@keyframes orb-ring-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+@keyframes orb-glow-breathe {
+  0%, 100% { opacity: 0.25; transform: scale(0.94); }
+  50% { opacity: 0.85; transform: scale(1.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb-flow::before, .orb-flow::after { animation: none; }
+  .orb-flow::before { opacity: 0.9; }
+  .orb-flow::after { opacity: 0.5; }
+}
+
 /* 流光**文字**（用户 2026-10-10 要求：日历「月 / 周」切换里，选中那个字要有流光效果）：
    与 .flow-frame 同一套配色（靛蓝 → 紫 → 青），做成跑动的渐变文字。
    只挂在 <span> 上，按钮自己的选中底色与尺寸都不受影响。 */
