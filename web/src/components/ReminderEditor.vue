@@ -52,6 +52,12 @@
               </div>
             </div>
             <label class="editor-field" :class="editing.kind === 'note' ? 'editor-notes-grow' : ''"><span>备注</span><textarea v-model="editing.notes" rows="4" maxlength="5000" placeholder="补充一些细节…"></textarea></label>
+            <!-- 备注记录（用户 2026-11-13）：新建备注与历次完成备注不是同一条，
+                 这里按时间戳把它们全部列出来；上面的文本框只编辑「新建备注」。 -->
+            <div v-if="showNoteTimeline" class="rounded-xl bg-muted/55 p-2.5" data-editor-note-timeline>
+              <p class="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">备注记录（按时间）</p>
+              <NoteTimeline :entries="noteTimeline" />
+            </div>
 
             <div
               v-if="editing.kind !== 'note'"
@@ -160,10 +166,12 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import ConfirmDialog from './ConfirmDialog.vue'
+import NoteTimeline from './NoteTimeline.vue'
 import { RouterLink } from 'vue-router'
 import LunarDatePicker from './LunarDatePicker.vue'
 import RepeatNotifySelect from './RepeatNotifySelect.vue'
 import { LIST_COLOR_NAMES, listColorHex, listColorLabel } from '../utils/list-colors'
+import { buildNoteTimeline } from '../utils/note-timeline'
 import {
   createReminder, deleteReminder, getReminder, updateReminder,
   type ChannelStatus, type ReminderChannel, type ReminderItem, type ReminderKind,
@@ -213,6 +221,15 @@ const blankInput = (): SaveReminderInput & { id?: number } => ({
 })
 
 const editing = reactive<SaveReminderInput & { id?: number }>(blankInput())
+// 打开时拉回来的完整条目：备注时间线要用它的创建时间 / 完成时间 / 完成备注历史。
+const detail = ref<ReminderItem | null>(null)
+const noteTimeline = computed(() => buildNoteTimeline(detail.value))
+// 只有存在「完成备注」时才显示记录块 —— 否则它和上面的文本框内容完全一样，看着像重复。
+const showNoteTimeline = computed(() => {
+  const item = detail.value
+  if (!item) return false
+  return !!(item.completed_note || (item.completion_notes && item.completion_notes.length))
+})
 const saving = ref(false)
 const loading = ref(false)
 // 删除确认框与进行中状态（用户 2026-10-13 要求编辑弹窗里能直接删）
@@ -265,6 +282,7 @@ function enableEnd() {
 }
 
 function applyItem(item: ReminderItem) {
+  detail.value = item
   canDelete.value = item.can_delete !== false
   Object.assign(editing, {
     id: item.id, title: item.title, notes: item.notes, color: item.color || '', kind: item.kind || 'task', list_id: item.list_id,
@@ -286,6 +304,7 @@ watch(() => [props.modelValue, props.reminderId, props.preset] as const, async (
   dateOpen.value = false
   endOpen.value = false
   if (props.preset) {
+    detail.value = null
     Object.assign(editing, blankInput(), props.preset)
     return
   }

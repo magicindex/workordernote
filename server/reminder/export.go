@@ -187,6 +187,31 @@ func activeExportRows(items []ReminderDTO, loc *time.Location, now time.Time) []
 	return renderExportRows(activeExportCells(items, loc, now), nil)
 }
 
+// mergeNoteExport 把「新建备注」和「完成备注」按时间戳拼成一段文本（用户 2026-11-13：
+// 两条备注不是一回事，放一起要用时间戳分开）。导出的「备注」列用这个格式，
+// 与界面上备注时间线的写法保持一致。
+func mergeNoteExport(createdAt *time.Time, notes string, completedAt *time.Time, completedNote string, loc *time.Location) string {
+	lines := make([]string, 0, 2)
+	if strings.TrimSpace(notes) != "" {
+		prefix := ""
+		if t := formatExportTime(createdAt, false, loc); t != "" {
+			prefix = t + " "
+		}
+		lines = append(lines, prefix+"新建备注："+strings.ReplaceAll(notes, "\r\n", "\n"))
+	}
+	if strings.TrimSpace(completedNote) != "" {
+		prefix := ""
+		if t := formatExportTime(completedAt, false, loc); t != "" {
+			prefix = t + " "
+		}
+		lines = append(lines, prefix+"完成备注："+strings.ReplaceAll(completedNote, "\r\n", "\n"))
+	}
+	// 用「；」而不是换行：换行会被 CSV 引号包起来，Excel 里还好，但仓库里所有
+	// 按行解析导出的脚本（verify-export 等）都得换成真正的 CSV 解析器才能读。
+	// 时间戳仍然是主要分隔，一行里也能看出「哪条是什么时候写的」。
+	return strings.Join(lines, "；")
+}
+
 // completedExportCells 把「已完成」记录转成导出行的字段，沿用同一套列。
 // 完成记录一行就是一次完成，所以状态列固定是「已完成」。
 func completedExportCells(items []CompletedItemDTO, loc *time.Location) []exportRow {
@@ -201,9 +226,10 @@ func completedExportCells(items []CompletedItemDTO, loc *time.Location) []export
 			due:       formatExportTime(item.ScheduledFor, false, loc),
 			completed: formatExportTime(&completedAt, false, loc),
 			repeat:    repeatRuleLabel(item.RepeatRule, ""),
-			// 完成备注填进「备注」列：完成记录没有条目的原始备注（历史行连条目都可能删了），
-			// 用户真正写下来的那句话就是完成备注（用户 2026-11-12 体检发现这列一直空着）。
-			notes: strings.ReplaceAll(item.Note, "\r\n", "\n"),
+			// 「备注」列把新建备注与这次完成备注按时间戳拼起来（用户 2026-11-13：
+			// 两条备注不是同一条，用时间戳分开）。没有新建备注（历史行连条目都可能删了）时
+			// 就只导出完成备注那一行。
+			notes: mergeNoteExport(item.CreatedAt, item.Notes, &completedAt, item.Note, loc),
 		})
 	}
 	return rows

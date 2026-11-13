@@ -32,6 +32,15 @@ export interface CompletedItem {
   undoable: boolean
   /** 这一次完成时填的备注（空串＝没填） */
   note?: string
+  /** 条目的「新建备注」（与完成备注不是一回事，用户 2026-11-13） */
+  notes?: string
+}
+
+/** 一次完成留下的备注（循环任务每条历史一条）。 */
+export interface CompletionNote {
+  note: string
+  completed_at: string
+  scheduled_for?: string | null
 }
 
 export interface ReminderList {
@@ -85,6 +94,8 @@ export interface ReminderItem {
   completed_at: string | null
   /** 完成时填的备注（一次性任务；循环任务每次记在完成记录上），空串＝没填 */
   completed_note?: string
+  /** 循环任务的「完成备注」历史（每次完成一条，按时间升序）；一次性任务为空 */
+  completion_notes?: CompletionNote[]
   snoozed_until: string | null
   version: number
   channels: ReminderChannel[]

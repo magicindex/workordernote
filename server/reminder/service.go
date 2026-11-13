@@ -614,6 +614,27 @@ func rebuildJobs(tx *gorm.DB, reminder Reminder, channels []string) error {
 	return nil
 }
 
+// loadCompletionNotes 一次查出这些提醒的「完成备注」历史（按完成时间升序）。
+// 列表页一页几十条，逐条查会 N+1；这里保持一条查询。
+func loadCompletionNotes(db *gorm.DB, userID uint, ids []uint) (map[uint][]CompletionNoteDTO, error) {
+	out := make(map[uint][]CompletionNoteDTO, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []Completion
+	if err := db.Select("reminder_id, note, completed_at, scheduled_for").
+		Where("user_id = ? AND deleted_at IS NULL AND reminder_id IN ? AND note <> ?", userID, ids, "").
+		Order(tsUTC("completed_at") + " ASC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.ReminderID] = append(out[row.ReminderID], CompletionNoteDTO{
+			Note: row.Note, CompletedAt: row.CompletedAt, ScheduledFor: row.ScheduledFor,
+		})
+	}
+	return out, nil
+}
+
 func getReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error) {
 	var item Reminder
 	if err := db.Where("id = ? AND user_id = ? AND deleted_at IS NULL", reminderID, userID).First(&item).Error; err != nil {
@@ -625,7 +646,14 @@ func getReminder(db *gorm.DB, userID, reminderID uint) (ReminderDTO, error) {
 	}
 	var list List
 	_ = db.Where("id = ? AND user_id = ?", item.ListID, userID).First(&list).Error
-	dto := ReminderDTO{Reminder: item, ListName: list.Name, ListColor: list.Color, CanDelete: item.UserID == userID}
+	notes, err := loadCompletionNotes(db, userID, []uint{item.ID})
+	if err != nil {
+		return ReminderDTO{}, err
+	}
+	dto := ReminderDTO{
+		Reminder: item, ListName: list.Name, ListColor: list.Color, CanDelete: item.UserID == userID,
+		CompletionNotes: notes[item.ID],
+	}
 	for _, ch := range channels {
 		dto.Channels = append(dto.Channels, ch.Channel)
 		if ch.Channel == ChannelEmail {
@@ -864,6 +892,10 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 	for _, row := range cycleRows {
 		doneByReminder[row.ReminderID] = row.Done
 	}
+	// 注意：列表**不**装载完成备注历史（loadCompletionNotes）。列表行里的备注时间线
+	// 只需要「新建备注 + 这一次的完成备注」，两者都在 reminders 这一行上；循环任务的
+	// 历次完成备注只在编辑面板（getReminder）里显示。这样列表仍是固定 3 条查询
+	// （TestListRemindersLoadsRelatedDataInConstantQueries 钉着），不会每页多一次扫描。
 
 	result := make([]ReminderDTO, 0, len(rows))
 	for _, row := range rows {
@@ -877,8 +909,8 @@ func listReminders(db *gorm.DB, userID uint, view, query string, listIDs []uint,
 			ChannelTargets: targetsByReminder[row.ID],
 			ListName:       listNames[row.ListID],
 			ListColor:      listColors[row.ListID],
-			CycleIndex:     cycle,
-			CanDelete:      row.UserID == userID,
+			CycleIndex: cycle,
+			CanDelete:  row.UserID == userID,
 		})
 	}
 	return result, nil
@@ -1510,6 +1542,7 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 		item.ListName = listNames[owner.ListID]
 		item.Kind = owner.Kind
 		item.RepeatRule = owner.RepeatRule
+		item.Notes = owner.Notes
 		item.ReminderExists = true
 		// 记事不撤销；信用卡还款记录要连账单的「已还」一起撤回（卡片上另入口）；
 		// 同一提醒只有最近一次完成能撤。
@@ -1538,6 +1571,7 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 			ListID:    r.ListID, ListName: listNames[r.ListID],
 			RepeatRule: r.RepeatRule, ReminderExists: true,
 			Note:       r.CompletedNote,
+			Notes:      r.Notes,
 			// 一次性的完成（以及异常情况下带 completed_at 的循环任务）直接清掉完成态即可。
 			Undoable: r.Kind != KindNote && r.CardID == 0,
 		})

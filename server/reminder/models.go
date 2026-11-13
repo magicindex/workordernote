@@ -295,6 +295,17 @@ type ReminderDTO struct {
 	// 服务端删除接口本来就按 user_id 过滤（删别人的一律 404），这个字段是给界面用的 ——
 	// 不是创建者就不显示/禁用删除按钮，而不是等点了才报错。
 	CanDelete bool `json:"can_delete"`
+	// CompletionNotes 是「完成备注」的历史（循环任务每次完成一条，最近的在前）。
+	// 一次性任务的完成备注在 Reminder.CompletedNote 上，这里为空。
+	// 行的展示与编辑面板的「备注记录」用它把「新建备注 / 完成备注」按时间拼起来。
+	CompletionNotes []CompletionNoteDTO `json:"completion_notes,omitempty"`
+}
+
+// CompletionNoteDTO 是一次完成留下的备注。
+type CompletionNoteDTO struct {
+	Note         string     `json:"note"`
+	CompletedAt  time.Time  `json:"completed_at"`
+	ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
 }
 
 // supportedListColors 是清单颜色的白名单。它与前端 utils/list-colors.ts 的
@@ -356,6 +367,9 @@ type CompletedItemDTO struct {
 	// Note 是这次完成时填的完成备注（用户 2026-11-12）：history 行取
 	// completions.note，reminder 行取 reminders.completed_note。为空表示没填。
 	Note string `json:"note"`
+	// Notes 是**条目的新建备注**（与上面的完成备注不是一回事，用户 2026-11-13 明确）。
+	// 已完成页把两条按时间戳拼起来显示，所以这里也要带出来。
+	Notes string `json:"notes"`
 }
 
 // CalendarItemDTO 是日历视图里的一项，有两种来源：

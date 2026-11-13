@@ -93,7 +93,9 @@ const itemById = async (page, id) => {
 };
 const completedRows = (page) => page.evaluate(() => [...document.querySelectorAll('.reminder-row')].map((r) => ({
   text: r.textContent.replace(/\s+/g, ' ').trim(),
-  note: r.querySelector('[data-completed-note]')?.textContent.replace(/\s+/g, ' ').trim() || '',
+  // 2026-11-13 起不再是一枚「完成备注」小标签，而是按时间戳拼接的备注时间线
+  note: r.querySelector('[data-note-timeline]')?.textContent.replace(/\s+/g, ' ').trim() || '',
+  timeline: [...r.querySelectorAll('[data-note-label]')].map((el) => el.textContent.trim()),
 })));
 
 (async () => {
@@ -190,6 +192,37 @@ const completedRows = (page) => page.evaluate(() => [...document.querySelectorAl
       histRows.length >= 2 && histRows.some((it) => it.note === '第二次完成') && histRows.some((it) => it.note === ''),
       JSON.stringify(histRows.map((h) => h.note)));
 
+    // ---------- 5b. 循环任务：编辑面板按时间列出历次完成备注 ----------
+    await page.goto(BASE + '/admin/all', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await sleep(1800);
+    const openEditor = await page.evaluate((title) => {
+      const row = [...document.querySelectorAll('.reminder-row')].find((r) => r.textContent.includes(title));
+      const btn = row?.querySelector('button.min-w-0');
+      if (!btn) return false;
+      btn.click();
+      return true;
+    }, T_REPEAT);
+    await sleep(1600);
+    const editorTimeline = await page.evaluate(() => {
+      const box = document.querySelector('[data-editor-note-timeline]');
+      return {
+        has: !!box,
+        labels: [...(box?.querySelectorAll('[data-note-label]') || [])].map((e) => e.textContent.trim()),
+        times: [...(box?.querySelectorAll('[data-note-time]') || [])].map((e) => e.textContent.trim()),
+        text: (box?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160),
+      };
+    });
+    // 这条循环任务第一次完成是空备注（只写进历史、没有 note），第二次才有字，
+    // 所以面板里应当只有 1 条「完成备注」，内容就是第二次那句。
+    check('编辑面板里有「备注记录（按时间）」并列出写过的完成备注',
+      openEditor === true && editorTimeline.has === true
+        && editorTimeline.labels.filter((l) => l === '完成备注').length === 1
+        && editorTimeline.times.length === 1
+        && editorTimeline.text.includes('第二次完成'),
+      JSON.stringify(editorTimeline));
+    await page.keyboard.press('Escape').catch(() => {});
+    await sleep(500);
+
     // ---------- 6. 取消按钮同样不完成 ----------
     await page.goto(BASE + '/admin', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await sleep(1500);
@@ -209,8 +242,37 @@ const completedRows = (page) => page.evaluate(() => [...document.querySelectorAl
     await sleep(1200);
     const rows = await completedRows(page);
     const onceRow = rows.find((r) => r.text.includes(T_ONCE));
-    check('已完成页这条带「完成备注」', !!onceRow && onceRow.note.includes(note), JSON.stringify(onceRow));
+    check('已完成页这条的备注时间线里有「完成备注」与内容',
+      !!onceRow && onceRow.note.includes(note) && onceRow.timeline.includes('完成备注'), JSON.stringify(onceRow));
     await page.screenshot({ path: path.join(SHOTS, 'completed-note-row.png') });
+
+    // ---------- 7a. 新建备注与完成备注按时间戳拼在一起 ----------
+    const bothTitle = `两条备注自检-${STAMP}`;
+    const madeBoth = await api(page, '/api/reminder/items', 'POST', {
+      title: bothTitle, notes: '建的时候写的新建备注', due_at: new Date(Date.now() + 3600e3).toISOString(),
+      repeat_rule: 'none', channels: ['inapp'],
+    });
+    const bothId = madeBoth.json?.data?.id;
+    if (bothId) {
+      await api(page, `/api/reminder/items/${bothId}/complete`, 'POST', { note: '完成时写的完成备注' });
+      await page.goto(BASE + '/admin/completed', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await waitFor(page, () => !!document.querySelector('.reminder-row'), { timeout: 20000 });
+      await sleep(1200);
+      const bothRows = await completedRows(page);
+      const bothRow = bothRows.find((r) => r.text.includes(bothTitle));
+      const times = await page.evaluate((title) => {
+        const row = [...document.querySelectorAll('.reminder-row')].find((r) => r.textContent.includes(title));
+        return [...(row?.querySelectorAll('[data-note-time]') || [])].map((el) => el.textContent.trim());
+      }, bothTitle);
+      check('已完成行里两条备注都在（新建备注 + 完成备注）',
+        !!bothRow && bothRow.timeline.includes('新建备注') && bothRow.timeline.includes('完成备注'), JSON.stringify(bothRow));
+      check('两条备注各自带时间戳（按时间分割）',
+        times.length === 2 && times.every((t) => /\d{2}-\d{2} \d{2}:\d{2}/.test(t)), JSON.stringify(times));
+      await api(page, `/api/reminder/items/${bothId}`, 'DELETE');
+    } else {
+      check('已完成行里两条备注都在（新建备注 + 完成备注）', false, '造数据失败');
+      check('两条备注各自带时间戳（按时间分割）', false, '造数据失败');
+    }
 
     // ---------- 7b. 「已完成」的搜索能搜到完成备注 ----------
     const searchBox = 'input[placeholder*="搜索提醒"]';

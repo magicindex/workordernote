@@ -560,14 +560,13 @@
                 <span>提醒已删除</span>
               </template>
             </div>
-            <p
-              v-if="entry.note"
-              class="mt-1.5 inline-flex max-w-full items-start gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-1 text-[11px] leading-4 font-medium text-emerald-700 dark:text-emerald-300"
-              data-completed-note
-            >
-              <span class="shrink-0 font-extrabold">完成备注</span>
-              <span class="break-words">{{ entry.note }}</span>
-            </p>
+            <!-- 备注时间线（用户 2026-11-13）：新建备注用条目的创建时间、
+                 完成备注用这次完成的时间，两条按时间戳拼在一起。 -->
+            <NoteTimeline
+              v-if="completedEntryTimeline(entry).length"
+              :entries="completedEntryTimeline(entry)"
+              class="mt-1.5"
+            />
             <!-- 完成时段（用户 2026-10-22）：录入时间 → 完成时间，并给出一共多久。
                  记事创建即完成，没有「做完」的过程，所以只给任务显示。 -->
             <div
@@ -687,9 +686,15 @@
                   >{{ itemRemaining(item) }}</span>
                   <span v-if="item.repeat_notify_minutes" class="tiny-badge whitespace-nowrap">过期提醒</span>
                 </div>
-                <!-- 备注信息一行：计划页固定单行（超出省略），其余页面保持原来的两行自适应。 -->
+                <!-- 备注（用户 2026-11-13「新建备注」和「完成备注」不是同一条）：
+                     已完成的行按时间戳把两条拼在一起显示；还没完成的行只显示新建备注。 -->
+                <NoteTimeline
+                  v-if="item.completed_at && noteTimelineOf(item).length"
+                  :entries="noteTimelineOf(item)"
+                  class="mt-1"
+                />
                 <p
-                  v-if="item.notes"
+                  v-else-if="item.notes"
                   class="mt-0.5 text-xs leading-4 text-muted-foreground sm:mt-1"
                   :class="isPlanned ? 'truncate' : 'break-words sm:truncate'"
                 >{{ item.notes }}</p>
@@ -719,16 +724,6 @@
                     >{{ itemRemaining(item) }}</span>
                   </template>
                 </div>
-                <!-- 完成备注（用户 2026-11-12）：勾完成时在弹窗里填的那句话，
-                     只在已完成的行上显示；循环任务每次一条，不会带到下一次。 -->
-                <p
-                  v-if="item.completed_at && item.completed_note"
-                  class="mt-1.5 inline-flex max-w-full items-start gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-1 text-[11px] leading-4 font-medium text-emerald-700 dark:text-emerald-300"
-                  data-completed-note
-                >
-                  <span class="shrink-0 font-extrabold">完成备注</span>
-                  <span class="break-words">{{ item.completed_note }}</span>
-                </p>
                 <!-- 完成时段（用户 2026-10-22）：接口连已完成的条目一起返回时，
                      已完成任务后边同样补上「录入 → 完成 · 共多久」。 -->
                 <div
@@ -831,6 +826,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import Toast from '../components/Toast.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import NoteTimeline from '../components/NoteTimeline.vue'
 import CompleteNoteDialog from '../components/CompleteNoteDialog.vue'
 import ListFilter from '../components/ListFilter.vue'
 import ListIcon from '../components/ListIcon.vue'
@@ -841,6 +837,7 @@ import ExportDialog from '../components/ExportDialog.vue'
 import CreditCardPanel from '../components/CreditCardPanel.vue'
 import CeremonyPanel from '../components/CeremonyPanel.vue'
 import { listColorHex } from '../utils/list-colors'
+import { buildNoteTimeline } from '../utils/note-timeline'
 import { remainingText } from '../utils/remaining'
 import { useIsNarrow } from '../utils/use-narrow'
 import {
@@ -2054,6 +2051,20 @@ function formatFullDue(value: string | null | undefined) {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
+/** 列表行的备注时间线：新建备注 + 完成备注（循环任务会带上历次完成备注）。 */
+function noteTimelineOf(item: ReminderItem) {
+  return buildNoteTimeline(item)
+}
+/** 已完成页一行的时间线：条目的新建备注 + 这一次的完成备注。 */
+function completedEntryTimeline(entry: CompletedItem) {
+  return buildNoteTimeline({
+    notes: entry.notes,
+    created_at: entry.created_at,
+    completed_at: entry.completed_at,
+    completed_note: entry.note,
+  })
+}
+
 /** 只要「年/月/日」，给新建卡片那个日期芯片用（用户 2026-11-12：不要时间）。 */
 function formatDayOnly(value: string | null | undefined) {
   if (!value) return ''

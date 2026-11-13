@@ -73,8 +73,32 @@ function fetchExportBytes(page, url) {  return page.evaluate(async (target) => {
   }, url);
 }
 
+/**
+ * 把 CSV 正文拆成「记录」（不是物理行）：引号里的换行属于同一个单元格。
+ * 「备注」列会把新建备注/完成备注按时间戳拼起来，用户自己写的备注里本来就可能有换行，
+ * 按物理行拆会把一条记录拆成好几行、列数全部错位（2026-11-13 踩到）。
+ */
 function csvLines(body) {
-  return body.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.length > 0);
+  const text = body.replace(/^\uFEFF/, '');
+  const out = [];
+  let cur = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      cur += ch;
+      if (ch === '"') {
+        if (text[i + 1] === '"') { cur += '"'; i++; } else quoted = false;
+      }
+      continue;
+    }
+    if (ch === '"') { quoted = true; cur += ch; continue; }
+    if (ch === '\n') { cur = cur.replace(/\r$/, ''); if (cur.length) out.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  const tail = cur.replace(/\r$/, '');
+  if (tail.length) out.push(tail);
+  return out;
 }
 
 /**
