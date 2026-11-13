@@ -233,6 +233,22 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-13：0.47.6（201 生产 / 200 生产均已上线）—— 发行与文档：README 最近更新 + 边界关系、补全 CHANGELOG
+
+> **发版记录**（VERSION 0.47.6，源码提交 `bf37a69`，镜像 `workordernote:0.47.6` =
+> `sha256:1a3b63ace65b8ef4ade0333cec4fbaf4d8e22f5235f9345a03200aa979e903b3`；registry manifest `sha256:c748b3d38e4613f6cd80c8ac1c9c419f9923ed90aeabf69e4aca05979cf23988`）
+
+- 用户要求：把最近迭代与修复写进 README、补「边界关系」（本仓库改了什么、依赖的其他仓库要同步什么）、打包最新程序与镜像、核对版本号与文档一致后推送两个仓库。
+- 代码无功能性改动。新增：
+  - README 「最近更新（0.47.1 → 0.47.6）」表；
+  - README 「边界关系」：本仓库负责什么、不负责/只读什么（上游只读快照 / 外部模型服务 / fnOS 系统）、依赖仓库/镜像各自要同步什么（Gitea、GitHub 镜像、GHCR、Gitea Registry、两台生产机 compose、四份版本文档）与标准发版顺序；
+  - CHANGELOG 补 0.47.1–0.47.6 六条。
+- 发行包：`release/0.47.6/workordernote-0.47.6-linux-amd64.tar.gz`（21M；reminder 静态二进制 + static/dist + LICENSE/NOTICE/CHANGELOG）与同目录 `docker-compose.yml`（tag 0.47.6）。
+- 201：备份 `docker-compose.yml.bak-pre0476-20261113-1737` + `tmp/data.bak-pre0476-20261113-1737.tgz`（15M），旧镜像保留 `workordernote:0.47.5-keep-20261113-1737`；17:38 重建，`0.47.6 / bf37a69`。
+- 200：备份 `docker-compose.yml.bak-pre0476-20261113-1740` / `data.bak-pre0476-20261113-1740.tgz`，旧镜像保留 `workordernote:0.47.5-keep-20261113-1740`；17:41 重建，`0.47.6 / bf37a69`。
+- 回归：201/200 `verify-128` 各 **34/34**；双机 `verify-sync-local` **15/15**。
+- 镜像已推 Gitea 与 GHCR 的 `0.47.6` / `latest`；git 推送 origin（Gitea）与 github（GitHub 镜像）。
+
 ### 2026-11-13：0.47.5（201 生产 / 200 生产均已上线）—— AI 对话超时说清楚，不再只回 502
 
 > **发版记录**（VERSION 0.47.5，源码提交 `5879239`，镜像 `workordernote:0.47.5` =
