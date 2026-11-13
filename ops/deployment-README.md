@@ -1,4 +1,4 @@
-# 工作序记 (WorkOrderNote) 0.46.3
+# 工作序记 (WorkOrderNote) 0.48.0
 
 任务、记事与日历一体的提醒应用。飞牛 NAS 上以 Docker 部署。
 
@@ -8,7 +8,7 @@
 ## 访问
 
 - <http://192.168.3.201:8906/>
-- 容器 `workordernote`，镜像 `workordernote:0.46.3`（本地自建）
+- 容器 `workordernote`，镜像 `workordernote:0.48.0`（本地自建 / Gitea Registry 同源）
 - 对比实例：<http://192.168.3.201:8907/> 官方原版 v0.3.0；<http://192.168.3.201:8908/> 沙盒
 
 ## 仓库与镜像地址（2026-10-22 起）
@@ -217,9 +217,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 版本与迭代
 
-- 软件版本见根目录 `VERSION`，当前 `0.46.3`，规则为 `主版本号.小版本号.修正号`。
-  **部署状态（2026-11-11 12:40）**：**201 生产 8906 / 200 生产均已升级到 `0.46.3`**
-  （提交 `00750f9`，镜像 `workordernote:0.46.3` = `sha256:d03fffe6d352…`）。
+- 软件版本见根目录 `VERSION`，当前 `0.48.0`，规则为 `主版本号.小版本号.修正号`。
+  **部署状态（2026-11-14 02:21）**：**201 生产 8906 / 200 生产均已升级到 `0.48.0`**
+  （提交 `1fe586d`，镜像 `workordernote:0.48.0` = `sha256:6dfc37ff476f31fe0b95bd7e48b512bfe5e85351b19cf4085be18d15ee3c6465`）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
   **公开设置 9 项三台一致**；**个人偏好 201 与 200 一致，沙箱单独一套**（开始提醒时间 `00:00`、
@@ -232,6 +232,20 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 应用内「侧栏 → 关于 → 版本信息」可查看迭代说明与原项目信息。
 
 ## 变更记录
+
+### 2026-11-14：0.48.0（201 生产 / 200 生产均已上线）—— AI 入口改成可拖动悬浮球
+
+> **发版记录**（VERSION 0.48.0，源码提交 `1fe586d`，镜像 `workordernote:0.48.0` =
+> `sha256:6dfc37ff476f31fe0b95bd7e48b512bfe5e85351b19cf4085be18d15ee3c6465`；registry manifest `sha256:89f28d913749e497e58f537b971ee86bfe4efe695c07d88797f5032bc10d93c0`）
+
+- 第 109 条：桌面端（≥1024px）侧栏「呼叫小秘」入口改成右下角可拖动悬浮球，位置存本机 `localStorage` 的 `reminders.assistant_ball_pos`，刷新/下次打开还原；点击展开右侧浮窗（不铺遮罩、正文右侧让出等宽槽），浮窗展开时球淡出、关闭/Esc 后回原位；1024–1439px 窄桌面展开时侧栏临时收成图标栏；移动端（<1024px）保持顶栏图标 + 整屏抽屉。
+- 无 schema 变更；前端新增 `AssistantLauncher`，后端只随版本号重新编译（`0.48.0 / 1fe586d`）。
+- 201：备份 `docker-compose.yml.bak-pre0480-20261114-021905`（1.5K）+ `data.bak-pre0480-20261114-021905.tgz`（11M，不含 logs），compose 改指 `192.168.3.200:3000/cyberzero/workordernote:0.48.0` 并从 registry 拉取；02:19:11 重建，healthy，`/api/version` = `0.48.0 / 1fe586d`。
+- 200：备份 `docker-compose.yml.bak-pre0480-20261114-022110` + `data.bak-pre0480-20261114-022110.tgz`（3.9M），从 `127.0.0.1:3000` 拉取 0.48.0 后 tag 成本地 `workordernote:0.48.0`（200 的 dockerd 未把 `192.168.3.200:3000` 加进 insecure-registries，走 LAN 地址会报 HTTPS）；02:21:20 重建，healthy，`/api/version` = `0.48.0 / 1fe586d`。
+- 回归：201/200 均 `verify-165` **25/25**、`verify-125` **18/18**、`verify-128` **34/34**；201 另跑 `verify-132` **9/9**；Go `go test ./...` 全绿（qrcode 依赖走 `goproxy.cn`）；201/200 数据体检 `integrity_check` ok。
+- 镜像：Gitea Registry 与 GHCR 的 `0.48.0` / `latest` 均已推送（manifest `sha256:89f28d913749e497e58f537b971ee86bfe4efe695c07d88797f5032bc10d93c0`）。
+- 发行包：`release/0.48.0/workordernote-0.48.0-linux-amd64.tar.gz`（21M，sha256 `2e615d9c69a814092600b625fbcad6a237f61e67c5c4d5141ff6e72c83e82743`）、`workordernote_0.48.0_amd64.fpk`（21M，sha256 `1d7b9b8522cd6b37e0f950677569f862e7eb34f4b20806bd46e5163dcd4631b4`）、`docker-compose.yml`（sha256 `34d6a8d4a19e37889f8c43238da88cc0fa897910fabecaa48597b801561819bb`）与 `screenshots-0.48.0.zip`；Release 附件见 Gitea / GitHub v0.48.0。
+
 
 ### 2026-11-14：0.47.7 热更新（201 生产 / 200 生产均已上线）—— AI 入口改为可拖动悬浮球
 
