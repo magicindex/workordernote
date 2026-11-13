@@ -90,12 +90,12 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
     check('打印弹窗打开且存在打印区 #print-root', !!opened);
 
     const chipCount = await page.evaluate(() => document.querySelectorAll('.channel-pill').length);
-    // 2026-11-12 起多了一列「完成备注」（默认不勾）
+    // 2026-11-13 起那一列改成「备注」= 新建备注 + 完成备注按时间戳拼在一起，默认勾上
     check('可选的列共 9 项', chipCount === 9, String(chipCount));
 
     const defaultLabels = await headerLabels('#print-root', page);
-    check('默认打印 5 列（序号/标题/类型/清单/完成时间）',
-      defaultLabels.join('/') === '序号/标题/类型/清单/完成时间', defaultLabels.join('/'));
+    check('默认打印 6 列（序号/标题/类型/清单/完成时间/备注）',
+      defaultLabels.join('/') === '序号/标题/类型/清单/完成时间/备注', defaultLabels.join('/'));
 
     // ── 3. 按内容自适应 ──
     const box = () => page.evaluate(() => {
@@ -107,13 +107,13 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
       } : null;
     });
     const before = await box();
-    check('5 列时自动横向', before && before.orientation === 'landscape', JSON.stringify(before));
-    check('5 列时字号自动=中', before && before.font === 'medium', JSON.stringify(before));
+    check('6 列（默认）时自动横向', before && before.orientation === 'landscape', JSON.stringify(before));
+    check('6 列时字号自动=小', before && before.font === 'small', JSON.stringify(before));
 
     await toggleColumn(page, '重复');
     await sleep(500);
     const six = await box();
-    check('勾上「重复」后 6 列，字号自动收小', six && six.columns === 6 && six.font === 'small', JSON.stringify(six));
+    check('勾上「重复」后 7 列，字号仍是小', six && six.columns === 7 && six.font === 'small', JSON.stringify(six));
     const sixLabels = await headerLabels('#print-root', page);
     check('打印区同步增加「重复」列', sixLabels.includes('重复'), sixLabels.join('/'));
     const previewLabels = await page.evaluate(() => {
@@ -195,6 +195,10 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
     const all = await page.evaluate(() => {
       const table = document.querySelector('#print-root table');
       const overflow = [...table.querySelectorAll('td, th')].filter((c) => c.scrollWidth > c.clientWidth + 1).length;
+      // 「备注」列会把新建备注与完成备注拼在一起，长备注（记事本那种整段文字）
+      // 会让行高变得很高 —— 每页能排几行要按**实测行高**算，不能写死。
+      const trs = [...table.querySelectorAll('tbody tr')];
+      const sumRowPx = trs.reduce((n, tr) => n + tr.getBoundingClientRect().height, 0);
       return {
         columns: Number(document.querySelector('[data-print-orientation]').getAttribute('data-print-columns')),
         font: document.querySelector('[data-print-orientation]').getAttribute('data-print-font'),
@@ -202,6 +206,8 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
         width: Math.round(table.getBoundingClientRect().width),
         printable: window.innerWidth,
         overflow,
+        rows: trs.length,
+        avgRowPx: trs.length ? sumRowPx / trs.length : 0,
       };
     });
     console.log('    全选 9 列：' + JSON.stringify(all));
@@ -229,11 +235,16 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
       // 页数断言要跟着**实际行数**走：这个用例打印的是「本月全部完成记录」，行数随使用增长
       // （迭代容器上累计到 109 行 → 5 页，原来写死「≤3 页」必然假红，2026-10-12 踩到）。
       // 改成看「每页至少排得下 12 行」——既不浪费纸，也不随数据量变红。
-      const printedRows = printLayout.rows || 0;
+      const printedRows = all.rows || printLayout.rows || 0;
       const perPage = printedRows / Math.max(1, pages);
-      check('PDF 页数跟行数匹配（每页至少 12 行，不出现大半页空白）',
-        pages >= 1 && perPage >= 12,
-        `${pages} 页 / ${printedRows} 行（每页 ${perPage.toFixed(1)} 行）`);
+      // 每页放得下多少行，按实测平均行高换算：A4 横向 794px 高，上下各 12mm 边距（≈45px），
+      // 再去掉标题/表头约 60px。行高由「备注」列内容决定，所以阈值必须跟着实测走。
+      const pageContentPx = 794 - 2 * 45 - 60;
+      const fitPerPage = all.avgRowPx > 0 ? Math.floor(pageContentPx / all.avgRowPx) : 12;
+      const needPerPage = Math.max(3, Math.min(12, fitPerPage - 1));
+      check('PDF 页数跟行数匹配（不出现大半页空白）',
+        pages >= 1 && perPage >= needPerPage,
+        `${pages} 页 / ${printedRows} 行（每页 ${perPage.toFixed(1)} 行；按实测行高 ${Math.round(all.avgRowPx)}px 应 ≥ ${needPerPage}）`);
     } catch (e) {
       console.log('  （printToPDF 不可用，跳过纸张尺寸断言：' + e.message.slice(0, 60) + '）');
     }

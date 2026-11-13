@@ -61,3 +61,52 @@ export function buildNoteTimeline(src: NoteTimelineSource | null | undefined): N
     return a.at < b.at ? -1 : a.at > b.at ? 1 : 0
   })
 }
+
+/** 把时间线拼成一段可编辑的文本（编辑面板与导出的备注列共用这个格式）。 */
+export function buildMergedNoteText(src: NoteTimelineSource | null | undefined): string {
+  return buildNoteTimeline(src)
+    .map((e) => `${e.timeLabel ? e.timeLabel + ' ' : ''}${e.label}：${e.text}`)
+    .join('\n')
+}
+
+export interface ParsedMergedNote {
+  /** 新建备注（写回 reminders.notes） */
+  notes: string
+  /** 每一段完成备注（按出现顺序，与原有的完成条目一一对应） */
+  completions: { timeLabel: string; note: string; label: string }[]
+}
+
+// 跨年的条目时间戳会带年份（YYYY-MM-DD HH:mm），两种都要认，否则旧条目一编辑
+// 就把「完成备注」那几段当成普通文字并进新建备注里。
+const MERGE_MARKER = /^((?:\d{4}-)?\d{2}-\d{2} \d{2}:\d{2}) (新建备注|完成备注)：/
+
+/**
+ * 把编辑面板里那段合并文本拆回「新建备注 + 若干完成备注」。
+ * 没有时间戳标记的文字一律算新建备注（用户可能直接把整段清空重写）。
+ */
+export function parseMergedNoteText(text: string): ParsedMergedNote {
+  const out: ParsedMergedNote = { notes: '', completions: [] }
+  let current: { timeLabel: string; label: string; lines: string[] } | null = null
+  let loose: string[] = []
+  const flush = () => {
+    if (!current) return
+    const body = current.lines.join('\n').trim()
+    if (current.label === '新建备注') out.notes = out.notes ? out.notes + '\n' + body : body
+    else out.completions.push({ timeLabel: current.timeLabel, note: body, label: current.label })
+    current = null
+  }
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const m = MERGE_MARKER.exec(line)
+    if (m) {
+      flush()
+      current = { timeLabel: m[1], label: m[2], lines: [line.slice(m[0].length)] }
+      continue
+    }
+    if (current) current.lines.push(line)
+    else loose.push(line)
+  }
+  flush()
+  const looseText = loose.join('\n').trim()
+  if (looseText) out.notes = out.notes ? out.notes + '\n' + looseText : looseText
+  return out
+}

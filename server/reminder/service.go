@@ -388,6 +388,43 @@ func CreateNote(db *gorm.DB, userID uint, title, notes, originClientID string) (
 	return item, nil
 }
 
+// updateCompletionNote 改「完成备注」（用户 2026-11-13：编辑属性里新建备注和完成备注
+// 要能一起看到、一起改）。两种来源：
+//   · 一次性任务：`reminders.completed_note`（completionID = 0）；
+//   · 循环任务的某一次完成：`completions.note`（带 completionID）。
+// 改的是历史文字，不重算完成时间，也不动 due_at。
+func updateCompletionNote(db *gorm.DB, userID, reminderID, completionID uint, note string) (ReminderDTO, error) {
+	note = normalizeCompletionNote(note)
+	err := db.Transaction(func(tx *gorm.DB) error {
+		var item Reminder
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND user_id = ? AND deleted_at IS NULL", reminderID, userID).First(&item).Error; err != nil {
+			return err
+		}
+		if completionID > 0 {
+			res := tx.Model(&Completion{}).
+				Where("id = ? AND reminder_id = ? AND user_id = ? AND deleted_at IS NULL", completionID, reminderID, userID).
+				Update("note", note)
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected == 0 {
+				return gorm.ErrRecordNotFound
+			}
+			return nil
+		}
+		item.CompletedNote = note
+		// 这条备注随 reminders 行走双向同步，必须推进 version/updated_at，
+		// 否则对端会按旧版本把这次修改覆盖回去。
+		item.Version++
+		return tx.Save(&item).Error
+	})
+	if err != nil {
+		return ReminderDTO{}, err
+	}
+	return getReminder(db, userID, reminderID)
+}
+
 func updateReminder(db *gorm.DB, userID, reminderID uint, in SaveReminderInput) (ReminderDTO, error) {
 	if err := validateReminderInput(&in); err != nil {
 		return ReminderDTO{}, err
@@ -622,14 +659,14 @@ func loadCompletionNotes(db *gorm.DB, userID uint, ids []uint) (map[uint][]Compl
 		return out, nil
 	}
 	var rows []Completion
-	if err := db.Select("reminder_id, note, completed_at, scheduled_for").
+	if err := db.Select("id, reminder_id, note, completed_at, scheduled_for").
 		Where("user_id = ? AND deleted_at IS NULL AND reminder_id IN ? AND note <> ?", userID, ids, "").
 		Order(tsUTC("completed_at") + " ASC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	for _, row := range rows {
 		out[row.ReminderID] = append(out[row.ReminderID], CompletionNoteDTO{
-			Note: row.Note, CompletedAt: row.CompletedAt, ScheduledFor: row.ScheduledFor,
+			ID: row.ID, Note: row.Note, CompletedAt: row.CompletedAt, ScheduledFor: row.ScheduledFor,
 		})
 	}
 	return out, nil

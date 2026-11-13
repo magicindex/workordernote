@@ -290,3 +290,122 @@ func TestNudgeDoneReceiptCarriesCompletionNote(t *testing.T) {
 		t.Fatalf("回执应带上完成备注，实际 %q", notice.Body)
 	}
 }
+
+// 编辑面板里「完成备注」也可以改（用户 2026-11-13）：
+// 一次性任务改 reminders.completed_note（并推 version 供同步），
+// 循环任务的某一次改 completions.note；不是自己的记录一律 404。
+func TestUpdateCompletionNote(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const userID = 47
+	// 一次性任务
+	once, err := createReminder(appDB, userID, SaveReminderInput{Title: "改一次性备注"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := completeReminderWithNote(appDB, userID, once.ID, "原来的完成备注"); err != nil {
+		t.Fatal(err)
+	}
+	before, err := getReminder(appDB, userID, once.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := updateCompletionNote(appDB, userID, once.ID, 0, "改过的完成备注")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.CompletedNote != "改过的完成备注" {
+		t.Fatalf("一次性任务的完成备注应被改写，实际 %q", updated.CompletedNote)
+	}
+	if updated.Version <= before.Version {
+		t.Fatalf("改备注要推进 version（同步要用），before=%d after=%d", before.Version, updated.Version)
+	}
+
+	// 循环任务：改某一次完成的历史备注
+	due := time.Now().Add(time.Hour).Truncate(time.Second)
+	repeating, err := createReminder(appDB, userID, SaveReminderInput{
+		Title: "改循环备注", DueAt: &due, RepeatRule: "daily",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := completeReminderWithNote(appDB, userID, repeating.ID, "第一次备注"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := getReminder(appDB, userID, repeating.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.CompletionNotes) != 1 || got.CompletionNotes[0].ID == 0 {
+		t.Fatalf("完成备注历史应带 id：%+v", got.CompletionNotes)
+	}
+	cid := got.CompletionNotes[0].ID
+	if _, err := updateCompletionNote(appDB, userID, repeating.ID, cid, "改过的历史备注"); err != nil {
+		t.Fatal(err)
+	}
+	after, err := getReminder(appDB, userID, repeating.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after.CompletionNotes) != 1 || after.CompletionNotes[0].Note != "改过的历史备注" {
+		t.Fatalf("完成历史的备注应被改写，实际 %+v", after.CompletionNotes)
+	}
+	if after.Notes != "" {
+		t.Fatalf("改完成备注不该动新建备注，实际 %q", after.Notes)
+	}
+
+	// 别的提醒的 completion_id：404
+	other, err := createReminder(appDB, userID, SaveReminderInput{Title: "别的提醒"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := updateCompletionNote(appDB, userID, other.ID, cid, "想改别人的"); err == nil {
+		t.Fatal("completion_id 不属于这条提醒时应报错")
+	}
+}
+
+// 改过的完成备注要能过双向同步（reminders.completed_note 随行同步；
+// completions 的历史备注由对端「补空」路径带回）。
+func TestUpdatedCompletionNoteSyncs(t *testing.T) {
+	withShanghaiLocal(t)
+	dbA, dbB := newSyncDB(t), newSyncDB(t)
+	userA := seedUser(t, dbA, "王耀辉", "admin")
+	seedUser(t, dbB, "王耀辉", "admin")
+
+	due := time.Now().Add(time.Hour).Truncate(time.Second)
+	item, err := createReminder(dbA, userA.ID, SaveReminderInput{
+		Title: "同步改过的备注", DueAt: &due, RepeatRule: "none",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := completeReminderWithNote(dbA, userA.ID, item.ID, "第一次写的"); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := buildSyncSnapshot(dbA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applySyncSnapshot(dbB, snap); err != nil {
+		t.Fatal(err)
+	}
+	// A 上把完成备注改掉，再同步一次
+	if _, err := updateCompletionNote(dbA, userA.ID, item.ID, 0, "改过之后再同步"); err != nil {
+		t.Fatal(err)
+	}
+	snap2, err := buildSyncSnapshot(dbA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applySyncSnapshot(dbB, snap2); err != nil {
+		t.Fatal(err)
+	}
+	var onB Reminder
+	if err := dbB.Where("title = ?", "同步改过的备注").First(&onB).Error; err != nil {
+		t.Fatal(err)
+	}
+	if onB.CompletedNote != "改过之后再同步" {
+		t.Fatalf("改过的完成备注应同步到对端，实际 %q", onB.CompletedNote)
+	}
+}

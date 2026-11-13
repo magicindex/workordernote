@@ -38,6 +38,8 @@ export interface CompletedItem {
 
 /** 一次完成留下的备注（循环任务每条历史一条）。 */
 export interface CompletionNote {
+  /** completions 行主键；编辑面板改这一行备注时要指回它 */
+  id?: number
   note: string
   completed_at: string
   scheduled_for?: string | null
@@ -347,6 +349,13 @@ export const deleteReminder = (id: number) => request.delete(`/api/reminder/item
 export const completeReminder = (id: number, note?: string) =>
   request.post(`/api/reminder/items/${id}/complete`, note ? { note } : undefined)
 export const restoreReminder = (id: number) => request.post(`/api/reminder/items/${id}/restore`)
+
+/**
+ * 改「完成备注」（用户 2026-11-13）。不传 completion_id = 改一次性任务的完成备注；
+ * 传了就改循环任务那一次完成的历史备注。
+ */
+export const updateCompletionNote = (reminderId: number, input: { note: string; completion_id?: number }) =>
+  request.patch(`/api/reminder/items/${reminderId}/completion-note`, input)
 // 撤销一次「重复提醒」的完成：删掉这条完成历史并把到期时间退回那次排期。
 // 一次性任务走上面的 restoreReminder（清 completed_at），两者对应已完成页的两种来源。
 export const retractCompletion = (id: number) => request.post(`/api/reminder/completions/${id}/retract`)

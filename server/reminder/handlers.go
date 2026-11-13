@@ -51,6 +51,9 @@ func setupAuthRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	group.PUT("/items/:id", handleUpdateReminder(db))
 	group.DELETE("/items/:id", handleDeleteReminder(db))
 	group.POST("/items/:id/complete", handleCompleteReminder(db))
+	// 编辑面板里「完成备注」也能改（用户 2026-11-13）：一次性任务改 completed_note，
+	// 循环任务的某一次改 completions.note（带 completion_id）。
+	group.PATCH("/items/:id/completion-note", handleUpdateCompletionNote(db))
 	group.POST("/items/:id/restore", handleRestoreReminder(db))
 	// 撤销一次「重复提醒」的完成（已完成页的「撤销」按钮）：删历史 + due_at 退回那次排期。
 	group.POST("/completions/:id/retract", handleRetractCompletion(db))
@@ -717,6 +720,34 @@ func handleCompleteReminder(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		publishDataChanged(item.UserID, "reminder", "completed", item.ID, originClientID(c))
+		response.Success(c, item)
+	}
+}
+
+// handleUpdateCompletionNote 改一条完成备注。body: {"note": "...", "completion_id": 123}
+// completion_id 省略或 0 表示改「一次性任务」的 completed_note。
+func handleUpdateCompletionNote(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		var body struct {
+			Note         string `json:"note"`
+			CompletionID uint   `json:"completion_id"`
+		}
+		if c.Request.ContentLength > 0 {
+			if err := c.ShouldBindJSON(&body); err != nil {
+				response.ErrorBadRequest(c, "备注格式不对，应为 {\"note\":\"…\"}")
+				return
+			}
+		}
+		item, err := updateCompletionNote(db, currentUserID(c), id, body.CompletionID, body.Note)
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		publishDataChanged(item.UserID, "reminder", "updated", item.ID, originClientID(c))
 		response.Success(c, item)
 	}
 }

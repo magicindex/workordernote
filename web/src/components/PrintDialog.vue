@@ -149,6 +149,17 @@ function formatTime(value: string | null | undefined, withTime = true) {
   return withTime ? `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}` : date
 }
 const kindLabel = (item: CompletedItem) => (item.kind === 'note' ? '记事' : '提醒')
+/** 新建备注 + 完成备注按时间戳拼成一段（与界面/导出同一套写法）。 */
+const mergedNote = (item: CompletedItem) => {
+  const lines: string[] = []
+  const created = formatTime(item.created_at)
+  const completed = formatTime(item.completed_at)
+  if ((item.notes || '').trim()) lines.push(`${created ? created + ' ' : ''}新建备注：${item.notes}`)
+  if ((item.note || '').trim()) lines.push(`${completed ? completed + ' ' : ''}完成备注：${item.note}`)
+  // 打印用「；」连成一行：两条备注各带时间戳就能分清，又不会把行高撑成两倍
+  // （行太高时每页只剩 5 行，整份记录凭空多出好几页）。
+  return lines.length ? lines.join('；') : '—'
+}
 const repeatLabel = (rule: string) => ({
   none: '不重复', daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年',
 }[rule] || rule || '不重复')
@@ -164,8 +175,9 @@ const columns = [
   { key: 'list', label: '清单', cls: 'col-tight', defaultValue: true, value: (i: CompletedItem) => i.list_name || '—' },
   { key: 'completed', label: '完成时间', cls: 'col-time', defaultValue: true, value: (i: CompletedItem) => formatTime(i.completed_at) },
   { key: 'scheduled', label: '原定时间', cls: 'col-time', defaultValue: false, value: (i: CompletedItem) => formatTime(i.scheduled_for) || '—' },
-  // 完成备注（2026-11-12）：默认不选，勾上就多一列；没写备注的行显示「—」。
-  { key: 'note', label: '完成备注', cls: '', defaultValue: false, value: (i: CompletedItem) => i.note || '—' },
+  // 备注（2026-11-13）：新建备注与完成备注是两条，这里按时间戳拼在一列里打印，
+  // 默认就选上 —— 用户要的是「打印里两条都能看到」，而不是只印一条。
+  { key: 'note', label: '备注', cls: '', defaultValue: true, value: (i: CompletedItem) => mergedNote(i) },
   { key: 'repeat', label: '重复', cls: 'col-tight', defaultValue: false, value: (i: CompletedItem) => repeatLabel(i.repeat_rule) },
   { key: 'source', label: '记录来源', cls: 'col-tight', defaultValue: false, value: (i: CompletedItem) => sourceLabel(i) },
 ]

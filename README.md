@@ -6,7 +6,7 @@
 - 仓库：<http://192.168.3.200:3000/cyberzero/WorkOrderNote>
 - 发布与安装包：<http://192.168.3.200:3000/cyberzero/WorkOrderNote/releases>
 - GitHub 镜像：<https://github.com/magicindex/workordernote>
-- 当前版本：`0.47.1`
+- 当前版本：`0.47.2`
 
 > **本项目是衍生作品。** 基于开源项目
 > [TechFunWay/reminders](https://github.com/TechFunWay/reminders)（MIT 许可）衍生开发，
@@ -62,10 +62,10 @@
 镜像发布在仓库自带的容器仓库，可直接拉取：
 
 ```bash
-docker pull 192.168.3.200:3000/cyberzero/workordernote:0.47.1
+docker pull 192.168.3.200:3000/cyberzero/workordernote:0.47.2
 ```
 
-同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.47.1`；Gitea 容器仓库不可用时可直接改用。
+同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.47.2`；Gitea 容器仓库不可用时可直接改用。
 
 ### 用仓库里的 compose 文件安装
 
@@ -90,7 +90,7 @@ curl -fsSLO https://raw.githubusercontent.com/magicindex/workordernote/main/dock
 ```yaml
 services:
   workordernote:
-    image: 192.168.3.200:3000/cyberzero/workordernote:0.47.1
+    image: 192.168.3.200:3000/cyberzero/workordernote:0.47.2
     container_name: workordernote
     # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
     user: "1000:1001"

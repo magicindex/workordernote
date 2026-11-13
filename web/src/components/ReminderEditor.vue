@@ -52,12 +52,8 @@
               </div>
             </div>
             <label class="editor-field" :class="editing.kind === 'note' ? 'editor-notes-grow' : ''"><span>备注</span><textarea v-model="editing.notes" rows="4" maxlength="5000" placeholder="补充一些细节…"></textarea></label>
-            <!-- 备注记录（用户 2026-11-13）：新建备注与历次完成备注不是同一条，
-                 这里按时间戳把它们全部列出来；上面的文本框只编辑「新建备注」。 -->
-            <div v-if="showNoteTimeline" class="rounded-xl bg-muted/55 p-2.5" data-editor-note-timeline>
-              <p class="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">备注记录（按时间）</p>
-              <NoteTimeline :entries="noteTimeline" />
-            </div>
+            <!-- 备注是一段可编辑的合并文本（用户 2026-11-13）：新建备注与历次完成备注
+                 按时间戳排在一起、一起改。保存时再拆回 reminders.notes 与各次完成备注。 -->
 
             <div
               v-if="editing.kind !== 'note'"
@@ -171,9 +167,10 @@ import { RouterLink } from 'vue-router'
 import LunarDatePicker from './LunarDatePicker.vue'
 import RepeatNotifySelect from './RepeatNotifySelect.vue'
 import { LIST_COLOR_NAMES, listColorHex, listColorLabel } from '../utils/list-colors'
-import { buildNoteTimeline } from '../utils/note-timeline'
+import { buildMergedNoteText, buildNoteTimeline, parseMergedNoteText } from '../utils/note-timeline'
 import {
   createReminder, deleteReminder, getReminder, updateReminder,
+  updateCompletionNote,
   type ChannelStatus, type ReminderChannel, type ReminderItem, type ReminderKind,
   type ReminderList, type SaveReminderInput,
 } from '../api/reminder'
@@ -221,15 +218,9 @@ const blankInput = (): SaveReminderInput & { id?: number } => ({
 })
 
 const editing = reactive<SaveReminderInput & { id?: number }>(blankInput())
-// 打开时拉回来的完整条目：备注时间线要用它的创建时间 / 完成时间 / 完成备注历史。
+// 打开时拉回来的完整条目：备注文本框里是「新建备注 + 历次完成备注」拼起来的合并文本，
+// 保存时要拆回去（并逐条写回完成备注），所以原样留一份做对照。
 const detail = ref<ReminderItem | null>(null)
-const noteTimeline = computed(() => buildNoteTimeline(detail.value))
-// 只有存在「完成备注」时才显示记录块 —— 否则它和上面的文本框内容完全一样，看着像重复。
-const showNoteTimeline = computed(() => {
-  const item = detail.value
-  if (!item) return false
-  return !!(item.completed_note || (item.completion_notes && item.completion_notes.length))
-})
 const saving = ref(false)
 const loading = ref(false)
 // 删除确认框与进行中状态（用户 2026-10-13 要求编辑弹窗里能直接删）
@@ -285,7 +276,7 @@ function applyItem(item: ReminderItem) {
   detail.value = item
   canDelete.value = item.can_delete !== false
   Object.assign(editing, {
-    id: item.id, title: item.title, notes: item.notes, color: item.color || '', kind: item.kind || 'task', list_id: item.list_id,
+    id: item.id, title: item.title, notes: buildMergedNoteText(item), color: item.color || '', kind: item.kind || 'task', list_id: item.list_id,
     priority: item.priority, due_at: item.due_at, all_day: item.all_day,
     start_at: item.start_at || null, end_at: item.end_at || null,
     repeat_rule: item.repeat_rule, calendar: item.calendar || 'solar',
@@ -308,6 +299,7 @@ watch(() => [props.modelValue, props.reminderId, props.preset] as const, async (
     Object.assign(editing, blankInput(), props.preset)
     return
   }
+  detail.value = null
   if (!id) { errorMsg.value = '没有指定要编辑的提醒'; return }
   Object.assign(editing, blankInput(), { id: Number(id) })
   loading.value = true
@@ -387,6 +379,39 @@ async function doDelete() {
   }
 }
 
+/**
+ * 编辑面板里改过的「完成备注」写回各自那条完成记录：
+ *   · 一次性任务 → reminders.completed_note（completion_id 省略）；
+ *   · 循环任务的某一次 → completions.note（带 completion_id）。
+ * 按合并文本里的出现顺序与原有条目一一对应 —— 顺序来自 buildNoteTimeline（按时间升序），
+ * 这里用同样的规则排一遍，保证「第 N 段对应第 N 条」。
+ */
+async function persistCompletionNoteEdits(parsed: { timeLabel: string; note: string }[]) {
+  const item = detail.value
+  if (!item || !editing.id) return
+  const originals: { id?: number; at: string; note: string }[] = []
+  if ((item.completed_note || '').trim()) {
+    originals.push({ id: undefined, at: item.completed_at || '', note: (item.completed_note || '').trim() })
+  }
+  for (const row of item.completion_notes || []) {
+    if (!(row.note || '').trim()) continue
+    originals.push({ id: row.id, at: row.completed_at || '', note: row.note.trim() })
+  }
+  originals.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
+  const count = Math.min(originals.length, parsed.length)
+  for (let i = 0; i < count; i += 1) {
+    const before = originals[i]
+    const after = parsed[i]
+    if (before.note === after.note.trim()) continue
+    try {
+      await updateCompletionNote(editing.id, { note: after.note, completion_id: before.id })
+    } catch (err: any) {
+      // 单条失败不挡整次保存：主字段已经存好了，提示一下让用户知道哪条没写回
+      errorMsg.value = err.response?.data?.message || '完成备注没能保存'
+    }
+  }
+}
+
 async function save() {
   if (!editing.title?.trim() || saving.value) return
   if (!isCreate.value && !editing.id) return
@@ -410,8 +435,18 @@ async function save() {
   errorMsg.value = ''
   try {
     const { id, ...payload } = editing
-    if (isCreate.value) await createReminder(payload)
-    else await updateReminder(id as number, payload)
+    // 备注框里是合并文本：新建备注写回 notes，各段完成备注按原顺序写回那条完成记录。
+    // 新建模式没有完成备注，整段就是新建备注。
+    const parsed = isCreate.value
+      ? { notes: editing.notes || '', completions: [] as { timeLabel: string; note: string }[] }
+      : parseMergedNoteText(editing.notes || '')
+    payload.notes = parsed.notes
+    if (isCreate.value) {
+      await createReminder(payload)
+    } else {
+      await updateReminder(id as number, payload)
+      await persistCompletionNoteEdits(parsed.completions)
+    }
     emit('update:modelValue', false)
     emit('saved')
   } catch (err: any) {

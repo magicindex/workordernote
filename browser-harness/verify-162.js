@@ -192,7 +192,7 @@ const completedRows = (page) => page.evaluate(() => [...document.querySelectorAl
       histRows.length >= 2 && histRows.some((it) => it.note === '第二次完成') && histRows.some((it) => it.note === ''),
       JSON.stringify(histRows.map((h) => h.note)));
 
-    // ---------- 5b. 循环任务：编辑面板按时间列出历次完成备注 ----------
+    // ---------- 5b. 编辑属性：一条合并的备注（可编辑），保存写回完成备注 ----------
     await page.goto(BASE + '/admin/all', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await sleep(1800);
     const openEditor = await page.evaluate((title) => {
@@ -203,25 +203,41 @@ const completedRows = (page) => page.evaluate(() => [...document.querySelectorAl
       return true;
     }, T_REPEAT);
     await sleep(1600);
-    const editorTimeline = await page.evaluate(() => {
-      const box = document.querySelector('[data-editor-note-timeline]');
-      return {
-        has: !!box,
-        labels: [...(box?.querySelectorAll('[data-note-label]') || [])].map((e) => e.textContent.trim()),
-        times: [...(box?.querySelectorAll('[data-note-time]') || [])].map((e) => e.textContent.trim()),
-        text: (box?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160),
-      };
+    const editorNote = await page.evaluate(() => {
+      const ta = [...document.querySelectorAll('.editor-panel textarea, .editor-panel-modal textarea')]
+        .find((el) => el.offsetParent !== null);
+      return { has: !!ta, value: ta ? ta.value : '', hasTimelineBlock: !!document.querySelector('[data-editor-note-timeline]') };
     });
-    // 这条循环任务第一次完成是空备注（只写进历史、没有 note），第二次才有字，
-    // 所以面板里应当只有 1 条「完成备注」，内容就是第二次那句。
-    check('编辑面板里有「备注记录（按时间）」并列出写过的完成备注',
-      openEditor === true && editorTimeline.has === true
-        && editorTimeline.labels.filter((l) => l === '完成备注').length === 1
-        && editorTimeline.times.length === 1
-        && editorTimeline.text.includes('第二次完成'),
-      JSON.stringify(editorTimeline));
-    await page.keyboard.press('Escape').catch(() => {});
-    await sleep(500);
+    check('编辑属性里备注是**一条**合并文本（新建备注 + 完成备注按时间戳排在一起）',
+      openEditor === true && editorNote.has === true
+        && /新建备注：/.test(editorNote.value) === false   // 这条循环任务没有新建备注
+        && /\d{2}-\d{2} \d{2}:\d{2} 完成备注：第二次完成/.test(editorNote.value)
+        && editorNote.hasTimelineBlock === false,
+      JSON.stringify(editorNote).slice(0, 240));
+    // 直接改文本框里那行「完成备注」，保存后应当写回 completions.note
+    const editedValue = await page.evaluate(() => {
+      const ta = [...document.querySelectorAll('.editor-panel textarea, .editor-panel-modal textarea')]
+        .find((el) => el.offsetParent !== null);
+      if (!ta) return '';
+      const next = ta.value.replace('第二次完成', '第二次完成（编辑过）');
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(ta, next);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      return next;
+    });
+    const savedEditor = await page.evaluate(async () => {
+      const btn = [...document.querySelectorAll('button')].find((b) => (b.textContent || '').trim() === '保存提醒');
+      if (!btn) return { ok: false };
+      btn.click();
+      await new Promise((r) => setTimeout(r, 1600));
+      return { ok: true };
+    });
+    const repeatDetail = await itemById(page, created.repeat);
+    const savedNote = (repeatDetail?.completion_notes || []).map((n) => n.note).join('|');
+    check('在合并的备注里改「完成备注」，保存后写回完成记录',
+      savedEditor.ok === true && editedValue.includes('编辑过') && savedNote.includes('第二次完成（编辑过）'),
+      JSON.stringify({ editedValue: editedValue.slice(0, 80), savedNote }));
+    await sleep(400);
 
     // ---------- 6. 取消按钮同样不完成 ----------
     await page.goto(BASE + '/admin', { waitUntil: 'domcontentloaded', timeout: 30000 });

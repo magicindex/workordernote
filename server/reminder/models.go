@@ -302,7 +302,10 @@ type ReminderDTO struct {
 }
 
 // CompletionNoteDTO 是一次完成留下的备注。
+// ID 是 completions 行的主键：编辑面板按时间戳把备注拼在一起显示，
+// 用户改了某一行的「完成备注」时要能指回具体那条记录。
 type CompletionNoteDTO struct {
+	ID           uint       `json:"id"`
 	Note         string     `json:"note"`
 	CompletedAt  time.Time  `json:"completed_at"`
 	ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
