@@ -233,6 +233,18 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-13：0.47.7（201 生产 / 200 生产均已上线）—— 新建卡片去掉「清空」按钮
+
+> **发版记录**（VERSION 0.47.7，源码提交 `d316b0b`，镜像 `workordernote:0.47.7` =
+> `sha256:4a1b6c64dd4df30c29e300d8b5ffae8c494225a00c2f729f25eb2055f92b91cd`；registry manifest `sha256:3d80ba641aa27c8dc3a14d1c3e66e26a34eebfdb7ff20db090ea72584516521d`）
+
+- 第 108 条：新建提醒芯片行去掉「清空」按钮与相关前端逻辑（清空状态、清空函数、「无日期 → 跳全部」死分支、日期选择器回传空值时不再抹日期）。日期只剩三个相对芯片 + 「选择日期」两条来源。
+- 无 schema 变更，纯前端。
+- 201：备份 `docker-compose.yml.bak-pre0477-20261113-1808` + `tmp/data.bak-pre0477-20261113-1808.tgz`，旧镜像保留 `workordernote:0.47.6-keep-20261113-1808`；18:08 重建，`0.47.7 / d316b0b`。
+- 200：备份 `docker-compose.yml.bak-pre0477-20261113-1810` / `data.bak-pre0477-20261113-1810.tgz`，旧镜像保留 `workordernote:0.47.6-keep-20261113-1810`；18:10 重建，`0.47.7 / d316b0b`。
+- 回归：201/200 `verify-128` 各 **34/34**；201 上 `verify-105` 28/28、`verify-163` 13/13；双机 `verify-sync-local` **15/15**。
+- 镜像已推 Gitea 与 GHCR 的 `0.47.7` / `latest`。
+
 ### 2026-11-13：0.47.6（201 生产 / 200 生产均已上线）—— 发行与文档：README 最近更新 + 边界关系、补全 CHANGELOG
 
 > **发版记录**（VERSION 0.47.6，源码提交 `bf37a69`，镜像 `workordernote:0.47.6` =
