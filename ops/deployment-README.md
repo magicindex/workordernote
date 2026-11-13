@@ -245,6 +245,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 回归：201/200 `verify-128` 各 **34/34**；201 上 `verify-105` 28/28、`verify-163` 13/13；双机 `verify-sync-local` **15/15**。
 - 镜像已推 Gitea 与 GHCR 的 `0.47.7` / `latest`。
 - 发行包：`release/0.47.7/workordernote-0.47.7-linux-amd64.tar.gz`（21M，静态二进制 `0.47.7 / d316b0b` + static/dist + LICENSE/NOTICE/CHANGELOG）与同目录 `docker-compose.yml`；已作为附件上传到 Gitea 与 GitHub 两个 Release 页（`0.47.6` 的发行包也已补传到 GitHub）。
+- **飞牛安装包**：`release/0.47.7/workordernote_0.47.7_amd64.fpk`（21M，`fnpack build` 产物，`manifest` 里 `version = 0.47.7`、`platform = x86`）也已上传到 Gitea 与 GitHub 的 v0.47.7 Release；本机没有 qemu-aarch64，arm64 的 fpk 跳过。
 
 ### 2026-11-13：0.47.6（201 生产 / 200 生产均已上线）—— 发行与文档：README 最近更新 + 边界关系、补全 CHANGELOG
 
