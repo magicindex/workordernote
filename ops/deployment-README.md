@@ -233,6 +233,21 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-13：0.47.1（201 生产 / 200 生产均已上线）—— 备注时间线、久置提交修复、AI 图标呼吸
+
+> **发版记录**（VERSION 0.47.1，源码提交 `7f2191b`，镜像 `workordernote:0.47.1` =
+> `sha256:f4df69ba08d73ec288bd7f759a4d14ec249f0b28e1ddbb91e2e7e89a5ddfd10c`，
+> 92.1MB，构建于 2026-11-13T03:12:00Z；registry（Gitea/GHCR）manifest
+> `sha256:fcb14d030bf84c71bb32f5f629deafa062525635275a31fdc491b2ca6a5407a3`）
+
+- 本版合并攒批第 100–102 条：「新建备注 / 完成备注」拆开并按时间戳拼接显示（列表已完成行、已完成页、编辑面板的「备注记录」、导出备注列）；新建卡片久置后提交不再误报「结束时间不能早于现在」（提交前按来源重算日期，文案分清结束/到期）；侧栏 AI 入口图标加流光圆边 + 呼吸柔光；顺带给 logo 与主按钮补纯色兜底底、导出 CSV 解析支持单元格换行。
+- 发布前置验证：生产库拷贝 + 0.47.1 镜像在 8918 跑 —— 版本 `0.47.1 / 7f2191b`，`verify-162` 31/31、`verify-106` 23/23、`verify-125` 16/16、`verify-export` 44/44。
+- 201：备份 `docker-compose.yml.bak-pre0471-20261113-1117`（仓库 `tmp/` 与 `/vol1/1000/Docker/workordernote/` 各一份）/ `tmp/data.bak-pre0471-20261113-1117.tgz`（15M），旧镜像保留 `workordernote:0.47.0-keep-20261113-1117`；compose 改 `0.47.1` 后 11:17:14 重建，healthy，`/api/version` = `0.47.1 / 7f2191b`。数据：128 条未删除提醒（11 条记事，1 条完成备注），`integrity_check = ok`，summary `all 17 / completed 195 / overdue 0 / trash 35`。
+- 200：备份 `docker-compose.yml.bak-pre0471-20261113-1120` / `data.bak-pre0471-20261113-1120.tgz`（7.1M），旧镜像保留 `workordernote:0.47.0-keep-20261113-1120`；从 `127.0.0.1:3000` 拉取 0.47.1、tag 后 compose 改 tag 重建，11:18:17 healthy，`/api/version` = `0.47.1 / 7f2191b`。数据 128 条，与 201 一致。
+- 回归：201 `verify-128` **34/34**，200 `verify-128` **34/34**；双机 `verify-sync-local.sh` **15/15**（两台收敛到 128 条、内容指纹一致、删除传播正常）。
+- 镜像：Gitea `192.168.3.200:3000/cyberzero/workordernote:0.47.1` 与 `:latest`、GHCR `ghcr.io/magicindex/workordernote:0.47.1` 与 `:latest` 都已推（manifest `sha256:fcb14d03…`）。
+- 未做：离线一键安装包、飞牛 fpk、GitHub 快照、生产全量回归。
+
 ### 2026-11-12：0.47.0（201 生产 / 200 生产均已上线）—— 完成备注、新建框精简、日期芯片只选日期
 
 > **发版记录**（VERSION 0.47.0，源码提交 `ff4f36c`，镜像 `workordernote:0.47.0` =
