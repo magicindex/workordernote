@@ -233,6 +233,19 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-13：0.47.2（201 生产 / 200 生产均已上线）—— 备注合成一处可编辑、打印两条都在
+
+> **发版记录**（VERSION 0.47.2，源码提交 `6c5ee67`，镜像 `workordernote:0.47.2` =
+> `sha256:1546d1f6eec72c8abeeba2a1ce15d8164ae3b52b1fe28f2c8c1c71a5ab789736`；registry manifest `sha256:48e7fb3ac69fe03f26c921d2989821040b6fca0a40105ed25f2028f2641c8587`）
+
+- 第 103 条：编辑属性里的备注改成**一条合并文本**（新建备注 + 历次完成备注按时间戳排在一起、一起改），保存时拆回 `reminders.notes` 与各次 `completions.note`；新增 `PATCH /api/reminder/items/:id/completion-note`。打印弹窗的「完成备注」列改成「备注」= 两条按时间戳拼在一起，默认勾选，默认列数 5 → 6。
+- 无 schema 变更（只加了接口与 DTO 的 `id` 字段）。
+- 前置验证（生产库拷贝 + 0.47.2 镜像，8918）：`0.47.2 / 6c5ee67`，`verify-162` 32/32、`verify-print` 24/24、`verify-106` 23/23。
+- 201：备份 `docker-compose.yml.bak-pre0472-20261113-1313` / `tmp/data.bak-pre0472-20261113-1313.tgz`（14M），旧镜像保留 `workordernote:0.47.1-keep-20261113-1313`；13:13 重建，healthy，`/api/version` = `0.47.2 / 6c5ee67`。
+- 200：备份 `docker-compose.yml.bak-pre0472-20261113-1315` / `data.bak-pre0472-20261113-1315.tgz`（6.8M），旧镜像保留 `workordernote:0.47.1-keep-20261113-1315`；从 `127.0.0.1:3000` 拉取后重建，`/api/version` = `0.47.2 / 6c5ee67`。
+- 回归：201/200 `verify-128` 各 **34/34**；双机 `verify-sync-local` **15/15**（129/129 收敛、指纹一致）。
+- 镜像已推 Gitea 与 GHCR 的 `0.47.2` / `latest`（manifest `sha256:48e7fb3a…`）。
+
 ### 2026-11-13：0.47.1（201 生产 / 200 生产均已上线）—— 备注时间线、久置提交修复、AI 图标呼吸
 
 > **发版记录**（VERSION 0.47.1，源码提交 `7f2191b`，镜像 `workordernote:0.47.1` =
