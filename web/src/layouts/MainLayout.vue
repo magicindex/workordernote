@@ -1966,6 +1966,10 @@ onBeforeUnmount(() => {
 .sidebar-rail .my-lists-head { @apply lg:justify-center lg:px-0; }
 .sidebar-rail .nav-group { @apply lg:p-1; }
 .logo-mark { @apply flex h-11 w-11 items-center justify-center rounded-[15px] bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_10px_30px_-10px_rgba(59,130,246,.75)]; }
+/* 兜底：图标块必须自己带底色。2026-11-13 有用户那边看到的是「白色空方块」——
+   当浏览器用着半截缓存的 CSS（Tailwind 的渐变变量没跟上）时，背景会退成透明、
+   白色图标浮在白卡片上就什么都看不见。这里给一个纯色底，渐变照旧在上层覆盖。 */
+.logo-mark { background-color: #3b82f6; }
 .version-badge { @apply rounded-full border border-brand-500/25 bg-brand-500/10 px-2 py-0.5 text-[11px] font-bold leading-none text-brand-600 dark:text-brand-300; }
 /* 「呼叫小秘」：侧栏顶部的入口（「新建提醒」已挪到首页看板，见 HomeDashboardView）。
    用户 2026-11-11：取消外框与底色、内容居中、AI 标志紧挨名称（不再用 ml-auto 推到右边）；

@@ -247,6 +247,12 @@ textarea {
      SettingsView（compact-input）都在别的组件里用它们，结果样式全部没生效。
      这里是应用级设计原子，统一放到全局，与 btn-brand / btn-ghost / input-field 一致。 */
 
+  /* 兜底底色：同上（2026-11-13 用户截图里主按钮变成一块白）。渐变在 background-image，
+     这里补 background-color，即使品牌色变量缺失也还是蓝底白字。 */
+  .btn-primary {
+    background-color: #4f6ef2;
+    background-image: linear-gradient(135deg, rgb(var(--color-brand-500, 59 130 246)) 0%, rgb(var(--color-brand-400, 99 102 241)) 100%);
+  }
   .btn-primary {
     @apply inline-flex h-10 items-center justify-center rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-500 px-5 text-sm font-bold text-white shadow-[0_12px_25px_-12px_rgba(59,130,246,.75)] transition hover:-translate-y-0.5 hover:brightness-105 disabled:opacity-50 sm:h-11;
   }
