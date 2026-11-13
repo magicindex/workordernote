@@ -52,16 +52,19 @@
           </button>
         </div>
 
-        <!-- 左上角入口：「呼叫小秘」（AI 助手）。
-             「新建提醒」按钮已按用户 2026-10-16 的要求挪到首页看板「接下来 14 天」标题行右侧
-             （见 HomeDashboardView），列表页自己的「+ 新建提醒」、手机悬浮 +、快捷键 N 都不变。
-             窄栏（56px 图标栏）时收成 44px 圆按钮、居中（见 .rail-actions）。 -->
-        <div class="rail-actions mx-4 flex flex-col gap-2">
+        <!-- 「呼叫小秘」（AI 助手）入口。
+             用户 2026-11-13：桌面端不再放在侧栏顶部，改成一颗可拖动的悬浮球
+             （见 components/AssistantLauncher.vue）；拖过的位置记在 localStorage。
+             手机上保持现状：顶栏铃铛旁的小图标（<640px）+ 侧栏抽屉里的这一颗（<1024px）。
+             所以这里整块只在窄屏出现，桌面侧栏顶部不再有它。
+             窄栏（56px 图标栏）时收成 44px 圆按钮、居中（见 .rail-actions），
+             不过窄栏只在桌面出现，这个按钮在窄栏里已经看不到了。 -->
+        <div class="rail-actions mx-4 flex flex-col gap-2 lg:hidden">
           <button
             type="button"
             class="assistant-button"
-            :title="railActive ? `呼叫${assistantName}（AI 助手）` : `呼叫${assistantName}：写周报、一句话建任务`"
-            data-assistant-trigger
+            :title="`呼叫${assistantName}：写周报、一句话建任务`"
+            data-assistant-sidebar
             @click="openAssistant"
           >
             <!-- 图标外圈：一圈绕走的流光 + 外圈呼吸柔光（用户 2026-11-13：
@@ -357,7 +360,12 @@
 
     <div v-if="mobileOpen" class="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-sm lg:hidden" @click="mobileOpen = false"></div>
 
-    <div class="shell min-h-screen" :class="railActive ? 'lg:pl-14' : 'lg:pl-[292px]'">
+    <!-- 桌面端对话窗口展开时给内容区右侧让出一条等宽的槽（见 .assistant-docked）：
+         窗口仍然浮着，但正文不会被盖住，滚动、点击都不受影响。手机上这个类不生效。 -->
+    <div
+      class="shell min-h-screen"
+      :class="[railActive ? 'lg:pl-14' : 'lg:pl-[292px]', assistantOpen ? 'assistant-docked' : '']"
+    >
       <header class="topbar">
         <button class="icon-button" :aria-label="railCollapsed ? '展开侧栏' : '收起侧栏'" @click="toggleSidebar">
           <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M4 7h16M4 12h16M4 17h16" stroke-width="2" stroke-linecap="round"/></svg>
@@ -617,8 +625,12 @@
     <!-- 版本信息与迭代说明 -->
     <VersionDialog v-model="versionOpen" :version="appVersion" :build-time="appBuildTime" />
 
-    <!-- 呼叫小秘：AI 助手抽屉。接上模型后走真回复，没接上时用本地兜底文案 -->
+    <!-- 呼叫小秘：AI 助手抽屉。接上模型后走真回复，没接上时用本地兜底文案。
+         桌面端是右侧浮窗（不铺满、不挡正文），手机端保持原来的整屏抽屉。 -->
     <AssistantPanel v-model="assistantOpen" />
+
+    <!-- 桌面端的「呼叫小秘」悬浮球：可拖动、记住位置；窗口展开时淡出，收起后回到原处。 -->
+    <AssistantLauncher :panel-open="assistantOpen" @open="openAssistant" />
 
     <!-- 新建清单：先选模板（通用 / 信用卡），信用卡填完卡片信息自动生成还款计划 -->
     <ListCreateDialog
@@ -734,6 +746,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import VersionDialog from '../components/VersionDialog.vue'
 import AssistantPanel from '../components/AssistantPanel.vue'
+import AssistantLauncher from '../components/AssistantLauncher.vue'
 import { useAssistantStore } from '../stores/assistant'
 import Modal from '../components/Modal.vue'
 import ListCreateDialog from '../components/ListCreateDialog.vue'
@@ -776,6 +789,8 @@ const authStore = useAuthStore()
 const assistantStore = useAssistantStore()
 const assistantName = computed(() => assistantStore.displayName)
 const mobileOpen = ref(false)
+// 「呼叫小秘」面板开合。桌面端默认收起，只露一颗悬浮球（用户 2026-11-13）。
+const assistantOpen = ref(false)
 
 // 界面折叠状态记在本地：这类偏好跟人走、跟设备走，不必上服务端。
 const lsGet = (key: string) => { try { return localStorage.getItem(key) } catch { return null } }
@@ -787,7 +802,22 @@ const lsSet = (key: string, value: string) => { try { localStorage.setItem(key, 
 // 离开日历时能原样还原。手机端这两者都不影响抽屉（CSS 里的规则都带 lg: 前缀）。
 const railCollapsed = ref(lsGet('ui_rail_collapsed') === '1')
 const railForced = ref(false)
-const railActive = computed(() => railCollapsed.value || railForced.value)
+// AI 浮窗展开时，窄一点的桌面（<1440）先把侧栏临时收成图标栏：
+// 浮窗给正文让出的那一条槽已经占去 372–420px，再留着 292px 的侧栏，
+// 1024 宽的内容区只剩 350px（卡片会被挤成竖排）。这里只影响「当前显示」，
+// 不动用户的 railCollapsed 偏好；关掉浮窗就恢复。用户点汉堡手动展开时，
+// assistantRailDismissed 让这次打开期间不再强行收起（见 toggleSidebar）。
+const compactQuery = typeof window !== 'undefined' ? window.matchMedia('(max-width: 1439px)') : null
+const compactDesktop = ref(!!compactQuery?.matches)
+const assistantRailDismissed = ref(false)
+const assistantRailForced = computed(
+  () => assistantOpen.value && compactDesktop.value && !assistantRailDismissed.value,
+)
+const railActive = computed(() => railCollapsed.value || railForced.value || assistantRailForced.value)
+/** 缩窗口跨过 1440 时重新判断：浮窗开着也要立刻决定侧栏是否临时收起。 */
+function syncCompactDesktop() {
+  compactDesktop.value = !!compactQuery?.matches
+}
 // 底部「设置」组**默认收起**，给清单列表腾出更多竖向空间；
 // 而且**不记状态**：展开只是为了点一次里面的入口，刷新/重进页面就回到收起
 // （用户要求：「点击刷新默认状态收起状态」）。
@@ -1033,9 +1063,10 @@ function toggleSidebar() {
   if (typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches) {
     // 翻转的是**当前看到的状态**（railActive），不是偏好本身：在日历里被临时收起时，
     // 点一下应当展开（而不是把偏好翻成 true 继续收着——那样点了没反应）。
-    // 用户手动决定之后，日历的临时收起也不再压着他。
+    // 用户手动决定之后，日历的临时收起不再压着他；AI 浮窗这次打开期间也不再强行收起。
     const next = !railActive.value
     railForced.value = false
+    if (assistantRailForced.value) assistantRailDismissed.value = true
     railCollapsed.value = next
     lsSet('ui_rail_collapsed', next ? '1' : '0')
   } else {
@@ -1128,11 +1159,15 @@ async function openQuickAdd() {
 // ---- 「呼叫小秘」：AI 助手面板（模型参数在「系统配置 → AI 助手」里填，见 api/assistant.ts）----
 // 面板在任何页面都能叫出来，所以这里不做跳转；以后别的页面（空状态、看板卡片等）
 // 想叫它，派发 window 事件 open-assistant 即可，和 open-quick-reminder 一个路子。
-const assistantOpen = ref(false)
 function openAssistant() {
   mobileOpen.value = false
   assistantOpen.value = true
 }
+// 关掉浮窗（Esc / 关闭按钮 / 点遮罩）后，下一次打开仍按「窄桌面先收起侧栏」的规矩来，
+// 而不是沿用上一次用户手动展开过的临时状态。
+watch(assistantOpen, (open) => {
+  if (!open) assistantRailDismissed.value = false
+})
 // ---- 左上角 logo：列表 / 日历 一键切换 ----
 // 顶栏右侧那个「列表 / 日历」开关仍然保留（只在提醒相关页面出现），这里是从 logo 直接切。
 function toggleViewFromLogo() {
@@ -1883,6 +1918,7 @@ onMounted(() => {
   void loadSidebarOrder()
   loadVersion()
   window.visualViewport?.addEventListener('resize', syncKeyboardState)
+  compactQuery?.addEventListener('change', syncCompactDesktop)
   window.addEventListener('reminder-data-changed', refreshNavigation)
   window.addEventListener('open-assistant', openAssistant)
   window.addEventListener('open-quick-add', openQuickAdd)
@@ -1914,6 +1950,7 @@ onBeforeUnmount(() => {
   if (versionTimer !== undefined) window.clearInterval(versionTimer)
   audioContext?.close()
   window.visualViewport?.removeEventListener('resize', syncKeyboardState)
+  compactQuery?.removeEventListener('change', syncCompactDesktop)
   window.removeEventListener('reminder-data-changed', refreshNavigation)
   window.removeEventListener('open-assistant', openAssistant)
   window.removeEventListener('open-quick-add', openQuickAdd)
@@ -1939,7 +1976,17 @@ onBeforeUnmount(() => {
 .ambient-orb-one { width: 32rem; height: 32rem; left: 12%; top: -18rem; background: #60a5fa; }
 .ambient-orb-two { width: 28rem; height: 28rem; right: -10rem; bottom: -12rem; background: #a78bfa; opacity: .11; }
 /* 外壳禁止横向溢出：任何子元素意外撑宽都不会让整页能左右拖 */
-.shell { overflow-x: clip; }
+.shell { overflow-x: clip; transition: padding-right 0.28s cubic-bezier(0.22, 0.61, 0.36, 1); }
+/* 桌面端 AI 浮窗展开时，给正文右侧让出与浮窗等宽的槽（浮窗宽 + 左右 16px 间距）。
+   宽度走 --assistant-float-width（见 style.css），与 AssistantPanel 的实际宽度共用一份，
+   改窗口宽度时不会出现「窗口变宽了、正文还被盖住」。
+   注意方向：padding-right 让内容区变窄，浮窗本身是 fixed、不参与布局。 */
+@media (min-width: 1024px) {
+  .assistant-docked { padding-right: calc(var(--assistant-float-width, 388px) + 2rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shell { transition: none; }
+}
 .sidebar { @apply fixed inset-y-0 left-0 z-50 w-[292px] -translate-x-full border-r border-border/80 bg-surface/90 backdrop-blur-2xl transition-transform duration-300; }
 /* 手机：抽屉打开 */
 .sidebar-open { @apply translate-x-0; }

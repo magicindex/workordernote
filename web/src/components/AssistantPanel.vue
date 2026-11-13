@@ -1,10 +1,10 @@
 <template>
   <Teleport to="body">
     <Transition name="assistant">
-      <div v-if="modelValue" class="fixed inset-0 z-[60] flex justify-end" data-assistant-panel>
-        <div class="absolute inset-0 bg-black/45" data-assistant-backdrop @click="close"></div>
+      <div v-if="modelValue" class="assistant-shell fixed inset-0 z-[60] flex justify-end" data-assistant-panel>
+        <div class="assistant-backdrop absolute inset-0 bg-black/45" data-assistant-backdrop @click="close"></div>
 
-        <aside class="relative flex h-full w-full flex-col bg-surface text-foreground shadow-2xl sm:w-[420px]">
+        <aside class="assistant-drawer relative flex h-full w-full flex-col bg-surface text-foreground shadow-2xl sm:w-[420px]">
           <!-- 头部：小秘身份 + 模型接入状态 + 清空 / 关闭 -->
           <header class="flex items-center gap-3 border-b border-border px-4 py-3">
             <span class="assistant-avatar">{{ assistant.avatarText }}</span>
@@ -867,6 +867,51 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <style scoped>
+/* ---------------- 桌面端：右侧浮窗，而不是整屏抽屉 ----------------
+   用户 2026-11-13：「改成悬浮球，点击后展开对话窗口……展开后不遮挡主要内容」。
+   手机 / 平板的观感完全不动（整屏或 420px 抽屉 + 半透明遮罩）；
+   只有 ≥1024px 时换成一颗浮在右侧的卡片：
+     · 不铺满、不压暗背景，背后页面仍可正常滚动、点击；
+     · 位置固定在右侧，MainLayout 会同步给正文让出等宽的槽（--assistant-float-width），
+       所以正文不会被盖住；
+     · 高度跟着视口走，顶部从顶栏下面开始，底部留 16px。
+   窗口宽度与留槽宽度共用 style.css 里的 --assistant-float-width，改一处两边一起变。 */
+@media (min-width: 1024px) {
+  .assistant-shell {
+    inset: 88px 16px 16px auto;
+    width: var(--assistant-float-width, 388px);
+    height: auto;
+    justify-content: stretch;
+    pointer-events: none;
+  }
+  .assistant-backdrop {
+    display: none;
+  }
+  .assistant-drawer {
+    pointer-events: auto;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, rgb(var(--color-border)) 82%, transparent);
+    border-radius: 22px;
+    box-shadow:
+      0 30px 70px -28px rgba(15, 23, 42, 0.55),
+      0 12px 28px -18px rgba(15, 23, 42, 0.4);
+  }
+  /* 从右侧轻轻推进来一点即可，整屏抽屉那套 translateX(100%) 在浮窗上会像「飞出去」。 */
+  .assistant-enter-active .assistant-drawer,
+  .assistant-leave-active .assistant-drawer {
+    transition:
+      transform 0.26s cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity 0.26s ease;
+  }
+  .assistant-enter-from .assistant-drawer,
+  .assistant-leave-to .assistant-drawer {
+    opacity: 0;
+    transform: translateX(12px) scale(0.985);
+  }
+}
+
 .assistant-enter-active,
 .assistant-leave-active {
   transition: opacity 0.25s ease;

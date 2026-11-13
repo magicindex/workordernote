@@ -4,6 +4,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 桌面端「呼叫小秘」浮窗的宽度（用户 2026-11-13：展开后不遮挡主要内容）。
+   两处共用这一个值：AssistantPanel 用它定窗口宽度，MainLayout 用它给正文右侧让槽。
+   窄桌面（1024–1279）收窄一点，正文还剩得下；1280 以上再放宽到 388。 */
+:root {
+  --assistant-float-width: 340px;
+}
+@media (min-width: 1280px) {
+  :root {
+    --assistant-float-width: 388px;
+  }
+}
+
 /* ---------------- 流光边框（登录页那一套，应用内共用） ----------------
    登录卡片上那条绕圈走的彩色光带就在下面这个 .flow-frame：
    用 conic-gradient + mask 只留 1px 边框，再用 @property 让角度能补间动画。

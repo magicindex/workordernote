@@ -21,4 +21,7 @@ export const SK = {
   // 「记住密码」：勾上之后把账号密码存在**本机浏览器**里，下次打开登录页自动填好。
   // 只做 base64 混淆（不是加密）——这是给自建 NAS 的便利功能，明文只落在用户自己的设备上。
   rememberedLogin: `${P}remembered_login`,
+  // 「呼叫小秘」悬浮球的位置（用户 2026-11-13：改成可拖动的悬浮球，拖完记住位置）。
+  // 存 {x,y}（左上角的 CSS 像素坐标）；同域共享 localStorage，所以必须带前缀。
+  assistantBallPos: `${P}assistant_ball_pos`,
 } as const

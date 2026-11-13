@@ -43,6 +43,10 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       await api(page, '/api/assistant/prompts', 'PUT', { assistant_name: '' });
       await page.goto(`${BASE}/admin/settings`, { waitUntil: 'domcontentloaded' });
       await sleep(1400);
+      // 偏好设置 2026-10 起分了标签页，「小秘名称」在「更多」里；不切过去元素是 v-show 隐藏的
+      // （以前这里直接 page.click 会报 “Node is either not clickable”）。
+      await page.click('[data-settings-tab="more"]');
+      await sleep(400);
 
       const initial = await page.evaluate(() => ({
         block: !!document.querySelector('[data-ai-name-block]'),
@@ -95,9 +99,11 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       check('系统配置页不出现「小秘名称」（个人级 Internal）',
         await page.evaluate(() => !document.querySelector('[data-config-key="ai_assistant_name"]')));
 
-      // 恢复正常
+      // 恢复正常（同样先切到「更多」标签页）
       await page.goto(`${BASE}/admin/settings`, { waitUntil: 'domcontentloaded' });
       await sleep(1200);
+      await page.click('[data-settings-tab="more"]');
+      await sleep(400);
       await page.click('[data-ai-name-reset]');
       await sleep(900);
       const reset = await page.evaluate(() => ({
