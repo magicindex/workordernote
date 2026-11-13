@@ -232,11 +232,15 @@ export function estimateInstallment(
   principalCents: number,
   periods: number,
   paid: number,
+  /** 手工改过的每期费率（小数）；给值就覆盖银行表里的官方费率（用户 2026-11-13） */
+  overrideRate?: number | null,
 ): InstallmentEstimate {
   const safePeriods = Math.max(1, periods)
   const safePaid = Math.min(Math.max(0, paid), safePeriods)
   const remaining = safePeriods - safePaid
-  const perPeriodRate = toRange(rule.perPeriod[safePeriods])
+  const perPeriodRate = overrideRate && overrideRate > 0
+    ? { min: overrideRate, max: overrideRate }
+    : toRange(rule.perPeriod[safePeriods])
   const zero: RateRange = { min: 0, max: 0 }
   const principal = Math.max(0, principalCents)
 
@@ -246,6 +250,8 @@ export function estimateInstallment(
   }
 
   const totalRate = (() => {
+    // 手工费率优先：用户自己填的每期费率 × 期数，就是这次分期的总费率
+    if (overrideRate && overrideRate > 0) return { min: overrideRate * safePeriods, max: overrideRate * safePeriods }
     const total = rule.upfrontTotal?.[safePeriods]
     if (total !== undefined) return { min: total, max: total }
     if (!perPeriodRate) return null

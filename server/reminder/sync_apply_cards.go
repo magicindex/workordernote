@@ -31,6 +31,10 @@ func sameCard(local *Card, incoming syncCard, listID uint) bool {
 		local.Notes == incoming.Notes &&
 		local.Color == incoming.Color &&
 		local.Position == incoming.Position &&
+		local.InstallmentPeriods == incoming.InstallmentPeriods &&
+		local.InstallmentPaid == incoming.InstallmentPaid &&
+		local.InstallmentPrincipal == incoming.InstallmentPrincipal &&
+		local.InstallmentRate == incoming.InstallmentRate &&
 		// 删除标记也要比！漏了这一条时，「对端删掉、本机内容一模一样」会被判成
 		// 「内容一致，跳过」，于是**删不掉**（真实数据上踩到：回归测试卡在 200 上留着）。
 		// 清单与提醒的 sameList/sameReminder 一直有这个比较，卡片和账单期漏了。
@@ -79,6 +83,8 @@ func applySyncCards(tx *gorm.DB, snap syncSnapshot, users map[string]database.Us
 				Limit: incoming.Limit, StatementDay: incoming.StatementDay, DueDay: incoming.DueDay,
 				AdvanceDays: incoming.AdvanceDays, AutoRepeat: incoming.AutoRepeat,
 				Notes: incoming.Notes, Color: cardColor(incoming.Color), Position: incoming.Position,
+				InstallmentPeriods: incoming.InstallmentPeriods, InstallmentPaid: incoming.InstallmentPaid,
+				InstallmentPrincipal: incoming.InstallmentPrincipal, InstallmentRate: incoming.InstallmentRate,
 				CreatedAt: incoming.CreatedAt, UpdatedAt: incoming.UpdatedAt,
 			}
 			if err := tx.Create(&row).Error; err != nil {
@@ -112,6 +118,8 @@ func applySyncCards(tx *gorm.DB, snap syncSnapshot, users map[string]database.Us
 			"statement_day": incoming.StatementDay, "due_day": incoming.DueDay,
 			"advance_days": incoming.AdvanceDays, "auto_repeat": incoming.AutoRepeat,
 			"notes": incoming.Notes, "color": cardColor(incoming.Color), "position": incoming.Position,
+			"installment_periods": incoming.InstallmentPeriods, "installment_paid": incoming.InstallmentPaid,
+			"installment_principal": incoming.InstallmentPrincipal, "installment_rate": incoming.InstallmentRate,
 			"updated_at": incoming.UpdatedAt,
 		}
 		if incoming.Deleted {

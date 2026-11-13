@@ -116,8 +116,13 @@
           <!-- 手机端只留「本期应还」这一项（用户 2026-11-11：「手机版……有个第x期，
                取消显示，只保留本期应还」）：账期标签与「第 x 期」徽标在窄屏隐藏，sm 以上照旧。 -->
           <span class="hidden text-muted-foreground sm:inline">本期（{{ card.current?.period || '—' }}）</span>
-          <!-- 循环周期：这是这张卡的第几期（按开卡月份算，第 1 期就是开卡那个月） -->
-          <span v-if="periodIndex(card) > 0" class="tiny-badge hidden sm:inline-flex" :data-card-period-index="card.id">第 {{ periodIndex(card) }} 期</span>
+          <!-- 分期还款进度（用户 2026-11-13）：只有做了分期的卡才显示，
+               「第 x/N 期」＝已还 +1；已还清（已还 ≥ 总期数）或没分期的卡一律不显示。 -->
+          <span
+            v-if="installmentBadge(card)"
+            class="tiny-badge hidden items-center gap-1 sm:inline-flex"
+            :data-card-installment-badge="card.id"
+          >分期 第 {{ installmentBadge(card)!.current }}/{{ installmentBadge(card)!.total }} 期</span>
           <span v-if="card.current?.paid_at" class="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400" data-card-paid>
             <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="m5 13 4 4L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             已还 ¥{{ formatCents(card.current.paid_amount_cents || card.current.amount_cents) }}
@@ -237,7 +242,7 @@
           <label class="block">
             <span class="text-xs font-bold text-foreground">分期期数</span>
             <select v-model.number="installmentPeriods" class="input-field mt-1.5 !py-2" data-installment-periods>
-              <option v-for="p in installmentRule.periods" :key="p" :value="p">{{ p }} 期</option>
+              <option v-for="p in installmentPeriodOptions" :key="p" :value="p">{{ p }} 期</option>
             </select>
           </label>
           <label class="block">
@@ -250,6 +255,26 @@
             />
           </label>
         </div>
+
+        <!-- 每期费率（用户 2026-11-13）：默认用银行官方口径，留空就走官方；填了按填的算。 -->
+        <label class="block">
+          <span class="flex items-center justify-between gap-2 text-xs font-bold text-foreground">
+            每期费率（%）
+            <span class="text-[11px] font-medium text-muted-foreground" data-installment-official>
+              官方 {{ officialRateText }}<template v-if="installmentRateInput"> · 已手工修改</template>
+            </span>
+          </span>
+          <input
+            v-model="installmentRateInput"
+            class="input-field mt-1.5 !py-2"
+            inputmode="decimal"
+            :placeholder="officialRateText"
+            data-installment-rate
+          />
+          <span class="mt-1 block text-[11px] font-medium text-muted-foreground">
+            留空＝用官方渠道费率；填了就按手工费率算（例如 0.62 表示每期 0.62%）。
+          </span>
+        </label>
 
         <div class="rounded-xl border border-border/70 bg-surface px-3 py-2.5 text-[12px] font-semibold" data-installment-result>
           <p class="flex items-baseline gap-2">
@@ -273,8 +298,21 @@
           费率来自银行公开口径，实际以当期账单为准。
           <a v-if="installmentRule.source" :href="installmentRule.source" target="_blank" rel="noopener" class="underline">查看来源</a>
         </p>
-        <div class="flex justify-end gap-2">
+        <div class="flex flex-wrap justify-end gap-2">
+          <button
+            v-if="installmentCard && installmentCard.installment_periods > 0"
+            class="btn-secondary !text-rose-500"
+            :disabled="busyId !== null"
+            data-installment-clear
+            @click="clearInstallment"
+          >取消分期</button>
           <button class="btn-secondary" @click="installmentOpen = false">关闭</button>
+          <button
+            class="btn-primary"
+            :disabled="busyId !== null || !(parseYuanToCents(installmentPrincipalYuan) > 0)"
+            data-installment-save
+            @click="saveInstallment"
+          >保存到卡片</button>
         </div>
       </div>
     </Modal>
@@ -317,7 +355,7 @@ import CardEditorDialog from './CardEditorDialog.vue'
 import CardScheduleDialog from './CardScheduleDialog.vue'
 import ContextMenu from './ContextMenu.vue'
 import {
-  deleteCard, getCards, payCardStatement, saveCardStatement, unpayCardStatement,
+  deleteCard, getCards, payCardStatement, saveCardStatement, unpayCardStatement, updateCard,
   type CreditCard, type ReminderList,
 } from '../api/reminder'
 import { bankFaceLabelOf, bankLogoOf } from '../utils/banks'
@@ -362,10 +400,35 @@ const installmentPeriods = ref(12)
 const installmentPaid = ref(0)
 const installmentPrincipalYuan = ref('')
 
+// 手工改过的每期费率（百分数字符串，空 = 用官方渠道费率）
+const installmentRateInput = ref('')
+
 const installmentRule = computed(() => findInstallmentRule(installmentCard.value?.bank || ''))
+// 银行表里没有的期数（比如从对端同步来的老计划）也要能列出来，否则 select 对不上值
+const installmentPeriodOptions = computed(() => {
+  const list = [...installmentRule.value.periods]
+  if (!list.includes(installmentPeriods.value)) list.push(installmentPeriods.value)
+  return list.sort((a, b) => a - b)
+})
+/** 官方渠道费率文案（按当前期数）：给输入框做 placeholder / 说明。 */
+const officialRateText = computed(() => {
+  const raw = installmentRule.value.perPeriod[installmentPeriods.value]
+  if (raw === undefined) return '未收录'
+  const fmt = (v: number) => `${(v * 100).toFixed(2)}%`
+  return Array.isArray(raw) ? `${fmt(raw[0])}–${fmt(raw[1])}` : fmt(raw as number)
+})
+/** 输入框里填了有效百分数就用它，否则退回官方费率。 */
+const installmentOverrideRate = computed<number | null>(() => {
+  const text = installmentRateInput.value.trim()
+  if (!text) return null
+  const value = Number(text)
+  return Number.isFinite(value) && value > 0 ? value / 100 : null
+})
 const installmentEstimate = computed<InstallmentEstimate>(() => {
   const cents = parseYuanToCents(installmentPrincipalYuan.value)
-  return estimateInstallment(installmentRule.value, cents, installmentPeriods.value, installmentPaid.value)
+  return estimateInstallment(
+    installmentRule.value, cents, installmentPeriods.value, installmentPaid.value, installmentOverrideRate.value,
+  )
 })
 function fmtRate(range: RateRange | null) {
   if (!range) return '—'
@@ -375,22 +438,67 @@ function fmtRate(range: RateRange | null) {
 function openInstallment(card: CreditCard) {
   installmentCard.value = card
   const rule = findInstallmentRule(card.bank)
-  installmentPeriods.value = rule.periods.includes(12) ? 12 : rule.periods[0]
-  installmentPaid.value = 0
-  installmentPrincipalYuan.value = card.current?.amount_cents ? (card.current.amount_cents / 100).toFixed(2) : ''
+  const hasPlan = Number(card.installment_periods || 0) > 0
+  // 已有分期计划：按卡上保存的期数/已还/本金/手工费率回填
+  installmentPeriods.value = hasPlan
+    ? Number(card.installment_periods)
+    : (rule.periods.includes(12) ? 12 : rule.periods[0])
+  installmentPaid.value = hasPlan ? Number(card.installment_paid || 0) : 0
+  installmentPrincipalYuan.value = Number(card.installment_principal_cents || 0) > 0
+    ? (Number(card.installment_principal_cents) / 100).toFixed(2)
+    : (card.current?.amount_cents ? (card.current.amount_cents / 100).toFixed(2) : '')
+  installmentRateInput.value = Number(card.installment_rate || 0) > 0 ? String(card.installment_rate) : ''
   installmentOpen.value = true
 }
 
-/** 这张卡的「第几期」：从开卡那个月算到当前账单期（同月 = 第 1 期）。
-    账单期的期号本身是 YYYY-MM，两者相减就是期数；拿不到月份时返回 0（不显示角标）。 */
-function periodIndex(card: CreditCard) {
-  const period = String(card.current?.period || '')
-  const created = String(card.created_at || '')
-  const pm = /^(\d{4})-(\d{2})$/.exec(period)
-  const cm = /^(\d{4})-(\d{2})/.exec(created)
-  if (!pm || !cm) return 0
-  const delta = (Number(pm[1]) - Number(cm[1])) * 12 + (Number(pm[2]) - Number(cm[2]))
-  return delta >= 0 ? delta + 1 : 0
+/** 卡面的分期进度：没分期、或已还清（已还 ≥ 总期数）都返回 null（不显示期数）。 */
+function installmentBadge(card: CreditCard) {
+  const total = Number(card.installment_periods || 0)
+  const paid = Number(card.installment_paid || 0)
+  if (total <= 0 || paid >= total) return null
+  return { current: paid + 1, total }
+}
+
+/** 把弹窗里的分期计划存到卡片上（卡面据此显示「第几期」）。 */
+async function saveInstallment() {
+  const card = installmentCard.value
+  if (!card) return
+  busyId.value = card.id
+  try {
+    await updateCard(card.id, {
+      installment_periods: installmentPeriods.value,
+      installment_paid: installmentPaid.value,
+      installment_principal_cents: parseYuanToCents(installmentPrincipalYuan.value),
+      // 存百分数：0 = 用官方渠道费率；非 0 = 用户手工改过的费率
+      installment_rate: installmentOverrideRate.value ? Number((installmentOverrideRate.value * 100).toFixed(4)) : 0,
+    })
+    installmentOpen.value = false
+    await load()
+    notify(card.id, '分期计划已保存，卡面会显示当前第几期')
+    emit('changed')
+  } catch (err: any) {
+    notify(card.id, err.response?.data?.message || '保存分期失败', false)
+  } finally {
+    busyId.value = null
+  }
+}
+
+/** 取消分期：期数清零，已还/本金/手工费率一起清掉。 */
+async function clearInstallment() {
+  const card = installmentCard.value
+  if (!card) return
+  busyId.value = card.id
+  try {
+    await updateCard(card.id, { installment_periods: 0 })
+    installmentOpen.value = false
+    await load()
+    notify(card.id, '已取消分期')
+    emit('changed')
+  } catch (err: any) {
+    notify(card.id, err.response?.data?.message || '取消失败', false)
+  } finally {
+    busyId.value = null
+  }
 }
 
 function cardTitle(card: CreditCard) {

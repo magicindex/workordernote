@@ -573,7 +573,12 @@ export interface CreditCard {
   last_paid?: CardStatement | null
   unpaid_total_cents: number
   unpaid_count: number
-  /** 开卡时间：算「第几期」用（后端 GORM 自带字段） */
+  /** 开了分期才有：总期数 / 已还期数 / 本金 / 手工费率（百分数，0 = 官方默认） */
+  installment_periods: number
+  installment_paid: number
+  installment_principal_cents: number
+  installment_rate: number
+  /** 开卡时间（后端 GORM 自带字段） */
   created_at?: string
 }
 
@@ -605,6 +610,11 @@ export type CardInput = {
   notes?: string
   color?: string
   regenerate_plan?: boolean
+  /** 分期还款计划：期数 0 = 取消分期；已还期数不能超过总期数；费率 0 = 用官方默认 */
+  installment_periods?: number
+  installment_paid?: number
+  installment_principal_cents?: number
+  installment_rate?: number
 }
 
 export const getCards = (listId?: number) =>

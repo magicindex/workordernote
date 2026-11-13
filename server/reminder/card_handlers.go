@@ -194,6 +194,11 @@ func handleUpdateCard(db *gorm.DB) gin.HandlerFunc {
 			Notes        *string `json:"notes"`
 			Color        *string `json:"color"`
 			ListID       *uint   `json:"list_id"`
+			// 分期还款计划（用户 2026-11-13）：0 期 = 取消分期；Paid >= Periods 视为已还清。
+			InstallmentPeriods   *int     `json:"installment_periods"`
+			InstallmentPaid      *int     `json:"installment_paid"`
+			InstallmentPrincipal *int64   `json:"installment_principal_cents"`
+			InstallmentRate      *float64 `json:"installment_rate"`
 			// 明确要求重建提醒（改了账单日/还款日/提前提醒之后前端会带上）
 			RegeneratePlan bool `json:"regenerate_plan"`
 		}
@@ -260,6 +265,52 @@ func handleUpdateCard(db *gorm.DB) gin.HandlerFunc {
 		}
 		if in.Color != nil {
 			updates["color"] = cardColor(*in.Color)
+		}
+		// 分期还款计划：期数 0–60；已还期数不能超过总期数；费率 0–50%（0 = 官方默认）。
+		// 把期数改成 0 等于「取消分期」，已还/本金/费率一起清掉。
+		nextPeriods := card.InstallmentPeriods
+		cleared := false
+		if in.InstallmentPeriods != nil {
+			if *in.InstallmentPeriods < 0 || *in.InstallmentPeriods > 60 {
+				response.ErrorBadRequest(c, "分期期数应在 0–60 期之间")
+				return
+			}
+			nextPeriods = *in.InstallmentPeriods
+			updates["installment_periods"] = nextPeriods
+			if nextPeriods == 0 {
+				// 取消分期：已还期数、本金、手工费率一起清掉
+				cleared = true
+				updates["installment_principal"] = int64(0)
+				updates["installment_rate"] = float64(0)
+			}
+		}
+		nextPaid := card.InstallmentPaid
+		if cleared {
+			nextPaid = 0
+		}
+		if in.InstallmentPaid != nil {
+			nextPaid = *in.InstallmentPaid
+		}
+		if in.InstallmentPaid != nil || in.InstallmentPeriods != nil {
+			if nextPeriods > 0 && (nextPaid < 0 || nextPaid > nextPeriods) {
+				response.ErrorBadRequest(c, "已还期数应在 0–总期数之间")
+				return
+			}
+			updates["installment_paid"] = nextPaid
+		}
+		if in.InstallmentPrincipal != nil {
+			if *in.InstallmentPrincipal < 0 {
+				response.ErrorBadRequest(c, "分期本金不能为负数")
+				return
+			}
+			updates["installment_principal"] = *in.InstallmentPrincipal
+		}
+		if in.InstallmentRate != nil {
+			if *in.InstallmentRate < 0 || *in.InstallmentRate > 50 {
+				response.ErrorBadRequest(c, "每期费率应在 0–50% 之间（0 = 用官方默认）")
+				return
+			}
+			updates["installment_rate"] = *in.InstallmentRate
 		}
 		if in.ListID != nil {
 			if err := assertListOwner(db, userID, *in.ListID); err != nil {

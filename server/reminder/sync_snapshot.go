@@ -96,6 +96,8 @@ func buildSyncSnapshot(db *gorm.DB) (syncSnapshot, error) {
 			StatementDay: card.StatementDay, DueDay: card.DueDay,
 			AdvanceDays: card.AdvanceDays, AutoRepeat: card.AutoRepeat,
 			Notes: card.Notes, Color: card.Color, Position: card.Position,
+			InstallmentPeriods: card.InstallmentPeriods, InstallmentPaid: card.InstallmentPaid,
+			InstallmentPrincipal: card.InstallmentPrincipal, InstallmentRate: card.InstallmentRate,
 			Deleted: card.DeletedAt != nil, CreatedAt: card.CreatedAt, UpdatedAt: card.UpdatedAt,
 		})
 	}

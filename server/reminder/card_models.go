@@ -66,6 +66,16 @@ type Card struct {
 	Color    string `gorm:"size:16;not null;default:blue" json:"color"` // 卡面配色名
 	Position int    `gorm:"not null;default:0" json:"position"`
 
+	// 分期还款（用户 2026-11-13）：把某笔账单做了几期之后，卡面上要能显示
+	// 「当前还款第几期」。0 期 = 这张卡没有分期；Paid >= Periods 视为已还清，
+	// 卡面不再显示期数（用户明确要求「已还清的卡片上期数也不要显示」）。
+	InstallmentPeriods   int   `gorm:"not null;default:0" json:"installment_periods"`
+	InstallmentPaid      int   `gorm:"not null;default:0" json:"installment_paid"`
+	InstallmentPrincipal int64 `json:"installment_principal_cents"` // 分期本金（分）
+	// InstallmentRate：每期费率（百分数，例如 0.75 表示 0.75%）。0 = 用银行官方口径的默认费率；
+	// 非 0 = 用户手工「修复」过的费率（用户 2026-11-13：允许手工改费率，默认用官方渠道费率）。
+	InstallmentRate float64 `gorm:"type:double precision;not null;default:0" json:"installment_rate"`
+
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 	DeletedAt *time.Time `gorm:"index" json:"-"`

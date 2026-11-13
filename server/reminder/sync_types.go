@@ -108,24 +108,29 @@ var syncConfigSecrets = map[string]bool{
 
 // syncCard 是一张信用卡。卡片挂在清单下，所以用 list_uid 指过去。
 type syncCard struct {
-	UID          string    `json:"uid"`
-	Owner        string    `json:"owner"`
-	ListUID      string    `json:"list_uid"`
-	Name         string    `json:"name"`
-	Bank         string    `json:"bank"`
-	No           string    `json:"no"`
-	Holder       string    `json:"holder"`
-	Limit        int64     `json:"limit_cents"`
-	StatementDay int       `json:"statement_day"`
-	DueDay       int       `json:"due_day"`
-	AdvanceDays  int       `json:"advance_days"`
-	AutoRepeat   bool      `json:"auto_repeat"`
-	Notes        string    `json:"notes"`
-	Color        string    `json:"color"`
-	Position     int       `json:"position"`
-	Deleted      bool      `json:"deleted"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	UID          string `json:"uid"`
+	Owner        string `json:"owner"`
+	ListUID      string `json:"list_uid"`
+	Name         string `json:"name"`
+	Bank         string `json:"bank"`
+	No           string `json:"no"`
+	Holder       string `json:"holder"`
+	Limit        int64  `json:"limit_cents"`
+	StatementDay int    `json:"statement_day"`
+	DueDay       int    `json:"due_day"`
+	AdvanceDays  int    `json:"advance_days"`
+	AutoRepeat   bool   `json:"auto_repeat"`
+	Notes        string `json:"notes"`
+	Color        string `json:"color"`
+	Position     int    `json:"position"`
+	// 分期还款计划（2026-11-13）：随卡片一起同步，对端也要能显示「第几期」。
+	InstallmentPeriods   int       `json:"installment_periods"`
+	InstallmentPaid      int       `json:"installment_paid"`
+	InstallmentPrincipal int64     `json:"installment_principal_cents"`
+	InstallmentRate      float64   `json:"installment_rate"`
+	Deleted              bool      `json:"deleted"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 // syncCardStatement 是某张卡某一期的账单（金额与还款状态）。
@@ -208,15 +213,15 @@ type syncReminder struct {
 	Background string `json:"background,omitempty"`
 	// BgBlur / BgMask：背景图的蒙板（虚化像素 / 蒙板浓度百分比，见 models.go）。
 	// 老版本对端不认这两个字段，忽略即可（本机保持自己的值）。
-	BgBlur       int        `json:"bg_blur,omitempty"`
-	BgMask       int        `json:"bg_mask,omitempty"`
+	BgBlur      int        `json:"bg_blur,omitempty"`
+	BgMask      int        `json:"bg_mask,omitempty"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	// CompletedNote 是一次性任务的完成备注（2026-11-12 新增）。旧版本对端不认
 	// 这个字段，忽略即可：它只在完成的那一刻写一次，不影响任何调度语义。
 	CompletedNote string     `json:"completed_note,omitempty"`
 	SnoozedUntil  *time.Time `json:"snoozed_until,omitempty"`
-	Position     int        `json:"position"`
-	Version      uint       `json:"version"`
+	Position      int        `json:"position"`
+	Version       uint       `json:"version"`
 	// Channels 只带渠道名（inapp/email/...），不带 Targets：Targets 存的是本机
 	// channel_bindings 的自增 ID，到了对端指向的是别人的绑定。对端按渠道名重建，
 	// 邮箱留空即「该用户在该机器上绑定的全部地址」。
