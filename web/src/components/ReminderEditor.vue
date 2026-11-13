@@ -414,6 +414,9 @@ async function persistCompletionNoteEdits(parsed: { timeLabel: string; note: str
 
 async function save() {
   if (!editing.title?.trim() || saving.value) return
+  // 打开编辑面板后还没把条目读回来就保存（回车提交不会看按钮的 disabled 状态），
+  // 会把空表单盖到原条目上 —— 2026-11-13 真丢过一条新建备注。没加载完一律不保存。
+  if (!isCreate.value && (loading.value || !detail.value)) return
   if (!isCreate.value && !editing.id) return
   // 时间段：结束时间填了就必须有开始时间（这里用界面上的日期时间作为开始），
   // 且结束必须晚于开始 —— 后端也会校验，这里先拦一次给出更直接的中文提示。

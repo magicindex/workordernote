@@ -1,6 +1,6 @@
 services:
   workordernote:
-    image: 192.168.3.200:3000/cyberzero/workordernote:0.47.2
+    image: 192.168.3.200:3000/cyberzero/workordernote:0.47.3
     container_name: workordernote
     # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
     user: "1000:1001"
