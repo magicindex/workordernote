@@ -233,6 +233,19 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-13：0.47.3（201 生产 / 200 生产均已上线）—— 修「未加载完保存清空备注」的竞态
+
+> **发版记录**（VERSION 0.47.3，源码提交 `ef79b7a`，镜像 `workordernote:0.47.3` =
+> `sha256:d3e6098db5bbe25c148faa4b37eb4cbd1a1e86a37559a8dc113d08ddd92b9faf`；registry manifest `sha256:214f11253d38c0c9ef1db66d17b15a4513ce1c519a357b2f4690168a26114306`）
+
+- 第 104 条：打开编辑面板后详情还没返回时，在标题框回车会提交空表单（回车不受按钮 disabled 限制），把原条目的新建备注清空。现在 `save()` 在 `loading || !detail` 时直接返回。
+- 数据修复：`发电机更换电瓶`（201 id 2765 / 200 id 972）的新建备注「电池电压稍低」被该竞态清空（version 3→4），已从 `data.bak-pre0471-20261113-1117.tgz` 取回并用 PUT 恢复（version 5），手动同步后两台一致。
+- 无 schema 变更。
+- 201：备份 `docker-compose.yml.bak-pre0473-20261113-1321` + `tmp/data.bak-pre0473-20261113-1321.tgz`，旧镜像保留 `workordernote:0.47.2-keep-20261113-1321`；13:21 重建，`/api/version` = `0.47.3 / ef79b7a`。
+- 200：备份 `docker-compose.yml.bak-pre0473-20261113-1322` / `data.bak-pre0473-20261113-1322.tgz`，旧镜像保留 `workordernote:0.47.2-keep-20261113-1322`；拉取后重建，`/api/version` = `0.47.3 / ef79b7a`。
+- 回归：201/200 `verify-128` 各 **34/34**；双机 `verify-sync-local` **15/15**；生产上复跑竞态脚本：面板未加载完 → 保存按钮 disabled、回车 **0 次 PUT**、备注保持原样。
+- 镜像已推 Gitea 与 GHCR 的 `0.47.3` / `latest`（manifest `sha256:214f1125…`）。
+
 ### 2026-11-13：0.47.2（201 生产 / 200 生产均已上线）—— 备注合成一处可编辑、打印两条都在
 
 > **发版记录**（VERSION 0.47.2，源码提交 `6c5ee67`，镜像 `workordernote:0.47.2` =
