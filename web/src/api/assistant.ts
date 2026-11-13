@@ -159,11 +159,19 @@ export async function chatWithAssistant(
   timeoutMs = 180000,
   thinking?: AssistantThinkingMode,
 ): Promise<AssistantReply> {
-  const res = await request.post(
-    '/api/assistant/chat',
-    { messages, ...(digest ? { digest } : {}), ...(thinking ? { thinking } : {}) },
-    { timeout: timeoutMs },
-  )
+  let res
+  try {
+    res = await request.post(
+      '/api/assistant/chat',
+      { messages, ...(digest ? { digest } : {}), ...(thinking ? { thinking } : {}) },
+      { timeout: timeoutMs },
+    )
+  } catch (err: any) {
+    // HTTP 非 2xx 时 axios 只会给「Request failed with status code 502」，
+    // 服务端其实在 body 里写了人话（例如「等待 … 超过 60 秒：模型可能太慢」）——
+    // 把它翻出来，别让用户对着状态码猜（2026-11-13 用户对着 502 不知道卡在哪）。
+    unwrapError(err, '对话失败')
+  }
   if (res.data?.code !== 0) {
     throw new Error(res.data?.message || '对话失败')
   }

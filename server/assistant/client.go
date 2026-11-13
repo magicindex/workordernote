@@ -59,11 +59,12 @@ func asAPIError(err error) (*apiError, bool) {
 
 // client 是 OpenAI 兼容协议的最小客户端：一次对话、一次模型列表。
 type client struct {
-	baseURL  string
-	apiKey   string
-	model    string
-	provider string
-	http     *http.Client
+	baseURL        string
+	apiKey         string
+	model          string
+	provider       string
+	timeoutSeconds int
+	http           *http.Client
 }
 
 func newClient(s Settings) *client {
@@ -72,11 +73,12 @@ func newClient(s Settings) *client {
 		timeout = defaultTimeoutSeconds * time.Second
 	}
 	return &client{
-		baseURL:  s.effectiveBaseURL(),
-		apiKey:   strings.TrimSpace(s.APIKey),
-		model:    s.Model,
-		provider: s.Provider,
-		http:     &http.Client{Timeout: timeout},
+		baseURL:        s.effectiveBaseURL(),
+		apiKey:         strings.TrimSpace(s.APIKey),
+		model:          s.Model,
+		provider:       s.Provider,
+		timeoutSeconds: int(timeout / time.Second),
+		http:           &http.Client{Timeout: timeout},
 	}
 }
 
@@ -236,7 +238,7 @@ func (c *client) do(ctx context.Context, method, endpoint string, payload interf
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return &apiError{Message: connectionErrorText(c.baseURL, err)}
+		return &apiError{Message: connectionErrorText(c.baseURL, c.timeoutSeconds, err)}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
@@ -307,13 +309,16 @@ func upstreamErrorText(status int, raw []byte, endpoint string) string {
 }
 
 // connectionErrorText 区分「超时」与「连不上」：两者的排查方向完全不同。
-func connectionErrorText(baseURL string, err error) string {
+// 超时里把**配置的超时秒数**写出来：用户看到「等待 60 秒没答完」才知道
+// 该去「系统配置 → AI 助手」把超时时间调大（2026-11-13 实测：qwen3:8b 写周报要 90+ 秒）。
+func connectionErrorText(baseURL string, timeoutSeconds int, err error) string {
+	hint := fmt.Sprintf("等待 %s 响应超过 %d 秒：模型可能太慢（可在「系统配置 → AI 助手」调大超时时间），或该地址从本机不通", baseURL, timeoutSeconds)
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
-		return fmt.Sprintf("等待 %s 响应超时：模型可能太慢，或该地址从本机不通", baseURL)
+		return hint
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Sprintf("等待 %s 响应超时", baseURL)
+		return hint
 	}
 	return fmt.Sprintf("无法连接 %s：%v", baseURL, err)
 }
