@@ -6,7 +6,7 @@
 - 仓库：<http://192.168.3.200:3000/cyberzero/WorkOrderNote>
 - 发布与安装包：<http://192.168.3.200:3000/cyberzero/WorkOrderNote/releases>
 - GitHub 镜像：<https://github.com/magicindex/workordernote>
-- 当前版本：`0.47.6`
+- 当前版本：`0.47.7`
 
 > **本项目是衍生作品。** 基于开源项目
 > [TechFunWay/reminders](https://github.com/TechFunWay/reminders)（MIT 许可）衍生开发，
