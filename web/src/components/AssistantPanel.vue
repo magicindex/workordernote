@@ -145,10 +145,19 @@
                 :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
                 :data-assistant-role="msg.role"
               >
+                <!-- 用户说的保持纯文本；小秘的回答按 Markdown 渲染（模型常回 **加粗**、
+                     有序列表、代码块），清洗后再放进气泡，别把原始星号直接甩给用户。 -->
                 <div
-                  class="assistant-bubble"
-                  :class="[msg.role === 'user' ? 'assistant-bubble-user' : 'assistant-bubble-bot', msg.failed ? 'assistant-bubble-fail' : '']"
+                  v-if="msg.role === 'user'"
+                  class="assistant-bubble assistant-bubble-user"
                 >{{ msg.content }}</div>
+                <div
+                  v-else
+                  class="assistant-bubble assistant-bubble-bot assistant-bubble-md"
+                  :class="{ 'assistant-bubble-fail': msg.failed }"
+                  data-assistant-markdown
+                  v-html="renderMarkdown(msg.content)"
+                ></div>
               </div>
               <!-- 「这一轮附上了哪些数据」：写周报最怕答得漂亮却查的是空区间，
                    把区间与条数摆在下面，用户一眼能核对。 -->
@@ -377,6 +386,7 @@ import { getLists, type ReminderList } from '../api/reminder'
 import { listColorHex } from '../utils/list-colors'
 import { useRouter } from 'vue-router'
 import { useAssistantStore } from '../stores/assistant'
+import { renderMarkdown } from '../utils/markdown'
 
 /**
  * 气泡在 AssistantMessage 上多两个本地标记：
@@ -1014,6 +1024,128 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 }
 .assistant-bubble-bot {
   @apply bg-muted text-foreground;
+}
+/* Markdown 气泡：块级元素自己带间距，不能再让源码里的换行变成额外空行。 */
+.assistant-bubble-md {
+  white-space: normal;
+}
+.assistant-bubble-md :deep(p) {
+  margin: 0 0 0.35rem;
+}
+.assistant-bubble-md :deep(p:last-child) {
+  margin-bottom: 0;
+}
+.assistant-bubble-md :deep(strong),
+.assistant-bubble-md :deep(b) {
+  font-weight: 700;
+}
+.assistant-bubble-md :deep(em),
+.assistant-bubble-md :deep(i) {
+  font-style: italic;
+}
+.assistant-bubble-md :deep(del),
+.assistant-bubble-md :deep(s) {
+  text-decoration: line-through;
+}
+.assistant-bubble-md :deep(ul),
+.assistant-bubble-md :deep(ol) {
+  margin: 0.35rem 0;
+  padding-left: 1.2rem;
+}
+.assistant-bubble-md :deep(ul) {
+  list-style: disc;
+}
+.assistant-bubble-md :deep(ol) {
+  list-style: decimal;
+}
+.assistant-bubble-md :deep(ul ul) {
+  list-style: circle;
+}
+.assistant-bubble-md :deep(li) {
+  margin: 0.15rem 0;
+}
+.assistant-bubble-md :deep(li > p) {
+  margin: 0;
+}
+.assistant-bubble-md :deep(h1),
+.assistant-bubble-md :deep(h2),
+.assistant-bubble-md :deep(h3),
+.assistant-bubble-md :deep(h4),
+.assistant-bubble-md :deep(h5),
+.assistant-bubble-md :deep(h6) {
+  margin: 0.5rem 0 0.25rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+.assistant-bubble-md :deep(h1:first-child),
+.assistant-bubble-md :deep(h2:first-child),
+.assistant-bubble-md :deep(h3:first-child),
+.assistant-bubble-md :deep(h4:first-child),
+.assistant-bubble-md :deep(h5:first-child),
+.assistant-bubble-md :deep(h6:first-child) {
+  margin-top: 0;
+}
+.assistant-bubble-md :deep(h1) { font-size: 15px; }
+.assistant-bubble-md :deep(h2) { font-size: 14px; }
+.assistant-bubble-md :deep(h3) { font-size: 13.5px; }
+.assistant-bubble-md :deep(h4),
+.assistant-bubble-md :deep(h5),
+.assistant-bubble-md :deep(h6) { font-size: 13px; }
+.assistant-bubble-md :deep(code) {
+  border-radius: 0.35rem;
+  background: rgba(15, 23, 42, 0.1);
+  padding: 0.1rem 0.3rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+.assistant-bubble-md :deep(pre) {
+  margin: 0.4rem 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: rgba(15, 23, 42, 0.1);
+  padding: 0.5rem 0.6rem;
+}
+.assistant-bubble-md :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  font-size: 0.9em;
+  white-space: pre;
+}
+.assistant-bubble-md :deep(blockquote) {
+  margin: 0.4rem 0;
+  border-left: 3px solid rgb(var(--color-brand-500) / 0.45);
+  padding-left: 0.6rem;
+  color: rgb(var(--color-muted-foreground));
+}
+.assistant-bubble-md :deep(a) {
+  color: rgb(var(--color-brand-600));
+  text-decoration: underline;
+  word-break: break-all;
+}
+.assistant-bubble-md :deep(hr) {
+  margin: 0.5rem 0;
+  border: 0;
+  border-top: 1px solid rgb(var(--color-border));
+}
+.assistant-bubble-md :deep(table) {
+  display: block;
+  max-width: 100%;
+  margin: 0.4rem 0;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.assistant-bubble-md :deep(th),
+.assistant-bubble-md :deep(td) {
+  border: 1px solid rgb(var(--color-border));
+  padding: 0.25rem 0.45rem;
+  text-align: left;
+  white-space: nowrap;
+}
+.assistant-bubble-md :deep(th) {
+  background: rgba(15, 23, 42, 0.06);
+  font-weight: 700;
 }
 .assistant-bubble-fail {
   @apply border border-destructive/40 bg-destructive/10 text-destructive;
