@@ -7,27 +7,31 @@
       现在统一到每个人自己的设置里；没写过的人继续继承旧的全局默认值。
     </p>
 
-    <!-- AI 入口样式：从「外观」搬到 AI 部分（用户 2026-11-14「ai部分 按钮和球的转换选项没有了」） -->
+    <!-- AI 入口样式：从「外观」搬到 AI 部分（用户 2026-11-14）；桌面端左标签、右下拉同一行。 -->
     <div class="mt-4 rounded-xl border border-border bg-surface/60 p-3" data-ai-entry-style>
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <span class="text-xs font-bold text-foreground">AI 入口样式</span>
-        <span class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-300" data-ai-entry-style-state>
-          {{ entrySaving ? '保存中…' : (entryNotice || '已保存') }}
-        </span>
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-bold text-foreground">AI 入口样式</span>
+            <span class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-300" data-ai-entry-style-state>
+              {{ entrySaving ? '保存中…' : (entryNotice || '已保存') }}
+            </span>
+          </div>
+          <p class="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+            桌面端生效；手机端始终使用顶栏 AI 图标。切换后立刻生效，不用刷新。
+          </p>
+        </div>
+        <select
+          class="input-field !h-9 w-full !py-1.5 text-[13px] sm:w-[16rem] sm:shrink-0"
+          :value="entryStyle"
+          :disabled="entrySaving"
+          data-ai-entry-style-select
+          @change="saveEntryStyle(($event.target as HTMLSelectElement).value, $event)"
+        >
+          <option value="topbar">顶栏图标（铃铛旁 AI 按钮）</option>
+          <option value="floating">悬浮球（右下角可拖动）</option>
+        </select>
       </div>
-      <select
-        class="input-field mt-2 !h-9 !py-1.5 text-[13px]"
-        :value="entryStyle"
-        :disabled="entrySaving"
-        data-ai-entry-style-select
-        @change="saveEntryStyle(($event.target as HTMLSelectElement).value, $event)"
-      >
-        <option value="topbar">顶栏图标（铃铛旁 AI 按钮）</option>
-        <option value="floating">悬浮球（右下角可拖动）</option>
-      </select>
-      <p class="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-        桌面端生效；手机端始终使用顶栏 AI 图标。切换后立刻生效，不用刷新。
-      </p>
     </div>
 
     <!-- 小秘名称（用户 2026-10-20）：每个人给自己的助手起名，面板与对话里都用它 -->
