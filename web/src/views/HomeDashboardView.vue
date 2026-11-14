@@ -1,5 +1,7 @@
 <template>
   <div class="mx-auto max-w-6xl" data-home-dashboard>
+    <!-- 用户 2026-11-14：「首页只是用来展示」——这一页不再放「新建提醒」按钮，
+         手机端全局的悬浮 + 也在 Dashboard 路由隐藏（见 MainLayout 的 FAB_HIDE_ROUTES）。 -->
     <div class="mb-4 flex flex-wrap items-end justify-between gap-3 sm:mb-6">
       <div class="min-w-0">
         <p class="mb-1 text-xs font-extrabold uppercase tracking-[.18em] text-brand-500 sm:mb-2">首页</p>
@@ -12,15 +14,6 @@
           <b class="text-sky-500">后</b>=后天，再往后写周几、日期。
         </p>
       </div>
-      <!-- 「新建提醒」原来是侧栏最上面那个按钮，用户 2026-10-16 要求挪到这一页、
-           与「接下来 14 天」同行靠右。它派发 MainLayout 的 open-quick-add 事件，
-           由那边的 openQuickAdd() 把用户送到列表页再展开新建卡片。
-           按钮左边原来还有一个「待办 N · 逾期 N」计数，用户 2026-10-16 下午要求删掉
-           （两列标题条上各自就有「N 条」，这一处是重复的）。 -->
-      <button type="button" class="dashboard-new-button" data-dashboard-new-reminder title="新建提醒" @click="openQuickAdd">
-        <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2.2" stroke-linecap="round"/></svg>
-        新建提醒
-      </button>
     </div>
 
     <div v-if="errorMsg" class="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-rose-500/25 bg-rose-500/[.06] px-4 py-3 text-xs font-bold text-rose-500">
@@ -142,12 +135,6 @@ import { remainingText } from '../utils/remaining'
 // （见 MainLayout 的空闲跳转）。左边 14 天内待办、右边所有逾期，标题前一个字标级别。
 const authStore = useAuthStore()
 const router = useRouter()
-
-/** 标题行右侧的「新建提醒」：这一页没有新建面板，交给 MainLayout 的同名流程
- *  （它会把用户送到「待办」页并展开新建卡片，和以前侧栏那个按钮行为一致）。 */
-function openQuickAdd() {
-  window.dispatchEvent(new CustomEvent('open-quick-add'))
-}
 
 // 清单 id → 图标 key（列表接口不返回 list_icon，这里自己查一份）
 const listIcons = ref<Record<number, string>>({})
@@ -303,8 +290,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* 标题行右侧的「新建提醒」：沿用原来侧栏那个按钮的蓝紫渐变观感，缩小到行内高度 */
-.dashboard-new-button { @apply inline-flex h-10 shrink-0 items-center gap-1.5 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-500 px-3.5 text-sm font-bold text-white shadow-[0_14px_30px_-14px_rgba(59,130,246,.8)] transition hover:brightness-105 active:scale-[0.99]; }
 /* 栏目卡片：与「今天」页的按天卡片同一套观感（标题条带底色 + 卡片圆角/边框/阴影） */
 .home-col { @apply overflow-hidden rounded-[22px] border border-border/70 bg-surface/85 shadow-card backdrop-blur-xl; }
 .home-col-head { @apply flex items-center gap-2 border-b border-border/60 bg-brand-500/10 px-4 py-2.5 sm:px-5; }

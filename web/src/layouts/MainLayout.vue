@@ -1109,8 +1109,9 @@ const listColor = listColorHex
 // 现在叫它的有三处：手机悬浮 +、这里挂的 window 事件 open-quick-add（首页看板标题行右侧
 // 那个「新建提醒」派发的），以及 HomeView 自己的快捷键 N。
 const QUICK_ADD_HOSTS = ['Home', 'Planned', 'AllReminders', 'Completed', 'ReminderList']
-/** 这些页面上没有「新建提醒」的落点，悬浮 + 只会挡住内容，直接不显示。 */
-const FAB_HIDE_ROUTES = ['Trash', 'AdminUsers', 'AdminConfigs', 'AdminAudit', 'Channels', 'Profile', 'Settings', 'Notifications']
+/** 这些页面上没有「新建提醒」的落点，悬浮 + 只会挡住内容，直接不显示。
+ *  Dashboard（首页看板）用户 2026-11-14 要求「只是用来展示」，所以也藏掉。 */
+const FAB_HIDE_ROUTES = ['Dashboard', 'Trash', 'AdminUsers', 'AdminConfigs', 'AdminAudit', 'Channels', 'Profile', 'Settings', 'Notifications']
 /** 手机悬浮按钮按频道决定动作：提醒@他/信用卡/仪式感打开各自的“新建”，其余进待办新建卡。 */
 type FabAction = 'nudge' | 'credit' | 'ceremony' | 'reminder'
 const fabAction = computed<FabAction>(() => {

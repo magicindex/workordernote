@@ -1,19 +1,16 @@
 /**
- * 「新建提醒」从侧栏搬到首页看板（用户 2026-10-16 原话：
- * 「呼叫小秘上面的 新建提醒按钮，移动到 首页：与 接下来 14 天 同行 靠右」）。
+ * 首页看板只负责展示，不提供新建入口（用户 2026-11-14：
+ * 「首页 页面 新建按钮取消 ，首页只是用来展示」）。
  *
  * 钉住这几条：
- *   1) 侧栏最上面**不再有**「新建提醒」按钮；「呼叫小秘」按用户 2026-11-14 的要求
- *      统一成顶栏铃铛旁的 AI 星星（侧栏里不再显示入口）；
- *   2) 首页看板标题「接下来 14 天」那一行**右侧**多一个「新建提醒」，与标题**同行、靠右**，
- *      按钮左边原来的「待办 N · 逾期 N」计数已按用户 2026-10-16 的要求删掉；
- *   3) 点它**跳到「今天」页并展开新建卡片**（首页看板自己没有新建面板，走 MainLayout 的
- *      open-quick-add 流程，和以前侧栏那个按钮的落点一致），输入框自动聚焦；
- *   4) 移动端「悬浮 +」入口不受影响（`[data-mobile-fab]` 还在）。
+ *   1) 侧栏最上面没有「新建提醒」；AI 入口是顶栏铃铛旁的 AI 星星（侧栏只留给手机抽屉）；
+ *   2) 首页看板标题仍是「接下来 14 天」，但标题行右侧**没有**「新建提醒」按钮，
+ *      页面里也没有任何写着「新建」的按钮 / 链接；
+ *   3) 首页两列（未来 14 天待办 / 已逾期）仍然正常展示；
+ *   4) 手机端全局「悬浮 +」在首页 Dashboard 隐藏，但在「待办」页照常保留（其它页面不受影响）。
  *
- * 只读不写：不提交任何提醒；点开的新建卡片在收尾时按 Esc 收起。
- *
- * 用法：APP_URL=http://127.0.0.1:8920 node verify-125.js
+ * 只读不写。
+ * 用法：APP_URL=http://127.0.0.1:8906 node verify-125.js
  */
 const { withTab, sleep } = require('./harness');
 const { login, APP } = require('./reminders-app');
@@ -48,7 +45,7 @@ const visible = (page, sel) => page.evaluate((sel) => {
     await page.setViewport({ width: 1440, height: 1000 });
     await login(page, BASE);
 
-    // ============ 1. 侧栏：新建提醒没了；呼叫小秘统一到顶栏 AI 星星 ============
+    // ============ 1. 侧栏：没有新建提醒；AI 入口在顶栏 ============
     await gotoRetry(page, BASE + '/admin/home');
     await sleep(2500);
     const sidebar = await page.evaluate(() => {
@@ -58,11 +55,9 @@ const visible = (page, sel) => page.evaluate((sel) => {
       const topbar = document.querySelector('[data-assistant-topbar]');
       const topbarRect = topbar?.getBoundingClientRect();
       return {
-        // 侧栏里还有没有写着「新建提醒」的按钮（原来那个）
         newCount: buttons.filter((el) => /新建提醒/.test(el.textContent || '')).length,
         assistant: document.querySelectorAll('[data-assistant-trigger]').length,
         assistantText: (topbar?.innerText || '').trim(),
-        // 侧栏里的入口只留给手机抽屉：桌面端被 CSS 藏起来（宽高 0）
         drawerVisible: !!drawerTrigger && drawerTrigger.getBoundingClientRect().width > 0,
         topbarVisible: !!topbar && topbarRect.width > 0 && topbarRect.height > 0
           && getComputedStyle(topbar).position !== 'fixed',
@@ -71,56 +66,46 @@ const visible = (page, sel) => page.evaluate((sel) => {
     });
     check('侧栏最上面不再有「新建提醒」按钮', sidebar.newCount === 0, `还在 ${sidebar.newCount} 个`);
     check('桌面端侧栏里不再显示「呼叫小秘」入口', sidebar.drawerVisible === false);
-    check('桌面端改成顶栏铃铛旁的 AI 星星（可见、不是浮球）',
+    check('桌面端 AI 入口是顶栏铃铛旁的星星（可见、不是浮球）',
       sidebar.topbarVisible === true && sidebar.ball === false, JSON.stringify(sidebar));
     check('AI 入口只剩顶栏一个（侧栏入口只留给手机抽屉）',
       sidebar.assistant === 1 && /^呼叫\S+/.test(sidebar.assistantText), JSON.stringify(sidebar));
 
-    // ============ 2. 首页看板：标题行右侧的新建按钮 ============
+    // ============ 2. 首页看板：只展示，没有新建入口 ============
     const header = await page.evaluate(() => {
       const box = document.querySelector('[data-home-dashboard]');
       const h1 = document.querySelector('[data-home-dashboard] h1');
-      const btn = document.querySelector('[data-dashboard-new-reminder]');
-      const counts = document.querySelector('[data-home-counts]');
-      const boxOf = (el) => { const r = el?.getBoundingClientRect(); return r ? { l: r.left, r: r.right, t: r.top, b: r.bottom, cy: (r.top + r.bottom) / 2 } : null; };
-      return { title: (h1?.textContent || '').trim(), panel: boxOf(box), h1: boxOf(h1), btn: boxOf(btn), btnText: (btn?.textContent || '').trim(), counts: boxOf(counts) };
+      const newBtn = document.querySelector('[data-dashboard-new-reminder]');
+      const newButtons = [...(box?.querySelectorAll('button, a') || [])]
+        .filter((el) => /新建/.test(el.textContent || ''))
+        .map((el) => (el.textContent || '').trim());
+      return {
+        title: (h1?.textContent || '').trim(),
+        newBtn: !!newBtn,
+        newButtons,
+        upcoming: !!document.querySelector('[data-home-column="upcoming"]'),
+        overdue: !!document.querySelector('[data-home-column="overdue"]'),
+        counts: !!document.querySelector('[data-home-counts]'),
+      };
     });
     check('首页看板标题还是「接下来 14 天」', /接下来 14 天/.test(header.title), header.title);
-    check('标题行右侧有「新建提醒」按钮', !!header.btn && /新建提醒/.test(header.btnText), JSON.stringify(header.btnText));
-    check('按钮与标题**同行**（垂直中心差 ≤ 30px）',
-      !!header.btn && Math.abs(header.btn.cy - header.h1.cy) <= 30,
-      JSON.stringify({ 标题中心: header.h1?.cy, 按钮中心: header.btn?.cy }));
-    check('按钮**靠右**（右边缘与看板右边缘对齐，差 ≤ 16px）',
-      !!header.btn && Math.abs(header.btn.r - header.panel.r) <= 16,
-      JSON.stringify({ 按钮右: header.btn?.r, 看板右: header.panel?.r }));
-    check('按钮在标题右边（不是挤在标题前面）', !!header.btn && header.btn.l > header.h1.l, JSON.stringify({ 标题左: header.h1?.l, 按钮左: header.btn?.l }));
-    check('按钮左边不再有「待办 N · 逾期 N」计数（用户 2026-10-16 要求删掉）',
-      header.counts === null, JSON.stringify(header.counts));
+    check('首页标题行没有「新建提醒」按钮', header.newBtn === false);
+    check('首页看板里没有任何「新建」按钮 / 链接', header.newButtons.length === 0, JSON.stringify(header.newButtons));
+    check('首页两列仍在（未来 14 天待办 / 已逾期）', header.upcoming && header.overdue, JSON.stringify(header));
+    check('首页不再出现重复的「待办 N · 逾期 N」计数', header.counts === false);
 
-    // ============ 3. 点它 → 跳「今天」页并展开新建卡片 ============
-    await page.click('[data-dashboard-new-reminder]');
-    await sleep(2500);
-    const after = await page.evaluate(() => ({
-      url: location.pathname,
-      card: !!document.querySelector('.quick-card'),
-      input: !!document.querySelector('.quick-card input'),
-      focused: (document.activeElement?.getAttribute?.('placeholder') || ''),
-    }));
-    check('点一下跳到「今天」页（离开首页看板）', /\/admin\/?$/.test(after.url), after.url);
-    check('新建卡片自动展开（整块表单，不只是那个「新建」按钮）', after.card && after.input, JSON.stringify(after));
-    check('光标已经落在新建输入框里', /写点什么|添加一条提醒|新建|标题|要做/.test(after.focused), after.focused);
-
-    // 收尾：Esc 收起（没写标题时允许收起，不留下任何数据）
-    await page.keyboard.press('Escape');
-    await sleep(600);
-    const collapsed = await page.evaluate(() => !document.querySelector('.quick-card'));
-    check('收尾：Esc 把新建卡片收回去了（不留数据）', collapsed);
-
-    // ============ 4. 手机：悬浮 + 入口还在 ============
+    // ============ 3. 手机：首页不显示悬浮 +，待办页照常显示 ============
     await page.setViewport({ width: 390, height: 844 });
+    await gotoRetry(page, BASE + '/admin/home');
+    await sleep(2200);
+    const dashboardFab = await visible(page, '[data-mobile-fab]');
+    check('手机端首页不显示全局「悬浮 +」新建入口', dashboardFab === false);
+
     await gotoRetry(page, BASE + '/admin');
     await sleep(2200);
-    check('手机端「悬浮 +」新建入口还在', await visible(page, '[data-mobile-fab]'));
+    check('手机端「待办」页仍保留「悬浮 +」新建入口', await visible(page, '[data-mobile-fab]'));
+    check('手机端顶栏 AI 星星仍在', await visible(page, '[data-assistant-topbar]'));
+
     await page.setViewport({ width: 1440, height: 1000 });
   });
 
