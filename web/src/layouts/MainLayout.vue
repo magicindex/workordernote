@@ -93,42 +93,48 @@
             <span v-if="summary[item.key]" class="nav-count">{{ summary[item.key] }}</span>
           </RouterLink>
 
-          <!-- 课程表（用户 2026-10-18）：给家里人各排一张，课程与课外活动分开标色。
-               入口跟信用卡/记事本一样由个人偏好 timetable_enabled 控制，默认开。 -->
-          <RouterLink
-            v-if="authStore.timetableEnabled"
-            to="/admin/timetable"
-            class="nav-row"
-            :class="{ 'nav-row-active': isActive('/admin/timetable') }"
-            :title="railActive ? '课程表' : '课程表：按周几排课，课程和课外活动分开'"
-            data-nav-timetable
-            @click="mobileOpen = false"
-          >
-            <span class="nav-symbol h-5 w-5 bg-violet-500/12 text-violet-500">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="5" width="16" height="15" rx="2.5" stroke-width="1.7"/><path d="M4 10h16M9 3.5v3M15 3.5v3M8.5 14h2M13.5 14h2M8.5 17h2" stroke-width="1.7" stroke-linecap="round"/></svg>
-            </span>
-            <span class="flex-1">课程表</span>
-          </RouterLink>
-
-          <!-- 提醒@他（用户 2026-10-13）：多人之间互相推提醒的页面。开关是**后台
-             系统偏好** nudge_enabled（一个实例一份），关掉后这一行与页面一起隐藏。
-             角标 = 别人提醒我、我还没做完的条数（/summary 的 nudge_pending）。
-             2026-10-19 用户要求挪到「课程表」下面，不再跟「我的清单」一起排序。 -->
-            <RouterLink
-              v-if="authStore.nudgeEnabled"
-              to="/admin/nudges"
-              class="nav-row min-w-0 flex-1"
-              :class="{ 'nav-row-active': isActive('/admin/nudges') }"
-              :title="railActive ? '提醒@他' : '提醒@他：给别的用户推提醒，也看别人提醒我什么'"
-              data-nav-nudges
-              @click="mobileOpen = false"
+          <!-- 系统清单（用户 2026-11-14）：课程表 / 信用卡账单 / 记事本 / 仪式感 / 提醒@他
+               统一收进「已完成」下面的二级菜单；点别处自动收起。父行汇总子项角标。 -->
+          <div v-if="systemNavItems.length" ref="systemMenuRef" class="relative mt-0.5" data-nav-system-wrap>
+            <button
+              type="button"
+              class="nav-row w-full"
+              :class="{ 'nav-row-active': systemActive }"
+              :title="railActive ? '系统清单' : '系统清单：展开课程表、信用卡账单、记事本、仪式感、提醒@他'"
+              data-nav-system
+              :aria-expanded="systemOpen ? 'true' : 'false'"
+              @click.stop="toggleSystemMenu"
             >
-              <span class="nav-symbol h-5 w-5 bg-sky-500/12 text-sky-500">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15.5 8.5a3.5 3.5 0 1 0-7 0c0 4-2 4-2 5.5h11c0-1.5-2-1.5-2-5.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 17a1.6 1.6 0 0 0 3 0" stroke-width="1.7" stroke-linecap="round"/><circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/></svg>
+              <span class="nav-symbol h-5 w-5 bg-slate-500/12 text-slate-500">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="4" width="7" height="7" rx="1.6" stroke-width="1.7"/><rect x="13" y="4" width="7" height="7" rx="1.6" stroke-width="1.7"/><rect x="4" y="13" width="7" height="7" rx="1.6" stroke-width="1.7"/><rect x="13" y="13" width="7" height="7" rx="1.6" stroke-width="1.7"/></svg>
               </span>
-              <span class="flex-1">提醒@他</span>
-              <span v-if="summary.nudge_pending" class="nav-count">{{ summary.nudge_pending }}</span>
-            </RouterLink>
+              <span class="flex-1">系统清单</span>
+              <span v-if="summary.unread" class="h-2 w-2 rounded-full bg-rose-500" title="有新消息提醒" data-nav-system-unread></span>
+              <span v-if="systemTotal" class="nav-count" data-nav-system-count>{{ systemTotal }}</span>
+              <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="{ 'rotate-180': systemOpen }" fill="none" stroke="currentColor"><path d="m6 9 6 6 6-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div v-show="systemOpen" class="mt-0.5 space-y-0.5 pl-2" data-nav-system-menu>
+              <RouterLink
+                v-for="item in systemNavItems"
+                :key="item.key"
+                :to="item.to"
+                class="nav-row"
+                :class="{ 'nav-row-active': route.path === item.to }"
+                :data-nav-system-item="item.key"
+                :data-nav-timetable="item.key === 'timetable' ? '' : undefined"
+                :data-nav-cards="item.key === 'cards' ? '' : undefined"
+                :data-nav-notebook="item.key === 'notebook' ? '' : undefined"
+                :data-nav-ceremony="item.key === 'ceremony' ? '' : undefined"
+                :data-nav-nudges="item.key === 'nudges' ? '' : undefined"
+                :title="railActive ? item.label : item.title"
+                @click="systemOpen = false; mobileOpen = false"
+              >
+                <span class="nav-symbol h-5 w-5" :class="item.tone" v-html="item.icon"></span>
+                <span class="flex-1">{{ item.label }}</span>
+                <span v-if="item.count" class="nav-count">{{ item.count }}</span>
+              </RouterLink>
+            </div>
+          </div>
 
           </section>
 
@@ -888,7 +894,8 @@ const defaultMyRows = computed<MyListRow[]>(() => {
 })
 // 真正渲染的顺序：保存过的 token 按其下标排；没进过顺序的行（新清单）按默认先后接在后面
 const myListRows = computed<MyListRow[]>(() => {
-  const rows = defaultMyRows.value
+  // 系统栏目（信用卡 / 记事本 / 仪式感）已收进「系统清单」二级菜单，不再混在「我的清单」。
+  const rows = defaultMyRows.value.filter((row) => !MY_SYSTEM_ORDER.includes(String(row.list.template || 'general')))
   if (!sidebarOrder.value.length) return rows
   const idx = new Map(sidebarOrder.value.map((k, i) => [k, i]))
   return rows
@@ -1000,6 +1007,48 @@ function onMyRowTouchStart(row: MyListRow, event: TouchEvent) {
   if (row.kind === 'list') onListTouchStart(row.list, event)
 }
 const summary = ref<Record<string, number>>({})
+const systemMenuRef = ref<HTMLElement | null>(null)
+const systemOpen = ref(false)
+const systemIcons = {
+  timetable: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="5" width="16" height="15" rx="2.5" stroke-width="1.7"/><path d="M4 10h16M9 3.5v3M15 3.5v3M8.5 14h2M13.5 14h2M8.5 17h2" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  cards: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="6" width="18" height="12" rx="2.5" stroke-width="1.7"/><path d="M3 10h18M6.5 14h4" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  notebook: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="5" y="4" width="14" height="16" rx="2" stroke-width="1.7"/><path d="M8 4v16M11 8h5M11 12h5M11 16h3" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  ceremony: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3l2.4 5.2 5.6.7-4.1 3.9 1.1 5.6-5-2.8-5 2.8 1.1-5.6L4 8.9l5.6-.7L12 3Z" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+  nudges: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15.5 8.5a3.5 3.5 0 1 0-7 0c0 4-2 4-2 5.5h11c0-1.5-2-1.5-2-5.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 17a1.6 1.6 0 0 0 3 0" stroke-width="1.7" stroke-linecap="round"/><circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/></svg>',
+}
+const systemNavItems = computed(() => {
+  const items: { key: string; to: string; label: string; title: string; count: number; tone: string; icon: string }[] = []
+  const find = (t: string) => lists.value.find((l) => String(l.template || 'general') === t)
+  if (authStore.timetableEnabled) {
+    items.push({ key: 'timetable', to: '/admin/timetable', label: '课程表', title: '课程表：按周几排课', count: 0, tone: 'bg-violet-500/12 text-violet-500', icon: systemIcons.timetable })
+  }
+  if (authStore.creditCardEnabled && cardBucket.value) {
+    items.push({ key: 'cards', to: `/admin/list/${cardBucket.value.id}`, label: '信用卡账单', title: '信用卡账单：卡片、账单日与还款提醒', count: cardBucket.value.card_count || 0, tone: 'bg-brand-500/12 text-brand-500', icon: systemIcons.cards })
+  }
+  const notebook = find('notebook')
+  if (authStore.notebookEnabled && notebook) {
+    items.push({ key: 'notebook', to: `/admin/list/${notebook.id}`, label: '随手记事本', title: '随手记事本：新建的记事都收在这里', count: notebook.open_count || 0, tone: 'bg-emerald-500/12 text-emerald-500', icon: systemIcons.notebook })
+  }
+  const ceremony = find('ceremony')
+  if (authStore.ceremonyEnabled && ceremony) {
+    items.push({ key: 'ceremony', to: `/admin/list/${ceremony.id}`, label: '人生要有仪式感', title: '人生要有仪式感：倒计时与纪念日', count: ceremony.open_count || 0, tone: 'bg-rose-500/10 text-rose-500', icon: systemIcons.ceremony })
+  }
+  if (authStore.nudgeEnabled) {
+    items.push({ key: 'nudges', to: '/admin/nudges', label: '提醒@他', title: '提醒@他：给别的用户推提醒', count: summary.value.nudge_pending || 0, tone: 'bg-sky-500/12 text-sky-500', icon: systemIcons.nudges })
+  }
+  return items
+})
+const systemTotal = computed(() => systemNavItems.value.reduce((sum, item) => sum + (Number(item.count) || 0), 0))
+const systemActive = computed(() => systemNavItems.value.some((item) => route.path === item.to))
+function toggleSystemMenu() {
+  systemOpen.value = !systemOpen.value
+}
+function closeSystemOnOutsideClick(event: MouseEvent) {
+  if (!systemOpen.value) return
+  const el = systemMenuRef.value
+  if (el && !el.contains(event.target as Node)) systemOpen.value = false
+}
+watch(() => route.path, () => { systemOpen.value = false })
 const creatingList = ref(false)
 const realtimeToast = ref('')
 const appVersion = ref('')
@@ -1958,6 +2007,7 @@ onMounted(() => {
   document.addEventListener('keydown', unlockReminderSound, { once: true })
   document.addEventListener('visibilitychange', refreshWhenVisible)
   document.addEventListener('pointerdown', closeSettingsOnOutsideClick)
+  document.addEventListener('pointerdown', closeSystemOnOutsideClick)
   // 空闲回首页看板：任何操作都重新计时（见 armIdleTimer）
   armIdleTimer()
   for (const evt of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
@@ -1991,6 +2041,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', unlockReminderSound)
   document.removeEventListener('visibilitychange', refreshWhenVisible)
   document.removeEventListener('pointerdown', closeSettingsOnOutsideClick)
+  document.removeEventListener('pointerdown', closeSystemOnOutsideClick)
   if (idleTimer) clearTimeout(idleTimer)
   for (const evt of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
     window.removeEventListener(evt, onUserActivity)
