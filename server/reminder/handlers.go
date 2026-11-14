@@ -965,8 +965,8 @@ func handleCalendarItems(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// overdueGrace 读「任务过期多久算逾期」的系统配置（分钟）。
-// 读不到或值非法时按 0 处理（等于「一到点就算逾期」，即改动前的行为）。
+// overdueGrace 读当前用户的「任务过期多久算逾期」偏好（分钟）。
+// 读不到或值非法时按注册表默认 30 分钟处理；0 = 立即算逾期。
 //
 // 它出现在 /summary 这种热路径上，而 /summary 的「固定 2 条聚合查询」是有用例钉住的
 // （TestSummaryUsesTwoAggregateQueries）—— 所以和「记事本栏目开关」一样做一层 2 秒
@@ -986,6 +986,13 @@ type overduePolicyEntry struct {
 	at     time.Time
 }
 
+// clearOverduePolicyCache 配置一改就让所有用户的 2 秒缓存失效。
+func clearOverduePolicyCache() {
+	overduePolicyMu.Lock()
+	overduePolicyCache = map[uint]overduePolicyEntry{}
+	overduePolicyMu.Unlock()
+}
+
 func overdueGrace(db *gorm.DB, userID uint) time.Duration {
 	grace, _ := overduePolicy(db, userID)
 	return grace
@@ -993,8 +1000,8 @@ func overdueGrace(db *gorm.DB, userID uint) time.Duration {
 
 // overduePolicy 一次返回「宽限时长 + 逾期提醒时间（HH:MM，个人偏好）」。
 //
-//	· 宽限（task_overdue_after_minutes，系统配置，默认 30 分钟）：刚建出来的任务
-//	  不该立刻顶着「已逾期」。
+//	· 宽限（task_overdue_after_minutes，**个人偏好**，默认 30 分钟）：刚建出来的任务
+//	  不该立刻顶着「已逾期」；每个人自己设，0 = 立即算逾期。
 //	· 逾期提醒时间（task_overdue_time，**个人偏好**，默认 23:59）：到期日当天过了
 //	  这个点就算逾期（见 overdueDeadlineExpr）。读不到时用注册表默认值。
 func overduePolicy(db *gorm.DB, userID uint) (time.Duration, string) {
@@ -1005,10 +1012,16 @@ func overduePolicy(db *gorm.DB, userID uint) (time.Duration, string) {
 	}
 	overduePolicyMu.Unlock()
 
-	grace := time.Duration(0)
+	grace := 30 * time.Minute
 	cutoff := "23:59"
-	if cfg, err := sysconfig.GetPublicConfigs(db); err == nil {
-		if mins, err := strconv.Atoi(strings.TrimSpace(cfg["task_overdue_after_minutes"])); err == nil && mins > 0 {
+	if def, ok := sysconfig.GetConfigDef("task_overdue_after_minutes"); ok {
+		if mins, err := strconv.Atoi(strings.TrimSpace(def.Default)); err == nil && mins >= 0 {
+			grace = time.Duration(mins) * time.Minute
+		}
+	}
+	// 个人偏好：没写过这一行时保持默认 30 分钟。
+	if v, err := sysconfig.GetConfig(db, "task_overdue_after_minutes", userID); err == nil {
+		if mins, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && mins >= 0 {
 			grace = time.Duration(mins) * time.Minute
 		}
 	}

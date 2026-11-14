@@ -177,6 +177,14 @@ const selectOptionLabelMap: Record<string, Record<string, string>> = {
   // 提醒频率 / 「知道了」后的提醒频率：文案在 utils/reminder-options.ts（弹窗按钮也读同一份，
   // 用户 2026-10-13 要求「显示保持与后台一致」）
   reminder_notify_minutes: NOTIFY_MINUTES_LABELS,
+  task_overdue_after_minutes: {
+    '0': '立即',
+    '15': '15 分钟',
+    '30': '30 分钟',
+    '60': '1 小时',
+    '120': '2 小时',
+    '240': '4 小时',
+  },
   reminder_ack_minutes: ACK_MINUTES_LABELS,
   // 城市 id 与 web/src/utils/sun.ts 的 SUN_CITIES 一一对应，改一处要改两处。
   sun_location: {

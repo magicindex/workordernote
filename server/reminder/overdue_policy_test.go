@@ -140,7 +140,7 @@ func TestOverdueTimeDefersOverdueUntilCutoff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setPublicConfig(t, "task_overdue_after_minutes", "30")
+	setUserConfig(t, "task_overdue_after_minutes", "30", userID)
 	// 期望值全部按「判定时刻 + 30 分钟宽限」随时钟算：跑测试的钟点不同（尤其刚过零点、
 	// 刚过 20:30 这些边界）期望值本来就该变，写死数字只会在那几个分钟里假红。
 	const grace = 30 * time.Minute

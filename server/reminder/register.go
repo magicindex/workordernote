@@ -294,6 +294,9 @@ func init() {
 		if key == "reminder_all_day_time" || key == "reminder_advance_days" {
 			resetWindowCache(userID)
 		}
+		if key == "task_overdue_after_minutes" || key == "task_overdue_time" {
+			clearOverduePolicyCache()
+		}
 		// 栏目开关是 2 秒进程内缓存；改完设置要立刻按新值过滤，不能等缓存过期。
 		switch key {
 		case "credit_card_enabled":

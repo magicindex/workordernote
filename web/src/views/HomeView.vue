@@ -868,7 +868,7 @@ import {
   overdueDeadlineAt,
   isOverdueAt as isOverdueShared,
 } from '../utils/overdue'
-import { getPublicConfigs } from '../api/config'
+import { getAllConfigs } from '../api/config'
 import ReminderEditor from '../components/ReminderEditor.vue'
 import {
   completeReminder, createReminder, deleteReminder, exportReminders, getChannelStatuses, getCompletedHistory, getLists,
@@ -1084,7 +1084,7 @@ function applyQuickDefaults() {
   quickNotesOpen.value = false
   preset.value = planned ? '' : 'today'
 }
-// 「任务过期多久算逾期」按**分钟**存，前端从公开配置读（系统级设置，公开接口里的就是权威值）。
+// 「任务过期多久算逾期」按**分钟**存，现在是个人偏好：读当前用户合并后的配置。
 const overdueGraceMinutes = ref(30)
 // 「逾期提醒时间」（个人偏好 task_overdue_time，默认 23:59）：**到期日当天过了这个点
 // 就算逾期**，与任务写了几点无关（写 00:00 表示按到期时刻算、不按天顺延）。
@@ -2296,9 +2296,9 @@ watch([selectedList, () => authStore.creditCardEnabled, () => authStore.notebook
 
 async function loadOverdueGrace() {
   try {
-    const res = await getPublicConfigs()
+    const res = await getAllConfigs()
     const cfg = (res.data?.data || {}) as Record<string, unknown>
-    const v = Number(cfg.task_overdue_after_minutes)
+    const v = Number(cfg.task_overdue_after_minutes ?? 30)
     if (Number.isFinite(v) && v >= 0) overdueGraceMinutes.value = v
     // 默认结束时间已经写死 23:59（DEFAULT_DUE_TIME），不再读配置
   } catch { /* 拿不到就按默认 30 分钟 / 23:59 */ }

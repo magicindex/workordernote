@@ -200,11 +200,10 @@ func init() {
 	// 刚建完就已经过了几秒 —— 不给宽限的话所有新任务一建出来就顶着「已逾期」。
 	// 这里配一个宽限时长：过了这个时长才标逾期（排序与今天页口径不变）。
 	RegisterConfig(ConfigDef{
-		Key: "task_overdue_after_minutes", Scope: ScopeSystem, Type: TypeSelect,
+		Key: "task_overdue_after_minutes", Scope: ScopeUser, Type: TypeSelect,
 		Default: "30", Options: []string{"0", "15", "30", "60", "120", "240"},
-		Public: true,
-		Group:  "reminder", Label: "任务过期多久算逾期",
-		Description: "到期后多久开始标「已逾期」（默认 30 分钟；新建任务的默认时间是当前时刻，留一点宽限更自然）",
+		Group: "reminder", Label: "任务过期多久算逾期",
+		Description: "到期后多久开始标「已逾期」（默认 30 分钟；每个人自己选，0 = 立即算逾期）",
 	})
 	// 说明（2026-10-13）：原来这里有个「新建提醒默认结束时间」(task_expire_time)。
 	// 用户明确要求「今天/明天/本周末这些芯片的时间一律 23:59，除非自己手动改」，

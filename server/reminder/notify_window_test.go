@@ -62,7 +62,7 @@ func TestNotifyOverdueOncePerDay(t *testing.T) {
 	defer cleanup()
 
 	const userID = 322
-	setPublicConfig(t, "task_overdue_after_minutes", "0")
+	setUserConfig(t, "task_overdue_after_minutes", "0", userID)
 	// 逾期时间 00:00 = 按到期时刻算，这样「1 小时前到期」的任务必然已进入逾期
 	setUserConfig(t, "task_overdue_time", "00:00", userID)
 	setUserConfig(t, "reminder_all_day_time", "00:00", userID) // 不静默
