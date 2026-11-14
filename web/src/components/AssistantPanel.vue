@@ -492,7 +492,9 @@ function loadPanelSize() {
       applyFloatWidth(panelSize.value.width)
     }
     const maxH = Math.round((window.visualViewport?.height || window.innerHeight))
-    if (Number.isFinite(h) && h >= 360 && h <= Math.max(360, maxH)) {
+    // 旧版底部留 16px 时拖到“满高”会存成 maxH-16；现在顶/底都贴边，
+    // 这种接近满高的旧值直接当铺满，不再在底部留下那 16px。
+    if (Number.isFinite(h) && h >= 360 && h <= Math.max(360, maxH) && h < maxH - 24) {
       panelSize.value.height = Math.round(h)
     }
   } catch { /* 尺寸读不到就用默认 */ }
