@@ -218,8 +218,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 ## 版本与迭代
 
 - 软件版本见根目录 `VERSION`，当前 `0.48.0`，规则为 `主版本号.小版本号.修正号`。
-  **部署状态（2026-11-14 02:21）**：**201 生产 8906 / 200 生产均已升级到 `0.48.0`**
-  （提交 `1fe586d`，镜像 `workordernote:0.48.0` = `sha256:6dfc37ff476f31fe0b95bd7e48b512bfe5e85351b19cf4085be18d15ee3c6465`）。
+  **部署状态（2026-11-14 11:22）**：**201 生产 8906 / 200 生产均已升级到最新 0.48.0 热更新**
+  （提交 `5a7028e`，镜像 `workordernote:0.48.0-prefs-20261114-111935` =
+  `sha256:0679e37cfd3cbf5f8507489869917764a318cdce89c549e4969d15b19fb4df04`）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
   **公开设置 9 项三台一致**；**个人偏好 201 与 200 一致，沙箱单独一套**（开始提醒时间 `00:00`、
@@ -232,6 +233,20 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 应用内「侧栏 → 关于 → 版本信息」可查看迭代说明与原项目信息。
 
 ## 变更记录
+
+### 2026-11-14：0.48.0 热更新（201 / 200）—— 周起始日改个人偏好；AI 入口可切换悬浮球
+
+> **热更新记录**（软件版本仍为 `0.48.0`，后端重建；无 schema 变更。源码提交 `5a7028e`）
+> 镜像：`workordernote:0.48.0-prefs-20261114-111935` =
+> `sha256:0679e37cfd3cbf5f8507489869917764a318cdce89c549e4969d15b19fb4df04`；
+> Gitea registry manifest `sha256:ec5c9702efa87621651a1c761077afc6b67a7aa9773e9bca4e07082a04fcc3b0`（仅推 Gitea registry，未推 GHCR、未打 Release）
+
+- 第 114 条：`calendar_week_start` 从系统配置改为个人偏好（`ScopeUser`），系统配置页不再显示，偏好设置 →「常用 → 外观」每人自己选周一/周日；`CalendarView` 改读当前用户合并配置；`handleGetAllConfigs` 跳过已改成用户作用域的旧系统行，旧全局值不会再盖住个人选择。
+- 新增个人偏好 `assistant_entry_style`（`topbar` / `floating`，默认顶栏）：桌面端可在偏好设置 →「常用 → 外观 → AI 入口样式」切换；选悬浮球时顶栏 AI 星星隐藏、恢复右下角可拖动悬浮球（位置记忆）；手机端始终顶栏 AI 星星、不显示悬浮球。设置保存后广播 `config-changed`，外壳立即切换。
+- 201：备份 `docker-compose.yml.bak-pre0480prefs-20261114-111957` + `data.bak-pre0480prefs-20261114-111957.tgz`（11M，不含 logs），compose 改指 Gitea registry 的 `0.48.0-prefs-20261114-111935`；11:20 重建，healthy，`index-DtaVVqJC.js`，`/api/version` = `0.48.0 / 5a7028e`。
+- 200：备份 `docker-compose.yml.bak-pre0480prefs-20261114-112214` + `data.bak-pre0480prefs-20261114-112214.tgz`（3.9M），从 `127.0.0.1:3000` 拉取后 tag 成本地同 tag；11:22 重建，healthy，`index-DtaVVqJC.js`。
+- 回归：201 / 200 均 `verify-168` **10/10**、`verify-104` **20/20**、`verify-112` **52/52**、`verify-167` **8/8**、`verify-132` **9/9**、`verify-166` **10/10**；Go `go test ./...` 全绿。
+- 注意：0.48.0 的 Linux 包、fpk、GHCR 镜像与 Release 附件不包含 110–114 五项热更新；下一次正式发版（0.48.1）会带上 `47a0286`、`7c9b987`、`f628ae0`、`0966035`、`5a7028e`。
 
 ### 2026-11-14：0.48.0 热更新（201 / 200）—— AI 提示词改成每人一份统一提示词
 
