@@ -28,4 +28,6 @@ export const SK = {
   reminderEditorSize: `${P}reminder_editor_size`,
   // 编辑面板从左边还是右边弹出（按用户存；没选过就按页面默认）。
   editorSide: `${P}editor_side`,
+  // AI 对话浮窗拖拽后的宽高（按用户存；没拖过就用默认）。
+  assistantPanelSize: `${P}assistant_panel_size`,
 } as const

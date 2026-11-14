@@ -1,7 +1,13 @@
 <template>
   <Teleport to="body">
     <Transition name="assistant">
-      <div v-if="modelValue" class="assistant-shell fixed inset-0 z-[60] flex justify-end" data-assistant-panel>
+      <div
+        v-if="modelValue"
+        ref="shellRef"
+        class="assistant-shell fixed inset-0 z-[60] flex justify-end"
+        :style="panelStyle"
+        data-assistant-panel
+      >
         <div class="assistant-backdrop absolute inset-0 bg-black/45" data-assistant-backdrop @click="close"></div>
 
         <aside class="assistant-drawer relative flex h-full w-full flex-col bg-surface text-foreground shadow-2xl sm:w-[420px]">
@@ -362,13 +368,37 @@
             </div>
           </footer>
         </aside>
+
+        <!-- AI 浮窗边框外侧的透明拖拽区：左侧改宽、底边改高、左下角改宽高；
+             和编辑面板一样平时不可见，鼠标移上去才变缩放光标。 -->
+        <span
+          v-if="desktop"
+          class="assistant-resize-zone assistant-resize-left"
+          data-assistant-resize="left"
+          aria-label="拖拽左边缘调整 AI 对话窗宽度"
+          @pointerdown="startResize($event, 'left')"
+        ></span>
+        <span
+          v-if="desktop"
+          class="assistant-resize-zone assistant-resize-bottom"
+          data-assistant-resize="bottom"
+          aria-label="拖拽底边调整 AI 对话窗高度"
+          @pointerdown="startResize($event, 'bottom')"
+        ></span>
+        <span
+          v-if="desktop"
+          class="assistant-resize-zone assistant-resize-corner"
+          data-assistant-resize="bottom-left"
+          aria-label="拖拽左下角调整 AI 对话窗宽高"
+          @pointerdown="startResize($event, 'bottom-left')"
+        ></span>
       </div>
     </Transition>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   chatWithAssistant,
   getAssistantStatus,
@@ -387,6 +417,8 @@ import { listColorHex } from '../utils/list-colors'
 import { useRouter } from 'vue-router'
 import { useAssistantStore } from '../stores/assistant'
 import { renderMarkdown } from '../utils/markdown'
+import { SK } from '../utils/storage-keys'
+import { useAuthStore } from '../stores/auth'
 
 /**
  * 气泡在 AssistantMessage 上多两个本地标记：
@@ -425,6 +457,103 @@ const router = useRouter()
 /** 小秘的名字（每个人可自定义，见偏好设置 → AI 提示词）。 */
 const assistant = useAssistantStore()
 assistant.loadName()
+const authStore = useAuthStore()
+const shellRef = ref<HTMLElement | null>(null)
+const desktop = ref(typeof window !== 'undefined' && window.innerWidth >= 1024)
+const panelSize = ref<{ width: number | null; height: number | null }>({ width: null, height: null })
+const panelStyle = computed(() => {
+  if (!desktop.value) return undefined
+  const style: Record<string, string> = {}
+  if (panelSize.value.width) style.width = `${panelSize.value.width}px`
+  if (panelSize.value.height) {
+    style.height = `${panelSize.value.height}px`
+    style.maxHeight = 'calc(100vh - 104px)'
+  }
+  return style
+})
+function panelSizeKey() {
+  return `${SK.assistantPanelSize}.${authStore.user?.id || 'anon'}`
+}
+function applyFloatWidth(width: number) {
+  document.documentElement.style.setProperty('--assistant-float-width', `${width}px`)
+}
+function loadPanelSize() {
+  panelSize.value = { width: null, height: null }
+  document.documentElement.style.removeProperty('--assistant-float-width')
+  if (!desktop.value) return
+  try {
+    const raw = localStorage.getItem(panelSizeKey())
+    if (!raw) return
+    const parsed = JSON.parse(raw) as { w?: unknown; h?: unknown }
+    const w = Number(parsed?.w)
+    const h = Number(parsed?.h)
+    if (Number.isFinite(w) && w >= 320 && w <= 760) {
+      panelSize.value.width = Math.round(w)
+      applyFloatWidth(panelSize.value.width)
+    }
+    const maxH = Math.round(window.innerHeight - 104)
+    if (Number.isFinite(h) && h >= 360 && h <= Math.max(360, maxH)) {
+      panelSize.value.height = Math.round(h)
+    }
+  } catch { /* 尺寸读不到就用默认 */ }
+}
+function persistPanelSize() {
+  if (!panelSize.value.width || !panelSize.value.height) return
+  try {
+    localStorage.setItem(panelSizeKey(), JSON.stringify({ w: Math.round(panelSize.value.width), h: Math.round(panelSize.value.height) }))
+  } catch { /* 隐私模式/localStorage 不可用时只是不记忆 */ }
+}
+type ResizeEdge = 'left' | 'bottom' | 'bottom-left'
+let resizing = false
+let resizeEdge: ResizeEdge = 'left'
+let resizeStartX = 0
+let resizeStartY = 0
+let resizeStartW = 0
+let resizeStartH = 0
+function onViewportResize() {
+  const next = window.innerWidth >= 1024
+  desktop.value = next
+  if (!next) panelSize.value = { width: null, height: null }
+  else loadPanelSize()
+}
+function startResize(event: PointerEvent, edge: ResizeEdge) {
+  if (!desktop.value || !shellRef.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  const rect = shellRef.value.getBoundingClientRect()
+  resizing = true
+  resizeEdge = edge
+  resizeStartX = event.clientX
+  resizeStartY = event.clientY
+  resizeStartW = rect.width
+  resizeStartH = rect.height
+  panelSize.value.width = Math.round(rect.width)
+  panelSize.value.height = Math.round(rect.height)
+  document.body.style.userSelect = 'none'
+  window.addEventListener('pointermove', onResizeMove)
+  window.addEventListener('pointerup', stopResize, { once: true })
+}
+function onResizeMove(event: PointerEvent) {
+  if (!resizing) return
+  const dx = event.clientX - resizeStartX
+  const dy = event.clientY - resizeStartY
+  const maxW = Math.min(760, Math.round(window.innerWidth - 32))
+  const maxH = Math.max(360, Math.round(window.innerHeight - 104))
+  if (resizeEdge === 'left' || resizeEdge === 'bottom-left') {
+    panelSize.value.width = Math.max(320, Math.min(maxW, Math.round(resizeStartW - dx)))
+    applyFloatWidth(panelSize.value.width)
+  }
+  if (resizeEdge === 'bottom' || resizeEdge === 'bottom-left') {
+    panelSize.value.height = Math.max(360, Math.min(maxH, Math.round(resizeStartH + dy)))
+  }
+}
+function stopResize() {
+  if (!resizing) return
+  resizing = false
+  window.removeEventListener('pointermove', onResizeMove)
+  document.body.style.userSelect = ''
+  persistPanelSize()
+}
 
 /**
  * 预置问法。带 `option` 的会**先选好时间范围再发**——写周报这类问题必须附数据，
@@ -862,6 +991,7 @@ function onKeydown(e: KeyboardEvent) {
 }
 watch(() => props.modelValue, (open) => {
   if (open) {
+    loadPanelSize()
     window.addEventListener('keydown', onKeydown)
     void refreshStatus().then(() => loadThinkingMode())
     void loadSavedQueries()
@@ -873,7 +1003,16 @@ watch(() => props.modelValue, (open) => {
     closeMention()
   }
 })
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+onMounted(() => window.addEventListener('resize', onViewportResize))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('resize', onViewportResize)
+  window.removeEventListener('pointermove', onResizeMove)
+  if (resizing) {
+    resizing = false
+    document.body.style.userSelect = ''
+  }
+})
 </script>
 
 <style scoped>
@@ -920,6 +1059,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     opacity: 0;
     transform: translateX(12px) scale(0.985);
   }
+}
+
+/* AI 浮窗边框外侧的透明拖拽区（只在 ≥1024px 桌面浮窗显示）。 */
+.assistant-resize-zone {
+  @apply absolute z-[2] bg-transparent;
+  pointer-events: auto;
+  touch-action: none;
+}
+.assistant-resize-left { top: 0; bottom: 0; left: -3px; width: 8px; cursor: ew-resize; }
+.assistant-resize-bottom { left: 0; right: 0; bottom: -3px; height: 8px; cursor: ns-resize; }
+.assistant-resize-corner { left: -3px; bottom: -3px; width: 14px; height: 14px; cursor: nesw-resize; }
+@media (max-width: 1023px) {
+  .assistant-resize-zone { display: none; }
 }
 
 .assistant-enter-active,
