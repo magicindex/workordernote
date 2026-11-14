@@ -467,7 +467,7 @@ const panelStyle = computed(() => {
   if (panelSize.value.width) style.width = `${panelSize.value.width}px`
   if (panelSize.value.height) {
     style.height = `${panelSize.value.height}px`
-    style.maxHeight = 'calc(100vh - 104px)'
+    style.maxHeight = 'calc(100vh - 16px)'
   }
   return style
 })
@@ -491,7 +491,7 @@ function loadPanelSize() {
       panelSize.value.width = Math.round(w)
       applyFloatWidth(panelSize.value.width)
     }
-    const maxH = Math.round(window.innerHeight - 104)
+    const maxH = Math.round(window.innerHeight - 16)
     if (Number.isFinite(h) && h >= 360 && h <= Math.max(360, maxH)) {
       panelSize.value.height = Math.round(h)
     }
@@ -538,7 +538,7 @@ function onResizeMove(event: PointerEvent) {
   const dx = event.clientX - resizeStartX
   const dy = event.clientY - resizeStartY
   const maxW = Math.min(760, Math.round(window.innerWidth - 32))
-  const maxH = Math.max(360, Math.round(window.innerHeight - 104))
+  const maxH = Math.max(360, Math.round(window.innerHeight - 16))
   if (resizeEdge === 'left' || resizeEdge === 'bottom-left') {
     panelSize.value.width = Math.max(320, Math.min(maxW, Math.round(resizeStartW - dx)))
     applyFloatWidth(panelSize.value.width)
@@ -1023,11 +1023,11 @@ onBeforeUnmount(() => {
      · 不铺满、不压暗背景，背后页面仍可正常滚动、点击；
      · 位置固定在右侧，MainLayout 会同步给正文让出等宽的槽（--assistant-float-width），
        所以正文不会被盖住；
-     · 高度跟着视口走，顶部从顶栏下面开始，底部留 16px。
+     · 高度跟着视口走，顶部贴视口顶部，底部留 16px（用户 2026-11-14：顶部不要空着）。
    窗口宽度与留槽宽度共用 style.css 里的 --assistant-float-width，改一处两边一起变。 */
 @media (min-width: 1024px) {
   .assistant-shell {
-    inset: 88px 16px 16px auto;
+    inset: 0 16px 16px auto;
     width: var(--assistant-float-width, 388px);
     height: auto;
     justify-content: stretch;

@@ -70,6 +70,7 @@ function check(name, ok, extra = '') {
       await openPanel();
       const before = await info();
       check('AI 对话浮窗已打开', before.open === true, JSON.stringify({ w: before.w, h: before.h }));
+      check('浮窗顶部贴视口顶部，不再空着', before.top <= 2, `top=${before.top}`);
       check('左侧 / 底边有透明拖拽区', before.zones.length >= 2, JSON.stringify(before.zones));
       check('没有浮在角落的可见手柄', (await page.evaluate(() => !document.querySelector('[data-assistant-resize-handle]'))));
       check('默认宽度约 388px', before.w >= 300 && before.w <= 520, String(before.w));
