@@ -120,6 +120,35 @@ func TestPruneLocalKeepsNewestOnly(t *testing.T) {
 	}
 }
 
+func TestWebDAVConnection(t *testing.T) {
+	db := testDB(t)
+	var method, auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, auth = r.Method, r.Header.Get("Authorization")
+		w.WriteHeader(207)
+	}))
+	defer srv.Close()
+
+	sysconfig.UpdateConfig(db, "backup_webdav_url", srv.URL+"/dav", 0)
+	sysconfig.UpdateConfig(db, "backup_webdav_dir", "wb", 0)
+	sysconfig.UpdateConfig(db, "backup_webdav_username", "u", 0)
+	sysconfig.UpdateConfig(db, "backup_webdav_password", "p", 0)
+
+	latency, err := TestWebDAV(db)
+	if err != nil {
+		t.Fatalf("test webdav: %v", err)
+	}
+	if latency < 0 {
+		t.Fatalf("latency = %d", latency)
+	}
+	if method != "PROPFIND" {
+		t.Fatalf("method = %q, want PROPFIND", method)
+	}
+	if !strings.HasPrefix(auth, "Basic ") {
+		t.Fatalf("missing basic auth: %q", auth)
+	}
+}
+
 func TestWebDAVUploadAndPrune(t *testing.T) {
 	db := testDB(t)
 	var putPath, putAuth, putBody string

@@ -26,6 +26,14 @@ func RegisterRoutes(admin *gin.RouterGroup, db *gorm.DB) {
 			"local_dir":   localDir(db),
 		})
 	})
+	admin.POST("/backup/webdav/test", func(c *gin.Context) {
+		latency, err := TestWebDAV(db)
+		if err != nil {
+			response.ErrorBadRequest(c, "WebDAV 连接失败："+err.Error())
+			return
+		}
+		response.Success(c, gin.H{"message": "连接正常", "latency_ms": latency})
+	})
 	admin.POST("/backup/run", func(c *gin.Context) {
 		// 手动备份不受「自动备份」开关影响，但至少要有一个落点。
 		localOn, _ := sysconfig.GetConfig(db, "backup_local_enabled", 0)

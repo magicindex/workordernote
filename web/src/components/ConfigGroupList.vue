@@ -126,6 +126,7 @@
         </div>
       </div>
       </div>
+      <slot name="group-footer" :group="group"></slot>
       <slot v-if="extraGroup === group.key" name="group-extra"></slot>
     </div>
   </div>

@@ -32,7 +32,30 @@
         :items="items"
         :visible-groups="visibleGroups"
         @save="handleSave"
-      />
+      >
+        <template #group-footer="{ group }">
+          <div v-if="group.key === 'backup_remote' && webdavEnabled" class="border-t border-border px-4 py-3" data-webdav-test>
+            <div class="flex flex-wrap items-center gap-3">
+              <button class="btn-secondary !px-3 !py-2 text-xs" :disabled="webdavTesting" data-webdav-test-button @click="testWebDAVConnection">
+                {{ webdavTesting ? '测试中…' : '测试连接' }}
+              </button>
+              <span
+                class="inline-flex items-center gap-1.5 text-xs font-semibold"
+                :class="webdavResult?.ok ? 'text-emerald-600 dark:text-emerald-400' : webdavResult ? 'text-destructive' : 'text-muted-foreground'"
+                data-webdav-test-status
+                :data-state="webdavTesting ? 'testing' : webdavResult ? (webdavResult.ok ? 'ok' : 'error') : 'idle'"
+              >
+                <span class="h-2 w-2 rounded-full" :class="webdavTesting ? 'bg-amber-400' : webdavResult?.ok ? 'bg-emerald-500' : webdavResult ? 'bg-rose-500' : 'bg-muted-foreground/50'"></span>
+                <span v-if="webdavTesting">测试中…</span>
+                <span v-else-if="webdavResult?.ok">连接正常 · {{ webdavResult.latency }} ms</span>
+                <span v-else-if="webdavResult">连接失败</span>
+                <span v-else>未测试</span>
+              </span>
+            </div>
+            <p v-if="webdavResult && !webdavResult.ok" class="mt-1 break-all text-[11px] leading-4 text-destructive">{{ webdavResult.message }}</p>
+          </div>
+        </template>
+      </ConfigGroupList>
 
     </div>
   </div>
@@ -47,6 +70,7 @@ import AiAssistantPanel from '../components/AiAssistantPanel.vue'
 import BackupPanel from '../components/BackupPanel.vue'
 import SyncImportWizard from '../components/SyncImportWizard.vue'
 import { getSystemConfigMeta, updateConfig } from '../api/config'
+import { testWebDAV } from '../api/backup'
 import { useAuthStore } from '../stores/auth'
 import type { ConfigMeta } from '../api/config'
 
@@ -58,6 +82,26 @@ const visibleGroups = computed(() => {
   groups.delete('backup_local')
   return [...groups]
 })
+const webdavEnabled = computed(() => items.value.find((it) => it.key === 'backup_webdav_enabled')?.value === 'true')
+const webdavTesting = ref(false)
+const webdavResult = ref<{ ok: boolean; latency: number; message: string } | null>(null)
+async function testWebDAVConnection() {
+  if (webdavTesting.value) return
+  webdavTesting.value = true
+  webdavResult.value = null
+  try {
+    const res = await testWebDAV()
+    if (res.data?.code === 0) {
+      webdavResult.value = { ok: true, latency: Number(res.data.data?.latency_ms || 0), message: '连接正常' }
+    } else {
+      webdavResult.value = { ok: false, latency: 0, message: res.data?.message || '连接失败' }
+    }
+  } catch (err: any) {
+    webdavResult.value = { ok: false, latency: 0, message: err.response?.data?.message || '连接失败' }
+  } finally {
+    webdavTesting.value = false
+  }
+}
 const syncPanelRef = ref<InstanceType<typeof SyncPanel> | null>(null)
 
 // 导入向导完成后：同步设置刚被改写，刷新面板显示最新状态
@@ -104,6 +148,8 @@ async function handleSave(key: string, value: string) {
       if (key === 'ceremony_enabled') {
         authStore.setCeremonyEnabled(value !== 'false')
       }
+      // URL / 账号 / 子目录 / 证书开关一变，上一次测试结果就不作数了。
+      if (key.startsWith('backup_webdav_')) webdavResult.value = null
       listRef.value?.markSaved(key)
     } else {
       errorMsg.value = res.data?.message || '保存失败'

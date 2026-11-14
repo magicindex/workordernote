@@ -30,6 +30,11 @@ export function runBackup() {
   return request.post('/api/backup/run')
 }
 
+/** 测一次 WebDAV 目录连通性（PROPFIND），返回耗时；失败时后端给出原因。 */
+export function testWebDAV() {
+  return request.post('/api/backup/webdav/test')
+}
+
 export function listBackupFiles() {
   return request.get('/api/backup/files')
 }

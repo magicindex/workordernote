@@ -90,6 +90,31 @@ func explainDAVError(err error) error {
 	return err
 }
 
+// TestWebDAV 测一次 WebDAV 目录连通性：PROPFIND Depth:0。
+// 404 视为「连上了、目录还没建」（备份时会自动 MKCOL）；401/403 明确提示认证失败。
+func TestWebDAV(db *gorm.DB) (int64, error) {
+	target, err := webdavTarget(db, "")
+	if err != nil {
+		return 0, err
+	}
+	start := time.Now()
+	resp, err := davRequest(db, "PROPFIND", target, nil, map[string]string{"Depth": "0"})
+	if err != nil {
+		return time.Since(start).Milliseconds(), err
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	latency := time.Since(start).Milliseconds()
+	switch resp.StatusCode {
+	case 207, 200, 404:
+		return latency, nil
+	case 401, 403:
+		return latency, fmt.Errorf("认证失败（HTTP %d），请检查用户名/密码", resp.StatusCode)
+	default:
+		return latency, fmt.Errorf("WebDAV 返回 HTTP %d", resp.StatusCode)
+	}
+}
+
 // uploadWebDAV 先补建目录（忽略「已存在」的 405），再 PUT 整个文件。
 func uploadWebDAV(db *gorm.DB, file, name string) (string, error) {
 	target, err := webdavTarget(db, name)
