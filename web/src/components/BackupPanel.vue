@@ -25,7 +25,7 @@
       </p>
       <p class="text-muted-foreground">本机目录：<code class="text-[11px]">{{ status.local_dir || '—' }}</code></p>
       <p v-if="notice" class="font-medium" :class="noticeOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'" data-backup-notice>{{ notice }}</p>
-      <p class="text-muted-foreground">WebDAV 与本机保留份数在下面「数据备份」分组里设置；手动备份两个都已开启的位置各落一份。</p>
+      <p class="text-muted-foreground">保留份数在「备份计划」里设；本机目录与 WebDAV 连接分别在「本机备份」「WebDAV 远程备份」里设。手动备份两个都已开启的位置各落一份。</p>
     </div>
 
     <div class="border-t border-border px-4 py-4 sm:px-6">

@@ -33,18 +33,20 @@ function check(name, ok, detail = '') {
     check('面板说明写明备份整库与上传文件', /整库\s*\+\s*上传文件/.test(panel.text), panel.text.slice(0, 120));
 
     const group = await page.evaluate(() => {
-      const title = [...document.querySelectorAll('h2')].find((h) => h.textContent.trim() === '数据备份');
-      if (!title) return null;
+      const titles = [...document.querySelectorAll('h2')].map((h) => h.textContent.trim());
       return {
-        title: title.textContent.trim(),
+        titles,
         keys: [...document.querySelectorAll('[data-config-key]')].map((n) => n.getAttribute('data-config-key')).filter((k) => k.startsWith('backup_')),
       };
     });
     // backup_webdav_insecure：自建 NAS 自签名证书 / 用 IP 访问没有 IP SAN 时必须能跳过校验，
     // 否则备份只会在「上次结果」里留下 x509 报错（用户 2026-10-26 报的失败）。
     const needed = ['backup_enabled', 'backup_time', 'backup_local_enabled', 'backup_local_dir', 'backup_webdav_enabled', 'backup_webdav_url', 'backup_webdav_username', 'backup_webdav_password', 'backup_webdav_dir', 'backup_webdav_insecure', 'backup_keep'];
-    check('「数据备份」分组含本机与 WebDAV 的全部必填项',
-      !!group && needed.every((k) => group.keys.includes(k)), JSON.stringify(group));
+    check('备份设置拆成「备份计划 / 本机备份 / WebDAV 远程备份」三组',
+      !!group && ['备份计划', '本机备份', 'WebDAV 远程备份'].every((t) => group.titles.includes(t)),
+      JSON.stringify(group?.titles));
+    check('三组里含本机与 WebDAV 的全部必填项',
+      !!group && needed.every((k) => group.keys.includes(k)), JSON.stringify(group?.keys));
     const secretType = await page.evaluate(() => {
       const row = document.querySelector('[data-config-key="backup_webdav_password"] input');
       return row ? row.getAttribute('type') : '';

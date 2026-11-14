@@ -18,11 +18,12 @@
       <div class="surface rounded-2xl overflow-hidden">
       <div class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <h2 class="text-sm font-bold text-foreground">{{ group.title }}</h2>
-        <span class="text-[11px] font-semibold text-muted-foreground">{{ group.items.length }} 项</span>
+        <span class="text-[11px] font-semibold text-muted-foreground">{{ visibleCount(group) }} 项</span>
       </div>
       <div class="divide-y divide-border">
         <div
           v-for="item in group.items"
+          v-show="isItemVisible(item)"
           :key="item.key"
           class="flex flex-col gap-2.5 px-4 py-3 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:gap-3"
           :data-config-key="item.key"
@@ -163,7 +164,9 @@ const groupTitleMap: Record<string, string> = {
   dnd: '免打扰',
   appearance: '外观',
   system: '系统维护',
-  backup: '数据备份',
+  backup: '备份计划',
+  backup_local: '本机备份',
+  backup_remote: 'WebDAV 远程备份',
   security: '账号安全',
 }
 
@@ -230,6 +233,40 @@ function isSecret(key: string): boolean {
 
 function groupTitle(key: string): string {
   return groupTitleMap[key] || key
+}
+
+// 备份的从属项：总开关关着时只留开关，避免一上来就摆一长串 WebDAV 字段。
+const backupDependent: Record<string, string> = {
+  backup_local_dir: 'backup_local_enabled',
+  backup_webdav_url: 'backup_webdav_enabled',
+  backup_webdav_username: 'backup_webdav_enabled',
+  backup_webdav_password: 'backup_webdav_enabled',
+  backup_webdav_dir: 'backup_webdav_enabled',
+  backup_webdav_insecure: 'backup_webdav_enabled',
+}
+
+function isItemVisible(item: ConfigMeta): boolean {
+  const parentKey = backupDependent[item.key]
+  if (!parentKey) return true
+  const parent = props.items.find((it) => it.key === parentKey)
+  if (!parent) return true
+  return getEditValue(parent) === 'true'
+}
+
+function visibleCount(group: { items: ConfigMeta[] }): number {
+  return group.items.filter(isItemVisible).length
+}
+
+// 配置接口按 key 字母序返回；备份组里按“先开关、再连接信息、最后高级项”重排，
+// 避免出现「子目录 → 开关 → 跳过证书 → 密码 → 地址」这种跳跃顺序。
+const backupOrder: Record<string, number> = {
+  backup_enabled: 0, backup_time: 1, backup_keep: 2,
+  backup_local_enabled: 0, backup_local_dir: 1,
+  backup_webdav_enabled: 0, backup_webdav_url: 1, backup_webdav_username: 2,
+  backup_webdav_password: 3, backup_webdav_dir: 4, backup_webdav_insecure: 5,
+}
+function orderOf(key: string): number {
+  return backupOrder[key] ?? 999
 }
 
 function optionLabel(itemKey: string, opt: string): string {
@@ -324,7 +361,7 @@ const groups = computed(() => {
   return Array.from(map.entries()).map(([key, items]) => ({
     key,
     title: groupTitle(key),
-    items,
+    items: [...items].sort((a, b) => orderOf(a.key) - orderOf(b.key)),
   }))
 })
 </script>
