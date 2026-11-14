@@ -218,9 +218,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 ## 版本与迭代
 
 - 软件版本见根目录 `VERSION`，当前 `0.48.0`，规则为 `主版本号.小版本号.修正号`。
-  **部署状态（2026-11-14 14:48）**：**201 生产 8906 / 200 生产均已升级到最新 0.48.0 热更新**
-  （源码提交 `7c53607`，镜像 `workordernote:0.48.0-webdavtest2-20261114-144720` =
-  `sha256:f1ea7dc0b315aff865263e7841b7e600bc39eff069f910b1cfc5e35ccbf686c7`）。
+  **部署状态（2026-11-14 15:50）**：**201 生产 8906 / 200 生产均已升级到最新 0.48.0 热更新**
+  （源码提交 `8ef2d13`，镜像 `workordernote:0.48.0-webdavbrowse3-20261114-154839` =
+  `sha256:4bfa7460adfec99ef6b159aaeb2546cc25200dad42a70a3c785ea94d0f97d617`）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
   **公开设置 9 项三台一致**；**个人偏好 201 与 200 一致，沙箱单独一套**（开始提醒时间 `00:00`、
@@ -233,6 +233,22 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 应用内「侧栏 → 关于 → 版本信息」可查看迭代说明与原项目信息。
 
 ## 变更记录
+
+### 2026-11-14：0.48.0 热更新（201 / 200）—— WebDAV 地址/路径同行 + 远程目录选择；201 凭据修复
+
+> **热更新记录**（软件版本仍为 `0.48.0`，后端重建；无 schema 变更。源码提交 `8ef2d13`；
+> 构建时提交为 `90175ab`，`/api/version` 仍报告该后端 commit）
+> 镜像：`workordernote:0.48.0-webdavbrowse3-20261114-154839` =
+> `sha256:4bfa7460adfec99ef6b159aaeb2546cc25200dad42a70a3c785ea94d0f97d617`；
+> Gitea registry manifest `sha256:5c929828dbac3c2e4ee9db18add8fb3a7926479c401b350db08322ba9bb16128`（仅推 Gitea registry）
+
+- 第 129 条：新建 `WebDAVSettings.vue`：服务器地址 + 路径同一行两个模块，下方用户名/密码、证书开关、保存；原 URL 拆成服务器 origin + 路径（中文路径解码），保存按 `backup_webdav_url` + `backup_webdav_dir` 写回，目标地址不变。
+- 新增 `POST /api/backup/webdav/browse`（PROPFIND Depth:1）与「查看远程目录」面板：显示当前路径/子目录，点目录选中路径后保存。测试/查看目录前若字段有改动会先保存连接设置；未改动直接读已保存配置。
+- **201 401 原因**：数据库里 `backup_webdav_password` 为空（0 字节），而 URL/用户名/子目录与 200 一致；已从 200 复制 13 位密码到 201，测试恢复「连接正常 · 5 ms」。200 最近一次真实备份仍为 HTTP 403（连接通过，写入权限需另查）。
+- 201：备份 `docker-compose.yml.bak-pre0480webdavbrowse3-20261114-154859`；15:48 重建，healthy，`index-CptmOb9B.js`。
+- 200：备份 `docker-compose.yml.bak-pre0480webdavbrowse3-20261114-155009`；15:50 重建，healthy，`index-CptmOb9B.js`。
+- 验证：201 / 200 均 `verify-175` **7/7**、`verify-176` **5/5**、`verify-177` **4/4**；Go `TestWebDAVBrowse` / `TestWebDAVConnection` 通过。
+- 注意：0.48.0 的 Linux 包、fpk、GHCR 镜像与 Release 附件不包含 110–129 二十项热更新；下一次正式发版（0.48.1）会带上 `47a0286`、`7c9b987`、`f628ae0`、`0966035`、`5a7028e`、`a58094d`、`1345451`、`2f5c280`、`a003b2a`、`3c274b1`、`b7b871c`、`915a743`、`520c0db`、`f9cb898`、`ce83ba1`、`9e6dbf3`、`2189590`、`4e723dd`、`d374f18`、`641c473`、`7c53607`、`8ef2d13`。
 
 ### 2026-11-14：0.48.0 热更新（201 / 200）—— WebDAV 测试按钮移到第一行开关后
 
