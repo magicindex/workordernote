@@ -26,4 +26,6 @@ export const SK = {
   // 记事 / 提醒编辑面板拖拽后的宽高（按用户存；没拖过就不写）。
   noteEditorSize: `${P}note_editor_size`,
   reminderEditorSize: `${P}reminder_editor_size`,
+  // 编辑面板从左边还是右边弹出（按用户存；没选过就按页面默认）。
+  editorSide: `${P}editor_side`,
 } as const

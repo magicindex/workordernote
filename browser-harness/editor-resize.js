@@ -31,29 +31,46 @@ async function editorInfo(page) {
   });
 }
 
-/** 拉宽度：左抽屉拉右边缘，右抽屉拉左边缘；向面板外侧拖 delta。 */
+/** 拉宽度：左抽屉拉右边缘，右抽屉拉左边缘；向面板外侧拖 delta。
+ *  用合成 PointerEvent 直接打到拖拽区/ window，避免生产库上的提醒弹窗盖住鼠标坐标。 */
 async function dragWidth(page, info, delta = 120) {
   const edge = info.edges.find((e) => e.edge === 'right') || info.edges.find((e) => e.edge === 'left');
   if (!edge) throw new Error('没有可用的左右边缘拖拽区');
-  const dir = edge.edge === 'right' ? 1 : -1;
-  const y = info.top + info.h / 2;
-  await page.mouse.move(edge.x, y);
-  await page.mouse.down();
-  await page.mouse.move(edge.x + dir * delta, y, { steps: 12 });
-  await page.mouse.up();
+  await page.evaluate(({ edgeName, delta }) => {
+    const zone = [...document.querySelectorAll('[data-editor-resize]')].find((el) => el.getAttribute('data-editor-resize') === edgeName);
+    const panel = document.querySelector('.editor-panel');
+    if (!zone || !panel) return;
+    const b = zone.getBoundingClientRect();
+    const r = panel.getBoundingClientRect();
+    const dir = edgeName === 'right' ? 1 : -1;
+    const x = b.x + b.width / 2;
+    const y = r.top + r.height / 2;
+    const opts = (px, py) => ({ bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, buttons: 1, clientX: px, clientY: py });
+    zone.dispatchEvent(new PointerEvent('pointerdown', opts(x, y)));
+    window.dispatchEvent(new PointerEvent('pointermove', opts(x + dir * delta, y)));
+    window.dispatchEvent(new PointerEvent('pointerup', opts(x + dir * delta, y)));
+  }, { edgeName: edge.edge, delta });
   await sleep(420);
   return edge.edge;
 }
 
-/** 拉底边：向上 = 高度变小。 */
+/** 拉底边：向上 = 高度变小。同样用合成 PointerEvent。 */
 async function dragBottom(page, info, dy = -100) {
   const edge = info.edges.find((e) => e.edge === 'bottom');
   if (!edge) throw new Error('没有底边拖拽区');
-  const x = info.left + info.w / 2;
-  await page.mouse.move(x, edge.y);
-  await page.mouse.down();
-  await page.mouse.move(x, edge.y + dy, { steps: 12 });
-  await page.mouse.up();
+  await page.evaluate(({ dy }) => {
+    const zone = [...document.querySelectorAll('[data-editor-resize]')].find((el) => el.getAttribute('data-editor-resize') === 'bottom');
+    const panel = document.querySelector('.editor-panel');
+    if (!zone || !panel) return;
+    const b = zone.getBoundingClientRect();
+    const r = panel.getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    const y = b.y + b.height / 2;
+    const opts = (px, py) => ({ bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, buttons: 1, clientX: px, clientY: py });
+    zone.dispatchEvent(new PointerEvent('pointerdown', opts(x, y)));
+    window.dispatchEvent(new PointerEvent('pointermove', opts(x, y + dy)));
+    window.dispatchEvent(new PointerEvent('pointerup', opts(x, y + dy)));
+  }, { dy });
   await sleep(420);
 }
 

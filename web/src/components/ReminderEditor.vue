@@ -3,13 +3,14 @@
     <div
       v-if="modelValue"
       class="fixed inset-0 z-[70] flex"
-      :class="isModal ? 'items-center justify-center p-3 sm:p-6' : side === 'left' ? 'justify-start' : 'justify-end'"
+      :class="isModal ? 'items-center justify-center p-3 sm:p-6' : currentSide === 'left' ? 'justify-start' : 'justify-end'"
     >
       <div class="absolute inset-0 bg-slate-950/25 backdrop-blur-sm" @click="close"></div>
       <aside
         ref="panelRef"
         class="editor-panel"
-        :class="[isModal ? 'editor-panel-modal' : '', side === 'left' ? 'editor-panel-left' : '']"
+        :class="[isModal ? 'editor-panel-modal' : '', currentSide === 'left' ? 'editor-panel-left' : '']"
+        :data-editor-side="isModal ? 'center' : currentSide"
         :style="editorPanelStyle"
       >
         <div class="flex items-center justify-between border-b border-border px-4 py-3 sm:px-6 sm:py-5">
@@ -20,6 +21,23 @@
             </h2>
           </div>
           <div class="flex items-center gap-1.5">
+            <!-- 弹出方向：左边 / 右边，点了立刻换边并按用户记住；手机整屏抽屉和居中弹窗不显示。 -->
+            <button
+              v-if="!isModal && desktop"
+              type="button"
+              class="row-action !opacity-100"
+              data-editor-side-toggle
+              :data-editor-side-current="currentSide"
+              :title="currentSide === 'left' ? '改为从右侧弹出' : '改为从左侧弹出'"
+              :aria-label="currentSide === 'left' ? '改为从右侧弹出' : '改为从左侧弹出'"
+              @click="toggleSide"
+            >
+              <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" aria-hidden="true">
+                <path d="M3 5.5h18v13H3z" stroke-width="1.7" stroke-linejoin="round" />
+                <path v-if="currentSide === 'left'" d="M8 5.5v13M15 9l-3 3 3 3" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                <path v-else d="M16 5.5v13M9 9l3 3-3 3" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
             <!-- 删除（用户 2026-10-13：编辑弹窗「在同行右侧增加删除按钮」）：
                  只有**创建这条提醒的用户**能删 —— can_delete 由服务端按 user_id 判定，
                  不是创建者就置灰并说明原因（服务端那条路本来也只认创建者，删别人的 404）。 -->
@@ -260,8 +278,24 @@ const isCreate = computed(() => props.preset != null)
 const isNoteEditing = computed(() => (editing.kind as string) === 'note')
 const isModal = computed(() => props.presentation === 'modal')
 const authStore = useAuthStore()
-const canResizeLeft = computed(() => desktop.value && (isModal.value || props.side !== 'left'))
-const canResizeRight = computed(() => desktop.value && (isModal.value || props.side === 'left'))
+const currentSide = ref<'left' | 'right'>(props.side === 'left' ? 'left' : 'right')
+function editorSideKey() {
+  return `${SK.editorSide}.${authStore.user?.id || 'anon'}`
+}
+function loadEditorSide() {
+  try {
+    const stored = localStorage.getItem(editorSideKey())
+    if (stored === 'left' || stored === 'right') currentSide.value = stored
+  } catch { /* 读不到就按页面默认 */ }
+}
+function toggleSide() {
+  currentSide.value = currentSide.value === 'left' ? 'right' : 'left'
+  try {
+    localStorage.setItem(editorSideKey(), currentSide.value)
+  } catch { /* 隐私模式/localStorage 不可用时只是不记忆 */ }
+}
+const canResizeLeft = computed(() => desktop.value && (isModal.value || currentSide.value !== 'left'))
+const canResizeRight = computed(() => desktop.value && (isModal.value || currentSide.value === 'left'))
 const panelRef = ref<HTMLElement | null>(null)
 // 桌面端才允许拖拽（手机是整屏抽屉，拖了反而难用）；<768px 隐藏手柄，也不套记住的尺寸。
 const desktop = ref(typeof window !== 'undefined' && window.innerWidth >= 768)
@@ -361,6 +395,7 @@ function stopResize() {
   persistEditorSize()
 }
 onMounted(() => {
+  loadEditorSide()
   loadEditorSize()
   window.addEventListener('resize', onViewportResize)
 })
