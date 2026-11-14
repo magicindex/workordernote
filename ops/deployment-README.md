@@ -239,6 +239,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 > **热更新记录**（软件版本仍为 `0.48.0`，后端重建；无 schema 变更。源码提交 `a58094d`）
 > 最终镜像：`workordernote:0.48.0-mdnote2-20261114-113510` =
 > `sha256:e0bd19fd56b8205afea1d1603a0628e15996222f6eaa6ae8219ed584a840e11e`；
+> 前端另有修正提交 `1345451`（记事详情不再被备注时间线抢先渲染，已包含在 mdnote2 静态资源里）；
 > Gitea registry manifest `sha256:cee865aa045ab960d9e47e48f2551a1188d960ddfeb7afe8d0c0cb9480914df7`
 > （第一次构建的 `mdnote-113312` 发现记事详情被备注时间线抢先渲染，已用 `mdnote2` 修正并覆盖部署）
 
