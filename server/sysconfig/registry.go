@@ -255,10 +255,10 @@ func init() {
 	// 都是个人偏好（每人一份），选项值是分钟数。
 	RegisterConfig(ConfigDef{
 		Key: "reminder_notify_minutes", Scope: ScopeUser, Type: TypeSelect,
-		Default: "10", Options: []string{"5", "10", "15", "30", "60"},
+		Default: "10", Options: []string{"0", "5", "10", "15", "30", "60"},
 		Public: true,
 		Group:  "reminder", Label: "提醒频率",
-		Description: "到点的提醒如果没处理，隔多久再弹一次（也是新建提醒时「过期提醒频率」的默认值）",
+		Description: "到点的提醒如果没处理，隔多久再弹一次；选「不重复」时只提醒一次，也不再显示「稍后提醒」",
 	})
 	RegisterConfig(ConfigDef{
 		Key: "reminder_ack_minutes", Scope: ScopeUser, Type: TypeSelect,

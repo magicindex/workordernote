@@ -21,6 +21,7 @@ export const ACK_MINUTES_LABELS: Record<string, string> = {
 
 /** 提醒频率（分钟）的取值与中文。 */
 export const NOTIFY_MINUTES_LABELS: Record<string, string> = {
+  '0': '不重复（只提醒一次）',
   '5': '每 5 分钟',
   '10': '每 10 分钟',
   '15': '每 15 分钟',

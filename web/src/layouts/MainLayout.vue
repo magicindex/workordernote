@@ -619,8 +619,8 @@
       :repeat-count="currentAlertRepeatCount"
       :busy="alertBusy"
       :error="alertError"
-      :snooze-label="`稍后提醒（${notifyMinutes} 分钟后）`"
-      :show-snooze="!currentAlertIsNudge"
+      :snooze-label="notifyMinutes > 0 ? `稍后提醒（${notifyMinutes} 分钟后）` : '稍后提醒'"
+      :show-snooze="showSnooze"
       :ack-label="currentAlertIsNudge ? '知道了' : ackLabel"
       :ack-hint="currentAlertIsNudge ? '去「提醒@他」页面查看并处理' : ackHint"
       @ack="ackCurrentAlert"
@@ -1547,7 +1547,7 @@ const currentAlert = computed(() => alertQueue.value[0] || null)
 const pendingAlertCount = computed(() => Math.max(alertQueue.value.length - 1, 0))
 const currentAlertRepeatCount = computed(() => currentAlert.value?.count || 1)
 // 提醒频率来自偏好设置（个人偏好）：未处理多久再提醒、点「知道了」后多久再提醒
-const notifyMinutes = computed(() => authStore.reminderNotifyMinutes || 10)
+const notifyMinutes = computed(() => authStore.reminderNotifyMinutes)
 const ackMinutes = computed(() => authStore.reminderAckMinutes || 0)
 // 主按钮必须写明「点了会怎样」：用户 2026-10-12 报「昨天到期的任务进了逾期，
 // 点『知道了』它就出了逾期」——只写「知道了」让人以为是关掉提示，实际上是把提醒
@@ -1559,6 +1559,8 @@ const ackMinutes = computed(() => authStore.reminderAckMinutes || 0)
 const ackLabel = computed(() => `知道了（${ackMinutesLabel(ackMinutes.value)}）`)
 // 当前弹窗是「提醒@他」推来的通知吗（那种没有关联任务，文案与按钮都不一样）
 const currentAlertIsNudge = computed(() => NUDGE_NOTIFICATION_TYPES.includes(String(currentAlert.value?.type || '')))
+// 「提醒频率」选「不重复（0）」时只给「知道了」，不再显示「稍后提醒」。
+const showSnooze = computed(() => !currentAlertIsNudge.value && notifyMinutes.value > 0)
 const ackHint = computed(() => (ackMinutes.value > 0
   ? `要完成请到列表里勾选；${ackMinutes.value} 分钟后会再提醒一次`
   : '要完成请到列表里勾选；今天不再提示，明天同一时间继续提醒'))
@@ -1722,7 +1724,7 @@ function ackCurrentAlert() {
 
 function snoozeCurrentAlert() {
   const alert = currentAlert.value
-  if (!alert) return
+  if (!alert || notifyMinutes.value <= 0) return
   void runAlertAction(async () => {
     if (!alert.reminderID) return
     const until = new Date(Date.now() + notifyMinutes.value * 60_000).toISOString()

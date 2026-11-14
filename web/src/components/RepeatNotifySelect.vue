@@ -36,7 +36,7 @@ const emit = defineEmits<{
 }>()
 
 const options = [
-  { value: 0, label: '不过期提醒' },
+  { value: 0, label: '不重复（只提醒一次）' },
   { value: 5, label: '每 5 分钟' },
   { value: 15, label: '每 15 分钟' },
   { value: 30, label: '每 30 分钟' },

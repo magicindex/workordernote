@@ -29,13 +29,20 @@ const ALLOWED_TAGS = [
 ]
 const ALLOWED_ATTR = ['href', 'title', 'target', 'rel', 'class']
 
-/** 把一段 Markdown 变成可安全放进气泡的 HTML。空文本返回空串。 */
-export function renderMarkdown(text: string): string {
+/**
+ * 把一段 Markdown 变成可安全放进气泡的 HTML。空文本返回空串。
+ *
+ * `allowLinks:false` 用于「整行本身就是一个可点按钮」的场景（比如记事列表行）：
+ * 链接会嵌在 <button> 里，既不合 HTML 规范，点链接也会被按钮的点击抢走。
+ * 这种情况下只保留链接文字，不生成 <a>。
+ */
+export function renderMarkdown(text: string, options: { allowLinks?: boolean } = {}): string {
   if (!text) return ''
   // marked 默认同步解析；显式 async:false 保证返回字符串（类型上仍可能是 Promise）。
   const html = marked.parse(text, { async: false, gfm: true, breaks: true })
+  const allowLinks = options.allowLinks !== false
   return DOMPurify.sanitize(String(html), {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR,
+    ALLOWED_TAGS: allowLinks ? ALLOWED_TAGS : ALLOWED_TAGS.filter((tag) => tag !== 'a'),
+    ALLOWED_ATTR: allowLinks ? ALLOWED_ATTR : ALLOWED_ATTR.filter((attr) => attr !== 'href'),
   })
 }

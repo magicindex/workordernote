@@ -535,7 +535,13 @@
           </button>
           <button class="min-w-0 flex-1 text-left" :disabled="!entry.reminder_exists" @click="openCompletedEntry(entry)">
             <div class="flex items-center gap-2">
-              <h3 class="min-w-0 break-words text-sm font-bold leading-5 sm:truncate sm:text-[15px]">{{ entry.title }}</h3>
+              <div
+                v-if="entry.kind === 'note'"
+                class="note-markdown note-markdown-title min-w-0 break-words text-sm font-bold leading-5 sm:text-[15px]"
+                data-note-title-markdown
+                v-html="renderMarkdown(entry.title, { allowLinks: false })"
+              ></div>
+              <h3 v-else class="min-w-0 break-words text-sm font-bold leading-5 sm:truncate sm:text-[15px]">{{ entry.title }}</h3>
               <span v-if="entry.kind === 'note'" class="tiny-badge">记事</span>
               <span v-else-if="entry.repeat_rule && entry.repeat_rule !== 'none'" class="tiny-badge">{{ ruleLabel(entry.repeat_rule) }}</span>
             </div>
@@ -639,7 +645,17 @@
                        颜色在侧栏「编辑清单」里改，改完会广播数据变更，本页与日历立即刷新。
                        计划页（用户 2026-10-29）：标题单独占一行、允许自动换行（原来桌面端
                        sm:truncate 会把长名字截掉，移动端又会跟徽标抢宽度）。 -->
+                  <!-- 记事内容支持 Markdown：加粗 / 列表 / 代码块等按格式显示；
+                       任务标题保持纯文本（不受影响）。 -->
+                  <div
+                    v-if="item.kind === 'note'"
+                    class="note-markdown note-markdown-title min-w-0 break-words text-sm font-bold leading-5 sm:text-[15px]"
+                    :style="{ color: listColor(item.list_color) }"
+                    data-note-title-markdown
+                    v-html="renderMarkdown(item.title, { allowLinks: false })"
+                  ></div>
                   <h3
+                    v-else
                     class="min-w-0 break-words text-sm font-bold leading-5"
                     :class="isPlanned ? 'text-[15px]' : 'sm:truncate sm:text-[15px]'"
                     :style="{ color: listColor(item.list_color) }"
@@ -686,6 +702,12 @@
                   :entries="noteTimelineOf(item)"
                   class="mt-1"
                 />
+                <div
+                  v-else-if="item.notes && item.kind === 'note'"
+                  class="note-markdown note-markdown-body mt-0.5 text-xs leading-4 text-muted-foreground sm:mt-1"
+                  data-note-content-markdown
+                  v-html="renderMarkdown(item.notes, { allowLinks: false })"
+                ></div>
                 <p
                   v-else-if="item.notes"
                   class="mt-0.5 text-xs leading-4 text-muted-foreground sm:mt-1"
@@ -820,6 +842,7 @@ import { useAuthStore } from '../stores/auth'
 import Toast from '../components/Toast.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import NoteTimeline from '../components/NoteTimeline.vue'
+import { renderMarkdown } from '../utils/markdown'
 import CompleteNoteDialog from '../components/CompleteNoteDialog.vue'
 import ListFilter from '../components/ListFilter.vue'
 import ListIcon from '../components/ListIcon.vue'
@@ -2395,6 +2418,25 @@ function onShortcut(e: KeyboardEvent) {
   .quick-card { box-shadow: none; }
   .empty-state { min-height: 200px; }
 }
+/* 记事内容 Markdown（用户 2026-11-14）：加粗 / 列表 / 代码 / 引用等按格式显示。
+   渲染结果来自 v-html，scoped 样式要穿透进去。 */
+.note-markdown { @apply leading-5; }
+.note-markdown :deep(p) { margin: 0 0 0.3rem; }
+.note-markdown :deep(p:last-child) { margin-bottom: 0; }
+.note-markdown :deep(strong), .note-markdown :deep(b) { font-weight: 800; }
+.note-markdown :deep(em), .note-markdown :deep(i) { font-style: italic; }
+.note-markdown :deep(ul), .note-markdown :deep(ol) { margin: 0.25rem 0; padding-left: 1.1rem; }
+.note-markdown :deep(ul) { list-style: disc; }
+.note-markdown :deep(ol) { list-style: decimal; }
+.note-markdown :deep(li) { margin: 0.1rem 0; }
+.note-markdown :deep(code) { border-radius: 0.3rem; background: rgba(15, 23, 42, 0.1); padding: 0.05rem 0.25rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+.note-markdown :deep(pre) { margin: 0.3rem 0; overflow-x: auto; border-radius: 0.45rem; background: rgba(15, 23, 42, 0.1); padding: 0.4rem 0.5rem; }
+.note-markdown :deep(pre code) { background: transparent; padding: 0; white-space: pre; }
+.note-markdown :deep(blockquote) { margin: 0.25rem 0; border-left: 3px solid rgb(var(--color-brand-500) / 0.45); padding-left: 0.5rem; }
+.note-markdown :deep(h1), .note-markdown :deep(h2), .note-markdown :deep(h3), .note-markdown :deep(h4) { margin: 0.3rem 0 0.15rem; font-size: 1em; font-weight: 800; }
+.note-markdown :deep(hr) { margin: 0.35rem 0; border: 0; border-top: 1px solid rgb(var(--color-border)); }
+.note-markdown :deep(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 11px; }
+.note-markdown :deep(th), .note-markdown :deep(td) { border: 1px solid rgb(var(--color-border)); padding: 0.15rem 0.35rem; text-align: left; white-space: nowrap; }
 .empty-ring { @apply absolute inset-2 rounded-full border border-brand-500/20 bg-brand-500/5; }
 .empty-check { @apply absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-[0_16px_35px_-12px_rgba(59,130,246,.65)]; }
 .empty-dot { @apply absolute h-2.5 w-2.5 rounded-full; }.dot-one { @apply left-0 top-5 bg-amber-400; }.dot-two { @apply right-1 top-1 bg-violet-400; }.dot-three { @apply bottom-0 right-6 bg-emerald-400; }

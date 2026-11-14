@@ -6,10 +6,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"smallgo/server/logger"
+	"smallgo/server/sysconfig"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -223,6 +225,12 @@ func finishCancelled(db *gorm.DB, jobID uint, code string) {
 // on the same occurrence (for example a daily rule with a one-day interval).
 func scheduleRepeatNotify(tx *gorm.DB, item Reminder, job DeliveryJob) error {
 	if item.RepeatNotifyMinutes <= 0 || item.DueAt == nil {
+		return nil
+	}
+	// 「提醒频率 = 不重复（0）」是用户级的**总开关**：即使单条提醒自己写着
+	// 「过期提醒频率 10 分钟」，也不再往后排重复通知——同一条提醒只提醒一次。
+	if value, err := sysconfig.GetConfig(tx, "reminder_notify_minutes", item.UserID); err == nil &&
+		strings.TrimSpace(value) == "0" {
 		return nil
 	}
 	interval := time.Duration(item.RepeatNotifyMinutes) * time.Minute

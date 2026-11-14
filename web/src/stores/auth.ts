@@ -128,7 +128,11 @@ export const useAuthStore = defineStore('auth', () => {
     ceremonyEnabled.value = configs.ceremony_enabled !== 'false'
     timetableEnabled.value = configs.timetable_enabled === 'true'
     nudgeEnabled.value = configs.nudge_enabled !== 'false'
-    reminderNotifyMinutes.value = Number(configs.reminder_notify_minutes || 10) || 10
+    // 0 是有效值（不重复），不能再用 `|| 10` 把 0 吞掉。
+    const notifyRaw = configs.reminder_notify_minutes
+    const notifyValue = notifyRaw === undefined || notifyRaw === null || notifyRaw === ''
+      ? 10 : Number(notifyRaw)
+    reminderNotifyMinutes.value = Number.isFinite(notifyValue) && notifyValue >= 0 ? notifyValue : 10
     reminderAckMinutes.value = Number(configs.reminder_ack_minutes || 0) || 0
     reminderOverdueTime.value = normalizeClockValue(configs.task_overdue_time) || '23:59'
     if (configs.site_title) siteTitle.value = configs.site_title
@@ -362,7 +366,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function setReminderFrequencies(notifyMinutes: number, ackMinutes: number) {
-    if (notifyMinutes > 0) reminderNotifyMinutes.value = notifyMinutes
+    if (notifyMinutes >= 0) reminderNotifyMinutes.value = notifyMinutes
     if (ackMinutes >= 0) reminderAckMinutes.value = ackMinutes
   }
 
