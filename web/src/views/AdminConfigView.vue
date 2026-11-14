@@ -30,6 +30,7 @@
       <ConfigGroupList
         ref="listRef"
         :items="items"
+        :visible-groups="visibleGroups"
         @save="handleSave"
       />
 
@@ -38,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfigGroupList from '../components/ConfigGroupList.vue'
 import SyncPanel from '../components/SyncPanel.vue'
@@ -51,6 +52,12 @@ import type { ConfigMeta } from '../api/config'
 
 const authStore = useAuthStore()
 const items = ref<ConfigMeta[]>([])
+// 本机备份已经并进顶部「数据备份」卡片，不再单独显示分组卡。
+const visibleGroups = computed(() => {
+  const groups = new Set(items.value.map((it) => it.group || 'general'))
+  groups.delete('backup_local')
+  return [...groups]
+})
 const syncPanelRef = ref<InstanceType<typeof SyncPanel> | null>(null)
 
 // 导入向导完成后：同步设置刚被改写，刷新面板显示最新状态

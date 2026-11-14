@@ -25,7 +25,40 @@
       </p>
       <p class="text-muted-foreground">本机目录：<code class="text-[11px]">{{ status.local_dir || '—' }}</code></p>
       <p v-if="notice" class="font-medium" :class="noticeOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'" data-backup-notice>{{ notice }}</p>
-      <p class="text-muted-foreground">保留份数在「备份计划」里设；本机目录与 WebDAV 连接分别在「本机备份」「WebDAV 远程备份」里设。手动备份两个都已开启的位置各落一份。</p>
+      <p class="text-muted-foreground">保留份数在「备份计划」里设；WebDAV 连接在「WebDAV 远程备份」里设。手动备份两个都已开启的位置各落一份。</p>
+
+      <!-- 本机备份合并进「数据备份」卡片（用户 2026-11-14）：不再单独占一张卡。 -->
+      <div class="mt-3 rounded-xl border border-border/70 bg-muted/20 p-3" data-backup-local>
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="min-w-0 flex-1">
+            <p class="text-xs font-bold text-foreground">本机备份</p>
+            <p class="mt-0.5 text-[11px] leading-4 text-muted-foreground">把备份文件写到本机目录；关闭后只推 WebDAV。</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="localEnabled"
+            :disabled="localSaving"
+            class="inline-flex h-6 w-11 shrink-0 items-center overflow-hidden rounded-full p-0.5 transition-colors focus:outline-none focus:ring-4 focus:ring-brand-500/20"
+            :class="[localEnabled ? 'bg-brand-500' : 'bg-muted', localSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer']"
+            data-backup-local-toggle
+            aria-label="备份到本机"
+            @click="toggleLocal"
+          >
+            <span class="h-5 w-5 shrink-0 rounded-full bg-white shadow transition-transform" :class="localEnabled ? 'translate-x-5' : 'translate-x-0'"></span>
+          </button>
+        </div>
+        <div v-if="localEnabled" class="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            v-model="localDir"
+            class="compact-input min-w-0 flex-1 !h-9 font-mono !text-[11px]"
+            placeholder="留空 = 数据目录下的 backups"
+            data-backup-local-dir
+          />
+          <button class="btn-secondary !h-9 shrink-0 !px-3 !text-xs" :disabled="localSaving" data-backup-local-save @click="saveLocalDir">保存</button>
+        </div>
+        <p v-if="localNotice" class="mt-1 text-[11px] font-medium" :class="localNoticeOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'" data-backup-local-notice>{{ localNotice }}</p>
+      </div>
     </div>
 
     <div class="border-t border-border px-4 py-4 sm:px-6">
@@ -94,6 +127,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { getBackupStatus, listBackupFiles, restoreBackup, runBackup, uploadRestore } from '../api/backup'
+import { getSystemConfigMeta, updateConfig } from '../api/config'
 import type { BackupFile, BackupStatus } from '../api/backup'
 import ConfirmDialog from './ConfirmDialog.vue'
 
@@ -101,6 +135,11 @@ const status = ref<BackupStatus>({ last_at: '', last_status: '', last_detail: ''
 const running = ref(false)
 const notice = ref('')
 const noticeOk = ref(true)
+const localEnabled = ref(true)
+const localDir = ref('')
+const localSaving = ref(false)
+const localNotice = ref('')
+const localNoticeOk = ref(true)
 
 const files = ref<BackupFile[]>([])
 const filesLoading = ref(false)
@@ -120,8 +159,69 @@ const restoreMessage = computed(() => {
 
 onMounted(() => {
   load()
+  loadLocalConfig()
   loadFiles()
 })
+
+async function loadLocalConfig() {
+  try {
+    const res = await getSystemConfigMeta()
+    const items = Array.isArray(res.data?.data) ? res.data.data : []
+    const en = items.find((it: { key: string }) => it.key === 'backup_local_enabled')
+    const dir = items.find((it: { key: string }) => it.key === 'backup_local_dir')
+    if (en) localEnabled.value = String(en.value) === 'true'
+    if (dir) localDir.value = String(dir.value || '')
+  } catch {
+    // 读不到就按默认（本机开、目录留空）显示，不影响备份按钮。
+  }
+}
+
+async function toggleLocal() {
+  if (localSaving.value) return
+  localSaving.value = true
+  localNotice.value = ''
+  try {
+    const next = !localEnabled.value
+    const res = await updateConfig('backup_local_enabled', String(next))
+    if (res.data?.code === 0) {
+      localEnabled.value = next
+      localNoticeOk.value = true
+      localNotice.value = next ? '已开启本机备份' : '已关闭本机备份'
+      await load()
+    } else {
+      localNoticeOk.value = false
+      localNotice.value = res.data?.message || '保存失败'
+    }
+  } catch (err: any) {
+    localNoticeOk.value = false
+    localNotice.value = err.response?.data?.message || '保存失败'
+  } finally {
+    localSaving.value = false
+  }
+}
+
+async function saveLocalDir() {
+  if (localSaving.value) return
+  localSaving.value = true
+  localNotice.value = ''
+  try {
+    const res = await updateConfig('backup_local_dir', localDir.value.trim())
+    if (res.data?.code === 0) {
+      localNoticeOk.value = true
+      localNotice.value = '已保存本机目录'
+      await load()
+      await loadFiles()
+    } else {
+      localNoticeOk.value = false
+      localNotice.value = res.data?.message || '保存失败'
+    }
+  } catch (err: any) {
+    localNoticeOk.value = false
+    localNotice.value = err.response?.data?.message || '保存失败'
+  } finally {
+    localSaving.value = false
+  }
+}
 
 async function load() {
   try {
