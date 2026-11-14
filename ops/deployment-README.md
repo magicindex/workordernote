@@ -233,6 +233,19 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-14：0.48.0 热更新（201 / 200）—— AI 聊天消息按 Markdown 渲染
+
+> **热更新记录**（软件版本仍为 `0.48.0`，后端未重建 / 未变 schema；只替换前端静态资源。源码提交 `47a0286`）
+> 镜像：`workordernote:0.48.0-md-20261114-085614` =
+> `sha256:e0a12f3e97526aa0b73c027c302f15d83f4a451020a91923c5d5d5a03c87e721`；
+> Gitea registry manifest `sha256:30ab787132282a357e0986741de52f0a3d8b7af43bf8508d938bb8afec9b3c6a`（仅推 Gitea registry，未推 GHCR、未打 Release）
+
+- 第 110 条：`AssistantPanel` 的回答气泡改用 Markdown 渲染（marked + DOMPurify 白名单清洗）：`**加粗**`、有序/无序列表、代码块、引用、表格、链接都能正常显示，危险 HTML 被清洗；用户自己发的话仍按纯文本。
+- 201：备份 `docker-compose.yml.bak-pre0480md-20261114-085624`，compose 改指 Gitea registry 的 `0.48.0-md-20261114-085614`；08:56 重建，healthy，`index-CWTewBY_.js`，`/api/version` = `0.48.0 / 1fe586d`。
+- 200：备份 `docker-compose.yml.bak-pre0480md-20261114-085704`，从 `127.0.0.1:3000` 拉取后 tag 成本地 `workordernote:0.48.0-md-20261114-085614`；08:57 重建，healthy，`index-CWTewBY_.js`。
+- 验证：201 / 200 均 `verify-166` **10/10**（加粗/列表/代码块/表格/链接安全/危险 HTML 清洗/用户气泡纯文本）。
+- 注意：0.48.0 的 Linux 包、fpk、GHCR 镜像与 Release 附件**不包含**这次 Markdown 修复；下一次正式发版（0.48.1）会带上 `47a0286`。
+
 ### 2026-11-14：0.48.0（201 生产 / 200 生产均已上线）—— AI 入口改成可拖动悬浮球
 
 > **发版记录**（VERSION 0.48.0，源码提交 `1fe586d`，镜像 `workordernote:0.48.0` =
