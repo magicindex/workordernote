@@ -46,9 +46,7 @@
               <td class="py-3.5 px-6 text-muted-foreground whitespace-nowrap">{{ log.created_at }}</td>
               <td class="py-3.5 px-4">
                 <div class="flex items-center gap-2.5">
-                  <div class="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-[11px] shrink-0" :class="avatarClass(log.username || '?')">
-                    {{ (log.username || '?').charAt(0).toUpperCase() }}
-                  </div>
+                  <UserAvatar :name="log.username || '?'" :size="28" shape="full" />
                   <div>
                     <div class="font-medium text-foreground leading-tight">{{ log.username }}</div>
                     <div class="text-xs text-muted-foreground">#{{ log.user_id }}</div>
@@ -85,9 +83,7 @@
         <div v-for="log in logs" :key="'m-' + log.id" class="p-4" data-mobile-audit-card>
           <div class="flex items-center justify-between gap-2">
             <div class="flex min-w-0 items-center gap-2">
-              <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white" :class="avatarClass(log.username || '?')">
-                {{ (log.username || '?').charAt(0).toUpperCase() }}
-              </div>
+              <UserAvatar :name="log.username || '?'" :size="28" shape="full" />
               <div class="min-w-0">
                 <div class="truncate text-sm font-semibold text-foreground">{{ log.username || '—' }} <span class="text-[11px] font-normal text-muted-foreground">#{{ log.user_id }}</span></div>
                 <div class="text-[11px] text-muted-foreground">{{ log.created_at }}</div>
@@ -120,6 +116,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getAuditLogs, exportAuditLogs } from '../api/audit'
+import UserAvatar from '../components/UserAvatar.vue'
 
 const logs = ref<any[]>([])
 const page = ref(1)
@@ -130,19 +127,7 @@ const totalPages = computed(() => Math.ceil(total.value / pageSize.value) || 1)
 const filterUsername = ref('')
 const filterAction = ref('')
 
-const avatarPalette = [
-  'bg-gradient-to-br from-indigo-500 to-purple-500',
-  'bg-gradient-to-br from-sky-500 to-blue-600',
-  'bg-gradient-to-br from-emerald-500 to-teal-600',
-  'bg-gradient-to-br from-amber-500 to-orange-600',
-  'bg-gradient-to-br from-pink-500 to-rose-600',
-  'bg-gradient-to-br from-violet-500 to-fuchsia-600',
-]
-function avatarClass(name: string) {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h)
-  return avatarPalette[Math.abs(h) % avatarPalette.length]
-}
+
 
 function actionClass(action: string) {
   const a = (action || '').toLowerCase()

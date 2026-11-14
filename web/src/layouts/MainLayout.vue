@@ -451,7 +451,7 @@
           <UiThemeToggle />
           <div class="mx-1 hidden h-7 w-px bg-border sm:block"></div>
           <RouterLink to="/admin/profile" class="flex items-center gap-2 rounded-xl p-1.5 pr-2 hover:bg-muted">
-            <span class="avatar">{{ userInitial }}</span>
+            <UserAvatar :name="authStore.user?.username" :size="32" shape="xl" class="sm:!h-9 sm:!w-9" />
             <span class="hidden text-sm font-semibold md:block">{{ authStore.user?.username }}</span>
           </RouterLink>
           <button class="icon-button !hidden sm:!flex" aria-label="退出登录" @click="logout">
@@ -764,6 +764,7 @@ import Toast from '../components/Toast.vue'
 import VersionDialog from '../components/VersionDialog.vue'
 import AssistantPanel from '../components/AssistantPanel.vue'
 import AssistantLauncher from '../components/AssistantLauncher.vue'
+import UserAvatar from '../components/UserAvatar.vue'
 import { useAssistantStore } from '../stores/assistant'
 import Modal from '../components/Modal.vue'
 import ListCreateDialog from '../components/ListCreateDialog.vue'
@@ -1083,7 +1084,6 @@ const adminNav = [
   { to: '/admin/audit', label: '操作日志', tone: 'bg-amber-500/12 text-amber-500', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="5" y="4" width="14" height="17" rx="2" stroke-width="1.8"/><path d="M9 4h6v3H9zM9 11h6M9 15h4" stroke-width="1.8" stroke-linecap="round"/></svg>' },
 ]
 
-const userInitial = computed(() => (authStore.user?.username || 'R').charAt(0).toUpperCase())
 const greeting = computed(() => {
   const h = new Date().getHours()
   return h < 6 ? '夜深了' : h < 11 ? '早上好' : h < 14 ? '中午好' : h < 18 ? '下午好' : '晚上好'
@@ -2132,7 +2132,6 @@ onBeforeUnmount(() => {
 @media (display-mode: standalone) {
   .topbar { height: auto; min-height: calc(3rem + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
 }
-.avatar { @apply flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-extrabold text-white shadow-sm sm:h-9 sm:w-9; }
 /* 悬浮「新建」：右下角，浮在底部标签栏之上；手机端才有 */
 .mobile-fab { @apply fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-[0_16px_34px_-10px_rgba(59,130,246,.95)] transition-all duration-200 active:scale-95 lg:hidden; bottom: calc(5rem + env(safe-area-inset-bottom)); }
 .mobile-fab-hidden { @apply pointer-events-none translate-y-24 opacity-0; }

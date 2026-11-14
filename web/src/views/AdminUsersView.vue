@@ -85,9 +85,7 @@
             <tr v-for="user in users" :key="user.id" class="hover:bg-muted/50 transition-colors">
               <td class="py-3.5 px-6">
                 <div class="flex items-center gap-3">
-                  <div class="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0" :class="avatarClass(user.username)">
-                    {{ user.username.charAt(0).toUpperCase() }}
-                  </div>
+                  <UserAvatar :name="user.username" :size="36" shape="full" />
                   <div>
                     <div class="font-semibold text-foreground">{{ user.username }}</div>
                     <div class="text-xs text-muted-foreground">ID #{{ user.id }}</div>
@@ -151,9 +149,7 @@
       <div class="divide-y divide-border md:hidden" data-mobile-users>
         <div v-for="user in users" :key="'m-' + user.id" class="p-4" data-mobile-user-card>
           <div class="flex items-start gap-3">
-            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white" :class="avatarClass(user.username)">
-              {{ user.username.charAt(0).toUpperCase() }}
-            </div>
+            <UserAvatar :name="user.username" :size="36" shape="full" />
             <div class="min-w-0 flex-1">
               <div class="flex items-center justify-between gap-2">
                 <div class="truncate font-semibold text-foreground">{{ user.username }}</div>
@@ -245,6 +241,7 @@ import { ref, computed, onMounted } from 'vue'
 import { getUsers, toggleUserStatus, deleteUser, resetUserPassword } from '../api/user'
 import { passwordValidationError } from '../utils/password'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import UserAvatar from '../components/UserAvatar.vue'
 
 const users = ref<any[]>([])
 const search = ref('')
@@ -266,19 +263,7 @@ const resetNewPassword = ref('')
 const resetLoading = ref(false)
 const resetMsg = ref('')
 
-const avatarPalette = [
-  'bg-gradient-to-br from-indigo-500 to-purple-500',
-  'bg-gradient-to-br from-sky-500 to-blue-600',
-  'bg-gradient-to-br from-emerald-500 to-teal-600',
-  'bg-gradient-to-br from-amber-500 to-orange-600',
-  'bg-gradient-to-br from-pink-500 to-rose-600',
-  'bg-gradient-to-br from-violet-500 to-fuchsia-600',
-]
-function avatarClass(name: string) {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h)
-  return avatarPalette[Math.abs(h) % avatarPalette.length]
-}
+
 
 onMounted(loadUsers)
 

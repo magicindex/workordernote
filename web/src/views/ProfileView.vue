@@ -5,9 +5,12 @@
       <div class="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-white/10 blur-2xl"></div>
       <div class="absolute -bottom-20 -left-10 w-56 h-56 rounded-full bg-black/10 blur-2xl"></div>
       <div class="relative flex items-center gap-3 sm:gap-5">
-        <div class="w-12 h-12 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl bg-white/15 backdrop-blur ring-1 ring-white/25 flex items-center justify-center text-white font-display font-extrabold text-xl sm:text-3xl shrink-0">
-          {{ userInitial }}
-        </div>
+        <UserAvatar
+          :name="authStore.user?.username"
+          :size="48"
+          shape="xl"
+          class="sm:!h-20 sm:!w-20 sm:!rounded-2xl ring-white/25"
+        />
         <div class="min-w-0">
           <h1 class="text-lg sm:text-2xl font-display font-extrabold text-white truncate">{{ authStore.user?.username }}</h1>
           <div class="flex items-center gap-2 mt-1 sm:mt-2">
@@ -151,11 +154,11 @@ import { getChannelStatuses, type ChannelStatus } from '../api/reminder'
 import { getPublicConfigs } from '../api/config'
 import { passwordValidationError } from '../utils/password'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import UserAvatar from '../components/UserAvatar.vue'
 import { onFnOSGatewayOrigin } from '../utils/gateway'
 
 const authStore = useAuthStore()
 const router = useRouter()
-const userInitial = computed(() => (authStore.user?.username || 'U').charAt(0).toUpperCase())
 // 网关域：文案要说清楚「退出的是本应用，不是飞牛账号」，但退出按钮一样要有——
 // 飞牛授权只是身份来源，和第三方登录一样不应该替用户决定应用会话的生死。
 const gatewaySession = onFnOSGatewayOrigin()
