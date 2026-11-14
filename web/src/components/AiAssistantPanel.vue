@@ -463,9 +463,6 @@ function payload(): AssistantSettingsInput {
     provider: form.provider,
     base_url: form.base_url,
     model: form.model,
-    // 系统提示词已搬到「偏好设置」，这里不再显示；保存时原样带回，避免把
-    // 管理员设的默认值清空（后端把空串当成「改成默认」）。
-    system_prompt: settings.value?.system_prompt || '',
     timeout_seconds: Number(form.timeout_seconds) || 60,
     thinking_mode: form.thinking_mode,
   }

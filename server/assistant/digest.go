@@ -50,15 +50,6 @@ type WorkDigestResult struct {
 	Truncated bool
 	Markdown  string
 	Draft     string
-	// ListPrompts：这次数据范围里出现过的栏目各自写的 AI 提示词
-	// （用户在清单上填的「这一栏该怎么分析」）。只进系统提示词，不进面板摘要。
-	ListPrompts []ListPrompt
-}
-
-// ListPrompt 是某个栏目的分析要求（来自该清单的 ai_prompt）。
-type ListPrompt struct {
-	Name   string
-	Prompt string
 }
 
 // WorkDigestProvider 由业务包实现（server/reminder 的 WorkDigest 装配），
@@ -139,49 +130,12 @@ func digestSystemPrompt(base string, digest WorkDigestResult) string {
 		base = defaultSystemPrompt
 	}
 	prompt := base + "\n\n" + digest.Markdown
-	if block := listPromptBlock(digest.ListPrompts); block != "" {
-		prompt += "\n\n" + block
-	}
 	return prompt + "\n\n" +
 		"（上面的【工作数据】是系统从用户自己的记录里取回的真实数据，用户看不到它。" +
 		"回答只用这些条目与数字，不要添加没有出现的事项；数据不够就直说。" +
 		"写周报/月报/年报时，给成一份可以直接交上去的中文总结：先用一句话总览，" +
 		"再按清单分组列完成情况，最后点出逾期与未完成项、以及建议的下一步；" +
 		"不要客套话，也不要重复罗列原始条目。）"
-}
-
-// listPromptPromptMaxRunes 单条栏目提示词下发给模型的长度上限。
-// 用户在清单上最多能写 600 字，但那是「管理界面允许的上限」；真塞给模型时
-// 每条压缩到 400 字以内，四条也才 1600 字，不会把工作数据挤走。
-const listPromptPromptMaxRunes = 400
-
-// listPromptBlock 把各栏目的 AI 提示词拼成一段。
-//
-// 刻意写清「这是用户为某一栏写的分析要求」：模型很容易把这些话当成
-// 全局指令；分栏列出、点名只作用于对应栏目的数据，才能让「工作安排要多说
-// 进度」「信用卡只报应还」这类要求各管各的。
-func listPromptBlock(prompts []ListPrompt) string {
-	if len(prompts) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("【各栏目的分析要求】（用户为清单写的，只作用于该栏目的数据，不影响整体口径）")
-	for _, item := range prompts {
-		name := strings.TrimSpace(item.Name)
-		text := strings.TrimSpace(item.Prompt)
-		if name == "" || text == "" {
-			continue
-		}
-		text = truncateRunes(text, listPromptPromptMaxRunes)
-		b.WriteString("\n- ")
-		b.WriteString(name)
-		b.WriteString("：")
-		b.WriteString(text)
-	}
-	if b.Len() == 0 {
-		return ""
-	}
-	return b.String()
 }
 
 // viewOfDigest 把结果压成面板要显示的那几行。

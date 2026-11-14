@@ -58,9 +58,6 @@ func saveComplete(t *testing.T, db *gorm.DB, baseURL string, extra settingsInput
 	if extra.Model != "" {
 		in.Model = extra.Model
 	}
-	if extra.SystemPrompt != "" {
-		in.SystemPrompt = extra.SystemPrompt
-	}
 	if extra.TimeoutSeconds != 0 {
 		in.TimeoutSeconds = extra.TimeoutSeconds
 	}
@@ -69,6 +66,15 @@ func saveComplete(t *testing.T, db *gorm.DB, baseURL string, extra settingsInput
 		t.Fatalf("save settings: %v", err)
 	}
 	return next
+}
+
+// seedGlobalPrompt 模拟「升级前管理员写过的旧全局默认提示词」：它已经不在后台
+// 设置里出现，只作为用户没写自己的统一提示词时的默认继承。
+func seedGlobalPrompt(t *testing.T, db *gorm.DB, text string) {
+	t.Helper()
+	if err := sysconfig.UpdateConfig(db, keySystemPrompt, text, 0); err != nil {
+		t.Fatalf("seed global prompt: %v", err)
+	}
 }
 
 func postJSON(t *testing.T, handler gin.HandlerFunc, body string) (int, map[string]interface{}) {
@@ -495,7 +501,8 @@ func TestChatHandlerPrependsServerSideSystemPrompt(t *testing.T) {
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"收到"}}]}`))
 	})
 	db := newTestDB(t)
-	saveComplete(t, db, upstream.URL, settingsInput{SystemPrompt: "你是小秘"})
+	saveComplete(t, db, upstream.URL, settingsInput{})
+	seedGlobalPrompt(t, db, "你是小秘")
 
 	status, parsed := postJSON(t, handleChat(db), `{"messages":[{"role":"user","content":"你好"}]}`)
 	if status != http.StatusOK {
@@ -599,9 +606,6 @@ func TestAdminSettingsViewMasksKey(t *testing.T) {
 	}
 	if len(parsed.Data.Providers) == 0 {
 		t.Fatal("面板需要服务商预设连同样例模型一起返回")
-	}
-	if parsed.Data.DefaultPrompt == "" {
-		t.Fatal("面板的「恢复默认提示词」需要服务端给默认值")
 	}
 }
 
@@ -746,7 +750,8 @@ func callAs(t *testing.T, handler gin.HandlerFunc, method, path, body string, us
 // 互不覆盖；没写的人用默认值。
 func TestSystemPromptIsPerUser(t *testing.T) {
 	db := newTestDB(t)
-	saveComplete(t, db, "http://127.0.0.1:1", settingsInput{SystemPrompt: "管理员的默认"})
+	saveComplete(t, db, "http://127.0.0.1:1", settingsInput{})
+	seedGlobalPrompt(t, db, "管理员的默认")
 
 	status, parsed := callAs(t, handleSavePromptPrefs(db), http.MethodPut, "/api/assistant/prompts",
 		`{"system_prompt":"  只对我生效的人设  "}`, 7)
@@ -777,7 +782,7 @@ func TestSystemPromptIsPerUser(t *testing.T) {
 		gotMessages = body.Messages
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"收到"}}]}`))
 	})
-	saveComplete(t, db, upstream.URL, settingsInput{SystemPrompt: "管理员的默认"})
+	saveComplete(t, db, upstream.URL, settingsInput{})
 	status, _ = callAs(t, handleChat(db), http.MethodPost, "/api/assistant/chat",
 		`{"messages":[{"role":"user","content":"你好"}]}`, 7)
 	if status != http.StatusOK || len(gotMessages) == 0 || gotMessages[0].Content != "只对我生效的人设" {
@@ -806,7 +811,8 @@ func TestSystemPromptIsPerUser(t *testing.T) {
 // 并且真的进了系统提示词（模型会用这个名字称呼自己）。
 func TestAssistantNameIsPerUser(t *testing.T) {
 	db := newTestDB(t)
-	saveComplete(t, db, "http://127.0.0.1:1", settingsInput{SystemPrompt: "你是小秘，帮用户记事。"})
+	saveComplete(t, db, "http://127.0.0.1:1", settingsInput{})
+	seedGlobalPrompt(t, db, "你是小秘，帮用户记事。")
 
 	status, parsed := callAs(t, handleSavePromptPrefs(db), http.MethodPut, "/api/assistant/prompts",
 		`{"assistant_name":"  小豆  "}`, 7)
@@ -841,7 +847,7 @@ func TestAssistantNameIsPerUser(t *testing.T) {
 		gotMessages = body.Messages
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"在"}}]}`))
 	})
-	saveComplete(t, db, upstream.URL, settingsInput{SystemPrompt: "你是小秘，帮用户记事。"})
+	saveComplete(t, db, upstream.URL, settingsInput{})
 	status, _ = callAs(t, handleChat(db), http.MethodPost, "/api/assistant/chat",
 		`{"messages":[{"role":"user","content":"你好"}]}`, 7)
 	if status != http.StatusOK || len(gotMessages) == 0 || !strings.Contains(gotMessages[0].Content, "小豆") {

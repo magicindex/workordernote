@@ -518,34 +518,18 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       check('收尾把测试记事删掉了', del.status === 200 && del.body?.code === 0, JSON.stringify(del.body));
     }
 
-    // ---------- 5b. 提示词搬到偏好设置：系统提示词 + 各栏目提示词（用户 2026-10-18）----------
-    // 这两样以前在「系统配置 → AI 助手」里，只有管理员能改；现在是个人偏好。
+    // ---------- 5b. 提示词：每人一份统一提示词，不再按栏目 / 管理员全局设置 ----------
     const adminHasPrompts = await page.evaluate(() => ({
       system: !!document.querySelector('[data-ai-prompt]'),
       lists: !!document.querySelector('[data-ai-list-prompts]'),
     }));
-    check('系统配置页不再显示提示词（只有管理员进得去，别人改不了）',
+    check('系统配置页不再显示提示词（全局 / 各栏目都没有）',
       !adminHasPrompts.system && !adminHasPrompts.lists, JSON.stringify(adminHasPrompts));
 
-    let listRows = (await api(page, '/api/reminder/lists')).body?.data || [];
-    let extraList = null;
-    const generalsOf = (rows) => rows.filter((row) => !row.template || row.template === 'general');
-    if (generalsOf(listRows).length < 2) {
-      // 新实例只有一条默认清单：造一条临时清单，用完删掉。
-      const created = await api(page, '/api/reminder/lists', 'POST', { name: '验提示词-临时', color: 'blue', icon: 'list' });
-      extraList = created.body?.data || null;
-      listRows = (await api(page, '/api/reminder/lists')).body?.data || [];
-      check('为验证补了一条临时清单', !!extraList && listRows.some((row) => row.id === extraList.id), JSON.stringify(created.body).slice(0, 120));
-    }
-    check('清单接口带 ai_prompt 字段（默认是空串）',
-      listRows.length > 0 && listRows.every((row) => typeof row.ai_prompt === 'string'),
-      JSON.stringify(listRows.slice(0, 2).map((row) => ({ name: row.name, ai_prompt: row.ai_prompt }))));
-
-    const generalLists = generalsOf(listRows);
-    const target = generalLists[0] || null;
-    const other = generalLists[1] || null;
-    check('至少有两条普通清单可用来验「各栏一条 / 互相引用」', !!target && !!other,
-      JSON.stringify(generalLists.map((row) => row.name)));
+    const listRows = (await api(page, '/api/reminder/lists')).body?.data || [];
+    check('清单接口不再暴露 ai_prompt 字段（栏目提示词已取消）',
+      listRows.length > 0 && listRows.every((row) => !('ai_prompt' in row)),
+      JSON.stringify(listRows.slice(0, 2).map((row) => Object.keys(row))));
 
     // 自己可能已经写过：先清回默认，才能验「用默认」这个初始态。
     await api(page, '/api/assistant/prompts', 'PUT', { system_prompt: '' });
@@ -562,16 +546,20 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
         hasPrompt: !!box,
         value: box ? box.value : '',
         state: (document.querySelector('[data-ai-pref-prompt-state]')?.textContent || '').trim(),
+        hasListPrompts: !!document.querySelector('[data-ai-list-prompts]'),
       };
     });
-    check('偏好设置里有「AI 提示词」一节和系统提示词输入框', prefShape.section && prefShape.hasPrompt, JSON.stringify(prefShape));
-    // 个人系统提示词是 Internal 配置：不能再以「assistant」一组出现在通用列表里，
-    // 否则页面上会有两个「我的系统提示词」输入框（用户 2026-10-18 说重复）。
+    check('偏好设置里有「AI 提示词」一节和统一提示词输入框',
+      prefShape.section && prefShape.hasPrompt, JSON.stringify(prefShape));
+    check('偏好设置里不再有「各栏目的 AI 提示词」',
+      prefShape.hasListPrompts === false, JSON.stringify(prefShape));
+    // 个人统一提示词是 Internal 配置：不能再以「assistant」一组出现在通用列表里，
+    // 否则页面上会有两个提示词输入框（用户 2026-10-18 说重复）。
     const dupShape = await page.evaluate(() => ({
       metaItem: !!document.querySelector('[data-config-key="ai_user_prompt"]'),
       promptBoxes: document.querySelectorAll('[data-ai-pref-prompt]').length,
     }));
-    check('只留「AI 提示词」一节，通用列表里不再重复出现系统提示词',
+    check('只留「AI 提示词」一节，通用列表里不再重复出现提示词',
       !dupShape.metaItem && dupShape.promptBoxes === 1, JSON.stringify(dupShape));
     check('没写过时标「用默认」', prefShape.state.includes('用默认'), prefShape.state);
 
@@ -598,82 +586,12 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       JSON.stringify({ ...prefSaved, saved: myPrompt.system_prompt }));
 
     const adminSettingsNow = (await api(page, '/api/assistant/admin/settings')).body?.data || {};
-    check('管理员设的默认提示词没被我改掉',
-      adminSettingsNow.system_prompt === (before.system_prompt || before.default_system_prompt || ''),
-      JSON.stringify({ now: adminSettingsNow.system_prompt?.slice(0, 24), before: before.system_prompt?.slice(0, 24) }));
+    check('后台设置不再暴露全局提示词（已改为按用户继承旧默认）',
+      !('system_prompt' in adminSettingsNow) && !('default_system_prompt' in adminSettingsNow),
+      JSON.stringify(Object.keys(adminSettingsNow)));
 
-    const sectionShape = await page.evaluate(() => {
-      const rows = Array.from(document.querySelectorAll('[data-ai-list-prompt-row]'));
-      return {
-        hasSection: !!document.querySelector('[data-ai-list-prompts]'),
-        names: rows.map((el) => el.getAttribute('data-ai-list-prompt-row')),
-        rows: rows.length,
-      };
-    });
-    check('后台有「各栏目的 AI 提示词」一节', sectionShape.hasSection, JSON.stringify(sectionShape));
-    check('每个清单一行', sectionShape.rows === listRows.length
-      && listRows.every((row) => sectionShape.names.includes(row.name)),
-      JSON.stringify({ ui: sectionShape.names, api: listRows.map((row) => row.name) }));
-
-    if (target && other) {
-      // 先清到已知状态（展示实例上可能已经写过），再走一遍「填 → 未保存 → 保存 → 已设置」。
-      await api(page, `/api/reminder/lists/${target.id}`, 'PATCH', { ai_prompt: '' });
-      await page.reload({ waitUntil: 'networkidle2' });
-      await sleep(900);
-      // reload 之后偏好设置回到默认的「常用」标签，「各栏目提示词」在「更多」里藏着 ——
-      // 不切回去的话下面 scrollIntoView/focus 拿到的是 0×0 的隐藏节点，直接抛不可点击。
-      await page.evaluate(() => document.querySelector('[data-settings-tab="more"]')?.click());
-      await sleep(500);
-      const PROMPT = '按基站/线路分组，多说进度';
-      const targetSel = `[data-ai-list-prompt=${JSON.stringify(target.name)}]`;
-      // 这段在「更多」里，常见情况是滚下去才看得见；puppeteer 的 click 对不可见/被遮挡
-      // 的节点会直接抛 "Node is either not clickable"（2026-11-12 踩到）。先滚到中间再聚焦。
-      await page.evaluate((sel) => document.querySelector(sel)?.scrollIntoView({ block: 'center' }), targetSel);
-      await sleep(250);
-      await page.focus(targetSel);
-      await page.keyboard.down('Control');
-      await page.keyboard.press('A');
-      await page.keyboard.up('Control');
-      await page.keyboard.type(PROMPT);
-      await sleep(250);
-      const dirtyRow = await page.evaluate((name) => (document.querySelector(`[data-ai-list-prompt-row=${JSON.stringify(name)}]`)?.textContent || '').replace(/\s+/g, ' '), target.name);
-      check('改过之后那一行标「未保存」', /未保存/.test(dirtyRow), dirtyRow.slice(0, 80));
-      await page.evaluate((sel) => {
-        const el = document.querySelector(sel);
-        el?.scrollIntoView({ block: 'center' });
-        el?.click();
-      }, `[data-ai-list-prompt-save=${JSON.stringify(target.name)}]`);
-      await sleep(1000);
-      const savedState = await page.evaluate((name) => {
-        const row = document.querySelector(`[data-ai-list-prompt-row=${JSON.stringify(name)}]`);
-        return {
-          text: (row?.textContent || '').replace(/\s+/g, ' '),
-          flash: !!document.querySelector('[data-ai-list-prompt-saved]'),
-        };
-      }, target.name);
-      check('点保存后这一行标「已设置」并提示「已保存」', /已设置/.test(savedState.text) && savedState.flash, JSON.stringify(savedState));
-      const readBack = (await api(page, '/api/reminder/lists')).body?.data?.find((row) => row.id === target.id);
-      check('写进清单的提示词读回来一字不差', readBack?.ai_prompt === PROMPT, JSON.stringify(readBack?.ai_prompt));
-
-      // 引用：从别的栏目复制一段（一次性复制，不是共享引用）。
-      await page.select(`[data-ai-list-prompt-ref=${JSON.stringify(other.name)}]`, String(target.id));
-      await sleep(300);
-      const copied = await page.evaluate((name) => document.querySelector(`[data-ai-list-prompt=${JSON.stringify(name)}]`)?.value || '', other.name);
-      check('「引用其他栏目」把那段文字复制过来', copied === PROMPT, copied);
-
-      const tooLong = await api(page, `/api/reminder/lists/${target.id}`, 'PATCH', { ai_prompt: '字'.repeat(601) });
-      check('超长提示词被拒绝并说清上限',
-        tooLong.status === 400 && /600/.test(tooLong.body?.message || ''), JSON.stringify(tooLong.body).slice(0, 160));
-      const cleared = await api(page, `/api/reminder/lists/${target.id}`, 'PATCH', { ai_prompt: '' });
-      check('清空提示词接口正常', cleared.body?.code === 0, JSON.stringify(cleared.body).slice(0, 120));
-    }
-
-    // 收尾：把自己的系统提示词清回默认，删掉临时清单。
+    // 收尾：把自己的统一提示词清回默认。
     await api(page, '/api/assistant/prompts', 'PUT', { system_prompt: '' });
-    if (extraList) {
-      const removed = await api(page, `/api/reminder/lists/${extraList.id}`, 'DELETE');
-      check('收尾删掉了临时清单', removed.body?.code === 0, JSON.stringify(removed.body).slice(0, 120));
-    }
 
     // ---------- 6. 收尾：恢复原设置（密钥留空表示不动）----------
     await api(page, '/api/assistant/admin/settings', 'PUT', {
@@ -682,7 +600,6 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       base_url: before.base_url || '',
       api_key: '',
       model: before.model || '',
-      system_prompt: before.system_prompt || before.default_system_prompt || '',
       timeout_seconds: before.timeout_seconds || 60,
       thinking_mode: before.thinking_mode || 'brief',
     });

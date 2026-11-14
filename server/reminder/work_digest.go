@@ -61,14 +61,6 @@ type WorkDigestItem struct {
 	ListID uint `json:"-"`
 }
 
-// WorkDigestPrompt 是这次数据范围里某个栏目的 AI 提示词（用户为清单写的分析要求）。
-// 只进模型的系统提示词，不进面板摘要。
-type WorkDigestPrompt struct {
-	ListID uint
-	Name   string
-	Prompt string
-}
-
 // WorkDigestList 是清单维度的分布，让模型能说出「哪块最忙」。
 type WorkDigestList struct {
 	Name      string `json:"name"`
@@ -83,7 +75,7 @@ type WorkDigestCourse struct {
 	Day      string `json:"day"` // YYYY-MM-DD（本周那一天）
 	Weekday  int    `json:"weekday"`
 	Title    string `json:"title"`
-	Kind     string `json:"kind"` // course / activity
+	Kind     string `json:"kind"`              // course / activity
 	Section  string `json:"section,omitempty"` // 早课 / 上午 / 下午 / 晚课
 	Start    string `json:"start"`
 	End      string `json:"end"`
@@ -104,24 +96,21 @@ type WorkDigestStats struct {
 
 // WorkDigest 是一段时间的工作数据快照。
 type WorkDigest struct {
-	Option    string           `json:"option"`
-	Label     string           `json:"label"` // 「上周（2026-10-05 ~ 2026-10-11）」
-	Start     string           `json:"start,omitempty"`
-	End       string           `json:"end,omitempty"`
-	Keyword   string           `json:"keyword,omitempty"`
-	ListID    uint             `json:"list_id,omitempty"`
-	ListName  string           `json:"list_name,omitempty"` // 「@清单名」点名的那一栏
-	All       bool             `json:"all,omitempty"`       // 不限时间
-	Completed []WorkDigestItem `json:"completed"`
-	Open      []WorkDigestItem `json:"open"`
-	Notes     []WorkDigestItem `json:"notes"`
-	Lists     []WorkDigestList `json:"lists"`
+	Option    string             `json:"option"`
+	Label     string             `json:"label"` // 「上周（2026-10-05 ~ 2026-10-11）」
+	Start     string             `json:"start,omitempty"`
+	End       string             `json:"end,omitempty"`
+	Keyword   string             `json:"keyword,omitempty"`
+	ListID    uint               `json:"list_id,omitempty"`
+	ListName  string             `json:"list_name,omitempty"` // 「@清单名」点名的那一栏
+	All       bool               `json:"all,omitempty"`       // 不限时间
+	Completed []WorkDigestItem   `json:"completed"`
+	Open      []WorkDigestItem   `json:"open"`
+	Notes     []WorkDigestItem   `json:"notes"`
+	Lists     []WorkDigestList   `json:"lists"`
 	Courses   []WorkDigestCourse `json:"courses,omitempty"`
-	Stats     WorkDigestStats  `json:"stats"`
-	Truncated bool             `json:"truncated"`
-	// 这次数据范围涉及的栏目的 AI 提示词（用户为清单写的分析要求）。
-	// 不序列化：面板摘要不需要它，只有系统提示词的装配要。
-	Prompts []WorkDigestPrompt `json:"-"`
+	Stats     WorkDigestStats    `json:"stats"`
+	Truncated bool               `json:"truncated"`
 }
 
 // BuildWorkDigest 取一段工作数据。now 由调用方传入（测试里要钉死时刻）。
@@ -231,7 +220,6 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 	}
 
 	digest.Lists = mergeWorkLists(digest.Completed, digest.Open, digest.Notes)
-	digest.Prompts = collectListPrompts(db, userID, digest)
 	digest.Stats = WorkDigestStats{
 		Completed: len(digest.Completed),
 		Open:      len(digest.Open),
@@ -256,56 +244,6 @@ func LooksLikeScheduleQuery(text string) bool {
 		}
 	}
 	return false
-}
-
-// workDigestMaxListPrompts 一次最多带几条栏目提示词。
-// 提示词是给模型看的要求，条数太多会挤掉真正的工作数据；四条已经够覆盖
-// 「工作安排 / 信用卡 / 随手记事本 / 自建清单」这类常见组合。
-const workDigestMaxListPrompts = 4
-
-// collectListPrompts 取这次数据范围里出现过的栏目的 AI 提示词。
-//
-// 只挑**真有数据**的栏目：用户给「人生要有仪式感」写了提示词、但这段时间一条
-// 数据都没有，就别把那段话塞给模型（否则模型会对着空数据讲要求）。用 @清单名
-// 点名时只看那一栏。顺序按清单在侧栏的先后，最多 workDigestMaxListPrompts 条。
-func collectListPrompts(db *gorm.DB, userID uint, digest WorkDigest) []WorkDigestPrompt {
-	wanted := map[uint]bool{}
-	add := func(items []WorkDigestItem) {
-		for _, item := range items {
-			if item.ListID > 0 {
-				wanted[item.ListID] = true
-			}
-		}
-	}
-	add(digest.Completed)
-	add(digest.Open)
-	add(digest.Notes)
-	if digest.ListID > 0 {
-		wanted = map[uint]bool{digest.ListID: true}
-	}
-	if len(wanted) == 0 {
-		return nil
-	}
-	var rows []List
-	if err := db.Where("user_id = ? AND deleted_at IS NULL AND ai_prompt <> ''", userID).
-		Order("position ASC, id ASC").Find(&rows).Error; err != nil {
-		return nil
-	}
-	out := make([]WorkDigestPrompt, 0, len(rows))
-	for _, list := range rows {
-		if !wanted[list.ID] {
-			continue
-		}
-		prompt := strings.TrimSpace(list.AIPrompt)
-		if prompt == "" {
-			continue
-		}
-		out = append(out, WorkDigestPrompt{ListID: list.ID, Name: strings.TrimSpace(list.Name), Prompt: prompt})
-		if len(out) >= workDigestMaxListPrompts {
-			break
-		}
-	}
-	return out
 }
 
 // workRangeLabel 给区间一个口语名字，草稿的标题与提示词都用它。

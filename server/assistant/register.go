@@ -44,15 +44,15 @@ func init() {
 	})
 	sysconfig.RegisterConfig(sysconfig.ConfigDef{
 		Key: keySystemPrompt, Scope: sysconfig.ScopeSystem, Type: sysconfig.TypeString,
-		Default: defaultSystemPrompt, Internal: true, Group: "assistant", Label: "系统提示词",
-		Description: "每轮对话都由服务端加在最前面，决定小秘的人设与边界",
+		Default: defaultSystemPrompt, Internal: true, Group: "assistant", Label: "旧全局默认提示词",
+		Description: "仅作为用户还没写自己的统一提示词时的默认继承；不再在后台编辑",
 	})
-	// 个人系统提示词：每个人一份，放在偏好设置里改；Internal 让它不出现在
+	// 个人的统一提示词：每个人一份，放在偏好设置里改；Internal 让它不出现在
 	// 通用配置接口的列表里（读写走 /api/assistant/prompts）。
 	sysconfig.RegisterConfig(sysconfig.ConfigDef{
 		Key: keyUserPrompt, Scope: sysconfig.ScopeUser, Type: sysconfig.TypeString,
 		Default: "", Internal: true, Group: "assistant", Label: "我的系统提示词",
-		Description: "只影响你自己和小秘的对话；留空则使用管理员设的默认提示词",
+		Description: "一份提示词作用于你所有的对话和所有栏目；留空则继承旧全局默认提示词",
 	})
 	// 小秘名称：每个人自己起（个人偏好，随账号同步）。留空就是默认的「小秘」。
 	sysconfig.RegisterConfig(sysconfig.ConfigDef{
@@ -85,8 +85,8 @@ func RegisterRoutes(auth *gin.RouterGroup, admin *gin.RouterGroup, db *gorm.DB) 
 	// 把小秘的一段回答存进记事本（标题与标签由服务端自动生成）：
 	// 与对话一样是每个用户自己的数据，所以挂登录用户组。
 	auth.POST("/assistant/notes", handleSaveNote(db))
-	// 个人提示词：登录用户读写自己的（系统提示词）。各栏目的提示词存在清单上，
-	// 走 /api/reminder/lists/:id 的 ai_prompt 字段。
+	// 个人统一提示词：登录用户读写自己那一份，所有人共用同一套「每人一份」的规则，
+	// 互不覆盖；各栏目不再单独配置提示词。
 	auth.GET("/assistant/prompts", handleGetPromptPrefs(db))
 	auth.PUT("/assistant/prompts", handleSavePromptPrefs(db))
 

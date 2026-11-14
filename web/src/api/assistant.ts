@@ -223,7 +223,6 @@ export interface AssistantSettings {
   api_key: string
   api_key_set: boolean
   model: string
-  system_prompt: string
   timeout_seconds: number
   /** 「对话里显示思考过程」的后台偏好。 */
   thinking_mode: AssistantThinkingMode
@@ -233,7 +232,6 @@ export interface AssistantSettings {
   ready: boolean
   active: boolean
   reason: string
-  default_system_prompt: string
   providers: AssistantProviderPreset[]
 }
 
@@ -245,7 +243,6 @@ export interface AssistantSettingsInput {
   api_key?: string
   clear_api_key?: boolean
   model: string
-  system_prompt: string
   timeout_seconds: number
   thinking_mode: AssistantThinkingMode
 }
@@ -353,7 +350,7 @@ export async function testAssistantSettings(input?: AssistantSettingsInput): Pro
   }
 }
 
-/** 「我的系统提示词」：空串表示还没写，会回退到 default_system_prompt。 */
+/** 「我的统一提示词」：一个账号一份，所有栏目共用；空串表示还没写，会继承 default_system_prompt。 */
 export interface AssistantPromptPrefs {
   system_prompt: string
   default_system_prompt: string

@@ -135,16 +135,6 @@ async function main() {
       const madeId = made.body?.data?.id ?? null;
       if (madeId) await api(page, `/api/reminder/items/${madeId}/complete`, 'POST', {});
 
-      // 4.4) 栏目提示词（用户 2026-10-17）：清单上的「这一栏该怎么分析」只进 system，
-      //      分栏列出；清空后就不再出现。挑自检任务所在的栏目，保证它这一轮真有数据。
-      const promptListId = made.body?.data?.list_id ?? null;
-      const promptListName = made.body?.data?.list_name ?? '';
-      const promptText = `${stamp}栏目要求：先说结论`;
-      const promptSet = promptListId
-        ? await api(page, `/api/reminder/lists/${promptListId}`, 'PATCH', { ai_prompt: promptText })
-        : { body: { code: -1 } };
-      check('清单能存下 AI 提示词', !!promptListId && promptSet.body?.code === 0, JSON.stringify(promptSet.body).slice(0, 200));
-
       const seenBefore = seen.length;
       const digestChat = await api(page, '/api/assistant/chat', 'POST', {
         messages: [{ role: 'user', content: '帮我写这周的周报' }],
@@ -160,26 +150,6 @@ async function main() {
       check('回复带数据摘要回执（前端据此写「已附上数据」）',
         !!ddata.digest && ddata.digest.option === 'week' && (ddata.digest.completed || 0) >= 1 && (ddata.digest.lists || 0) >= 1,
         JSON.stringify(ddata.digest).slice(0, 240));
-      check('栏目提示词进了给模型的 system（分栏列出、带栏目名）',
-        dsystem.includes('【各栏目的分析要求】') && dsystem.includes(`- ${promptListName}：${promptText}`),
-        dsystem.slice(-320));
-      check('栏目提示词没混进用户消息或数据摘要',
-        !String(dmsgs[1]?.content || '').includes('栏目要求') && !JSON.stringify(ddata.digest || {}).includes('栏目要求'),
-        JSON.stringify({ user: dmsgs[1]?.content, digest: ddata.digest }).slice(0, 240));
-      if (promptListId) {
-        await api(page, `/api/reminder/lists/${promptListId}`, 'PATCH', { ai_prompt: '' });
-        const seenClear = seen.length;
-        await api(page, '/api/assistant/chat', 'POST', {
-          messages: [{ role: 'user', content: '再写一次周报' }],
-          digest: { option: 'week' },
-        });
-        const clearReq = seen.slice(seenClear).find((r) => r.method === 'POST' && r.url.includes('/chat/completions'));
-        const clearSystem = String(((clearReq && clearReq.body && clearReq.body.messages) || [])[0]?.content || '');
-        // 只断言「被清空那一栏」的要求消失了：别的栏目可能也写着要求（比如展示实例上的
-        // 「信用卡账单」），那些照样该出现，不能拿整段标题当判据。
-        check('清空某栏的提示词后，system 里不再有那一栏的要求',
-          !clearSystem.includes(`- ${promptListName}：${promptText}`), clearSystem.slice(-260));
-      }
       if (madeId) await api(page, `/api/reminder/items/${madeId}`, 'DELETE');
 
       // 5) 面板：状态行与真回复

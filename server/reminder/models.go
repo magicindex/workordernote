@@ -53,13 +53,7 @@ type List struct {
 	Position  int    `gorm:"not null;default:0;index:idx_reminder_lists_user_position" json:"position"`
 	IsDefault bool   `gorm:"not null;default:false" json:"is_default"`
 	// 模板：general（普通清单）或 credit_card（信用卡清单，里面放卡片实体）
-	Template string `gorm:"size:16;not null;default:general" json:"template"`
-	// AI 提示词：这一栏的数据交给「小秘」分析时，额外告诉模型该怎么看它
-	// （用户 2026-10-17：「为每个不同栏目增加 ai 提示词」）。空串表示不加要求。
-	// 存在清单上而不是系统配置里：新建清单天然就能带，多个清单填同一段文字即为
-	// 「共用一个提示词」（各自改，互不影响）。
-	AIPrompt string `gorm:"column:ai_prompt;size:600;not null;default:''" json:"ai_prompt"`
-
+	Template  string     `gorm:"size:16;not null;default:general" json:"template"`
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 	DeletedAt *time.Time `gorm:"index" json:"-"`

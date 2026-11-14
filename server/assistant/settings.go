@@ -35,9 +35,8 @@ const (
 	keyAPIKey       = "ai_api_key"
 	keyModel        = "ai_model"
 	keySystemPrompt = "ai_system_prompt"
-	// keyUserPrompt 是「每个人自己的系统提示词」。0.35.0 之前系统提示词只有
-	// 管理员能改；现在它是个人偏好：这个人写过就用他的，没写才回退到管理员
-	// 设的默认值（keySystemPrompt）。
+	// keyUserPrompt 是「每个人自己的统一提示词」。这个人写过就用他的；没写才继承
+	// 旧全局默认值（keySystemPrompt）——后者只作为默认继承，后台不再提供编辑入口。
 	keyUserPrompt = "ai_user_prompt"
 	// keyAssistantName 是「每个人给自己的小秘起的名字」：空串 = 用默认的「小秘」。
 	// 它不是密钥，随个人偏好一起同步；对话里、面板标题与系统提示词都用它。
@@ -66,8 +65,8 @@ const (
 
 const defaultProviderID = "deepseek"
 
-// defaultSystemPrompt 是开箱即用的系统提示词。面板里可改：不同的人对「小秘」
-// 的期待不一样（有人要点子，有人要周报草稿）。
+// defaultSystemPrompt 是开箱即用的内置提示词，也是旧全局默认值没被配置过时的兜底。
+// 每个人可以在偏好设置里写自己的统一提示词；没写的人继承旧全局默认值。
 //
 // 关于【工作数据】：用户问周报这类问题时，服务端会把真实记录附在系统消息里
 // （见 digest.go 的 digestSystemPrompt）。提示词里必须交代这一点，否则模型会把
@@ -213,8 +212,8 @@ func userSystemPrompt(db *gorm.DB, userID uint) string {
 	return strings.TrimSpace(v)
 }
 
-// effectiveSystemPrompt 给出这一轮真正要用的系统提示词：本人的优先，
-// 没写就用管理员设的默认值（settings.SystemPrompt，默认值是内置文案）。
+// effectiveSystemPrompt 给出这一轮真正要用的统一提示词：本人的优先，
+// 没写就继承旧全局默认值（settings.SystemPrompt，默认值是内置文案）。
 // assistantName 读这个人给小秘起的名字；没设置或配置坏了就是空串（由界面回退到「小秘」）。
 func assistantName(db *gorm.DB, userID uint) string {
 	if userID == 0 {
@@ -376,7 +375,6 @@ type settingsInput struct {
 	APIKey         string `json:"api_key"`
 	ClearAPIKey    bool   `json:"clear_api_key"`
 	Model          string `json:"model"`
-	SystemPrompt   string `json:"system_prompt"`
 	TimeoutSeconds int    `json:"timeout_seconds"`
 	ThinkingMode   string `json:"thinking_mode"`
 }
@@ -417,11 +415,6 @@ func (in settingsInput) apply(current Settings) (Settings, error) {
 		return current, fmt.Errorf("API Key 过长")
 	}
 
-	prompt := strings.TrimSpace(in.SystemPrompt)
-	if len([]rune(prompt)) > 4000 {
-		return current, fmt.Errorf("系统提示词最多 4000 字")
-	}
-
 	timeout := in.TimeoutSeconds
 	if timeout == 0 {
 		timeout = defaultTimeoutSeconds
@@ -447,7 +440,7 @@ func (in settingsInput) apply(current Settings) (Settings, error) {
 		BaseURL:        baseURL,
 		APIKey:         apiKey,
 		Model:          model,
-		SystemPrompt:   prompt,
+		SystemPrompt:   current.SystemPrompt,
 		TimeoutSeconds: timeout,
 		ThinkingMode:   thinking,
 	}
@@ -473,7 +466,6 @@ func saveSettings(db *gorm.DB, in settingsInput) (Settings, error) {
 		keyBaseURL:      next.BaseURL,
 		keyAPIKey:       next.APIKey,
 		keyModel:        next.Model,
-		keySystemPrompt: next.SystemPrompt,
 		keyTimeout:      strconv.Itoa(next.TimeoutSeconds),
 		keyThinkingMode: next.ThinkingMode,
 	}

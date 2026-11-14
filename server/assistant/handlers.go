@@ -293,7 +293,6 @@ type settingsView struct {
 	APIKey           string           `json:"api_key"`
 	APIKeySet        bool             `json:"api_key_set"`
 	Model            string           `json:"model"`
-	SystemPrompt     string           `json:"system_prompt"`
 	TimeoutSeconds   int              `json:"timeout_seconds"`
 	ThinkingMode     string           `json:"thinking_mode"`
 	ThinkingOptions  []string         `json:"thinking_options"`
@@ -301,7 +300,6 @@ type settingsView struct {
 	Ready            bool             `json:"ready"`
 	Active           bool             `json:"active"`
 	Reason           string           `json:"reason"`
-	DefaultPrompt    string           `json:"default_system_prompt"`
 	Providers        []providerPreset `json:"providers"`
 }
 
@@ -313,7 +311,6 @@ func buildSettingsView(s Settings) settingsView {
 		APIKey:           maskSecret(s.APIKey),
 		APIKeySet:        s.APIKey != "",
 		Model:            s.Model,
-		SystemPrompt:     s.SystemPrompt,
 		TimeoutSeconds:   s.TimeoutSeconds,
 		ThinkingMode:     s.ThinkingMode,
 		ThinkingOptions:  thinkingModeOptions,
@@ -321,7 +318,6 @@ func buildSettingsView(s Settings) settingsView {
 		Ready:            s.ready(),
 		Active:           s.active(),
 		Reason:           s.blockedReason(true),
-		DefaultPrompt:    defaultSystemPrompt,
 		Providers:        providerPresets,
 	}
 }

@@ -107,19 +107,5 @@ func workDigestProvider(db *gorm.DB, userID uint, req assistant.WorkDigestReques
 		Truncated: digest.Truncated,
 		Markdown:  digest.Markdown(),
 		Draft:     digest.DraftReport(),
-		// 各栏目的 AI 提示词：用户在清单上写的「这一栏该怎么分析」。
-		ListPrompts: listPromptsOf(digest.Prompts),
 	}, nil
-}
-
-// listPromptsOf 把 reminder 的提示词结构搬成 assistant 的（两个包互不 import）。
-func listPromptsOf(prompts []reminder.WorkDigestPrompt) []assistant.ListPrompt {
-	if len(prompts) == 0 {
-		return nil
-	}
-	out := make([]assistant.ListPrompt, 0, len(prompts))
-	for _, item := range prompts {
-		out = append(out, assistant.ListPrompt{Name: item.Name, Prompt: item.Prompt})
-	}
-	return out
 }
