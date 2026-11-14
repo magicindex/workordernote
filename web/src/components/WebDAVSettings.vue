@@ -29,6 +29,15 @@
         >
           {{ testing ? '测试中…' : '测试连接' }}
         </button>
+        <button
+          class="btn-secondary !px-3 !py-2 text-xs"
+          :disabled="!enabled || backupTesting || testing || saving"
+          :title="enabled ? '立即生成一份真实备份并上传到 WebDAV' : '请先开启「备份到 WebDAV」'"
+          data-webdav-test-backup
+          @click="testBackup"
+        >
+          {{ backupTesting ? '备份中…' : '测试备份' }}
+        </button>
         <span
           class="inline-flex items-center gap-1.5 text-xs font-semibold"
           :class="!enabled ? 'text-muted-foreground' : result?.ok ? 'text-emerald-600 dark:text-emerald-400' : result ? 'text-destructive' : 'text-muted-foreground'"
@@ -44,6 +53,10 @@
         </span>
       </div>
     </div>
+
+    <p v-if="backupNotice" class="px-4 pb-2 text-xs font-medium" :class="backupNoticeOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'" data-webdav-test-backup-result>
+      {{ backupNotice }}
+    </p>
 
     <!-- 服务器地址 + 路径同一行、分两个模块 -->
     <div class="px-4 py-3" data-webdav-address-row>
@@ -175,7 +188,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { getSystemConfigMeta, updateConfig } from '../api/config'
-import { browseWebDAV, testWebDAV, type WebDAVDir } from '../api/backup'
+import { browseWebDAV, runBackup, testWebDAV, type WebDAVDir } from '../api/backup'
 
 const enabled = ref(false)
 const server = ref('')
@@ -189,6 +202,9 @@ const notice = ref('')
 const noticeOk = ref(true)
 const testing = ref(false)
 const result = ref<{ ok: boolean; latency: number; message: string } | null>(null)
+const backupTesting = ref(false)
+const backupNotice = ref('')
+const backupNoticeOk = ref(true)
 const browseOpen = ref(false)
 const browsing = ref(false)
 const browsePath = ref('')
@@ -200,6 +216,7 @@ function touch() {
   dirty.value = true
   notice.value = ''
   result.value = null
+  backupNotice.value = ''
 }
 
 function normalizeServer(raw: string): { server: string; basePath: string } | null {
@@ -219,6 +236,14 @@ function normalizePath(raw: string): string {
 // URL.pathname 会把中文路径编码成 %E5…；显示/保存前要还原成可读路径，
 // 否则再拼一次 URL 会变成二次编码。
 function decodePath(raw: string): string {
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
+}
+
+function prettyRemote(raw: string): string {
   try {
     return decodeURIComponent(raw)
   } catch {
@@ -264,6 +289,7 @@ async function toggleEnabled() {
     if (res.data?.code === 0) {
       enabled.value = next
       result.value = null
+      backupNotice.value = ''
       if (!next) browseOpen.value = false
       noticeOk.value = true
       notice.value = next ? '已开启 WebDAV 备份' : '已关闭 WebDAV 备份'
@@ -339,6 +365,30 @@ async function testConnection() {
     result.value = { ok: false, latency: 0, message: err.response?.data?.message || '连接失败' }
   } finally {
     testing.value = false
+  }
+}
+
+async function testBackup() {
+  if (!enabled.value || backupTesting.value) return
+  if (dirty.value && !(await saveConnection(false))) return
+  backupTesting.value = true
+  backupNotice.value = ''
+  try {
+    const res = await runBackup()
+    if (res.data?.code === 0) {
+      const data = res.data.data || {}
+      backupNoticeOk.value = true
+      const size = Number(data.size || 0) ? `（${(Number(data.size) / 1024 / 1024).toFixed(1)} MB）` : ''
+      backupNotice.value = `测试备份成功：${data.file || ''}${size}${data.webdav_path ? ` → ${prettyRemote(data.webdav_path)}` : ''}`
+    } else {
+      backupNoticeOk.value = false
+      backupNotice.value = res.data?.message || '测试备份失败'
+    }
+  } catch (err: any) {
+    backupNoticeOk.value = false
+    backupNotice.value = err.response?.data?.message || '测试备份失败'
+  } finally {
+    backupTesting.value = false
   }
 }
 

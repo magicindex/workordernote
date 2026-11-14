@@ -36,6 +36,8 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
         button: !!btn,
         inFirstRow: !!btn?.closest('[data-webdav-enable-row]'),
         disabled: !!btn?.disabled,
+        backupBtn: !!document.querySelector('[data-webdav-test-backup]'),
+        backupDisabled: !!document.querySelector('[data-webdav-test-backup]')?.disabled,
         state: document.querySelector('[data-webdav-test-status]')?.getAttribute('data-state') || '',
         text: (document.querySelector('[data-webdav-test-status]')?.textContent || '').replace(/\s+/g, ' ').trim(),
       };
@@ -43,6 +45,8 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     check('WebDAV 分组里有测试连接按钮', ui.area && ui.button, JSON.stringify(ui));
     check('测试按钮在「备份到 WebDAV」第一行开关后，且已启用时可点',
       ui.inFirstRow === true && ui.disabled === false, JSON.stringify(ui));
+    check('测试连接后边有「测试备份」按钮且已启用时可点',
+      ui.backupBtn === true && ui.backupDisabled === false, JSON.stringify(ui));
     check('测试前状态是「未测试」', ui.state === 'idle' && ui.text.includes('未测试'), JSON.stringify(ui));
 
     await page.evaluate(() => document.querySelector('[data-webdav-test-button]')?.click());
