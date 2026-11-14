@@ -152,21 +152,44 @@
           </div>
         </form>
 
-        <!-- 详情面板：右下角手柄可拖宽高；松手后按用户 + 类型记住尺寸，下次打开还是这个大小。 -->
+        <!-- 拖拽区贴着窗口边框、在边框外侧，透明不可见；鼠标移上去才变缩放光标。
+             右抽屉拉左边缘、左抽屉拉右边缘、弹窗两侧都能拉；底边/两个底角调高度。
+             松手后按用户 + 类型记住尺寸。 -->
+        <span
+          v-if="canResizeLeft"
+          class="editor-resize-zone editor-resize-left"
+          data-editor-resize="left"
+          aria-label="拖拽左边缘调整宽度"
+          @pointerdown="startResize($event, 'left')"
+        ></span>
+        <span
+          v-if="canResizeRight"
+          class="editor-resize-zone editor-resize-right"
+          data-editor-resize="right"
+          aria-label="拖拽右边缘调整宽度"
+          @pointerdown="startResize($event, 'right')"
+        ></span>
         <span
           v-if="desktop"
-          class="editor-resize-handle"
-          role="separator"
-          aria-label="拖拽调整编辑面板大小"
-          title="拖拽调整大小（自动记住）"
-          data-note-resize-handle
-          @pointerdown="startResize"
-          @click.stop
-        >
-          <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" fill="none" stroke="currentColor" aria-hidden="true">
-            <path d="M14 3 3 14M14 8 8 14M14 13l-1 1" stroke-width="1.5" stroke-linecap="round" />
-          </svg>
-        </span>
+          class="editor-resize-zone editor-resize-bottom"
+          data-editor-resize="bottom"
+          aria-label="拖拽底边调整高度"
+          @pointerdown="startResize($event, 'bottom')"
+        ></span>
+        <span
+          v-if="desktop && canResizeLeft"
+          class="editor-resize-zone editor-resize-corner editor-resize-corner-left"
+          data-editor-resize="bottom-left"
+          aria-label="拖拽左下角调整宽高"
+          @pointerdown="startResize($event, 'bottom-left')"
+        ></span>
+        <span
+          v-if="desktop && canResizeRight"
+          class="editor-resize-zone editor-resize-corner editor-resize-corner-right"
+          data-editor-resize="bottom-right"
+          aria-label="拖拽右下角调整宽高"
+          @pointerdown="startResize($event, 'bottom-right')"
+        ></span>
       </aside>
 
       <ConfirmDialog
@@ -237,6 +260,8 @@ const isCreate = computed(() => props.preset != null)
 const isNoteEditing = computed(() => (editing.kind as string) === 'note')
 const isModal = computed(() => props.presentation === 'modal')
 const authStore = useAuthStore()
+const canResizeLeft = computed(() => desktop.value && (isModal.value || props.side !== 'left'))
+const canResizeRight = computed(() => desktop.value && (isModal.value || props.side === 'left'))
 const panelRef = ref<HTMLElement | null>(null)
 // 桌面端才允许拖拽（手机是整屏抽屉，拖了反而难用）；<768px 隐藏手柄，也不套记住的尺寸。
 const desktop = ref(typeof window !== 'undefined' && window.innerWidth >= 768)
@@ -278,7 +303,9 @@ function persistEditorSize() {
     localStorage.setItem(editorSizeKey(), JSON.stringify({ w: Math.round(editorSize.width), h: Math.round(editorSize.height) }))
   } catch { /* 隐私模式/localStorage 不可用时只是不记忆 */ }
 }
+type ResizeEdge = 'left' | 'right' | 'bottom' | 'bottom-left' | 'bottom-right'
 let resizing = false
+let resizeEdge: ResizeEdge = 'right'
 let resizeStartX = 0
 let resizeStartY = 0
 let resizeStartW = 0
@@ -290,12 +317,13 @@ function onViewportResize() {
     editorSize.height = null
   }
 }
-function startResize(event: PointerEvent) {
+function startResize(event: PointerEvent, edge: ResizeEdge) {
   if (!desktop.value || !panelRef.value) return
   event.preventDefault()
   event.stopPropagation()
   const rect = panelRef.value.getBoundingClientRect()
   resizing = true
+  resizeEdge = edge
   resizeStartX = event.clientX
   resizeStartY = event.clientY
   resizeStartW = rect.width
@@ -308,10 +336,22 @@ function startResize(event: PointerEvent) {
 }
 function onResizeMove(event: PointerEvent) {
   if (!resizing) return
+  const dx = event.clientX - resizeStartX
+  const dy = event.clientY - resizeStartY
   const maxW = Math.min(1200, Math.round(window.innerWidth * 0.95))
   const maxH = Math.round(window.innerHeight * (isModal.value ? 0.92 : 1))
-  editorSize.width = Math.max(360, Math.min(maxW, Math.round(resizeStartW + event.clientX - resizeStartX)))
-  editorSize.height = Math.max(280, Math.min(maxH, Math.round(resizeStartH + event.clientY - resizeStartY)))
+  // 居中弹窗改宽度时两侧各动一半，光标才不会跑得比边缘快。
+  const sideFactor = isModal.value ? 2 : 1
+  if (resizeEdge === 'left' || resizeEdge === 'bottom-left') {
+    editorSize.width = Math.max(360, Math.min(maxW, Math.round(resizeStartW - dx * sideFactor)))
+  } else if (resizeEdge === 'right' || resizeEdge === 'bottom-right') {
+    editorSize.width = Math.max(360, Math.min(maxW, Math.round(resizeStartW + dx * sideFactor)))
+  }
+  if (resizeEdge === 'bottom' || resizeEdge === 'bottom-left' || resizeEdge === 'bottom-right') {
+    // 抽屉顶在视口上方，底边跟手；居中弹窗上下各动一半。
+    const heightFactor = isModal.value ? 2 : 1
+    editorSize.height = Math.max(280, Math.min(maxH, Math.round(resizeStartH + dy * heightFactor)))
+  }
 }
 function stopResize() {
   if (!resizing) return
@@ -620,14 +660,19 @@ async function save() {
   .editor-footer-modal .btn-secondary, .editor-footer-modal .btn-primary { max-width: none; }
 }
 
-/* 编辑面板右下角手柄：只负责拖拽，视觉上像三道斜线的小握把。 */
-.editor-resize-handle {
-  @apply absolute z-30 flex h-5 w-5 cursor-nwse-resize touch-none items-center justify-center rounded-md text-muted-foreground/60 transition hover:bg-brand-500/10 hover:text-brand-600 dark:hover:text-brand-300;
-  right: 2px;
-  bottom: 2px;
+/* 边框外侧的透明拖拽区：不画手柄，鼠标移上去才变成缩放光标。 */
+.editor-resize-zone {
+  @apply absolute z-40 bg-transparent;
+  touch-action: none;
 }
+.editor-resize-left { top: 0; bottom: 0; left: -3px; width: 8px; cursor: ew-resize; }
+.editor-resize-right { top: 0; bottom: 0; right: -3px; width: 8px; cursor: ew-resize; }
+.editor-resize-bottom { left: 0; right: 0; bottom: -3px; height: 8px; cursor: ns-resize; }
+.editor-resize-corner { bottom: -3px; width: 14px; height: 14px; }
+.editor-resize-corner-left { left: -3px; cursor: nesw-resize; }
+.editor-resize-corner-right { right: -3px; cursor: nwse-resize; }
 @media (max-width: 767px) {
-  .editor-resize-handle { display: none; }
+  .editor-resize-zone { display: none; }
 }
 .sheet-enter-active, .sheet-leave-active { transition: opacity .18s ease; }
 .sheet-enter-active .editor-panel, .sheet-leave-active .editor-panel { transition: transform .22s cubic-bezier(.2,.8,.2,1), opacity .18s ease; }
