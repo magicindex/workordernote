@@ -233,6 +233,20 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-14：0.48.0 热更新（201 / 200）—— AI 提示词改成每人一份统一提示词
+
+> **热更新记录**（软件版本仍为 `0.48.0`，后端重建；无 schema 变更。源码提交 `0966035`）
+> 镜像：`workordernote:0.48.0-prompt-20261114-110256` =
+> `sha256:29a71bea9c99e17376a29cee96a008537754c76d3b519bbc3488357947710a5d`；
+> Gitea registry manifest `sha256:8389aa6f5ebe28feba933840997de4d005222049d98dd08a0a8b1b3c95cd06fa`（仅推 Gitea registry，未推 GHCR、未打 Release）
+
+- 第 113 条：取消「各栏目的 AI 提示词」——偏好设置与新建清单里的输入框删除、`lists.ai_prompt` 不再读写/返回、模型请求不再拼【各栏目的分析要求】；后台设置不再暴露/保存全局 `system_prompt`，只保留用户级 `ai_user_prompt`（一个账号一份，所有栏目/对话共用，互不覆盖）。旧 `ai_system_prompt` 继续作为 `default_system_prompt` 默认继承。
+- 201：备份 `docker-compose.yml.bak-pre0480prompt-20261114-110322` + `data.bak-pre0480prompt-20261114-110322.tgz`（11M，不含 logs），compose 改指 Gitea registry 的 `0.48.0-prompt-20261114-110256`；11:03 重建，healthy，`index-DrfhTDqM.js`，`/api/version` = `0.48.0 / 0966035`。
+- 200：备份 `docker-compose.yml.bak-pre0480prompt-20261114-110455` + `data.bak-pre0480prompt-20261114-110455.tgz`（3.9M），从 `127.0.0.1:3000` 拉取后 tag 成本地同 tag；11:05 重建，healthy，`index-DrfhTDqM.js`。
+- 回归：201 / 200 均 `verify-167` **8/8**、`verify-132` **9/9**、`verify-125` **12/12**、`verify-165` **21/21**、`verify-166` **10/10**；Go `go test ./...` 全绿；201 / 200 数据体检 `integrity_check` ok（201 667 条提醒、200 507 条提醒）。
+- 旧数据：`lists.ai_prompt` 列仍在库里，但代码已不读不写、界面不显示；旧全局 `ai_system_prompt` 只作为默认继承，后台不再能改。
+- 注意：0.48.0 的 Linux 包、fpk、GHCR 镜像与 Release 附件不包含 110–113 四项热更新；下一次正式发版（0.48.1）会带上 `47a0286`、`7c9b987`、`f628ae0`、`0966035`。
+
 ### 2026-11-14：0.48.0 热更新（201 / 200）—— 首页取消新建按钮，只做展示
 
 > **热更新记录**（软件版本仍为 `0.48.0`，后端未重建；只替换前端静态资源。源码提交 `f628ae0`）
