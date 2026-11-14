@@ -57,6 +57,19 @@ const api = (page, p) => page.evaluate(async ({ base, p }) => {
     }));
     check('点击后展开所有系统栏目', opened.visible === true && opened.expanded === 'true', JSON.stringify(opened));
     check('展开后子项可见', opened.items.length > 0 && opened.items.every((i) => i.visible), JSON.stringify(opened.items));
+    const align = await page.evaluate(() => {
+      const left = (sel) => {
+        const el = document.querySelector(sel);
+        return el ? Math.round(el.getBoundingClientRect().left) : null;
+      };
+      return {
+        home: left('a[href="/admin"] .flex-1'),
+        parent: left('[data-nav-system] .flex-1'),
+        childIcon: left('[data-nav-system-item="cards"] .nav-symbol'),
+        childLabel: left('[data-nav-system-item="cards"] .flex-1'),
+      };
+    });
+    check('系统清单与子项左对齐', align.home !== null && align.parent === align.home && align.childLabel === align.parent, JSON.stringify(align));
 
     await page.evaluate(() => document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
     await sleep(300);

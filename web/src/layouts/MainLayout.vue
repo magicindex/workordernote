@@ -98,7 +98,7 @@
           <div v-if="systemNavItems.length" ref="systemMenuRef" class="relative mt-0.5" data-nav-system-wrap>
             <button
               type="button"
-              class="nav-row w-full"
+              class="nav-row w-full text-left"
               :class="{ 'nav-row-active': systemActive }"
               :title="railActive ? '系统清单' : '系统清单：展开课程表、信用卡账单、记事本、仪式感、提醒@他'"
               data-nav-system
@@ -113,7 +113,7 @@
               <span v-if="systemTotal" class="nav-count" data-nav-system-count>{{ systemTotal }}</span>
               <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="{ 'rotate-180': systemOpen }" fill="none" stroke="currentColor"><path d="m6 9 6 6 6-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-            <div v-show="systemOpen" class="mt-0.5 space-y-0.5 pl-2" data-nav-system-menu>
+            <div v-show="systemOpen" class="mt-0.5 space-y-0.5" data-nav-system-menu>
               <RouterLink
                 v-for="item in systemNavItems"
                 :key="item.key"
