@@ -559,10 +559,17 @@
                 <span>提醒已删除</span>
               </template>
             </div>
+            <!-- 记事的内容本身就是 Markdown；其它条目的备注仍走时间线。 -->
+            <div
+              v-if="entry.kind === 'note' && entry.notes"
+              class="note-markdown note-markdown-body mt-1.5 text-xs leading-4 text-muted-foreground"
+              data-note-content-markdown
+              v-html="renderMarkdown(entry.notes, { allowLinks: false })"
+            ></div>
             <!-- 备注时间线（用户 2026-11-13）：新建备注用条目的创建时间、
                  完成备注用这次完成的时间，两条按时间戳拼在一起。 -->
             <NoteTimeline
-              v-if="completedEntryTimeline(entry).length"
+              v-else-if="completedEntryTimeline(entry).length"
               :entries="completedEntryTimeline(entry)"
               class="mt-1.5"
             />
@@ -698,7 +705,7 @@
                 <!-- 备注（用户 2026-11-13「新建备注」和「完成备注」不是同一条）：
                      已完成的行按时间戳把两条拼在一起显示；还没完成的行只显示新建备注。 -->
                 <NoteTimeline
-                  v-if="item.completed_at && noteTimelineOf(item).length"
+                  v-if="item.kind !== 'note' && item.completed_at && noteTimelineOf(item).length"
                   :entries="noteTimelineOf(item)"
                   class="mt-1"
                 />
