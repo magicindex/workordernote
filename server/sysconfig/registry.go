@@ -229,11 +229,18 @@ func init() {
 		Description: "日历视图里每天那些任务文字的字体大小",
 	})
 	RegisterConfig(ConfigDef{
-		Key: "calendar_week_start", Scope: ScopeSystem, Type: TypeSelect,
+		Key: "calendar_week_start", Scope: ScopeUser, Type: TypeSelect,
 		Default: "monday", Options: []string{"monday", "sunday"},
-		Public: true,
-		Group:  "appearance", Label: "周起始日",
-		Description: "日历里一周从哪天开始（周一或周日），周视图的第一列也跟着它",
+		Group: "appearance", Label: "周起始日",
+		Description: "日历里一周从哪天开始（周一或周日），周视图的第一列也跟着它；每个人自己选",
+	})
+	// AI 入口样式：桌面端可以选顶栏铃铛旁的 AI 图标，或右下角可拖动的悬浮球；
+	// 手机端始终用顶栏图标（悬浮球只在 ≥1024px 显示）。
+	RegisterConfig(ConfigDef{
+		Key: "assistant_entry_style", Scope: ScopeUser, Type: TypeSelect,
+		Default: "topbar", Options: []string{"topbar", "floating"},
+		Group: "appearance", Label: "AI 入口样式",
+		Description: "桌面端：顶栏图标 / 悬浮球；手机端始终是顶栏图标",
 	})
 	RegisterConfig(ConfigDef{
 		Key: "default_view", Scope: ScopeUser, Type: TypeSelect,

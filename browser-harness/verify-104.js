@@ -4,7 +4,7 @@
  *   2) 上一周 / 本周 / 下一周 导航
  *   3) 鼠标在时间线上移动显示时分；双击按所在时分新建 1 小时时段
  *   4) 任务按时段画块、按清单上色；重叠的并排分栏并给出提示
- *   5) 后台「周起始日」（周一/周日）决定第一列
+ *   5) 个人偏好「周起始日」（周一/周日）决定第一列
  *
  * 用法：APP_URL=http://127.0.0.1:8918 node verify-104.js
  */
@@ -224,7 +224,7 @@ async function waitSel(page, sel, timeout = 20000) {
     await sleep(600);
     await page.screenshot({ path: path.join(SHOTS, 'calendar-week.png') });
 
-    // 6) 后台「周起始日」：改成周日，第一列应变成周日
+    // 6) 个人偏好「周起始日」：改成周日，第一列应变成周日
     await api(page, '/api/configs', 'PUT', { key: 'calendar_week_start', value: 'sunday' });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitSel(page, '[data-cal-view-toggle]', 20000);
@@ -242,7 +242,7 @@ async function waitSel(page, sel, timeout = 20000) {
       if (/周日/.test(firstCol)) break;
       await sleep(400);
     }
-    check('把后台「周起始日」改成周日后，第一列变成周日', /周日/.test(firstCol), firstCol);
+    check('把「周起始日」偏好改成周日后，第一列变成周日', /周日/.test(firstCol), firstCol);
     await api(page, '/api/configs', 'PUT', { key: 'calendar_week_start', value: String(weekStartBefore) });
     await sleep(600);
     const weekStartAfter = String((await api(page, '/api/configs')).body?.data?.calendar_week_start ?? '');

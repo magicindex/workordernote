@@ -383,7 +383,10 @@
           <button
             type="button"
             class="icon-button"
-            :class="assistantOpen ? 'bg-brand-500/10 text-brand-600 dark:text-brand-300' : ''"
+            :class="[
+              assistantOpen ? 'bg-brand-500/10 text-brand-600 dark:text-brand-300' : '',
+              assistantEntryStyle === 'floating' ? 'lg:hidden' : '',
+            ]"
             :aria-label="assistantOpen ? `收起${assistantName}（AI 助手）` : `呼叫${assistantName}（AI 助手）`"
             :aria-pressed="assistantOpen ? 'true' : 'false'"
             :title="assistantOpen ? `收起${assistantName}` : `呼叫${assistantName}：写周报、一句话建任务`"
@@ -632,6 +635,14 @@
          桌面端是右侧浮窗（不铺满、不挡正文），手机端保持原来的整屏抽屉。 -->
     <AssistantPanel v-model="assistantOpen" />
 
+    <!-- 个人偏好选了「悬浮球」时，桌面端用右下角这颗可拖动入口替代顶栏图标；
+         手机端不显示（组件自身的 CSS 在 <1024px 隐藏）。 -->
+    <AssistantLauncher
+      v-if="assistantEntryStyle === 'floating'"
+      :panel-open="assistantOpen"
+      @open="openAssistant"
+    />
+
     <!-- 新建清单：先选模板（通用 / 信用卡），信用卡填完卡片信息自动生成还款计划 -->
     <ListCreateDialog
       v-model="creatingList"
@@ -746,6 +757,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import VersionDialog from '../components/VersionDialog.vue'
 import AssistantPanel from '../components/AssistantPanel.vue'
+import AssistantLauncher from '../components/AssistantLauncher.vue'
 import { useAssistantStore } from '../stores/assistant'
 import Modal from '../components/Modal.vue'
 import ListCreateDialog from '../components/ListCreateDialog.vue'
@@ -788,8 +800,11 @@ const authStore = useAuthStore()
 const assistantStore = useAssistantStore()
 const assistantName = computed(() => assistantStore.displayName)
 const mobileOpen = ref(false)
-// 「呼叫小秘」面板开合。桌面端默认收起；入口是顶栏铃铛旁的 AI 星星（用户 2026-11-14）。
+// 「呼叫小秘」面板开合。桌面端默认收起；入口默认是顶栏铃铛旁的 AI 星星（用户 2026-11-14）。
 const assistantOpen = ref(false)
+// AI 入口样式（个人偏好 assistant_entry_style）：topbar=顶栏星星，floating=右下角悬浮球。
+// 手机端始终用顶栏星星（悬浮球 CSS 只在 ≥1024px 显示）。
+const assistantEntryStyle = ref<'topbar' | 'floating'>('topbar')
 
 // 界面折叠状态记在本地：这类偏好跟人走、跟设备走，不必上服务端。
 const lsGet = (key: string) => { try { return localStorage.getItem(key) } catch { return null } }
@@ -962,6 +977,9 @@ async function saveMyOrder(visibleKeys: string[]) {
 async function loadSidebarOrder() {
   try {
     const res = await getAllConfigs()
+    // 顺带读 AI 入口样式：桌面端个人偏好，默认顶栏星星；手机端由 CSS 固定用顶栏星星。
+    const style = String(res.data?.data?.assistant_entry_style || 'topbar')
+    assistantEntryStyle.value = style === 'floating' ? 'floating' : 'topbar'
     const raw = String(res.data?.data?.sidebar_order ?? '')
     const parsed = raw ? JSON.parse(raw) : []
     // 'nudge' 是旧版「提醒@他」在「我的清单」里的排序 token；2026-10-19 挪到「课程表」下面后不再参与排序。
@@ -1167,6 +1185,12 @@ function openAssistant() {
 function toggleAssistant() {
   mobileOpen.value = false
   assistantOpen.value = !assistantOpen.value
+}
+/** 偏好在设置页保存后广播 config-changed：这里立刻换入口样式，不用刷新页面。 */
+function onConfigChanged(event: Event) {
+  const detail = (event as CustomEvent<{ key?: string; value?: string }>).detail
+  if (detail?.key !== 'assistant_entry_style') return
+  assistantEntryStyle.value = detail.value === 'floating' ? 'floating' : 'topbar'
 }
 // 关掉浮窗（Esc / 关闭按钮 / 点遮罩）后，下一次打开仍按「窄桌面先收起侧栏」的规矩来，
 // 而不是沿用上一次用户手动展开过的临时状态。
@@ -1926,6 +1950,7 @@ onMounted(() => {
   compactQuery?.addEventListener('change', syncCompactDesktop)
   window.addEventListener('reminder-data-changed', refreshNavigation)
   window.addEventListener('open-assistant', openAssistant)
+  window.addEventListener('config-changed', onConfigChanged)
   window.addEventListener('open-quick-add', openQuickAdd)
   document.addEventListener('pointerdown', unlockReminderSound, { once: true })
   document.addEventListener('keydown', unlockReminderSound, { once: true })
@@ -1958,6 +1983,7 @@ onBeforeUnmount(() => {
   compactQuery?.removeEventListener('change', syncCompactDesktop)
   window.removeEventListener('reminder-data-changed', refreshNavigation)
   window.removeEventListener('open-assistant', openAssistant)
+  window.removeEventListener('config-changed', onConfigChanged)
   window.removeEventListener('open-quick-add', openQuickAdd)
   document.removeEventListener('pointerdown', unlockReminderSound)
   document.removeEventListener('keydown', unlockReminderSound)

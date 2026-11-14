@@ -512,7 +512,7 @@ import CompleteNoteDialog from '../components/CompleteNoteDialog.vue'
 import ContextMenu from '../components/ContextMenu.vue'
 import CalendarPrintDialog from '../components/CalendarPrintDialog.vue'
 import type { ContextMenuItem } from '../components/ContextMenu.vue'
-import { getAllConfigs, getPublicConfigs } from '../api/config'
+import { getAllConfigs } from '../api/config'
 import {
   completeReminder, deleteReminder, exportReminders, getCalendarItems, getChannelStatuses, getLists,
   getLunarCalendar, listIdsParam, restoreReminder,
@@ -541,7 +541,7 @@ const dayKey = (d: Date) => keyOf(d.getFullYear(), d.getMonth() + 1, d.getDate()
 // 月视图 / 周视图。周视图＝7 列（天）× 纵向小时，任务按它的时段画成块，
 // 重叠的并排分栏；鼠标在时间线上移动显示时分，双击按所在时分新建。
 const viewMode = ref<'month' | 'week'>('month')
-// 后台「周起始日」（系统配置，默认周一）：月历表头与周视图第一列都跟着它
+// 个人偏好「周起始日」（默认周一）：月历表头与周视图第一列都跟着它
 const weekStartPref = ref<'monday' | 'sunday'>('monday')
 // 日历里新建提醒的默认时分：**写死 23:59**（用户 2026-10-13：芯片/默认时间一律 23:59，
 // 除非手动改），不再跟后台配置联动。
@@ -850,9 +850,8 @@ function setViewMode(mode: 'month' | 'week') {
 }
 async function loadWeekStart() {
   try {
-    // 用公开配置：周起始日是**系统级**设置，公开接口里的就是权威值（管理员的
-    // /api/configs 会把用户作用域的键合并进来，历史上可能留下同名用户行）
-    const res = await getPublicConfigs()
+    // 周起始日现在是**个人偏好**：读当前登录用户合并后的配置；没设置就用默认周一。
+    const res = await getAllConfigs()
     const cfgAll = (res.data?.data || {}) as Record<string, unknown>
     const v = String(cfgAll.calendar_week_start || '')
     if (v === 'sunday' || v === 'monday') {

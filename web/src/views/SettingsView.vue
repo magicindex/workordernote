@@ -218,6 +218,8 @@ async function handleSave(key: string, value: string) {
         authStore.setNudgeEnabled(value !== 'false')
       }
       listRef.value?.markSaved(key)
+      // 让外壳（MainLayout）等常驻组件立刻响应外观类偏好：AI 入口样式、周起始日等。
+      window.dispatchEvent(new CustomEvent('config-changed', { detail: { key, value } }))
       if (key === 'theme_mode') {
         const themeStore = useThemeStore()
         if (themeStore.mode !== value) {

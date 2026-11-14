@@ -97,6 +97,12 @@ func handleGetAllConfigs(db *gorm.DB) gin.HandlerFunc {
 		}
 		result := make(map[string]string)
 		for k, v := range systemConfigs {
+			// 已经改成用户作用域的键，不再采用旧的系统行（例如「周起始日」从
+			// 后台搬到偏好设置后，库里可能还留着 user_id=0 的旧值）；用户值或
+			// 注册默认值才是权威值。
+			if def, ok := GetConfigDef(k); ok && def.Scope == ScopeUser {
+				continue
+			}
 			result[k] = v
 		}
 		for k, v := range userConfigs {

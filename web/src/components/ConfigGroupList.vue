@@ -210,6 +210,10 @@ const selectOptionLabelMap: Record<string, Record<string, string>> = {
     monday: '周一',
     sunday: '周日',
   },
+  assistant_entry_style: {
+    topbar: '顶栏图标',
+    floating: '悬浮球',
+  },
 }
 
 function isSecret(key: string): boolean {

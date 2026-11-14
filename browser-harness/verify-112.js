@@ -6,7 +6,7 @@
  *   2) **今天 / 计划页的「新建」按钮**：实线边框 + **流光**（.flow-frame 的旋转光带）。
  *   3) 新建提醒默认预填「今天当前时刻」（2026-11-11 起，不再写死 23:59）；
  *      逾期口径 = **当天到这个点才算过期**，再叠加「过期多久算逾期」的宽限分钟数。
- *   4) **后台「周起始日」显示中文**（周一 / 周日，原来直接显示 monday/sunday）。
+ *   4) **周起始日搬到个人偏好，选项显示中文**（周一 / 周日，原来直接显示 monday/sunday）。
  *   5) **偏好设置里已删掉「清单顺序」**（用户 2026-10-16：与侧栏重复），侧栏那一套见 verify-121；
  *      同页的「默认清单」还在。
  *   6) **人生要有仪式感卡片**：倒计时放最上面、字号放大，卡片加高；卡面跟着所选过渡色变，
@@ -315,8 +315,13 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
       overdueView.tColor === 'rgb(244, 63, 94)', overdueView.tColor);
     check('剩余超过 24 小时：倒计时不转红', overdueView.fColor !== 'rgb(244, 63, 94)', overdueView.fColor);
 
-    // =============== 4. 后台「周起始日」中文 ===============
+    // =============== 4. 周起始日改成个人偏好（中文选项） ===============
     await gotoRetry(page, BASE + '/admin/configs');
+    await sleep(2200);
+    const systemHasWeek = await page.evaluate(() => !!document.querySelector('[data-config-key="calendar_week_start"]'));
+    check('系统配置里不再有「周起始日」（已搬到偏好设置）', systemHasWeek === false, String(systemHasWeek));
+
+    await gotoRetry(page, BASE + '/admin/settings');
     await sleep(2600);
     const weekRow = await page.evaluate(() => {
       const row = document.querySelector('[data-config-key="calendar_week_start"]');
@@ -326,7 +331,7 @@ const cleanUp = (page) => Promise.all(createdIds.map((id) => api(page, `/api/rem
         value: row.querySelector('select')?.value || '',
       };
     });
-    check('系统配置里「周起始日」的选项是中文（周一 / 周日）',
+    check('偏好设置里「周起始日」的选项是中文（周一 / 周日）',
       !!weekRow && weekRow.options.includes('周一') && weekRow.options.includes('周日')
         && !weekRow.options.some((t) => /monday|sunday/i.test(t)),
       JSON.stringify(weekRow));
