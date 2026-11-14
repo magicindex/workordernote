@@ -10,7 +10,7 @@
         ref="panelRef"
         class="editor-panel"
         :class="[isModal ? 'editor-panel-modal' : '', side === 'left' ? 'editor-panel-left' : '']"
-        :style="notePanelStyle"
+        :style="editorPanelStyle"
       >
         <div class="flex items-center justify-between border-b border-border px-4 py-3 sm:px-6 sm:py-5">
           <div>
@@ -142,8 +142,8 @@
           </div>
 
           <div
-            class="flex items-center gap-3 border-t border-border bg-surface/80 p-3.5 backdrop-blur sm:p-5"
-            :style="isNoteEditor && desktop ? { paddingRight: '2.75rem' } : undefined"
+            class="editor-footer flex items-center gap-3 border-t border-border bg-surface/80 p-3.5 backdrop-blur sm:p-5"
+            :class="isModal ? 'editor-footer-modal' : ''"
           >
             <button type="button" class="btn-secondary flex-1" @click="close">取消</button>
             <button class="btn-primary flex-1" :disabled="saving || loading || !editing.title.trim()">
@@ -152,12 +152,12 @@
           </div>
         </form>
 
-        <!-- 记事详情：右下角手柄可拖宽高；松手后按用户记住尺寸，下次打开还是这个大小。 -->
+        <!-- 详情面板：右下角手柄可拖宽高；松手后按用户 + 类型记住尺寸，下次打开还是这个大小。 -->
         <span
-          v-if="isNoteEditor && desktop"
+          v-if="desktop"
           class="editor-resize-handle"
           role="separator"
-          aria-label="拖拽调整记事编辑面板大小"
+          aria-label="拖拽调整编辑面板大小"
           title="拖拽调整大小（自动记住）"
           data-note-resize-handle
           @pointerdown="startResize"
@@ -238,42 +238,44 @@ const isNoteEditing = computed(() => (editing.kind as string) === 'note')
 const isModal = computed(() => props.presentation === 'modal')
 const authStore = useAuthStore()
 const panelRef = ref<HTMLElement | null>(null)
-const isNoteEditor = computed(() => editing.kind === 'note')
 // 桌面端才允许拖拽（手机是整屏抽屉，拖了反而难用）；<768px 隐藏手柄，也不套记住的尺寸。
 const desktop = ref(typeof window !== 'undefined' && window.innerWidth >= 768)
-const noteSize = reactive<{ width: number | null; height: number | null }>({ width: null, height: null })
-const notePanelStyle = computed(() => {
-  if (!isNoteEditor.value || !desktop.value) return undefined
+const editorSize = reactive<{ width: number | null; height: number | null }>({ width: null, height: null })
+const editorPanelStyle = computed(() => {
+  if (!desktop.value) return undefined
   const style: Record<string, string> = {}
-  if (noteSize.width) {
-    style.width = `${noteSize.width}px`
+  if (editorSize.width) {
+    style.width = `${editorSize.width}px`
     style.maxWidth = '95vw'
   }
-  if (noteSize.height) {
-    style.height = `${noteSize.height}px`
+  if (editorSize.height) {
+    style.height = `${editorSize.height}px`
     style.maxHeight = isModal.value ? '92vh' : '100vh'
   }
   return style
 })
-function noteSizeKey() {
-  return `${SK.noteEditorSize}.${authStore.user?.id || 'anon'}`
+function editorSizeKey() {
+  const base = editing.kind === 'note' ? SK.noteEditorSize : SK.reminderEditorSize
+  return `${base}.${authStore.user?.id || 'anon'}`
 }
-function loadNoteSize() {
+function loadEditorSize() {
+  editorSize.width = null
+  editorSize.height = null
   if (!desktop.value) return
   try {
-    const raw = localStorage.getItem(noteSizeKey())
+    const raw = localStorage.getItem(editorSizeKey())
     if (!raw) return
     const parsed = JSON.parse(raw) as { w?: unknown; h?: unknown }
     const w = Number(parsed?.w)
     const h = Number(parsed?.h)
-    if (Number.isFinite(w) && w >= 360 && w <= 1200) noteSize.width = Math.round(w)
-    if (Number.isFinite(h) && h >= 280 && h <= 1400) noteSize.height = Math.round(h)
+    if (Number.isFinite(w) && w >= 360 && w <= 1200) editorSize.width = Math.round(w)
+    if (Number.isFinite(h) && h >= 280 && h <= 1400) editorSize.height = Math.round(h)
   } catch { /* 尺寸读不到就用默认 */ }
 }
-function persistNoteSize() {
-  if (!noteSize.width || !noteSize.height) return
+function persistEditorSize() {
+  if (!editorSize.width || !editorSize.height) return
   try {
-    localStorage.setItem(noteSizeKey(), JSON.stringify({ w: Math.round(noteSize.width), h: Math.round(noteSize.height) }))
+    localStorage.setItem(editorSizeKey(), JSON.stringify({ w: Math.round(editorSize.width), h: Math.round(editorSize.height) }))
   } catch { /* 隐私模式/localStorage 不可用时只是不记忆 */ }
 }
 let resizing = false
@@ -284,12 +286,12 @@ let resizeStartH = 0
 function onViewportResize() {
   desktop.value = window.innerWidth >= 768
   if (!desktop.value) {
-    noteSize.width = null
-    noteSize.height = null
+    editorSize.width = null
+    editorSize.height = null
   }
 }
 function startResize(event: PointerEvent) {
-  if (!isNoteEditor.value || !desktop.value || !panelRef.value) return
+  if (!desktop.value || !panelRef.value) return
   event.preventDefault()
   event.stopPropagation()
   const rect = panelRef.value.getBoundingClientRect()
@@ -298,8 +300,8 @@ function startResize(event: PointerEvent) {
   resizeStartY = event.clientY
   resizeStartW = rect.width
   resizeStartH = rect.height
-  noteSize.width = Math.round(rect.width)
-  noteSize.height = Math.round(rect.height)
+  editorSize.width = Math.round(rect.width)
+  editorSize.height = Math.round(rect.height)
   document.body.style.userSelect = 'none'
   window.addEventListener('pointermove', onResizeMove)
   window.addEventListener('pointerup', stopResize, { once: true })
@@ -308,18 +310,18 @@ function onResizeMove(event: PointerEvent) {
   if (!resizing) return
   const maxW = Math.min(1200, Math.round(window.innerWidth * 0.95))
   const maxH = Math.round(window.innerHeight * (isModal.value ? 0.92 : 1))
-  noteSize.width = Math.max(360, Math.min(maxW, Math.round(resizeStartW + event.clientX - resizeStartX)))
-  noteSize.height = Math.max(280, Math.min(maxH, Math.round(resizeStartH + event.clientY - resizeStartY)))
+  editorSize.width = Math.max(360, Math.min(maxW, Math.round(resizeStartW + event.clientX - resizeStartX)))
+  editorSize.height = Math.max(280, Math.min(maxH, Math.round(resizeStartH + event.clientY - resizeStartY)))
 }
 function stopResize() {
   if (!resizing) return
   resizing = false
   window.removeEventListener('pointermove', onResizeMove)
   document.body.style.userSelect = ''
-  persistNoteSize()
+  persistEditorSize()
 }
 onMounted(() => {
-  loadNoteSize()
+  loadEditorSize()
   window.addEventListener('resize', onViewportResize)
 })
 onBeforeUnmount(() => {
@@ -331,7 +333,7 @@ onBeforeUnmount(() => {
   }
 })
 watch(() => props.modelValue, (open) => {
-  if (open) loadNoteSize()
+  if (open) loadEditorSize()
   else if (resizing) stopResize()
 })
 
@@ -342,8 +344,8 @@ const blankInput = (): SaveReminderInput & { id?: number } => ({
 })
 
 const editing = reactive<SaveReminderInput & { id?: number }>(blankInput())
-watch(() => editing.kind, (kind) => {
-  if (kind === 'note') loadNoteSize()
+watch(() => editing.kind, () => {
+  loadEditorSize()
 })
 // 打开时拉回来的完整条目：备注文本框里是「新建备注 + 历次完成备注」拼起来的合并文本，
 // 保存时要拆回去（并逐条写回完成备注），所以原样留一份做对照。
@@ -608,11 +610,21 @@ async function save() {
 .editor-panel-modal {
   @apply h-auto max-h-[88vh] w-full max-w-[680px] rounded-2xl border border-border shadow-2xl;
 }
-/* 记事编辑面板右下角手柄：只负责拖拽，视觉上像三道斜线的小握把。 */
+/* 面板变宽时，底部两个操作按钮不再跟着无限变宽：封顶后居中，只有面板本身在变。
+   默认宽度下按钮尺寸与原来基本一致（510 抽屉约 224、680 弹窗约 288）。 */
+.editor-footer { @apply justify-center; }
+.editor-footer .btn-secondary, .editor-footer .btn-primary { flex: 1 1 0; max-width: 14rem; }
+.editor-footer-modal .btn-secondary, .editor-footer-modal .btn-primary { max-width: 18rem; }
+@media (max-width: 767px) {
+  .editor-footer .btn-secondary, .editor-footer .btn-primary,
+  .editor-footer-modal .btn-secondary, .editor-footer-modal .btn-primary { max-width: none; }
+}
+
+/* 编辑面板右下角手柄：只负责拖拽，视觉上像三道斜线的小握把。 */
 .editor-resize-handle {
   @apply absolute z-30 flex h-5 w-5 cursor-nwse-resize touch-none items-center justify-center rounded-md text-muted-foreground/60 transition hover:bg-brand-500/10 hover:text-brand-600 dark:hover:text-brand-300;
-  right: 5px;
-  bottom: 5px;
+  right: 2px;
+  bottom: 2px;
 }
 @media (max-width: 767px) {
   .editor-resize-handle { display: none; }

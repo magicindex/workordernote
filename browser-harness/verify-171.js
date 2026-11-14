@@ -57,7 +57,11 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
         const r = panel?.getBoundingClientRect();
         const handle = document.querySelector('[data-note-resize-handle]');
         const hr = handle?.getBoundingClientRect();
-        return { panel: !!panel, w: r?.width || 0, h: r?.height || 0, handle: !!handle, hx: hr ? hr.x + hr.width / 2 : 0, hy: hr ? hr.y + hr.height / 2 : 0 };
+        return {
+          panel: !!panel, w: r?.width || 0, h: r?.height || 0, handle: !!handle,
+          hx: hr ? hr.x + hr.width / 2 : 0, hy: hr ? hr.y + hr.height / 2 : 0,
+          btns: [...document.querySelectorAll('.editor-footer button')].map((b) => Math.round(b.getBoundingClientRect().width)),
+        };
       });
 
       await openRow();
@@ -75,6 +79,8 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       const after = await rect();
       check('向右拖后宽度增加约 120px', after.w > before.w + 90, `${before.w} → ${after.w}`);
       check('向上拖后高度减少约 100px', after.h < before.h - 70, `${before.h} → ${after.h}`);
+      check('拖动只改面板，底部按钮尺寸不变',
+        JSON.stringify(after.btns) === JSON.stringify(before.btns), `${JSON.stringify(before.btns)} → ${JSON.stringify(after.btns)}`);
       const stored = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.includes('note_editor_size')).map((k) => localStorage.getItem(k)));
       check('尺寸已按用户写入本地缓存', stored.some((raw) => /"w":\d+/.test(String(raw)) && /"h":\d+/.test(String(raw))), JSON.stringify(stored));
 
