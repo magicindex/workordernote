@@ -181,7 +181,8 @@ async function loadMeta() {
   try {
     const res = await getUserConfigMeta()
     if (res.data?.code === 0) {
-      items.value = Array.isArray(res.data.data) ? res.data.data : []
+      // AI 入口样式已移到「更多 → AI 提示词」里，避免外观组重复出现。
+      items.value = (Array.isArray(res.data.data) ? res.data.data : []).filter((it: ConfigMeta) => it.key !== 'assistant_entry_style')
     } else {
       errorMsg.value = res.data?.message || '加载配置失败'
     }

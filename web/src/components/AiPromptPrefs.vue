@@ -7,6 +7,29 @@
       现在统一到每个人自己的设置里；没写过的人继续继承旧的全局默认值。
     </p>
 
+    <!-- AI 入口样式：从「外观」搬到 AI 部分（用户 2026-11-14「ai部分 按钮和球的转换选项没有了」） -->
+    <div class="mt-4 rounded-xl border border-border bg-surface/60 p-3" data-ai-entry-style>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <span class="text-xs font-bold text-foreground">AI 入口样式</span>
+        <span class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-300" data-ai-entry-style-state>
+          {{ entrySaving ? '保存中…' : (entryNotice || '已保存') }}
+        </span>
+      </div>
+      <select
+        class="input-field mt-2 !h-9 !py-1.5 text-[13px]"
+        :value="entryStyle"
+        :disabled="entrySaving"
+        data-ai-entry-style-select
+        @change="saveEntryStyle(($event.target as HTMLSelectElement).value, $event)"
+      >
+        <option value="topbar">顶栏图标（铃铛旁 AI 按钮）</option>
+        <option value="floating">悬浮球（右下角可拖动）</option>
+      </select>
+      <p class="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+        桌面端生效；手机端始终使用顶栏 AI 图标。切换后立刻生效，不用刷新。
+      </p>
+    </div>
+
     <!-- 小秘名称（用户 2026-10-20）：每个人给自己的助手起名，面板与对话里都用它 -->
     <div class="mt-4 rounded-xl border border-border bg-surface/60 p-3" data-ai-name-block>
       <div class="flex flex-wrap items-center justify-between gap-2">
@@ -116,6 +139,7 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { getPromptPrefs, saveAssistantName, savePromptPrefs } from '../api/assistant'
+import { getAllConfigs, updateConfig } from '../api/config'
 import { useAssistantStore } from '../stores/assistant'
 
 const assistant = useAssistantStore()
@@ -133,6 +157,9 @@ const promptValue = ref('')
 const promptSaved = ref('')
 const promptSaving = ref(false)
 const promptNotice = ref('')
+const entryStyle = ref<'topbar' | 'floating'>('topbar')
+const entrySaving = ref(false)
+const entryNotice = ref('')
 
 const defaultBrief = computed(() => {
   const text = defaultPrompt.value.trim()
@@ -145,7 +172,9 @@ const promptDirty = computed(() => promptValue.value.trim() !== promptSaved.valu
 
 async function loadPrefs() {
   try {
-    const res = await getPromptPrefs()
+    const [res, cfgRes] = await Promise.all([getPromptPrefs(), getAllConfigs()])
+    const cfg = (cfgRes.data?.data || {}) as Record<string, unknown>
+    entryStyle.value = String(cfg.assistant_entry_style || 'topbar') === 'floating' ? 'floating' : 'topbar'
     if (res.data?.code === 0) {
       const data = res.data.data || {}
       promptValue.value = data.system_prompt || ''
@@ -160,6 +189,30 @@ async function loadPrefs() {
     }
   } catch (err: any) {
     errorMsg.value = err?.response?.data?.message || err?.message || '加载提示词失败'
+  }
+}
+
+async function saveEntryStyle(value: string, event?: Event) {
+  const next = value === 'floating' ? 'floating' : 'topbar'
+  entrySaving.value = true
+  errorMsg.value = ''
+  entryNotice.value = ''
+  try {
+    const res = await updateConfig('assistant_entry_style', next)
+    if (res.data?.code === 0) {
+      entryStyle.value = next
+      entryNotice.value = '已保存'
+      window.dispatchEvent(new CustomEvent('config-changed', { detail: { key: 'assistant_entry_style', value: next } }))
+      setTimeout(() => { entryNotice.value = '' }, 2400)
+    } else {
+      errorMsg.value = res.data?.message || '保存失败'
+      if (event?.target) (event.target as HTMLSelectElement).value = entryStyle.value
+    }
+  } catch (err: any) {
+    errorMsg.value = err?.response?.data?.message || err?.message || '保存失败'
+    if (event?.target) (event.target as HTMLSelectElement).value = entryStyle.value
+  } finally {
+    entrySaving.value = false
   }
 }
 
