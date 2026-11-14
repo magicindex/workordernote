@@ -19,7 +19,9 @@
           <span :class="status.last_status === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'">
             {{ status.last_status === 'ok' ? '成功' : '失败' }}
           </span>
-          <span v-if="status.last_detail" class="block mt-1 break-all">{{ status.last_detail }}</span>
+          <span v-if="status.last_detail" class="mt-1 block space-y-0.5">
+            <span v-for="(line, i) in detailLines" :key="i" class="block break-all" data-backup-detail-line>{{ line }}</span>
+          </span>
         </span>
         <span v-else>还没有执行过备份。</span>
       </p>
@@ -206,6 +208,17 @@ const confirmOpen = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 type RestoreTarget = { kind: 'local'; name: string } | { kind: 'upload'; file: File }
 const restoreTarget = ref<RestoreTarget | null>(null)
+
+const detailLines = computed(() => String(status.value.last_detail || '')
+  .split('；')
+  .map((line) => line.trim())
+  .filter(Boolean)
+  .map((line) => {
+    // WebDAV 地址里的中文/空格是 percent-encoded 的，展示时还原成可读路径。
+    return line.replace(/https?:\/\/\S+/g, (m) => {
+      try { return decodeURIComponent(m) } catch { return m }
+    })
+  }))
 
 const restoreMessage = computed(() => {
   const target = restoreTarget.value
