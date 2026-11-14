@@ -138,7 +138,7 @@ func TestWebDAVBrowse(t *testing.T) {
 	defer srv.Close()
 	sysconfig.UpdateConfig(db, "backup_webdav_url", srv.URL+"/dav", 0)
 	sysconfig.UpdateConfig(db, "backup_webdav_dir", "wb", 0)
-	res, err := BrowseWebDAV(db)
+	res, err := BrowseWebDAV(db, nil)
 	if err != nil {
 		t.Fatalf("browse: %v", err)
 	}

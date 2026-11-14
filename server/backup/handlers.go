@@ -27,7 +27,13 @@ func RegisterRoutes(admin *gin.RouterGroup, db *gorm.DB) {
 		})
 	})
 	admin.POST("/backup/webdav/browse", func(c *gin.Context) {
-		res, err := BrowseWebDAV(db)
+		var req struct {
+			Path *string `json:"path"`
+		}
+		if c.Request.ContentLength > 0 {
+			_ = c.ShouldBindJSON(&req)
+		}
+		res, err := BrowseWebDAV(db, req.Path)
 		if err != nil {
 			response.ErrorBadRequest(c, "查看 WebDAV 目录失败："+err.Error())
 			return

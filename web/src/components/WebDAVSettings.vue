@@ -123,30 +123,52 @@
 
     <p v-if="notice" class="px-4 pb-3 text-xs font-medium" :class="noticeOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'" data-webdav-notice>{{ notice }}</p>
 
-    <!-- 远程目录选择 -->
-    <div v-if="browseOpen" class="px-4 py-3" data-webdav-browse-panel>
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="min-w-0">
-          <p class="text-xs font-bold text-foreground">选择远程目录</p>
-          <p class="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">当前：/{{ browsePath || '（根目录）' }}</p>
-        </div>
-        <div class="flex flex-wrap gap-1.5">
-          <button class="btn-secondary !px-2.5 !py-1.5 text-[11px]" :disabled="browsing" data-webdav-use-current @click="useCurrentPath">选择当前目录</button>
-          <button class="btn-secondary !px-2.5 !py-1.5 text-[11px]" :disabled="browsing" @click="browseOpen = false">关闭</button>
+    <!-- 远程目录逐级选择弹窗 -->
+    <Teleport to="body">
+      <div v-if="browseOpen" class="fixed inset-0 z-[85] flex items-center justify-center p-3 sm:p-6" data-webdav-browse-panel>
+        <div class="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" @click="browseOpen = false"></div>
+        <div class="surface-modal relative z-10 flex max-h-[82vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl">
+          <div class="flex items-start justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+            <div class="min-w-0">
+              <h3 class="text-sm font-extrabold text-foreground">选择远程目录</h3>
+              <p class="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">当前：/{{ browsePath || '（根目录）' }}</p>
+            </div>
+            <button class="row-action !opacity-100" aria-label="关闭" @click="browseOpen = false">
+              <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <div class="min-h-[12rem] flex-1 overflow-y-auto px-4 py-3 sm:px-5">
+            <p v-if="browseError" class="break-all text-xs font-medium leading-5 text-destructive">{{ browseError }}</p>
+            <div v-else-if="browsing" class="py-8 text-center text-xs text-muted-foreground">读取远程目录…</div>
+            <div v-else class="space-y-1">
+              <button
+                v-for="dir in browseDirs"
+                :key="dir.path"
+                class="flex w-full items-center gap-2 rounded-xl border border-border/70 px-3 py-2 text-left text-xs font-semibold text-foreground transition hover:border-brand-500/40 hover:bg-brand-500/5"
+                data-webdav-browse-dir
+                @click="chooseDir(dir)"
+              >
+                <span class="text-base">📁</span>
+                <span class="min-w-0 flex-1 break-all">{{ dir.name }}</span>
+                <span class="text-muted-foreground">›</span>
+              </button>
+              <p v-if="!browseDirs.length" class="py-8 text-center text-xs text-muted-foreground">这个目录下没有可访问的子目录</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3 sm:px-5">
+            <button class="btn-secondary !px-3 !py-2 text-xs" :disabled="browsing || !browsePath" data-webdav-parent @click="goParent">
+              ← 上一级
+            </button>
+            <div class="flex flex-wrap gap-2">
+              <button class="btn-secondary !px-3 !py-2 text-xs" @click="browseOpen = false">取消</button>
+              <button class="btn-brand !px-4 !py-2 text-xs" :disabled="browsing || !!browseError" data-webdav-use-current @click="confirmBrowse">
+                确定选择
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-      <p v-if="browseError" class="mt-2 break-all text-[11px] font-medium leading-4 text-destructive">{{ browseError }}</p>
-      <div v-else class="mt-2 flex flex-wrap gap-1.5">
-        <button
-          v-for="dir in browseDirs"
-          :key="dir.path"
-          class="assistant-chip !text-[11px]"
-          data-webdav-browse-dir
-          @click="chooseDir(dir)"
-        >📁 {{ dir.name }}</button>
-        <span v-if="!browseDirs.length" class="text-[11px] text-muted-foreground">没有子目录</span>
-      </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
@@ -170,6 +192,7 @@ const result = ref<{ ok: boolean; latency: number; message: string } | null>(nul
 const browseOpen = ref(false)
 const browsing = ref(false)
 const browsePath = ref('')
+const browseParent = ref('')
 const browseDirs = ref<WebDAVDir[]>([])
 const browseError = ref('')
 
@@ -264,7 +287,9 @@ async function saveConnection(showNotice: boolean): Promise<boolean> {
     notice.value = '服务器地址不合法，请填写 http:// 或 https:// 开头的地址'
     return false
   }
-  const nextPath = normalizePath([decodePath(parsed.basePath), path.value].filter(Boolean).join('/'))
+  let nextPath = normalizePath(path.value)
+  const basePath = decodePath(parsed.basePath)
+  if (basePath && nextPath !== basePath && !nextPath.startsWith(basePath + '/')) nextPath = normalizePath(basePath + '/' + nextPath)
   saving.value = true
   if (showNotice) notice.value = ''
   try {
@@ -323,11 +348,20 @@ async function openBrowse() {
   browseOpen.value = true
   browseError.value = ''
   browseDirs.value = []
+  browsePath.value = ''
+  browseParent.value = ''
+  // 从已保存地址/路径的“根”开始，一级一级往下点。
+  await loadBrowse('')
+}
+
+async function loadBrowse(target: string) {
   browsing.value = true
+  browseError.value = ''
   try {
-    const res = await browseWebDAV()
+    const res = await browseWebDAV(target)
     if (res.data?.code === 0) {
       browsePath.value = String(res.data.data?.path || '')
+      browseParent.value = String(res.data.data?.parent || '')
       browseDirs.value = Array.isArray(res.data.data?.dirs) ? res.data.data.dirs : []
     } else {
       browseError.value = res.data?.message || '读取远程目录失败'
@@ -339,19 +373,22 @@ async function openBrowse() {
   }
 }
 
-function chooseDir(dir: WebDAVDir) {
-  path.value = normalizePath(dir.path)
-  dirty.value = true
-  browseOpen.value = false
-  noticeOk.value = true
-  notice.value = `已选择路径：${path.value}（记得点「保存连接设置」）`
+async function chooseDir(dir: WebDAVDir) {
+  await loadBrowse(dir.path)
 }
 
-function useCurrentPath() {
+async function goParent() {
+  if (!browsePath.value) return
+  await loadBrowse(browseParent.value)
+}
+
+function confirmBrowse() {
+  if (browseError.value) return
   path.value = normalizePath(browsePath.value)
   dirty.value = true
   browseOpen.value = false
   noticeOk.value = true
   notice.value = `已选择路径：${path.value || '（根目录）'}（记得点「保存连接设置」）`
 }
+
 </script>

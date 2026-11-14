@@ -42,12 +42,13 @@ export interface WebDAVDir {
 
 export interface WebDAVBrowseResult {
   path: string
+  parent: string
   dirs: WebDAVDir[]
 }
 
-/** 列出远程当前路径下一层目录，用于选择备份路径。 */
-export function browseWebDAV() {
-  return request.post('/api/backup/webdav/browse')
+/** 列出远程指定路径（不传 = 当前配置路径）下一层目录，用于逐级选择备份路径。 */
+export function browseWebDAV(path?: string) {
+  return request.post('/api/backup/webdav/browse', path === undefined ? undefined : { path })
 }
 
 export function listBackupFiles() {

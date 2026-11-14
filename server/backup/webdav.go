@@ -25,6 +25,12 @@ var hrefPattern = regexp.MustCompile(`<[^>]*href[^>]*>([^<]+)</[^>]*href>`)
 
 // webdavTarget 拼出最终 URL：地址 + 子目录 + 文件名。
 func webdavTarget(db *gorm.DB, name string) (string, error) {
+	dir, _ := sysconfig.GetConfig(db, "backup_webdav_dir", 0)
+	return webdavTargetAt(db, dir, name)
+}
+
+// webdavTargetAt 用指定目录覆盖配置里的子目录，供「逐级浏览」用。
+func webdavTargetAt(db *gorm.DB, dir, name string) (string, error) {
 	base, _ := sysconfig.GetConfig(db, "backup_webdav_url", 0)
 	base = strings.TrimSpace(base)
 	if base == "" {
@@ -34,8 +40,7 @@ func webdavTarget(db *gorm.DB, name string) (string, error) {
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return "", fmt.Errorf("WebDAV 地址不合法")
 	}
-	sub, _ := sysconfig.GetConfig(db, "backup_webdav_dir", 0)
-	sub = strings.Trim(strings.TrimSpace(sub), "/")
+	sub := strings.Trim(strings.TrimSpace(dir), "/")
 	u.Path = strings.TrimRight(u.Path, "/")
 	if sub != "" {
 		u.Path += "/" + sub
@@ -99,8 +104,9 @@ type DAVDir struct {
 
 // DAVBrowseResult 是当前路径与下一层目录。
 type DAVBrowseResult struct {
-	Path string   `json:"path"`
-	Dirs []DAVDir `json:"dirs"`
+	Path   string   `json:"path"`
+	Parent string   `json:"parent"`
+	Dirs   []DAVDir `json:"dirs"`
 }
 
 type davBrowseResponse struct {
@@ -115,13 +121,23 @@ type davBrowseResponse struct {
 }
 
 // BrowseWebDAV 用 PROPFIND Depth:1 列出当前目录下的子目录，供「查看远程目录」选择路径。
-func BrowseWebDAV(db *gorm.DB) (DAVBrowseResult, error) {
-	target, err := webdavTarget(db, "")
+func BrowseWebDAV(db *gorm.DB, overridePath *string) (DAVBrowseResult, error) {
+	dir, _ := sysconfig.GetConfig(db, "backup_webdav_dir", 0)
+	if overridePath != nil {
+		dir = *overridePath
+	}
+	current := strings.Trim(strings.TrimSpace(dir), "/")
+	target, err := webdavTargetAt(db, current, "")
 	if err != nil {
 		return DAVBrowseResult{}, err
 	}
-	dir, _ := sysconfig.GetConfig(db, "backup_webdav_dir", 0)
-	current := strings.Trim(strings.TrimSpace(dir), "/")
+	parent := ""
+	if current != "" {
+		parent = strings.Trim(strings.TrimSpace(path.Dir(current)), "/")
+		if parent == "." {
+			parent = ""
+		}
+	}
 	body := `<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>`
 	resp, err := davRequest(db, "PROPFIND", target, strings.NewReader(body), map[string]string{
 		"Depth": "1", "Content-Type": "application/xml; charset=utf-8",
@@ -187,7 +203,7 @@ func BrowseWebDAV(db *gorm.DB) (DAVBrowseResult, error) {
 		dirs = append(dirs, DAVDir{Name: name, Path: child})
 	}
 	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Name < dirs[j].Name })
-	return DAVBrowseResult{Path: current, Dirs: dirs}, nil
+	return DAVBrowseResult{Path: current, Parent: parent, Dirs: dirs}, nil
 }
 
 // TestWebDAV 测一次 WebDAV 目录连通性：PROPFIND Depth:0。

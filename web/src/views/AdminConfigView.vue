@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container animate-fade-in">
+  <div class="page-container mx-auto max-w-6xl animate-fade-in">
     <PageHeader title="系统配置" description="管理全局系统级配置，仅管理员可见" />
 
     <div v-if="errorMsg" class="surface rounded-2xl px-5 py-3 text-sm text-destructive">

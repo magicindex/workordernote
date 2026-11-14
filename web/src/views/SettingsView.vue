@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container animate-fade-in">
+  <div class="page-container mx-auto max-w-6xl animate-fade-in">
     <PageHeader title="偏好设置" description="管理你的个人功能配置" />
 
     <div v-if="errorMsg" class="surface mt-4 rounded-2xl px-5 py-3 text-sm text-destructive">
