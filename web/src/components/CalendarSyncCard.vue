@@ -1,6 +1,6 @@
 <template>
   <h4 class="mt-5 text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground">手机日历</h4>
-  <div class="mt-2 rounded-2xl border border-border/70 p-3.5" data-calendar-sync>
+  <div class="surface mt-2 rounded-2xl p-3.5" data-calendar-sync>
     <div class="flex items-start gap-3">
       <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/12 text-brand-600 dark:text-brand-300">
         <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" aria-hidden="true">

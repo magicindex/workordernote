@@ -3,7 +3,7 @@
        能不能装取决于浏览器：需要 HTTPS（或 localhost）+ manifest + Service Worker；
        内网纯 http 打开时 Chrome 不提供安装，这里就如实说明并给出替代方案。 -->
   <h4 class="mt-5 text-xs font-extrabold uppercase tracking-[0.16em] text-muted-foreground" data-install-heading>{{ heading }}</h4>
-  <div class="mt-2 rounded-2xl border border-border/70 p-3.5" data-install-card>
+  <div class="surface mt-2 rounded-2xl p-3.5" data-install-card>
     <div class="flex flex-wrap items-center gap-2">
       <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/12 text-brand-600 dark:text-brand-300">
         <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" aria-hidden="true">
