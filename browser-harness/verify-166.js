@@ -91,7 +91,7 @@ const REPLY = [
       req.continue();
     });
 
-    await page.click('[data-assistant-ball]');
+    await page.click('[data-assistant-topbar]');
     await waitFor(page, () => !!document.querySelector('[data-assistant-panel]'), { timeout: 8000 });
     await sleep(700);
 

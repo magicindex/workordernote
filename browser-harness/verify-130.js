@@ -103,7 +103,7 @@ async function waitSavedChip(page, name, timeout = 12000) {
     await gotoRetry(page, BASE + '/admin');
     await sleep(900);
     const mobileEntry = await page.evaluate(() => {
-      const btn = document.querySelector('[data-assistant-mobile]');
+      const btn = document.querySelector('[data-assistant-topbar]');
       const bell = document.querySelector('header a[href="/admin/notifications"]');
       if (!btn || !bell) return { ok: false };
       const b = btn.getBoundingClientRect();
@@ -111,7 +111,7 @@ async function waitSavedChip(page, name, timeout = 12000) {
       return { ok: true, visible: b.width > 0 && b.height > 0, gap: Math.round(b.left - n.right) };
     });
     check('手机端铃铛旁边有 AI 图标', mobileEntry.ok && mobileEntry.visible && mobileEntry.gap >= -2 && mobileEntry.gap <= 16, JSON.stringify(mobileEntry));
-    await page.click('[data-assistant-mobile]');
+    await page.click('[data-assistant-topbar]');
     await page.waitForSelector('[data-assistant-panel]', { timeout: 5000 }).catch(() => {});
     await sleep(400);
     const mobilePanel = await page.evaluate(() => !!document.querySelector('[data-assistant-panel]'));

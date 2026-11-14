@@ -3,8 +3,8 @@
  * 「呼叫小秘上面的 新建提醒按钮，移动到 首页：与 接下来 14 天 同行 靠右」）。
  *
  * 钉住这几条：
- *   1) 侧栏最上面**不再有**「新建提醒」按钮；「呼叫小秘」按用户 2026-11-13 的要求
- *      改成桌面端右下角的可拖动悬浮球（侧栏里不再显示入口）；
+ *   1) 侧栏最上面**不再有**「新建提醒」按钮；「呼叫小秘」按用户 2026-11-14 的要求
+ *      统一成顶栏铃铛旁的 AI 星星（侧栏里不再显示入口）；
  *   2) 首页看板标题「接下来 14 天」那一行**右侧**多一个「新建提醒」，与标题**同行、靠右**，
  *      按钮左边原来的「待办 N · 逾期 N」计数已按用户 2026-10-16 的要求删掉；
  *   3) 点它**跳到「今天」页并展开新建卡片**（首页看板自己没有新建面板，走 MainLayout 的
@@ -48,71 +48,32 @@ const visible = (page, sel) => page.evaluate((sel) => {
     await page.setViewport({ width: 1440, height: 1000 });
     await login(page, BASE);
 
-    // ============ 1. 侧栏：新建提醒没了；呼叫小秘改成桌面悬浮球 ============
+    // ============ 1. 侧栏：新建提醒没了；呼叫小秘统一到顶栏 AI 星星 ============
     await gotoRetry(page, BASE + '/admin/home');
     await sleep(2500);
     const sidebar = await page.evaluate(() => {
       const aside = document.querySelector('aside.sidebar');
       const buttons = Array.from(aside?.querySelectorAll('button, a') || []);
       const drawerTrigger = aside?.querySelector('[data-assistant-sidebar]');
-      const ball = document.querySelector('[data-assistant-trigger]');
-      const ballRect = ball?.getBoundingClientRect();
+      const topbar = document.querySelector('[data-assistant-topbar]');
+      const topbarRect = topbar?.getBoundingClientRect();
       return {
         // 侧栏里还有没有写着「新建提醒」的按钮（原来那个）
         newCount: buttons.filter((el) => /新建提醒/.test(el.textContent || '')).length,
         assistant: document.querySelectorAll('[data-assistant-trigger]').length,
-        assistantText: (ball?.textContent || '').trim(),
+        assistantText: (topbar?.innerText || '').trim(),
         // 侧栏里的入口只留给手机抽屉：桌面端被 CSS 藏起来（宽高 0）
         drawerVisible: !!drawerTrigger && drawerTrigger.getBoundingClientRect().width > 0,
-        ballVisible: !!ball && ballRect.width > 0 && ballRect.height > 0
-          && getComputedStyle(ball).position === 'fixed',
+        topbarVisible: !!topbar && topbarRect.width > 0 && topbarRect.height > 0
+          && getComputedStyle(topbar).position !== 'fixed',
+        ball: !!document.querySelector('[data-assistant-ball]'),
       };
     });
     check('侧栏最上面不再有「新建提醒」按钮', sidebar.newCount === 0, `还在 ${sidebar.newCount} 个`);
     check('桌面端侧栏里不再显示「呼叫小秘」入口', sidebar.drawerVisible === false);
-    check('桌面端改成右下角悬浮球（fixed、可见）', sidebar.ballVisible === true, JSON.stringify(sidebar));
-    // AI 入口的名字在「系统配置 → AI 助手」里能改（默认「望舒」），这里只认「呼叫」前缀，
-    // 不再写死「呼叫小秘」—— 那是最早的默认名，改了名这条就假红。
-    // 用户 2026-11-13：「给 ai 名称前边图标加上流光圆边，让效果看起来像是在呼吸」。
-    // 量三件事：有一圈会转的流光（conic + 角度动画）、外圈柔光在缩放/明暗（呼吸）、
-    // 系统开「减少动态效果」时两个动画都停。
-    const orb = await page.evaluate(async () => {
-      const el = document.querySelector('[data-assistant-trigger].orb-flow');
-      if (!el) return null;
-      const ring = getComputedStyle(el, '::before');
-      const glow = getComputedStyle(el, '::after');
-      const frame = () => ({ scale: glow.transform, opacity: Number(glow.opacity) });
-      const one = frame();
-      await new Promise((r) => setTimeout(r, 900));
-      const two = frame();
-      return {
-        ringAnim: ring.animationName, ringDur: ring.animationDuration,
-        glowAnim: glow.animationName,
-        conic: /conic-gradient/.test(ring.backgroundImage),
-        breathing: one.scale !== two.scale || Math.abs(one.opacity - two.opacity) > 0.05,
-        frames: [one, two],
-      };
-    });
-    check('AI 图标外圈有流光圆边（conic 光带在转）',
-      !!orb && orb.conic === true && /flow-frame-rotate/.test(orb.ringAnim) && parseFloat(orb.ringDur) > 1,
-      JSON.stringify(orb).slice(0, 200));
-    check('外圈柔光在「呼吸」（缩放/明暗随时间变化）',
-      !!orb && /orb-glow-breathe/.test(orb.glowAnim) && orb.breathing === true,
-      JSON.stringify(orb && orb.frames));
-    await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
-    await sleep(400);
-    const orbReduced = await page.evaluate(() => {
-      const el = document.querySelector('[data-assistant-trigger].orb-flow');
-      return el ? {
-        ring: getComputedStyle(el, '::before').animationName,
-        glow: getComputedStyle(el, '::after').animationName,
-      } : null;
-    });
-    check('「减少动态效果」时流光/呼吸都停下',
-      !!orbReduced && orbReduced.ring === 'none' && orbReduced.glow === 'none', JSON.stringify(orbReduced));
-    await page.emulateMediaFeatures([]);
-
-    check('AI 入口只剩悬浮球一个（不会在侧栏和右下角各有一个）',
+    check('桌面端改成顶栏铃铛旁的 AI 星星（可见、不是浮球）',
+      sidebar.topbarVisible === true && sidebar.ball === false, JSON.stringify(sidebar));
+    check('AI 入口只剩顶栏一个（侧栏入口只留给手机抽屉）',
       sidebar.assistant === 1 && /^呼叫\S+/.test(sidebar.assistantText), JSON.stringify(sidebar));
 
     // ============ 2. 首页看板：标题行右侧的新建按钮 ============

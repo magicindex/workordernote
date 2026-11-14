@@ -52,13 +52,9 @@
           </button>
         </div>
 
-        <!-- 「呼叫小秘」（AI 助手）入口。
-             用户 2026-11-13：桌面端不再放在侧栏顶部，改成一颗可拖动的悬浮球
-             （见 components/AssistantLauncher.vue）；拖过的位置记在 localStorage。
-             手机上保持现状：顶栏铃铛旁的小图标（<640px）+ 侧栏抽屉里的这一颗（<1024px）。
-             所以这里整块只在窄屏出现，桌面侧栏顶部不再有它。
-             窄栏（56px 图标栏）时收成 44px 圆按钮、居中（见 .rail-actions），
-             不过窄栏只在桌面出现，这个按钮在窄栏里已经看不到了。 -->
+        <!-- 「呼叫小秘」（AI 助手）的侧栏入口：用户 2026-11-14 起桌面端统一到
+             顶栏铃铛旁边（见 topbar 的 AI 星星），侧栏这一颗只保留给手机抽屉（<1024px），
+             手机端保持原来的入口与整屏抽屉不变。桌面侧栏顶部不再显示它。 -->
         <div class="rail-actions mx-4 flex flex-col gap-2 lg:hidden">
           <button
             type="button"
@@ -379,18 +375,25 @@
             <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span v-if="summary.unread" class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-red-500"></span>
           </RouterLink>
-          <!-- 手机端（用户 2026-10-19）：「铃铛旁边增加 ai 图标，用于手机 ai 对话」——
-               手机上侧栏是抽屉，呼叫小秘在抽屉里不好找，这里给一个常驻入口。
-               桌面端已有左上角「呼叫小秘」，所以这个按钮只在 <640px 出现。 -->
+          <!-- AI 小秘入口（用户 2026-11-14）：原来桌面端是右下角悬浮球，现在统一成
+               顶栏铃铛旁边的一颗 AI 星星，跟手机一致；桌面端也显示。
+               点击展开 / 收起：桌面浮窗不挡正文、顶栏按钮一直点得到；手机端展开后
+               是整屏抽屉、顶栏被遮住，实际效果仍是「点一下就打开」，与原来一致。
+               侧栏里那颗入口只留给手机抽屉（见 .rail-actions 的 lg:hidden）。 -->
           <button
             type="button"
-            class="icon-button sm:hidden"
-            :aria-label="`呼叫${assistantName}（AI 助手）`"
-            :title="`呼叫${assistantName}：写周报、一句话建任务`"
-            data-assistant-mobile
-            @click="openAssistant"
+            class="icon-button"
+            :class="assistantOpen ? 'bg-brand-500/10 text-brand-600 dark:text-brand-300' : ''"
+            :aria-label="assistantOpen ? `收起${assistantName}（AI 助手）` : `呼叫${assistantName}（AI 助手）`"
+            :aria-pressed="assistantOpen ? 'true' : 'false'"
+            :title="assistantOpen ? `收起${assistantName}` : `呼叫${assistantName}：写周报、一句话建任务`"
+            :data-assistant-open="assistantOpen ? 'true' : 'false'"
+            data-assistant-trigger
+            data-assistant-topbar
+            @click="toggleAssistant"
           >
             <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m12 3.6 1.9 4.4 4.4 1.9-4.4 1.9L12 16.2l-1.9-4.4-4.4-1.9 4.4-1.9L12 3.6Z" stroke-width="1.7" stroke-linejoin="round"/><path d="M18.6 15.4l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8.8-1.9Z" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            <span class="sr-only">呼叫{{ assistantName }}</span>
           </button>
           <!-- 免打扰（用户 2026-10-16）：「首行消息（铃铛图标）旁边放一个喇叭标志，点击进入静音标志，
                退出显示喇叭，点击进入免打扰模式。后台增加免打扰时间段。权责级别优先在 所有通知以上。」
@@ -625,12 +628,9 @@
     <!-- 版本信息与迭代说明 -->
     <VersionDialog v-model="versionOpen" :version="appVersion" :build-time="appBuildTime" />
 
-    <!-- 呼叫小秘：AI 助手抽屉。接上模型后走真回复，没接上时用本地兜底文案。
+    <!-- 呼叫小秘：AI 助手面板。接上模型后走真回复，没接上时用本地兜底文案。
          桌面端是右侧浮窗（不铺满、不挡正文），手机端保持原来的整屏抽屉。 -->
     <AssistantPanel v-model="assistantOpen" />
-
-    <!-- 桌面端的「呼叫小秘」悬浮球：可拖动、记住位置；窗口展开时淡出，收起后回到原处。 -->
-    <AssistantLauncher :panel-open="assistantOpen" @open="openAssistant" />
 
     <!-- 新建清单：先选模板（通用 / 信用卡），信用卡填完卡片信息自动生成还款计划 -->
     <ListCreateDialog
@@ -746,7 +746,6 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import VersionDialog from '../components/VersionDialog.vue'
 import AssistantPanel from '../components/AssistantPanel.vue'
-import AssistantLauncher from '../components/AssistantLauncher.vue'
 import { useAssistantStore } from '../stores/assistant'
 import Modal from '../components/Modal.vue'
 import ListCreateDialog from '../components/ListCreateDialog.vue'
@@ -789,7 +788,7 @@ const authStore = useAuthStore()
 const assistantStore = useAssistantStore()
 const assistantName = computed(() => assistantStore.displayName)
 const mobileOpen = ref(false)
-// 「呼叫小秘」面板开合。桌面端默认收起，只露一颗悬浮球（用户 2026-11-13）。
+// 「呼叫小秘」面板开合。桌面端默认收起；入口是顶栏铃铛旁的 AI 星星（用户 2026-11-14）。
 const assistantOpen = ref(false)
 
 // 界面折叠状态记在本地：这类偏好跟人走、跟设备走，不必上服务端。
@@ -1162,6 +1161,11 @@ async function openQuickAdd() {
 function openAssistant() {
   mobileOpen.value = false
   assistantOpen.value = true
+}
+/** 顶栏 AI 星星：点一下展开，再点一下收起（手机端面板会盖住顶栏，实际仍是点开）。 */
+function toggleAssistant() {
+  mobileOpen.value = false
+  assistantOpen.value = !assistantOpen.value
 }
 // 关掉浮窗（Esc / 关闭按钮 / 点遮罩）后，下一次打开仍按「窄桌面先收起侧栏」的规矩来，
 // 而不是沿用上一次用户手动展开过的临时状态。
