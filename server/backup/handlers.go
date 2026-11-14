@@ -26,6 +26,14 @@ func RegisterRoutes(admin *gin.RouterGroup, db *gorm.DB) {
 			"local_dir":   localDir(db),
 		})
 	})
+	admin.POST("/backup/webdav/browse", func(c *gin.Context) {
+		res, err := BrowseWebDAV(db)
+		if err != nil {
+			response.ErrorBadRequest(c, "查看 WebDAV 目录失败："+err.Error())
+			return
+		}
+		response.Success(c, res)
+	})
 	admin.POST("/backup/webdav/test", func(c *gin.Context) {
 		latency, err := TestWebDAV(db)
 		if err != nil {

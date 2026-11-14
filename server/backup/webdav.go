@@ -3,6 +3,7 @@ package backup
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -88,6 +89,105 @@ func explainDAVError(err error) error {
 		return fmt.Errorf("%w（HTTPS 证书不受信任或与访问地址不匹配：可改用证书里的主机名，或在「数据备份」里开启「跳过 HTTPS 证书校验」）", err)
 	}
 	return err
+}
+
+// DAVDir 是远程目录选择器里的一项。
+type DAVDir struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+// DAVBrowseResult 是当前路径与下一层目录。
+type DAVBrowseResult struct {
+	Path string   `json:"path"`
+	Dirs []DAVDir `json:"dirs"`
+}
+
+type davBrowseResponse struct {
+	Href     string `xml:"href"`
+	Propstat []struct {
+		Prop struct {
+			ResourceType struct {
+				Collection *struct{} `xml:"collection"`
+			} `xml:"resourcetype"`
+		} `xml:"prop"`
+	} `xml:"propstat"`
+}
+
+// BrowseWebDAV 用 PROPFIND Depth:1 列出当前目录下的子目录，供「查看远程目录」选择路径。
+func BrowseWebDAV(db *gorm.DB) (DAVBrowseResult, error) {
+	target, err := webdavTarget(db, "")
+	if err != nil {
+		return DAVBrowseResult{}, err
+	}
+	dir, _ := sysconfig.GetConfig(db, "backup_webdav_dir", 0)
+	current := strings.Trim(strings.TrimSpace(dir), "/")
+	body := `<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>`
+	resp, err := davRequest(db, "PROPFIND", target, strings.NewReader(body), map[string]string{
+		"Depth": "1", "Content-Type": "application/xml; charset=utf-8",
+	})
+	if err != nil {
+		return DAVBrowseResult{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return DAVBrowseResult{}, fmt.Errorf("认证失败（HTTP %d），请检查用户名/密码", resp.StatusCode)
+	}
+	if resp.StatusCode == 404 {
+		return DAVBrowseResult{}, fmt.Errorf("远程目录不存在，请检查地址与路径")
+	}
+	if resp.StatusCode != 207 && resp.StatusCode != 200 {
+		return DAVBrowseResult{}, fmt.Errorf("WebDAV 返回 HTTP %d", resp.StatusCode)
+	}
+	var ms struct {
+		Responses []davBrowseResponse `xml:"response"`
+	}
+	if err := xml.NewDecoder(resp.Body).Decode(&ms); err != nil {
+		return DAVBrowseResult{}, fmt.Errorf("解析远程目录失败：%w", err)
+	}
+	base, _ := url.Parse(target)
+	basePath := strings.TrimRight(base.Path, "/")
+	seen := map[string]bool{}
+	dirs := make([]DAVDir, 0)
+	for _, item := range ms.Responses {
+		href := strings.TrimSpace(item.Href)
+		u, err := url.Parse(href)
+		if err != nil {
+			continue
+		}
+		p := strings.TrimRight(u.Path, "/")
+		if basePath != "" {
+			if !strings.HasPrefix(p, basePath) {
+				continue
+			}
+			p = strings.TrimPrefix(p, basePath)
+		}
+		rel := strings.Trim(p, "/")
+		if rel == "" || strings.Contains(rel, "/") {
+			continue
+		}
+		isCollection := strings.HasSuffix(href, "/")
+		for _, ps := range item.Propstat {
+			if ps.Prop.ResourceType.Collection != nil {
+				isCollection = true
+			}
+		}
+		if !isCollection {
+			continue
+		}
+		name, err := url.PathUnescape(rel)
+		if err != nil || name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		child := name
+		if current != "" {
+			child = current + "/" + name
+		}
+		dirs = append(dirs, DAVDir{Name: name, Path: child})
+	}
+	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Name < dirs[j].Name })
+	return DAVBrowseResult{Path: current, Dirs: dirs}, nil
 }
 
 // TestWebDAV 测一次 WebDAV 目录连通性：PROPFIND Depth:0。

@@ -38,8 +38,8 @@ const api = (page, p) => page.evaluate(async ({ base, p }) => {
       return {
         titles: [...document.querySelectorAll('h2')].map((h) => h.textContent.trim()),
         schedule: cardOf('backup_enabled'),
-        remote: cardOf('backup_webdav_url'),
-        urlVisible: visible('backup_webdav_url'),
+        remote: (() => { const el = document.querySelector('[data-webdav-settings]'); return el?.closest('.surface')?.querySelector('h2')?.textContent?.trim() || ''; })(),
+        urlVisible: (() => { const input = document.querySelector('[data-webdav-server]'); return !!input && input.offsetParent !== null; })(),
         panelLocal: !!document.querySelector('[data-backup-panel] [data-backup-local]'),
         localGroupVisible: !!localGroupTitle && localGroupTitle.offsetParent !== null,
         panelLocalDirVisible: (() => { const input = document.querySelector('[data-backup-local-dir]'); return !!input && input.offsetParent !== null; })(),

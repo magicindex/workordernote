@@ -120,6 +120,36 @@ func TestPruneLocalKeepsNewestOnly(t *testing.T) {
 	}
 }
 
+func TestWebDAVBrowse(t *testing.T) {
+	db := testDB(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "PROPFIND" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.WriteHeader(207)
+		io.WriteString(w, `<?xml version="1.0"?><d:multistatus xmlns:d="DAV:">
+<d:response><d:href>/dav/wb/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>
+<d:response><d:href>/dav/wb/Alpha/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>
+<d:response><d:href>/dav/wb/Beta/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>
+<d:response><d:href>/dav/wb/not-a-dir.txt</d:href><d:propstat><d:prop><d:resourcetype/></d:prop></d:propstat></d:response>
+</d:multistatus>`)
+	}))
+	defer srv.Close()
+	sysconfig.UpdateConfig(db, "backup_webdav_url", srv.URL+"/dav", 0)
+	sysconfig.UpdateConfig(db, "backup_webdav_dir", "wb", 0)
+	res, err := BrowseWebDAV(db)
+	if err != nil {
+		t.Fatalf("browse: %v", err)
+	}
+	if res.Path != "wb" || len(res.Dirs) != 2 || res.Dirs[0].Name != "Alpha" || res.Dirs[1].Name != "Beta" {
+		t.Fatalf("browse result = %+v", res)
+	}
+	if res.Dirs[1].Path != "wb/Beta" {
+		t.Fatalf("child path = %q", res.Dirs[1].Path)
+	}
+}
+
 func TestWebDAVConnection(t *testing.T) {
 	db := testDB(t)
 	var method, auth string

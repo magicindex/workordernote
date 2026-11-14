@@ -20,7 +20,8 @@
         <h2 class="text-sm font-bold text-foreground">{{ group.title }}</h2>
         <span class="text-[11px] font-semibold text-muted-foreground">{{ visibleCount(group) }} 项</span>
       </div>
-      <div class="divide-y divide-border">
+      <slot v-if="customGroups?.includes(group.key)" name="group-body" :group="group"></slot>
+      <div v-else class="divide-y divide-border">
         <div
           v-for="item in group.items"
           v-show="isItemVisible(item)"
@@ -150,6 +151,8 @@ const props = defineProps<{
   columns?: number
   /** 在该分组的配置项下面追加一个自定义槽位（目前用于「默认清单」）。 */
   extraGroup?: string
+  /** 这些分组不用通用行渲染，改由 #group-body 插槽接管（WebDAV 连接组件）。 */
+  customGroups?: string[]
 }>()
 
 const emit = defineEmits<{

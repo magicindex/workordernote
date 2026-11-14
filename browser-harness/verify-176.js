@@ -34,7 +34,7 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       return {
         area: !!document.querySelector('[data-webdav-test]'),
         button: !!btn,
-        inFirstRow: !!btn?.closest('[data-config-key="backup_webdav_enabled"]'),
+        inFirstRow: !!btn?.closest('[data-webdav-enable-row]'),
         disabled: !!btn?.disabled,
         state: document.querySelector('[data-webdav-test-status]')?.getAttribute('data-state') || '',
         text: (document.querySelector('[data-webdav-test-status]')?.textContent || '').replace(/\s+/g, ' ').trim(),

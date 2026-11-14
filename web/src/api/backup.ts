@@ -35,6 +35,21 @@ export function testWebDAV() {
   return request.post('/api/backup/webdav/test')
 }
 
+export interface WebDAVDir {
+  name: string
+  path: string
+}
+
+export interface WebDAVBrowseResult {
+  path: string
+  dirs: WebDAVDir[]
+}
+
+/** 列出远程当前路径下一层目录，用于选择备份路径。 */
+export function browseWebDAV() {
+  return request.post('/api/backup/webdav/browse')
+}
+
 export function listBackupFiles() {
   return request.get('/api/backup/files')
 }
