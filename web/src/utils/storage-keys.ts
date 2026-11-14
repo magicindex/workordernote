@@ -23,4 +23,6 @@ export const SK = {
   rememberedLogin: `${P}remembered_login`,
   // 「呼叫小秘」悬浮球的位置（桌面端选了悬浮球入口时用；拖完记住）。
   assistantBallPos: `${P}assistant_ball_pos`,
+  // 记事编辑面板拖拽后的宽高（按用户存；没拖过就不写）。
+  noteEditorSize: `${P}note_editor_size`,
 } as const

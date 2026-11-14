@@ -6,7 +6,12 @@
       :class="isModal ? 'items-center justify-center p-3 sm:p-6' : side === 'left' ? 'justify-start' : 'justify-end'"
     >
       <div class="absolute inset-0 bg-slate-950/25 backdrop-blur-sm" @click="close"></div>
-      <aside class="editor-panel" :class="[isModal ? 'editor-panel-modal' : '', side === 'left' ? 'editor-panel-left' : '']">
+      <aside
+        ref="panelRef"
+        class="editor-panel"
+        :class="[isModal ? 'editor-panel-modal' : '', side === 'left' ? 'editor-panel-left' : '']"
+        :style="notePanelStyle"
+      >
         <div class="flex items-center justify-between border-b border-border px-4 py-3 sm:px-6 sm:py-5">
           <div>
             <p class="text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground">{{ isCreate ? '新建' : editing.kind === 'note' ? '记事详情' : '提醒详情' }}</p>
@@ -136,13 +141,32 @@
             </div>
           </div>
 
-          <div class="flex items-center gap-3 border-t border-border bg-surface/80 p-3.5 backdrop-blur sm:p-5">
+          <div
+            class="flex items-center gap-3 border-t border-border bg-surface/80 p-3.5 backdrop-blur sm:p-5"
+            :style="isNoteEditor && desktop ? { paddingRight: '2.75rem' } : undefined"
+          >
             <button type="button" class="btn-secondary flex-1" @click="close">取消</button>
             <button class="btn-primary flex-1" :disabled="saving || loading || !editing.title.trim()">
               {{ saving ? '保存中…' : editing.kind === 'note' ? '保存记事' : '保存提醒' }}
             </button>
           </div>
         </form>
+
+        <!-- 记事详情：右下角手柄可拖宽高；松手后按用户记住尺寸，下次打开还是这个大小。 -->
+        <span
+          v-if="isNoteEditor && desktop"
+          class="editor-resize-handle"
+          role="separator"
+          aria-label="拖拽调整记事编辑面板大小"
+          title="拖拽调整大小（自动记住）"
+          data-note-resize-handle
+          @pointerdown="startResize"
+          @click.stop
+        >
+          <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" fill="none" stroke="currentColor" aria-hidden="true">
+            <path d="M14 3 3 14M14 8 8 14M14 13l-1 1" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+        </span>
       </aside>
 
       <ConfirmDialog
@@ -160,7 +184,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import NoteTimeline from './NoteTimeline.vue'
 import { RouterLink } from 'vue-router'
@@ -168,6 +192,8 @@ import LunarDatePicker from './LunarDatePicker.vue'
 import RepeatNotifySelect from './RepeatNotifySelect.vue'
 import { LIST_COLOR_NAMES, listColorHex, listColorLabel } from '../utils/list-colors'
 import { buildMergedNoteText, buildNoteTimeline, parseMergedNoteText } from '../utils/note-timeline'
+import { SK } from '../utils/storage-keys'
+import { useAuthStore } from '../stores/auth'
 import {
   createReminder, deleteReminder, getReminder, updateReminder,
   updateCompletionNote,
@@ -210,6 +236,104 @@ const emit = defineEmits<{
 const isCreate = computed(() => props.preset != null)
 const isNoteEditing = computed(() => (editing.kind as string) === 'note')
 const isModal = computed(() => props.presentation === 'modal')
+const authStore = useAuthStore()
+const panelRef = ref<HTMLElement | null>(null)
+const isNoteEditor = computed(() => editing.kind === 'note')
+// 桌面端才允许拖拽（手机是整屏抽屉，拖了反而难用）；<768px 隐藏手柄，也不套记住的尺寸。
+const desktop = ref(typeof window !== 'undefined' && window.innerWidth >= 768)
+const noteSize = reactive<{ width: number | null; height: number | null }>({ width: null, height: null })
+const notePanelStyle = computed(() => {
+  if (!isNoteEditor.value || !desktop.value) return undefined
+  const style: Record<string, string> = {}
+  if (noteSize.width) {
+    style.width = `${noteSize.width}px`
+    style.maxWidth = '95vw'
+  }
+  if (noteSize.height) {
+    style.height = `${noteSize.height}px`
+    style.maxHeight = isModal.value ? '92vh' : '100vh'
+  }
+  return style
+})
+function noteSizeKey() {
+  return `${SK.noteEditorSize}.${authStore.user?.id || 'anon'}`
+}
+function loadNoteSize() {
+  if (!desktop.value) return
+  try {
+    const raw = localStorage.getItem(noteSizeKey())
+    if (!raw) return
+    const parsed = JSON.parse(raw) as { w?: unknown; h?: unknown }
+    const w = Number(parsed?.w)
+    const h = Number(parsed?.h)
+    if (Number.isFinite(w) && w >= 360 && w <= 1200) noteSize.width = Math.round(w)
+    if (Number.isFinite(h) && h >= 280 && h <= 1400) noteSize.height = Math.round(h)
+  } catch { /* 尺寸读不到就用默认 */ }
+}
+function persistNoteSize() {
+  if (!noteSize.width || !noteSize.height) return
+  try {
+    localStorage.setItem(noteSizeKey(), JSON.stringify({ w: Math.round(noteSize.width), h: Math.round(noteSize.height) }))
+  } catch { /* 隐私模式/localStorage 不可用时只是不记忆 */ }
+}
+let resizing = false
+let resizeStartX = 0
+let resizeStartY = 0
+let resizeStartW = 0
+let resizeStartH = 0
+function onViewportResize() {
+  desktop.value = window.innerWidth >= 768
+  if (!desktop.value) {
+    noteSize.width = null
+    noteSize.height = null
+  }
+}
+function startResize(event: PointerEvent) {
+  if (!isNoteEditor.value || !desktop.value || !panelRef.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  const rect = panelRef.value.getBoundingClientRect()
+  resizing = true
+  resizeStartX = event.clientX
+  resizeStartY = event.clientY
+  resizeStartW = rect.width
+  resizeStartH = rect.height
+  noteSize.width = Math.round(rect.width)
+  noteSize.height = Math.round(rect.height)
+  document.body.style.userSelect = 'none'
+  window.addEventListener('pointermove', onResizeMove)
+  window.addEventListener('pointerup', stopResize, { once: true })
+}
+function onResizeMove(event: PointerEvent) {
+  if (!resizing) return
+  const maxW = Math.min(1200, Math.round(window.innerWidth * 0.95))
+  const maxH = Math.round(window.innerHeight * (isModal.value ? 0.92 : 1))
+  noteSize.width = Math.max(360, Math.min(maxW, Math.round(resizeStartW + event.clientX - resizeStartX)))
+  noteSize.height = Math.max(280, Math.min(maxH, Math.round(resizeStartH + event.clientY - resizeStartY)))
+}
+function stopResize() {
+  if (!resizing) return
+  resizing = false
+  window.removeEventListener('pointermove', onResizeMove)
+  document.body.style.userSelect = ''
+  persistNoteSize()
+}
+onMounted(() => {
+  loadNoteSize()
+  window.addEventListener('resize', onViewportResize)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onViewportResize)
+  window.removeEventListener('pointermove', onResizeMove)
+  if (resizing) {
+    resizing = false
+    document.body.style.userSelect = ''
+  }
+})
+watch(() => props.modelValue, (open) => {
+  if (open) loadNoteSize()
+  else if (resizing) stopResize()
+})
 
 const blankInput = (): SaveReminderInput & { id?: number } => ({
   title: '', notes: '', color: '', kind: 'task', list_id: 0, priority: 0, due_at: null,
@@ -218,6 +342,9 @@ const blankInput = (): SaveReminderInput & { id?: number } => ({
 })
 
 const editing = reactive<SaveReminderInput & { id?: number }>(blankInput())
+watch(() => editing.kind, (kind) => {
+  if (kind === 'note') loadNoteSize()
+})
 // 打开时拉回来的完整条目：备注文本框里是「新建备注 + 历次完成备注」拼起来的合并文本，
 // 保存时要拆回去（并逐条写回完成备注），所以原样留一份做对照。
 const detail = ref<ReminderItem | null>(null)
@@ -480,6 +607,15 @@ async function save() {
    内部滚动区自己滚（表单区已经是 min-h-0 flex-1 overflow-y-auto）。 */
 .editor-panel-modal {
   @apply h-auto max-h-[88vh] w-full max-w-[680px] rounded-2xl border border-border shadow-2xl;
+}
+/* 记事编辑面板右下角手柄：只负责拖拽，视觉上像三道斜线的小握把。 */
+.editor-resize-handle {
+  @apply absolute z-30 flex h-5 w-5 cursor-nwse-resize touch-none items-center justify-center rounded-md text-muted-foreground/60 transition hover:bg-brand-500/10 hover:text-brand-600 dark:hover:text-brand-300;
+  right: 5px;
+  bottom: 5px;
+}
+@media (max-width: 767px) {
+  .editor-resize-handle { display: none; }
 }
 .sheet-enter-active, .sheet-leave-active { transition: opacity .18s ease; }
 .sheet-enter-active .editor-panel, .sheet-leave-active .editor-panel { transition: transform .22s cubic-bezier(.2,.8,.2,1), opacity .18s ease; }
