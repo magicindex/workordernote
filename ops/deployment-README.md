@@ -218,9 +218,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 ## 版本与迭代
 
 - 软件版本见根目录 `VERSION`，当前 `0.48.0`，规则为 `主版本号.小版本号.修正号`。
-  **部署状态（2026-11-14 17:28）**：**201 生产 8906 / 200 生产均已升级到最新 0.48.0 热更新**
-  （源码提交 `1cf39d3`，镜像 `workordernote:0.48.0-localbrowse-20261114-172704` =
-  `sha256:d64b8812cb0347c4b0a935cb69f9a2818655560908aed66b4c4c9bff3962172b`）。
+  **部署状态（2026-11-14 17:47）**：**201 生产 8906 / 200 生产均已升级到最新 0.48.0 热更新**
+  （源码提交 `919855b`，镜像 `workordernote:0.48.0-backupdetail-20261114-174551` =
+  `sha256:743b244e8ece670b344e94b009c5fe14ae69b6a4c434877dae539e50ff5b63e2`）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
   **公开设置 9 项三台一致**；**个人偏好 201 与 200 一致，沙箱单独一套**（开始提醒时间 `00:00`、
@@ -233,6 +233,19 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 应用内「侧栏 → 关于 → 版本信息」可查看迭代说明与原项目信息。
 
 ## 变更记录
+
+### 2026-11-14：0.48.0 热更新（201 / 200）—— 备份详情本机 / WebDAV 分行
+
+> **热更新记录**（软件版本仍为 `0.48.0`，仅前端静态资源；后端仍是 `5398153`。源码提交 `919855b`）
+> 镜像：`workordernote:0.48.0-backupdetail-20261114-174551` =
+> `sha256:743b244e8ece670b344e94b009c5fe14ae69b6a4c434877dae539e50ff5b63e2`；
+> Gitea registry manifest `sha256:2d1b6a718d43e6a5b0b15425159afbf6499c96830a2867a527a1d4f6e08dd463`（仅推 Gitea registry）
+
+- 第 133 条：`BackupPanel` 把 `last_detail` 按「；」拆成多行，本机路径与 WebDAV 路径各占一行，超长仍 `break-all`；WebDAV URL 的中文 percent-encoding 展示时解码。
+- 201：备份 `docker-compose.yml.bak-pre0480backupdetail-20261114-174607`；17:46 重建，healthy，`index-Cf7P0yNr.js`。
+- 200：备份 `docker-compose.yml.bak-pre0480backupdetail-20261114-174701`；17:47 重建，healthy，`index-Cf7P0yNr.js`。
+- 验证：201 / 200 均 `verify-179` **3/3**。
+- 注意：0.48.0 的 Linux 包、fpk、GHCR 镜像与 Release 附件不包含 110–133 二十四项热更新；下一次正式发版（0.48.1）会带上此前列表 + `919855b`。
 
 ### 2026-11-14：0.48.0 热更新（201 / 200）—— 本机备份目录逐级选择
 
