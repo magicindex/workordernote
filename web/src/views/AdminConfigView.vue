@@ -33,26 +33,31 @@
         :visible-groups="visibleGroups"
         @save="handleSave"
       >
-        <template #group-footer="{ group }">
-          <div v-if="group.key === 'backup_remote' && webdavEnabled" class="border-t border-border px-4 py-3" data-webdav-test>
-            <div class="flex flex-wrap items-center gap-3">
-              <button class="btn-secondary !px-3 !py-2 text-xs" :disabled="webdavTesting" data-webdav-test-button @click="testWebDAVConnection">
-                {{ webdavTesting ? '测试中…' : '测试连接' }}
-              </button>
-              <span
-                class="inline-flex items-center gap-1.5 text-xs font-semibold"
-                :class="webdavResult?.ok ? 'text-emerald-600 dark:text-emerald-400' : webdavResult ? 'text-destructive' : 'text-muted-foreground'"
-                data-webdav-test-status
-                :data-state="webdavTesting ? 'testing' : webdavResult ? (webdavResult.ok ? 'ok' : 'error') : 'idle'"
-              >
-                <span class="h-2 w-2 rounded-full" :class="webdavTesting ? 'bg-amber-400' : webdavResult?.ok ? 'bg-emerald-500' : webdavResult ? 'bg-rose-500' : 'bg-muted-foreground/50'"></span>
-                <span v-if="webdavTesting">测试中…</span>
-                <span v-else-if="webdavResult?.ok">连接正常 · {{ webdavResult.latency }} ms</span>
-                <span v-else-if="webdavResult">连接失败</span>
-                <span v-else>未测试</span>
-              </span>
-            </div>
-            <p v-if="webdavResult && !webdavResult.ok" class="mt-1 break-all text-[11px] leading-4 text-destructive">{{ webdavResult.message }}</p>
+        <template #item-after="{ item }">
+          <div v-if="item.key === 'backup_webdav_enabled'" class="flex flex-wrap items-center gap-2" data-webdav-test>
+            <button
+              class="btn-secondary !px-3 !py-2 text-xs"
+              :disabled="webdavTesting || !webdavEnabled"
+              :title="webdavEnabled ? '测试当前 WebDAV 配置' : '请先开启「备份到 WebDAV」'"
+              data-webdav-test-button
+              @click="testWebDAVConnection"
+            >
+              {{ webdavTesting ? '测试中…' : '测试连接' }}
+            </button>
+            <span
+              class="inline-flex items-center gap-1.5 text-xs font-semibold"
+              :class="!webdavEnabled ? 'text-muted-foreground' : webdavResult?.ok ? 'text-emerald-600 dark:text-emerald-400' : webdavResult ? 'text-destructive' : 'text-muted-foreground'"
+              data-webdav-test-status
+              :data-state="!webdavEnabled ? 'disabled' : webdavTesting ? 'testing' : webdavResult ? (webdavResult.ok ? 'ok' : 'error') : 'idle'"
+            >
+              <span class="h-2 w-2 rounded-full" :class="!webdavEnabled ? 'bg-muted-foreground/40' : webdavTesting ? 'bg-amber-400' : webdavResult?.ok ? 'bg-emerald-500' : webdavResult ? 'bg-rose-500' : 'bg-muted-foreground/50'"></span>
+              <span v-if="!webdavEnabled">未启用</span>
+              <span v-else-if="webdavTesting">测试中…</span>
+              <span v-else-if="webdavResult?.ok">连接正常 · {{ webdavResult.latency }} ms</span>
+              <span v-else-if="webdavResult">连接失败</span>
+              <span v-else>未测试</span>
+            </span>
+            <p v-if="webdavEnabled && webdavResult && !webdavResult.ok" class="w-full break-all text-[11px] leading-4 text-destructive">{{ webdavResult.message }}</p>
           </div>
         </template>
       </ConfigGroupList>

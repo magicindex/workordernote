@@ -29,13 +29,20 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
     }
     await page.goto(BASE + '/admin/configs', { waitUntil: 'domcontentloaded' });
     await sleep(1800);
-    const ui = await page.evaluate(() => ({
-      area: !!document.querySelector('[data-webdav-test]'),
-      button: !!document.querySelector('[data-webdav-test-button]'),
-      state: document.querySelector('[data-webdav-test-status]')?.getAttribute('data-state') || '',
-      text: (document.querySelector('[data-webdav-test-status]')?.textContent || '').replace(/\s+/g, ' ').trim(),
-    }));
+    const ui = await page.evaluate(() => {
+      const btn = document.querySelector('[data-webdav-test-button]');
+      return {
+        area: !!document.querySelector('[data-webdav-test]'),
+        button: !!btn,
+        inFirstRow: !!btn?.closest('[data-config-key="backup_webdav_enabled"]'),
+        disabled: !!btn?.disabled,
+        state: document.querySelector('[data-webdav-test-status]')?.getAttribute('data-state') || '',
+        text: (document.querySelector('[data-webdav-test-status]')?.textContent || '').replace(/\s+/g, ' ').trim(),
+      };
+    });
     check('WebDAV 分组里有测试连接按钮', ui.area && ui.button, JSON.stringify(ui));
+    check('测试按钮在「备份到 WebDAV」第一行开关后，且已启用时可点',
+      ui.inFirstRow === true && ui.disabled === false, JSON.stringify(ui));
     check('测试前状态是「未测试」', ui.state === 'idle' && ui.text.includes('未测试'), JSON.stringify(ui));
 
     await page.evaluate(() => document.querySelector('[data-webdav-test-button]')?.click());

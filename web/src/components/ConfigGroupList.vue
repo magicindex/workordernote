@@ -123,10 +123,10 @@
               {{ getSaving(item) ? '保存中…' : '保存' }}
             </button>
           </div>
+          <slot name="item-after" :item="item"></slot>
         </div>
       </div>
       </div>
-      <slot name="group-footer" :group="group"></slot>
       <slot v-if="extraGroup === group.key" name="group-extra"></slot>
     </div>
   </div>
