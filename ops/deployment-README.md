@@ -233,6 +233,21 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-14：0.48.0 热更新（201 / 200）—— 首页取消新建按钮，只做展示
+
+> **热更新记录**（软件版本仍为 `0.48.0`，后端未重建；只替换前端静态资源。源码提交 `f628ae0`）
+> 镜像：`workordernote:0.48.0-home-20261114-103558` =
+> `sha256:6bece5dd658a8acfc15152fca2e9a15f97d8d767d80a1ccf77922f3d2cb9d0d4`；
+> Gitea registry manifest `sha256:c03ebafabb77cd0047839d1a4d19c17346c7c477c694fdfe08ddd5c5bf80bfbc`（仅推 Gitea registry，未推 GHCR、未打 Release）
+
+- 第 112 条：删除 `HomeDashboardView` 标题行右侧的「新建提醒」按钮、`openQuickAdd()` 与 `.dashboard-new-button`，首页只保留两列展示；手机端全局悬浮 + 在 `Dashboard` 路由隐藏（`FAB_HIDE_ROUTES`），待办 / 清单等页面不受影响。
+- 201：备份 `docker-compose.yml.bak-pre0480home-20261114-103606`，compose 改指 Gitea registry 的 `0.48.0-home-20261114-103558`；10:36 重建，healthy，`index-D_L-XsHO.js`，`/api/version` = `0.48.0 / 1fe586d`。
+- 200：备份 `docker-compose.yml.bak-pre0480home-20261114-103641`，从 `127.0.0.1:3000` 拉取后 tag 成本地同 tag；10:36 重建，healthy，`index-D_L-XsHO.js`。
+- 验证：
+  - 201：`verify-125` **12/12**、`verify-165` **21/21**、`verify-166` **10/10**。
+  - 200：`verify-125` **12/12**；`verify-165` / `verify-166` 当时被一条未处理的真实站内提醒弹窗（`一体机业务开通测试（新型适配器）`）挡住，未代用户点「知道了」（避免改动真实提醒），因此未跑完；200 与 201 使用同一镜像 digest，顶栏 / Markdown 逻辑已在此前 10:23 的 200 上跑过 21/21 与 10/10。
+- 注意：0.48.0 的 Linux 包、fpk、GHCR 镜像与 Release 附件不包含 110 / 111 / 112 三项热更新；下一次正式发版（0.48.1）会带上 `47a0286`、`7c9b987`、`f628ae0`。
+
 ### 2026-11-14：0.48.0 热更新（201 / 200）—— AI 入口统一到顶栏 AI 星星
 
 > **热更新记录**（软件版本仍为 `0.48.0`，后端未重建；只替换前端静态资源。源码提交 `7c9b987`）
