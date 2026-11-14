@@ -233,6 +233,19 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-14：0.48.0 热更新（201 / 200）—— AI 入口统一到顶栏 AI 星星
+
+> **热更新记录**（软件版本仍为 `0.48.0`，后端未重建；只替换前端静态资源。源码提交 `7c9b987`）
+> 镜像：`workordernote:0.48.0-topbar-20261114-102251` =
+> `sha256:4d90b9bb33b0c91df846477160741d2b9b551c45f31656880998dfafede5cc2c`；
+> Gitea registry manifest `sha256:9563ee786feab604f77c5be6625b297ab89ac43e300918de8db7ade318e57f50`（仅推 Gitea registry，未推 GHCR、未打 Release）
+
+- 第 111 条：删除桌面右下角悬浮球（`AssistantLauncher` + `reminders.assistant_ball_pos`），AI 入口统一成顶栏通知中心右侧的 AI 星星；点击 `toggleAssistant()` 展开 / 收起面板，展开时按钮品牌色底 + `aria-pressed=true`。手机端保持「同一颗星星 + 抽屉入口 + 整屏抽屉」。
+- 201：备份 `docker-compose.yml.bak-pre0480topbar-20261114-102300`，compose 改指 Gitea registry 的 `0.48.0-topbar-20261114-102251`；10:23 重建，healthy，`index-RkkVMMlO.js`，`/api/version` = `0.48.0 / 1fe586d`。
+- 200：备份 `docker-compose.yml.bak-pre0480topbar-20261114-102336`，从 `127.0.0.1:3000` 拉取后 tag 成本地同 tag；10:23 重建，healthy，`index-RkkVMMlO.js`。
+- 验证：201 / 200 均 `verify-165` **21/21**（桌面无浮球、星星紧挨铃铛、展开/收起、1024 窄桌面自动收侧栏、手机原样）、`verify-166` **10/10**（Markdown 渲染仍正常）。
+- 注意：0.48.0 的 Linux 包、fpk、GHCR 镜像与 Release 附件不包含 110 / 111 两项热更新；下一次正式发版（0.48.1）会带上 `47a0286` 与 `7c9b987`。
+
 ### 2026-11-14：0.48.0 热更新（201 / 200）—— AI 聊天消息按 Markdown 渲染
 
 > **热更新记录**（软件版本仍为 `0.48.0`，后端未重建 / 未变 schema；只替换前端静态资源。源码提交 `47a0286`）
