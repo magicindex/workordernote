@@ -170,6 +170,27 @@
             排序中：用 ↑ ↓ 挪位置，点标题旁的 ✓ 完成
           </div>
 
+          <!-- 用户 2026-11-14：被拿出「系统清单」的栏目，作为独立清单排在这里。 -->
+          <RouterLink
+            v-for="item in independentSystemItems"
+            :key="'sys-' + item.key"
+            :to="item.to"
+            class="nav-row"
+            :class="{ 'nav-row-active': route.path === item.to }"
+            :data-nav-independent-system="item.key"
+            :data-nav-timetable="item.key === 'timetable' ? '' : undefined"
+            :data-nav-cards="item.key === 'cards' ? '' : undefined"
+            :data-nav-notebook="item.key === 'notebook' ? '' : undefined"
+            :data-nav-ceremony="item.key === 'ceremony' ? '' : undefined"
+            :data-nav-nudges="item.key === 'nudges' ? '' : undefined"
+            :title="railActive ? item.label : item.title"
+            @click="mobileOpen = false"
+          >
+            <span class="nav-symbol h-5 w-5" :class="item.tone" v-html="item.icon"></span>
+            <span class="flex-1">{{ item.label }}</span>
+            <span v-if="item.count" class="nav-count">{{ item.count }}</span>
+          </RouterLink>
+
           <!-- 「我的清单」这一段：信用卡账单 / 随手记事本 / 人生要有仪式感 / 自建清单
                统一由 myListRows 决定先后（顺序存用户配置 sidebar_order，清单行同时写回 position）。
                原来的「全部」入口 2026-10-19 已并入「智能清单」那一行，这里不再重复列。 -->
@@ -988,6 +1009,7 @@ async function loadSidebarOrder() {
     // 顺带读 AI 入口样式：桌面端个人偏好，默认顶栏星星；手机端由 CSS 固定用顶栏星星。
     const style = String(res.data?.data?.assistant_entry_style || 'topbar')
     assistantEntryStyle.value = style === 'floating' ? 'floating' : 'topbar'
+    systemPlacement.value = parseSystemPlacement(String(res.data?.data?.system_list_placement || ''))
     const raw = String(res.data?.data?.sidebar_order ?? '')
     const parsed = raw ? JSON.parse(raw) : []
     // 'nudge' 是旧版「提醒@他」在「我的清单」里的排序 token；2026-10-19 挪到「课程表」下面后不再参与排序。
@@ -1010,6 +1032,24 @@ function onMyRowTouchStart(row: MyListRow, event: TouchEvent) {
 const summary = ref<Record<string, number>>({})
 const systemMenuRef = ref<HTMLElement | null>(null)
 const systemOpen = ref(false)
+type SystemItemKey = 'timetable' | 'cards' | 'notebook' | 'ceremony' | 'nudges'
+const systemPlacement = ref<Record<SystemItemKey, 'system' | 'my'>>({
+  timetable: 'system', cards: 'system', notebook: 'system', ceremony: 'system', nudges: 'system',
+})
+function parseSystemPlacement(raw: string): Record<SystemItemKey, 'system' | 'my'> {
+  const next: Record<SystemItemKey, 'system' | 'my'> = {
+    timetable: 'system', cards: 'system', notebook: 'system', ceremony: 'system', nudges: 'system',
+  }
+  try {
+    const parsed = raw ? JSON.parse(raw) : null
+    if (parsed && typeof parsed === 'object') {
+      for (const key of Object.keys(next) as SystemItemKey[]) {
+        if (parsed[key] === 'my') next[key] = 'my'
+      }
+    }
+  } catch { /* 坏数据按默认折叠处理 */ }
+  return next
+}
 const systemIcons = {
   timetable: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="5" width="16" height="15" rx="2.5" stroke-width="1.7"/><path d="M4 10h16M9 3.5v3M15 3.5v3M8.5 14h2M13.5 14h2M8.5 17h2" stroke-width="1.7" stroke-linecap="round"/></svg>',
   cards: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="6" width="18" height="12" rx="2.5" stroke-width="1.7"/><path d="M3 10h18M6.5 14h4" stroke-width="1.7" stroke-linecap="round"/></svg>',
@@ -1017,7 +1057,7 @@ const systemIcons = {
   ceremony: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3l2.4 5.2 5.6.7-4.1 3.9 1.1 5.6-5-2.8-5 2.8 1.1-5.6L4 8.9l5.6-.7L12 3Z" stroke-width="1.7" stroke-linejoin="round"/></svg>',
   nudges: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15.5 8.5a3.5 3.5 0 1 0-7 0c0 4-2 4-2 5.5h11c0-1.5-2-1.5-2-5.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 17a1.6 1.6 0 0 0 3 0" stroke-width="1.7" stroke-linecap="round"/><circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/></svg>',
 }
-const systemNavItems = computed(() => {
+const allSystemItems = computed(() => {
   const items: { key: string; to: string; label: string; title: string; count: number; tone: string; icon: string }[] = []
   const find = (t: string) => lists.value.find((l) => String(l.template || 'general') === t)
   if (authStore.timetableEnabled) {
@@ -1039,6 +1079,8 @@ const systemNavItems = computed(() => {
   }
   return items
 })
+const systemNavItems = computed(() => allSystemItems.value.filter((item) => systemPlacement.value[item.key as SystemItemKey] !== 'my'))
+const independentSystemItems = computed(() => allSystemItems.value.filter((item) => systemPlacement.value[item.key as SystemItemKey] === 'my'))
 const systemTotal = computed(() => systemNavItems.value.reduce((sum, item) => sum + (Number(item.count) || 0), 0))
 const systemActive = computed(() => systemNavItems.value.some((item) => route.path === item.to))
 function toggleSystemMenu() {
@@ -1238,8 +1280,13 @@ function toggleAssistant() {
 /** 偏好在设置页保存后广播 config-changed：这里立刻换入口样式，不用刷新页面。 */
 function onConfigChanged(event: Event) {
   const detail = (event as CustomEvent<{ key?: string; value?: string }>).detail
-  if (detail?.key !== 'assistant_entry_style') return
-  assistantEntryStyle.value = detail.value === 'floating' ? 'floating' : 'topbar'
+  if (detail?.key === 'assistant_entry_style') {
+    assistantEntryStyle.value = detail.value === 'floating' ? 'floating' : 'topbar'
+    return
+  }
+  if (detail?.key === 'system_list_placement') {
+    systemPlacement.value = parseSystemPlacement(String(detail.value || ''))
+  }
 }
 // 关掉浮窗（Esc / 关闭按钮 / 点遮罩）后，下一次打开仍按「窄桌面先收起侧栏」的规矩来，
 // 而不是沿用上一次用户手动展开过的临时状态。

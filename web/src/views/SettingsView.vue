@@ -63,6 +63,7 @@
             </div>
           </template>
         </ConfigGroupList>
+        <SystemListPrefs v-show="activeTab === 'modules'" />
       </div>
 
       <div v-show="activeTab === 'mobile'" class="mt-4" data-settings-panel="mobile">
@@ -104,6 +105,7 @@ import ConfigGroupList from '../components/ConfigGroupList.vue'
 import CalendarSyncCard from '../components/CalendarSyncCard.vue'
 import InstallAppCard from '../components/InstallAppCard.vue'
 import AiPromptPrefs from '../components/AiPromptPrefs.vue'
+import SystemListPrefs from '../components/SystemListPrefs.vue'
 import { getUserConfigMeta, updateConfig } from '../api/config'
 import type { ConfigMeta } from '../api/config'
 import { getLists, updateList, type ReminderList } from '../api/reminder'
