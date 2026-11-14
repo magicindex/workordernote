@@ -14,6 +14,7 @@ export type ThemeBrand = 'default'  // extend this union when adding brand-* pal
 const STORAGE_MODE = 'reminder-theme-mode'
 const STORAGE_BRAND = 'reminder-theme-brand'
 const STORAGE_SUN_CITY = 'reminder-theme-sun-city'
+const STORAGE_PAGE_BG_TONE = 'reminder-page-bg-tone'
 
 function readStoredMode(): ThemeMode {
   const v = localStorage.getItem(STORAGE_MODE)
@@ -32,6 +33,27 @@ function readStoredSunCity(): string {
   return v && SUN_CITIES[v] ? v : DEFAULT_SUN_CITY
 }
 
+function clampPageBgTone(value: number): number {
+  if (!Number.isFinite(value)) return 0
+  return Math.max(-100, Math.min(100, Math.round(value)))
+}
+
+// 页面背景亮度：-100 最暗，0 默认，+100 最亮。只写 body 背景叠加层的 CSS 变量，
+// 不碰 --color-surface / --color-foreground，所以卡片和文字不受影响。
+function applyPageBgTone(value: number) {
+  if (typeof document === 'undefined') return
+  const tone = clampPageBgTone(value)
+  const root = document.documentElement
+  const alpha = Math.min(0.58, Math.abs(tone) / 100 * 0.58)
+  root.style.setProperty('--page-bg-tint', tone < 0 ? '0 0 0' : '255 255 255')
+  root.style.setProperty('--page-bg-alpha', alpha.toFixed(3))
+}
+
+function readStoredPageBgTone(): number {
+  const v = localStorage.getItem(STORAGE_PAGE_BG_TONE)
+  return v === null ? 0 : clampPageBgTone(Number(v))
+}
+
 const systemDark = ref(
   typeof window !== 'undefined'
     && window.matchMedia('(prefers-color-scheme: dark)').matches,
@@ -45,6 +67,7 @@ if (typeof window !== 'undefined') {
 export const useThemeStore = defineStore('theme', () => {
   const mode = ref<ThemeMode>(readStoredMode())
   const brand = ref<ThemeBrand>(readStoredBrand())
+  const pageBgTone = ref(readStoredPageBgTone())
   const sunCity = ref<string>(readStoredSunCity())
   // 当前时刻按日出日落算出来是不是夜间。只在 mode === 'sun' 时参与判断。
   const sunDark = ref<boolean>(isNightAt(new Date(), sunCity.value))
@@ -90,6 +113,7 @@ export const useThemeStore = defineStore('theme', () => {
     if (brand.value !== 'default') {
       root.classList.add(`brand-${brand.value}`)
     }
+    applyPageBgTone(pageBgTone.value)
   }
 
   function setMode(m: ThemeMode) {
@@ -126,7 +150,13 @@ export const useThemeStore = defineStore('theme', () => {
     setMode(next)
   }
 
+  function setPageBgTone(value: number) {
+    pageBgTone.value = clampPageBgTone(value)
+    localStorage.setItem(STORAGE_PAGE_BG_TONE, String(pageBgTone.value))
+    applyPageBgTone(pageBgTone.value)
+  }
+
   apply()
 
-  return { mode, brand, sunCity, sunDark, isDark, toggle, setMode, setBrand, setSunCity, refreshSun, apply }
+  return { mode, brand, sunCity, sunDark, pageBgTone, isDark, toggle, setMode, setBrand, setSunCity, setPageBgTone, refreshSun, apply }
 })

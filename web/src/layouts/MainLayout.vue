@@ -799,6 +799,7 @@ import UiThemeToggle from '../components/ui/ThemeToggle.vue'
 import ReminderAlert from '../components/ReminderAlert.vue'
 import IosInstallTip from '../components/IosInstallTip.vue'
 import { useAuthStore } from '../stores/auth'
+import { useThemeStore } from '../stores/theme'
 import {
   completeReminder,
   getDNDState,
@@ -824,6 +825,7 @@ import { onFnOSGatewayOrigin } from '../utils/gateway'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const themeStore = useThemeStore()
 // 小秘的名字：每个人可在「偏好设置 → AI 提示词」里改，侧栏入口与面板共用。
 const assistantStore = useAssistantStore()
 const assistantName = computed(() => assistantStore.displayName)
@@ -1010,6 +1012,7 @@ async function loadSidebarOrder() {
     const style = String(res.data?.data?.assistant_entry_style || 'topbar')
     assistantEntryStyle.value = style === 'floating' ? 'floating' : 'topbar'
     systemPlacement.value = parseSystemPlacement(String(res.data?.data?.system_list_placement || ''))
+    themeStore.setPageBgTone(Number(res.data?.data?.page_bg_tone || 0) || 0)
     const raw = String(res.data?.data?.sidebar_order ?? '')
     const parsed = raw ? JSON.parse(raw) : []
     // 'nudge' 是旧版「提醒@他」在「我的清单」里的排序 token；2026-10-19 挪到「课程表」下面后不再参与排序。
@@ -1286,6 +1289,10 @@ function onConfigChanged(event: Event) {
   }
   if (detail?.key === 'system_list_placement') {
     systemPlacement.value = parseSystemPlacement(String(detail.value || ''))
+    return
+  }
+  if (detail?.key === 'page_bg_tone') {
+    themeStore.setPageBgTone(Number(detail.value || 0) || 0)
   }
 }
 // 关掉浮窗（Esc / 关闭按钮 / 点遮罩）后，下一次打开仍按「窄桌面先收起侧栏」的规矩来，

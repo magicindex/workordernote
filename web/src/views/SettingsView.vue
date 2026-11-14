@@ -61,6 +61,7 @@
               </div>
               <p v-else class="text-xs text-muted-foreground">还没有清单。</p>
             </div>
+            <BackgroundTonePrefs v-show="activeTab === 'common'" />
           </template>
         </ConfigGroupList>
         <SystemListPrefs v-show="activeTab === 'modules'" />
@@ -106,6 +107,7 @@ import CalendarSyncCard from '../components/CalendarSyncCard.vue'
 import InstallAppCard from '../components/InstallAppCard.vue'
 import AiPromptPrefs from '../components/AiPromptPrefs.vue'
 import SystemListPrefs from '../components/SystemListPrefs.vue'
+import BackgroundTonePrefs from '../components/BackgroundTonePrefs.vue'
 import { getUserConfigMeta, updateConfig } from '../api/config'
 import type { ConfigMeta } from '../api/config'
 import { getLists, updateList, type ReminderList } from '../api/reminder'
