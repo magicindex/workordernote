@@ -35,6 +35,22 @@ export function testWebDAV() {
   return request.post('/api/backup/webdav/test')
 }
 
+export interface LocalBackupDir {
+  name: string
+  path: string
+}
+
+export interface LocalBackupBrowseResult {
+  path: string
+  parent: string
+  dirs: LocalBackupDir[]
+}
+
+/** 列出本机目录（空路径从数据目录开始），用于选择备份保存目录。 */
+export function browseLocalBackup(path?: string) {
+  return request.post('/api/backup/local/browse', path === undefined ? undefined : { path })
+}
+
 export interface WebDAVDir {
   name: string
   path: string

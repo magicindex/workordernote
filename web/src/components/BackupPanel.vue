@@ -55,6 +55,8 @@
             placeholder="留空 = 数据目录下的 backups"
             data-backup-local-dir
           />
+          <button class="btn-secondary !h-9 shrink-0 !px-3 !text-xs" :disabled="localSaving" data-backup-local-browse @click="openLocalBrowse">选择目录</button>
+          <button class="btn-ghost !h-9 shrink-0 !px-2 !text-xs" :disabled="localSaving" data-backup-local-default @click="localDir = ''">默认目录</button>
           <button class="btn-secondary !h-9 shrink-0 !px-3 !text-xs" :disabled="localSaving" data-backup-local-save @click="saveLocalDir">保存</button>
         </div>
         <p v-if="localNotice" class="mt-1 text-[11px] font-medium" :class="localNoticeOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'" data-backup-local-notice>{{ localNotice }}</p>
@@ -111,6 +113,53 @@
       </p>
     </div>
 
+    <!-- 本机目录选择：和 WebDAV 一样的逐级下钻弹窗 -->
+    <Teleport to="body">
+      <div v-if="localBrowseOpen" class="fixed inset-0 z-[85] flex items-center justify-center p-3 sm:p-6" data-backup-local-browse-panel>
+        <div class="absolute inset-0 bg-slate-950/35 backdrop-blur-sm" @click="localBrowseOpen = false"></div>
+        <div class="surface-modal relative z-10 flex max-h-[82vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl">
+          <div class="flex items-start justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+            <div class="min-w-0">
+              <h3 class="text-sm font-extrabold text-foreground">选择本机保存目录</h3>
+              <p class="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">当前：{{ localBrowsePath || '—' }}</p>
+            </div>
+            <button class="row-action !opacity-100" aria-label="关闭" @click="localBrowseOpen = false">
+              <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <div class="min-h-[12rem] flex-1 overflow-y-auto px-4 py-3 sm:px-5">
+            <p v-if="localBrowseError" class="break-all text-xs font-medium leading-5 text-destructive">{{ localBrowseError }}</p>
+            <div v-else-if="localBrowsing" class="py-8 text-center text-xs text-muted-foreground">读取本机目录…</div>
+            <div v-else class="space-y-1">
+              <button
+                v-for="dir in localBrowseDirs"
+                :key="dir.path"
+                class="flex w-full items-center gap-2 rounded-xl border border-border/70 px-3 py-2 text-left text-xs font-semibold text-foreground transition hover:border-brand-500/40 hover:bg-brand-500/5"
+                data-backup-local-browse-dir
+                @click="chooseLocalDir(dir)"
+              >
+                <span class="text-base">📁</span>
+                <span class="min-w-0 flex-1 break-all">{{ dir.name }}</span>
+                <span class="text-muted-foreground">›</span>
+              </button>
+              <p v-if="!localBrowseDirs.length" class="py-8 text-center text-xs text-muted-foreground">这个目录下没有子目录</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3 sm:px-5">
+            <button class="btn-secondary !px-3 !py-2 text-xs" :disabled="localBrowsing || !localBrowseParent" data-backup-local-browse-parent @click="goLocalParent">
+              ← 上一级
+            </button>
+            <div class="flex flex-wrap gap-2">
+              <button class="btn-secondary !px-3 !py-2 text-xs" @click="localBrowseOpen = false">取消</button>
+              <button class="btn-brand !px-4 !py-2 text-xs" :disabled="localBrowsing || !!localBrowseError" data-backup-local-browse-confirm @click="confirmLocalBrowse">
+                确定选择
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <ConfirmDialog
       v-model="confirmOpen"
       title="从备份恢复？"
@@ -126,7 +175,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { getBackupStatus, listBackupFiles, restoreBackup, runBackup, uploadRestore } from '../api/backup'
+import { browseLocalBackup, getBackupStatus, listBackupFiles, restoreBackup, runBackup, uploadRestore } from '../api/backup'
+import type { LocalBackupDir } from '../api/backup'
 import { getSystemConfigMeta, updateConfig } from '../api/config'
 import type { BackupFile, BackupStatus } from '../api/backup'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -140,6 +190,12 @@ const localDir = ref('')
 const localSaving = ref(false)
 const localNotice = ref('')
 const localNoticeOk = ref(true)
+const localBrowseOpen = ref(false)
+const localBrowsing = ref(false)
+const localBrowsePath = ref('')
+const localBrowseParent = ref('')
+const localBrowseDirs = ref<LocalBackupDir[]>([])
+const localBrowseError = ref('')
 
 const files = ref<BackupFile[]>([])
 const filesLoading = ref(false)
@@ -198,6 +254,52 @@ async function toggleLocal() {
   } finally {
     localSaving.value = false
   }
+}
+
+async function openLocalBrowse() {
+  if (localBrowsing.value) return
+  localBrowseOpen.value = true
+  localBrowseError.value = ''
+  localBrowseDirs.value = []
+  localBrowsePath.value = ''
+  localBrowseParent.value = ''
+  await loadLocalBrowse('')
+}
+
+async function loadLocalBrowse(path: string) {
+  localBrowsing.value = true
+  localBrowseError.value = ''
+  try {
+    const res = await browseLocalBackup(path)
+    if (res.data?.code === 0) {
+      localBrowsePath.value = String(res.data.data?.path || '')
+      localBrowseParent.value = String(res.data.data?.parent || '')
+      localBrowseDirs.value = Array.isArray(res.data.data?.dirs) ? res.data.data.dirs : []
+    } else {
+      localBrowseError.value = res.data?.message || '读取本机目录失败'
+    }
+  } catch (err: any) {
+    localBrowseError.value = err.response?.data?.message || '读取本机目录失败'
+  } finally {
+    localBrowsing.value = false
+  }
+}
+
+async function chooseLocalDir(dir: LocalBackupDir) {
+  await loadLocalBrowse(dir.path)
+}
+
+async function goLocalParent() {
+  if (!localBrowseParent.value) return
+  await loadLocalBrowse(localBrowseParent.value)
+}
+
+function confirmLocalBrowse() {
+  if (localBrowseError.value) return
+  localDir.value = localBrowsePath.value
+  localBrowseOpen.value = false
+  localNoticeOk.value = true
+  localNotice.value = `已选择目录：${localDir.value}（记得点「保存」）`
 }
 
 async function saveLocalDir() {

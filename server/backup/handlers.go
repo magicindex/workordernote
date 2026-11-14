@@ -26,6 +26,20 @@ func RegisterRoutes(admin *gin.RouterGroup, db *gorm.DB) {
 			"local_dir":   localDir(db),
 		})
 	})
+	admin.POST("/backup/local/browse", func(c *gin.Context) {
+		var req struct {
+			Path *string `json:"path"`
+		}
+		if c.Request.ContentLength > 0 {
+			_ = c.ShouldBindJSON(&req)
+		}
+		res, err := BrowseLocalBackup(req.Path)
+		if err != nil {
+			response.ErrorBadRequest(c, "查看本机目录失败："+err.Error())
+			return
+		}
+		response.Success(c, res)
+	})
 	admin.POST("/backup/webdav/browse", func(c *gin.Context) {
 		var req struct {
 			Path *string `json:"path"`
