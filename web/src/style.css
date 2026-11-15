@@ -201,6 +201,25 @@ select optgroup {
   color: rgb(var(--color-foreground));
 }
 
+/* 星空预设的固定星点：只覆盖页面背景，不参与动画，也不遮卡片/文字。 */
+.page-stars {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  pointer-events: none;
+  opacity: 0;
+  background-image:
+    radial-gradient(1px 1px at 22px 34px, rgb(var(--page-star-color)) 99%, transparent 100%),
+    radial-gradient(1px 1px at 84px 12px, rgb(var(--page-star-color)) 99%, transparent 100%),
+    radial-gradient(1.4px 1.4px at 48px 88px, rgb(var(--page-star-color)) 99%, transparent 100%),
+    radial-gradient(1px 1px at 130px 60px, rgb(var(--page-star-color)) 99%, transparent 100%),
+    radial-gradient(1px 1px at 10px 120px, rgb(var(--page-star-color)) 99%, transparent 100%);
+  background-size: 150px 150px, 190px 190px, 230px 230px, 270px 270px, 310px 310px;
+  background-repeat: repeat;
+}
+html.page-starry .page-stars { opacity: 0.48; }
+html.dark.page-starry .page-stars { opacity: 0.92; }
+
 body {
   @apply text-foreground;
   min-width: 320px;

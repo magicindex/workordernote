@@ -41,7 +41,7 @@
           type="color"
           class="h-8 w-10 cursor-pointer rounded-lg border border-border bg-transparent p-0.5"
           data-page-bg-color-start
-          @input="previewGradient"
+          @input="previewGradient()"
           @change="saveGradient"
         />
       </label>
@@ -52,7 +52,7 @@
           type="color"
           class="h-8 w-10 cursor-pointer rounded-lg border border-border bg-transparent p-0.5"
           data-page-bg-color-end
-          @input="previewGradient"
+          @input="previewGradient()"
           @change="saveGradient"
         />
       </label>
@@ -139,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { getAllConfigs, updateConfig } from '../api/config'
 import { parsePageBgGradient, useThemeStore, type PageBgDirection, type PageBgGradient } from '../stores/theme'
 
@@ -147,6 +147,7 @@ const theme = useThemeStore()
 const start = ref('#f7f8fa')
 const end = ref('#ffffff')
 const direction = ref<PageBgDirection>('vertical')
+const presetMode = ref<'' | 'starry'>('')
 const startStop = ref(0)
 const endStop = ref(100)
 const stopTrack = ref<HTMLElement | null>(null)
@@ -162,7 +163,7 @@ const toneLabel = computed(() => {
   return tone.value < 0 ? `${themeName} · 偏暗 ${-tone.value}%` : `${themeName} · 偏亮 ${tone.value}%`
 })
 
-type TonePreset = { key: string; label: string; start: string; end: string; direction: PageBgDirection }
+type TonePreset = { key: string; label: string; start: string; end: string; direction: PageBgDirection; preset?: 'starry' }
 const presets: TonePreset[] = [
   { key: 'mist', label: '晨雾', start: '#eef2ff', end: '#f8fafc', direction: 'vertical' },
   { key: 'sunset', label: '晚霞', start: '#ffecd2', end: '#fcb69f', direction: 'vertical' },
@@ -170,12 +171,19 @@ const presets: TonePreset[] = [
   { key: 'mint', label: '薄荷', start: '#d9f99d', end: '#a7f3d0', direction: 'vertical' },
   { key: 'ocean', label: '深海', start: '#1e3a8a', end: '#0f172a', direction: 'vertical' },
   { key: 'violet', label: '紫夜', start: '#312e81', end: '#111827', direction: 'horizontal' },
+  { key: 'starry', label: '星空', start: '#070d1f', end: '#172a4a', direction: 'vertical', preset: 'starry' },
 ]
 
 function themeDefaults(): { start: string; end: string } {
   return theme.isDark
     ? { start: '#0b0f1a', end: '#111827' }
     : { start: '#f7f8fa', end: '#ffffff' }
+}
+
+function starPalette(dark: boolean): { start: string; end: string } {
+  return dark
+    ? { start: '#070d1f', end: '#172a4a' }
+    : { start: '#e8f0ff', end: '#d6e4ff' }
 }
 
 function currentGradient(): PageBgGradient {
@@ -185,6 +193,7 @@ function currentGradient(): PageBgGradient {
     direction: direction.value,
     startStop: startStop.value,
     endStop: endStop.value,
+    preset: presetMode.value,
   }
 }
 
@@ -230,7 +239,8 @@ function nudgeStop(which: 'start' | 'end', delta: number) {
   void saveGradient()
 }
 
-function previewGradient() {
+function previewGradient(keepStarry = false) {
+  if (!keepStarry && presetMode.value === 'starry') presetMode.value = ''
   touchNotice()
   theme.setPageBgGradient(currentGradient())
 }
@@ -243,12 +253,24 @@ function previewTone(raw: string) {
 }
 
 function applyPreset(preset: TonePreset) {
-  start.value = preset.start
-  end.value = preset.end
-  direction.value = preset.direction
-  startStop.value = 0
-  endStop.value = 100
-  previewGradient()
+  if (preset.preset === 'starry') {
+    presetMode.value = 'starry'
+    const palette = starPalette(theme.isDark)
+    start.value = palette.start
+    end.value = palette.end
+    direction.value = 'vertical'
+    startStop.value = 0
+    endStop.value = 100
+    previewGradient(true)
+  } else {
+    presetMode.value = ''
+    start.value = preset.start
+    end.value = preset.end
+    direction.value = preset.direction
+    startStop.value = 0
+    endStop.value = 100
+    previewGradient(true)
+  }
   void saveGradient()
 }
 
@@ -309,11 +331,20 @@ async function reset() {
   direction.value = 'vertical'
   startStop.value = 0
   endStop.value = 100
-  previewGradient()
+  presetMode.value = ''
+  previewGradient(true)
   theme.resetPageBgTone()
   await saveGradient()
   await saveTone()
 }
+
+watch(() => theme.isDark, (dark) => {
+  if (presetMode.value !== 'starry') return
+  const palette = starPalette(dark)
+  start.value = palette.start
+  end.value = palette.end
+  previewGradient(true)
+})
 
 onMounted(async () => {
   const defaults = themeDefaults()
@@ -332,8 +363,15 @@ onMounted(async () => {
     theme.setPageBgToneFor(true, darkTone !== '' ? Number(darkTone) : legacyManual ? Number(legacyTone) : -20)
     const gradient = parsePageBgGradient(String(data.page_bg_gradient || ''))
     if (gradient) {
-      start.value = gradient.start
-      end.value = gradient.end
+      presetMode.value = gradient.preset
+      if (gradient.preset === 'starry') {
+        const palette = starPalette(theme.isDark)
+        start.value = palette.start
+        end.value = palette.end
+      } else {
+        start.value = gradient.start
+        end.value = gradient.end
+      }
       direction.value = gradient.direction
       startStop.value = gradient.startStop
       endStop.value = gradient.endStop

@@ -18,6 +18,8 @@ export interface PageBgGradient {
   /** 两个色阶在渐变里的位置（0–100%），1 表示起始色，2 表示结束色。 */
   startStop: number
   endStop: number
+  /** 空 = 普通两色渐变；starry = 星空预设（按主题用深空调色板 + 星点层）。 */
+  preset: '' | 'starry'
 }
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
@@ -41,6 +43,7 @@ export function parsePageBgGradient(raw: string): PageBgGradient | null {
       direction: data?.direction === 'horizontal' ? 'horizontal' : data?.direction === 'diagonal' ? 'diagonal' : 'vertical',
       startStop: validStops ? Math.round(startStop) : 0,
       endStop: validStops ? Math.round(endStop) : 100,
+      preset: data?.preset === 'starry' ? 'starry' : '',
     }
   } catch {
     return null
@@ -169,6 +172,7 @@ function applyPageBgGradient(value: PageBgGradient | null) {
   if (typeof document === 'undefined') return
   const root = document.documentElement
   if (!value) {
+    root.classList.remove('page-starry')
     root.style.removeProperty('--page-bg-start')
     root.style.removeProperty('--page-bg-end')
     root.style.removeProperty('--page-bg-start-stop')
@@ -176,6 +180,20 @@ function applyPageBgGradient(value: PageBgGradient | null) {
     root.style.removeProperty('--page-bg-angle')
     return
   }
+  // 星空预设：亮/暗主题各自一套深空底色，不跟随用户选色，保证星点对比。
+  if (value.preset === 'starry') {
+    const dark = root.classList.contains('dark')
+    const startStop = dark ? '#070d1f' : '#e8f0ff'
+    const endStop = dark ? '#172a4a' : '#d6e4ff'
+    root.classList.add('page-starry')
+    root.style.setProperty('--page-bg-start', rgbTriplet(parseHex(startStop)))
+    root.style.setProperty('--page-bg-end', rgbTriplet(parseHex(endStop)))
+    root.style.setProperty('--page-bg-start-stop', `${value.startStop}%`)
+    root.style.setProperty('--page-bg-end-stop', `${value.endStop}%`)
+    root.style.setProperty('--page-bg-angle', value.direction === 'horizontal' ? '90deg' : value.direction === 'diagonal' ? '135deg' : '180deg')
+    return
+  }
+  root.classList.remove('page-starry')
   const [startColor, endColor] = effectiveGradientColors(value)
   root.style.setProperty('--page-bg-start', startColor)
   root.style.setProperty('--page-bg-end', endColor)

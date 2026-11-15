@@ -52,6 +52,7 @@
   --page-bg-end-stop:          100%;
   --page-bg-tint:              0 0 0;
   --page-bg-alpha:             0;
+  --page-star-color:           71 85 105;
 }
 
 .dark {

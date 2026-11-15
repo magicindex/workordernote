@@ -1,5 +1,6 @@
 <template>
   <div class="min-h-screen text-foreground">
+    <div class="page-stars" aria-hidden="true"></div>
     <div class="ambient" aria-hidden="true">
       <span class="ambient-orb ambient-orb-one"></span>
       <span class="ambient-orb ambient-orb-two"></span>
