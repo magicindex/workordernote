@@ -2057,6 +2057,8 @@ let defaultViewApplied = false
 // 手机上没有日历视图，设成日历也按列表进。
 const defaultView = ref<'home' | 'list' | 'calendar'>('home')
 function defaultViewTarget(): { name: string } {
+  // 手机端打开应用第一页固定是「首页」看板，不再跟随桌面的默认视图偏好。
+  if (isNarrowNow()) return { name: 'Dashboard' }
   if (defaultView.value === 'calendar' && !isNarrowNow()) return { name: 'Calendar' }
   if (defaultView.value === 'home') return { name: 'Dashboard' }
   return { name: 'Home' }
