@@ -96,6 +96,56 @@ function hexToRgbTriplet(hex: string): string {
   return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`
 }
 
+function parseHex(hex: string): [number, number, number] {
+  const n = Number.parseInt(hex.slice(1), 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+function mixRgb(a: number[], b: number[], amount: number): [number, number, number] {
+  const t = Math.max(0, Math.min(1, amount))
+  return [
+    Math.round(a[0] * (1 - t) + b[0] * t),
+    Math.round(a[1] * (1 - t) + b[1] * t),
+    Math.round(a[2] * (1 - t) + b[2] * t),
+  ]
+}
+
+function rgbTriplet(rgb: number[]): string {
+  return `${rgb[0]} ${rgb[1]} ${rgb[2]}`
+}
+
+function relativeLuminance(rgb: number[]): number {
+  const channel = (v: number) => {
+    const c = v / 255
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2])
+}
+
+/**
+ * 深色模式下的有效渐变颜色：保留用户选色的色相，但压暗并收窄对比，
+ * 免得亮色渐变在暗色页面里刺眼；同时保证至少有一点明暗差，渐变不会糊成一块。
+ */
+function effectiveGradientColors(value: PageBgGradient): [string, string] {
+  const dark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  let a = parseHex(value.start)
+  let b = parseHex(value.end)
+  if (!dark) return [rgbTriplet(a), rgbTriplet(b)]
+  const base = [11, 15, 26]
+  a = mixRgb(a, base, 0.62)
+  b = mixRgb(b, base, 0.48)
+  if (Math.abs(relativeLuminance(a) - relativeLuminance(b)) < 0.04) {
+    if (relativeLuminance(a) <= relativeLuminance(b)) a = mixRgb(a, [0, 0, 0], 0.18)
+    else b = mixRgb(b, [255, 255, 255], 0.14)
+  }
+  // 两边都太黑时抬一点，保证暗色下也能看见渐变。
+  if (Math.max(relativeLuminance(a), relativeLuminance(b)) < 0.035) {
+    a = mixRgb(a, [30, 41, 59], 0.32)
+    b = mixRgb(b, [71, 85, 105], 0.42)
+  }
+  return [rgbTriplet(a), rgbTriplet(b)]
+}
+
 // 页面背景两色渐变：只写 body 使用的 CSS 变量，卡片/文字颜色完全不动。
 function applyPageBgGradient(value: PageBgGradient | null) {
   if (typeof document === 'undefined') return
@@ -108,8 +158,9 @@ function applyPageBgGradient(value: PageBgGradient | null) {
     root.style.removeProperty('--page-bg-angle')
     return
   }
-  root.style.setProperty('--page-bg-start', hexToRgbTriplet(value.start))
-  root.style.setProperty('--page-bg-end', hexToRgbTriplet(value.end))
+  const [startColor, endColor] = effectiveGradientColors(value)
+  root.style.setProperty('--page-bg-start', startColor)
+  root.style.setProperty('--page-bg-end', endColor)
   root.style.setProperty('--page-bg-start-stop', `${value.startStop}%`)
   root.style.setProperty('--page-bg-end-stop', `${value.endStop}%`)
   root.style.setProperty('--page-bg-angle', value.direction === 'horizontal' ? '90deg' : value.direction === 'diagonal' ? '135deg' : '180deg')
