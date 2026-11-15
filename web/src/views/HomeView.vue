@@ -6,13 +6,13 @@
       <!-- 页面标题那一行右侧就是时间卡片：宽屏并排（有最大宽度），窄屏自动折到标题下方 -->
       <section class="mb-3 flex flex-col gap-2.5 sm:mb-5">
         <div class="min-w-0">
-          <div class="mb-2 hidden items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-muted-foreground sm:flex">
+          <div class="page-on-bg-muted mb-2 hidden items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-muted-foreground sm:flex">
             <span class="h-2 w-2 rounded-full" :style="{ background: accentColor }"></span>
             信用卡账单
           </div>
-          <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">信用卡账单</h1>
-          <p class="mt-2 hidden text-sm text-muted-foreground sm:block">卡片、账单日与本周待还都在这一页；一个栏目装下所有卡。</p>
-          <p class="truncate text-xs text-muted-foreground sm:hidden">卡片与本周待还都在这一页</p>
+          <h1 class="page-on-bg font-display text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">信用卡账单</h1>
+          <p class="page-on-bg-muted mt-2 hidden text-sm text-muted-foreground sm:block">卡片、账单日与本周待还都在这一页；一个栏目装下所有卡。</p>
+          <p class="page-on-bg-muted truncate text-xs text-muted-foreground sm:hidden">卡片与本周待还都在这一页</p>
         </div>
         <!-- 到期卡片**单独一行**、放在标题下方（用户 2026-10-10 要求）：占满整行宽度，
              不再挤在标题右侧，也不再因为窄屏折行而跑到标题中间。 -->
@@ -27,15 +27,15 @@
     <template v-else-if="isCeremonyBucketPage">
       <section class="mb-3 flex flex-col gap-2 sm:mb-5 sm:flex-row sm:items-end sm:justify-between">
         <div class="min-w-0">
-          <div class="mb-2 hidden items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-muted-foreground sm:flex">
+          <div class="page-on-bg-muted mb-2 hidden items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-muted-foreground sm:flex">
             <ListIcon name="ceremony" :size="14" />
             <span>固定栏目</span>
           </div>
-          <h1 class="flex items-center gap-2 text-xl font-extrabold tracking-tight sm:text-[26px]" data-ceremony-page-title>
+          <h1 class="page-on-bg flex items-center gap-2 text-xl font-extrabold tracking-tight sm:text-[26px]" data-ceremony-page-title>
             <ListIcon name="ceremony" :size="24" />
             {{ pageTitle }}
           </h1>
-          <p class="mt-1 text-sm text-muted-foreground">生日、纪念日、节日、考试 —— 还有多少天，一眼就看到。</p>
+          <p class="page-on-bg-muted mt-1 text-sm text-muted-foreground">生日、纪念日、节日、考试 —— 还有多少天，一眼就看到。</p>
         </div>
       </section>
       <CeremonyPanel v-if="selectedList" :list="selectedList" @changed="onCardsChanged" @toast="(m, t) => showToast(m, t)" />
@@ -44,7 +44,7 @@
     <template v-else>
       <section class="mb-3 flex flex-col gap-2.5 sm:mb-6 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div class="min-w-0">
-          <div class="mb-2 hidden items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-muted-foreground sm:flex">
+          <div class="page-on-bg-muted mb-2 hidden items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-muted-foreground sm:flex">
             <ListIcon
               v-if="selectedList"
               :name="selectedList.icon"
@@ -55,10 +55,10 @@
             {{ eyebrow }}
           </div>
           <div class="flex flex-wrap items-baseline gap-x-2">
-            <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">{{ pageTitle }}</h1>
-            <p class="truncate text-xs text-muted-foreground sm:hidden">{{ subtitle }}</p>
+            <h1 class="page-on-bg font-display text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">{{ pageTitle }}</h1>
+            <p class="page-on-bg-muted truncate text-xs text-muted-foreground sm:hidden">{{ subtitle }}</p>
           </div>
-          <p class="mt-2 hidden text-sm text-muted-foreground sm:block">{{ subtitle }}</p>
+          <p class="page-on-bg-muted mt-2 hidden text-sm text-muted-foreground sm:block">{{ subtitle }}</p>
         </div>
         <!-- 搜索框左边就是收窄的「新建」按钮（用户 2026-10-10 要求：折叠后的新建按钮
              调整宽度、放到搜索框左边）。点它展开整块新建卡片。 -->

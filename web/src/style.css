@@ -201,6 +201,20 @@ select optgroup {
   color: rgb(var(--color-foreground));
 }
 
+/* 页面级文字对比度：只有显式加了 .page-on-bg 的标题/说明才受页面背景明度影响。 */
+.page-on-bg { color: rgb(var(--page-fg, var(--color-foreground))); }
+.page-on-bg-muted { color: rgb(var(--page-fg-muted, var(--color-muted-foreground))); }
+
+/* 侧栏现在跟着页面背景走：背景变暗时导航文字/说明也换成浅色。 */
+html.page-bg-dark .sidebar { color: rgb(var(--page-fg)); }
+html.page-bg-dark .sidebar .nav-row { color: rgb(var(--page-fg) / 0.88); }
+html.page-bg-dark .sidebar .nav-row:hover { color: rgb(var(--page-fg)); }
+html.page-bg-dark .sidebar .nav-row-active { color: rgb(var(--page-fg)) !important; }
+html.page-bg-dark .sidebar .nav-caption,
+html.page-bg-dark .sidebar .text-muted-foreground { color: rgb(var(--page-fg-muted)) !important; }
+html.page-bg-dark .sidebar .text-foreground { color: rgb(var(--page-fg)) !important; }
+html.page-bg-dark .sidebar .nav-group { border-color: rgb(var(--page-fg) / 0.18); }
+
 /* 星空预设的固定星点：只覆盖页面背景，不参与动画，也不遮卡片/文字。 */
 .page-stars {
   position: fixed;

@@ -4,9 +4,9 @@
   <div v-if="authStore.nudgeEnabled" class="mx-auto max-w-6xl" data-nudge-page>
     <div class="mb-4 flex flex-wrap items-end justify-between gap-3 sm:mb-7">
       <div class="min-w-0">
-        <p class="mb-1 text-xs font-extrabold uppercase tracking-[.18em] text-sky-500 sm:mb-2">多人提醒</p>
-        <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl">提醒@他</h1>
-        <p class="mt-0.5 text-[13px] text-muted-foreground sm:mt-2">
+        <p class="page-on-bg-muted mb-1 text-xs font-extrabold uppercase tracking-[.18em] text-sky-500 sm:mb-2">多人提醒</p>
+        <h1 class="page-on-bg font-display text-2xl font-extrabold tracking-tight sm:text-3xl">提醒@他</h1>
+        <p class="page-on-bg-muted mt-0.5 text-[13px] text-muted-foreground sm:mt-2">
           把提醒推给别的用户；别人提醒你的也在这里。对方「已收到 / 已完成」都会回到你的通知中心。
         </p>
       </div>

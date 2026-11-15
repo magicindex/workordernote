@@ -167,6 +167,49 @@ function effectiveGradientColors(value: PageBgGradient): [string, string] {
   return [rgbTriplet(a), rgbTriplet(b)]
 }
 
+function parseRgbTriplet(value: string): [number, number, number] {
+  const parts = value.split(/\s+/).map(Number)
+  return [parts[0] || 0, parts[1] || 0, parts[2] || 0]
+}
+
+/**
+ * 按页面背景的实际明度给页面级文字切换深浅。
+ * 只设置 --page-fg / --page-fg-muted，并给 html 加 page-bg-dark；
+ * 组件需要显式使用 .page-on-bg / .page-on-bg-muted，卡片内文字不受影响。
+ */
+function applyPageBgContrast(value: PageBgGradient | null, tone: number) {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  if (!value) {
+    root.classList.remove('page-bg-dark')
+    root.style.removeProperty('--page-fg')
+    root.style.removeProperty('--page-fg-muted')
+    return
+  }
+  let colors: [string, string]
+  if (value.preset === 'starry') {
+    const dark = root.classList.contains('dark')
+    colors = dark ? ['7 13 31', '23 42 74'] : ['232 240 255', '214 228 255']
+  } else {
+    colors = effectiveGradientColors(value)
+  }
+  const alpha = Math.min(0.72, Math.abs(tone) / 100 * 0.72)
+  const tint = tone < 0 ? [0, 0, 0] : [255, 255, 255]
+  const toneColor = (rgb: [number, number, number]): [number, number, number] => mixRgb(rgb, tint, alpha)
+  const a = toneColor(parseRgbTriplet(colors[0]))
+  const b = toneColor(parseRgbTriplet(colors[1]))
+  const avgLum = (relativeLuminance(a) + relativeLuminance(b)) / 2
+  const darkBg = avgLum < 0.42
+  root.classList.toggle('page-bg-dark', darkBg)
+  if (darkBg) {
+    root.style.setProperty('--page-fg', '248 250 252')
+    root.style.setProperty('--page-fg-muted', '203 213 225')
+  } else {
+    root.style.removeProperty('--page-fg')
+    root.style.removeProperty('--page-fg-muted')
+  }
+}
+
 // 页面背景两色渐变：只写 body 使用的 CSS 变量，卡片/文字颜色完全不动。
 function applyPageBgGradient(value: PageBgGradient | null) {
   if (typeof document === 'undefined') return
@@ -273,6 +316,7 @@ export const useThemeStore = defineStore('theme', () => {
     }
     applyPageBgTone(pageBgTone.value)
     applyPageBgGradient(pageBgGradient.value)
+    applyPageBgContrast(pageBgGradient.value, pageBgTone.value)
   }
 
   function setMode(m: ThemeMode) {
@@ -322,6 +366,7 @@ export const useThemeStore = defineStore('theme', () => {
     else pageBgToneLight.value = next
     persistTones()
     applyPageBgTone(pageBgTone.value)
+    applyPageBgContrast(pageBgGradient.value, pageBgTone.value)
   }
 
   /** 由配置加载时分别写入亮色/暗色值（不必等切到该主题）。 */
@@ -330,7 +375,10 @@ export const useThemeStore = defineStore('theme', () => {
     if (dark) pageBgToneDark.value = next
     else pageBgToneLight.value = next
     persistTones()
-    if (isDark.value === dark) applyPageBgTone(pageBgTone.value)
+    if (isDark.value === dark) {
+      applyPageBgTone(pageBgTone.value)
+      applyPageBgContrast(pageBgGradient.value, pageBgTone.value)
+    }
   }
 
   /** 恢复默认只重置当前主题；另一个主题的手动值保留。 */
@@ -339,6 +387,7 @@ export const useThemeStore = defineStore('theme', () => {
     else pageBgToneLight.value = PAGE_BG_TONE_LIGHT
     persistTones()
     applyPageBgTone(pageBgTone.value)
+    applyPageBgContrast(pageBgGradient.value, pageBgTone.value)
   }
 
   function setPageBgGradient(value: PageBgGradient | null) {
@@ -346,6 +395,7 @@ export const useThemeStore = defineStore('theme', () => {
     if (value) localStorage.setItem(STORAGE_PAGE_BG_GRADIENT, JSON.stringify(value))
     else localStorage.removeItem(STORAGE_PAGE_BG_GRADIENT)
     applyPageBgGradient(value)
+    applyPageBgContrast(value, pageBgTone.value)
   }
 
   apply()
