@@ -230,6 +230,13 @@ const selectOptionLabelMap: Record<string, Record<string, string>> = {
     topbar: '顶栏图标',
     floating: '悬浮球',
   },
+  reminder_same_day_hours: {
+    '0': '关闭',
+    '1': '1 小时后',
+    '2': '2 小时后',
+    '4': '4 小时后',
+    '8': '8 小时后',
+  },
 }
 
 function isSecret(key: string): boolean {

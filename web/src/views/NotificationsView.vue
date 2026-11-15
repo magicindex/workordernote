@@ -31,13 +31,14 @@
              用户 2026-10-12 加的「逾期提醒」）、发送失败（玫瑰色警告）。 -->
         <span
           class="notification-icon"
-          :class="item.type === 'channel_failed' ? 'failure' : item.type === 'reminder_overdue' ? 'overdue' : item.type.startsWith('nudge_') ? 'nudge' : 'due'"
+          :class="item.type === 'channel_failed' ? 'failure' : item.type === 'reminder_overdue' ? 'overdue' : item.type === 'reminder_started' ? 'started' : item.type.startsWith('nudge_') ? 'nudge' : 'due'"
         >
           <!-- 「提醒@他」的三种回执（收到 / 对方已收到 / 已完成）：一个 @ 气泡，
                与到点（铃铛）、逾期（感叹号）、发送失败（警告）区分开。 -->
           <svg v-if="item.type.startsWith('nudge_')" data-notification-nudge viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3.4" stroke-width="1.8"/><path d="M15.4 12v1.6a2.2 2.2 0 0 0 4.4 0V12a7.8 7.8 0 1 0-3.1 6.2" stroke-width="1.8" stroke-linecap="round"/></svg>
           <svg v-else-if="item.type === 'channel_failed'" viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M12 9v4m0 4h.01M10.3 3.8 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.8a2 2 0 0 0-3.4 0Z" stroke-width="1.8" stroke-linecap="round"/></svg>
           <svg v-else-if="item.type === 'reminder_overdue'" viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="1.8"/><path d="M12 7.5v5m0 3.5h.01" stroke-width="1.9" stroke-linecap="round"/></svg>
+          <svg v-else-if="item.type === 'reminder_started'" viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="8.5" stroke-width="1.8"/><path d="M12 7.5V12l3 2" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <svg v-else viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </span>
         <span class="min-w-0 flex-1 text-left">
@@ -135,5 +136,6 @@ onBeforeUnmount(() => {
 .notification-icon.due { @apply bg-blue-500/10 text-blue-500; }
 .notification-icon.failure { @apply bg-rose-500/10 text-rose-500; }
 .notification-icon.overdue { @apply bg-amber-500/10 text-amber-600 dark:text-amber-400; }
+.notification-icon.started { @apply bg-cyan-500/10 text-cyan-600 dark:text-cyan-400; }
 .notification-icon.nudge { @apply bg-sky-500/10 text-sky-500; }
 </style>

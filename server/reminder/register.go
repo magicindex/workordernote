@@ -237,6 +237,15 @@ func init() {
 		Description: "到期日前几天开始提醒（0 = 不提前）。只在离到期日超过这个天数时生效；创建时已经在几天内的按正常流程（到期日当天的开始提醒时间）。窗口内每天只在开始提醒时间提醒一次",
 	})
 
+	// 当天任务提醒（用户 2026-11-15）：任务**开始后** N 小时仍未完成时，再补一条站内提醒。
+	// 0 = 关闭（默认）；距开始不足 N 小时不提醒。按任务开始时间触发，不用到期时间。
+	sysconfig.RegisterConfig(sysconfig.ConfigDef{
+		Key: "reminder_same_day_hours", Scope: sysconfig.ScopeUser, Type: sysconfig.TypeSelect,
+		Default: "0", Options: []string{"0", "1", "2", "4", "8"},
+		Public: true, Group: "reminder", Label: "当天任务提醒",
+		Description: "任务开始后 X 小时仍未完成时提醒；0 = 关闭；距开始不足该小时数则不提醒",
+	})
+
 	// 免打扰（用户 2026-10-16）：「首行铃铛（消息）旁边放一个喇叭标志，点击进入静音标志，
 	// 退出显示喇叭，点击进入免打扰模式。后台增加免打扰时间段。」
 	//
@@ -360,6 +369,15 @@ func init() {
 		Run: func() {
 			if appDB != nil {
 				notifyOverdue(appDB)
+			}
+		},
+	})
+	scheduler.Register(scheduler.Job{
+		Name:     "reminder-started-notify",
+		Interval: time.Minute,
+		Run: func() {
+			if appDB != nil {
+				notifyStartedTasks(appDB)
 			}
 		},
 	})

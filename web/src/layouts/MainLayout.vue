@@ -1691,7 +1691,7 @@ const ackHint = computed(() => (ackMinutes.value > 0
 // 「到了逾期提醒时间还没完成就提醒」）。其它类型（例如渠道投递失败）仍是轻量 toast。
 // 提醒@他推来的通知（收到 / 对方又提醒你一次）也走中央弹窗（用户 2026-10-13：
 // 「提醒一下……即时发送提醒弹窗」）；它们没有关联任务，所以弹窗里不给「稍后提醒」。
-const ALERT_NOTIFICATION_TYPES = ['reminder_due', 'reminder_overdue', 'nudge_received', 'nudge_reminded']
+const ALERT_NOTIFICATION_TYPES = ['reminder_due', 'reminder_overdue', 'reminder_started', 'nudge_received', 'nudge_reminded']
 const NUDGE_NOTIFICATION_TYPES = ['nudge_received', 'nudge_reminded']
 
 // 免打扰（用户 2026-10-16）：首行铃铛旁边那个喇叭/静音按钮。状态以服务端为准
