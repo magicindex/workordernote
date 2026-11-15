@@ -11,6 +11,7 @@ import { DEFAULT_SUN_CITY, SUN_CITIES, isNightAt } from '../utils/sun'
 export type ThemeMode = 'light' | 'dark' | 'system' | 'sun'
 export type ThemeBrand = 'default'  // extend this union when adding brand-* palettes
 export type PageBgDirection = 'vertical' | 'horizontal' | 'diagonal'
+export type PageBgStarStyle = 'dot' | 'cross' | 'sparkle'
 export interface PageBgGradient {
   start: string
   end: string
@@ -20,6 +21,8 @@ export interface PageBgGradient {
   endStop: number
   /** 空 = 普通两色渐变；starry = 星空预设（按主题用深空调色板 + 星点层）。 */
   preset: '' | 'starry'
+  /** 星空星点样式：圆点 / 十字星 / 星芒。普通渐变忽略。 */
+  starStyle: PageBgStarStyle
 }
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
@@ -44,6 +47,7 @@ export function parsePageBgGradient(raw: string): PageBgGradient | null {
       startStop: validStops ? Math.round(startStop) : 0,
       endStop: validStops ? Math.round(endStop) : 100,
       preset: data?.preset === 'starry' ? 'starry' : '',
+      starStyle: data?.starStyle === 'cross' ? 'cross' : data?.starStyle === 'sparkle' ? 'sparkle' : 'dot',
     }
   } catch {
     return null
@@ -189,7 +193,7 @@ function applyPageBgContrast(value: PageBgGradient | null, tone: number) {
   let colors: [string, string]
   if (value.preset === 'starry') {
     const dark = root.classList.contains('dark')
-    colors = dark ? ['7 13 31', '23 42 74'] : ['232 240 255', '214 228 255']
+    colors = dark ? ['2 6 23', '11 27 58'] : ['7 20 40', '18 42 76']
   } else {
     colors = effectiveGradientColors(value)
   }
@@ -215,7 +219,7 @@ function applyPageBgGradient(value: PageBgGradient | null) {
   if (typeof document === 'undefined') return
   const root = document.documentElement
   if (!value) {
-    root.classList.remove('page-starry')
+    root.classList.remove('page-starry', 'page-starry-dot', 'page-starry-cross', 'page-starry-sparkle')
     root.style.removeProperty('--page-bg-start')
     root.style.removeProperty('--page-bg-end')
     root.style.removeProperty('--page-bg-start-stop')
@@ -226,9 +230,11 @@ function applyPageBgGradient(value: PageBgGradient | null) {
   // 星空预设：亮/暗主题各自一套深空底色，不跟随用户选色，保证星点对比。
   if (value.preset === 'starry') {
     const dark = root.classList.contains('dark')
-    const startStop = dark ? '#070d1f' : '#e8f0ff'
-    const endStop = dark ? '#172a4a' : '#d6e4ff'
+    const startStop = dark ? '#020617' : '#071428'
+    const endStop = dark ? '#0b1b3a' : '#122a4c'
     root.classList.add('page-starry')
+    root.classList.remove('page-starry-dot', 'page-starry-cross', 'page-starry-sparkle')
+    root.classList.add(`page-starry-${value.starStyle}`)
     root.style.setProperty('--page-bg-start', rgbTriplet(parseHex(startStop)))
     root.style.setProperty('--page-bg-end', rgbTriplet(parseHex(endStop)))
     root.style.setProperty('--page-bg-start-stop', `${value.startStop}%`)
@@ -236,7 +242,7 @@ function applyPageBgGradient(value: PageBgGradient | null) {
     root.style.setProperty('--page-bg-angle', value.direction === 'horizontal' ? '90deg' : value.direction === 'diagonal' ? '135deg' : '180deg')
     return
   }
-  root.classList.remove('page-starry')
+  root.classList.remove('page-starry', 'page-starry-dot', 'page-starry-cross', 'page-starry-sparkle')
   const [startColor, endColor] = effectiveGradientColors(value)
   root.style.setProperty('--page-bg-start', startColor)
   root.style.setProperty('--page-bg-end', endColor)

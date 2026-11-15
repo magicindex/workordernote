@@ -69,6 +69,19 @@
           <option value="diagonal">斜角</option>
         </select>
       </label>
+      <label v-if="presetMode === 'starry'" class="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+        星点
+        <select
+          v-model="starStyle"
+          class="input-field !h-8 !w-[5.5rem] !py-1 text-xs"
+          data-page-bg-star-style
+          @change="onStarStyleChange"
+        >
+          <option value="dot">圆点</option>
+          <option value="cross">十字星</option>
+          <option value="sparkle">星芒</option>
+        </select>
+      </label>
     </div>
 
     <div class="mt-2.5">
@@ -141,13 +154,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { getAllConfigs, updateConfig } from '../api/config'
-import { parsePageBgGradient, useThemeStore, type PageBgDirection, type PageBgGradient } from '../stores/theme'
+import { parsePageBgGradient, useThemeStore, type PageBgDirection, type PageBgGradient, type PageBgStarStyle } from '../stores/theme'
 
 const theme = useThemeStore()
 const start = ref('#f7f8fa')
 const end = ref('#ffffff')
 const direction = ref<PageBgDirection>('vertical')
 const presetMode = ref<'' | 'starry'>('')
+const starStyle = ref<PageBgStarStyle>('dot')
 const startStop = ref(0)
 const endStop = ref(100)
 const stopTrack = ref<HTMLElement | null>(null)
@@ -182,8 +196,8 @@ function themeDefaults(): { start: string; end: string } {
 
 function starPalette(dark: boolean): { start: string; end: string } {
   return dark
-    ? { start: '#070d1f', end: '#172a4a' }
-    : { start: '#e8f0ff', end: '#d6e4ff' }
+    ? { start: '#020617', end: '#0b1b3a' }
+    : { start: '#071428', end: '#122a4c' }
 }
 
 function currentGradient(): PageBgGradient {
@@ -194,6 +208,7 @@ function currentGradient(): PageBgGradient {
     startStop: startStop.value,
     endStop: endStop.value,
     preset: presetMode.value,
+    starStyle: starStyle.value,
   }
 }
 
@@ -239,6 +254,12 @@ function nudgeStop(which: 'start' | 'end', delta: number) {
   void saveGradient()
 }
 
+function onStarStyleChange() {
+  if (presetMode.value !== 'starry') return
+  previewGradient(true)
+  void saveGradient()
+}
+
 function previewGradient(keepStarry = false) {
   if (!keepStarry && presetMode.value === 'starry') presetMode.value = ''
   touchNotice()
@@ -255,6 +276,7 @@ function previewTone(raw: string) {
 function applyPreset(preset: TonePreset) {
   if (preset.preset === 'starry') {
     presetMode.value = 'starry'
+    if (!starStyle.value) starStyle.value = 'dot'
     const palette = starPalette(theme.isDark)
     start.value = palette.start
     end.value = palette.end
@@ -332,6 +354,7 @@ async function reset() {
   startStop.value = 0
   endStop.value = 100
   presetMode.value = ''
+  starStyle.value = 'dot'
   previewGradient(true)
   theme.resetPageBgTone()
   await saveGradient()
@@ -364,6 +387,7 @@ onMounted(async () => {
     const gradient = parsePageBgGradient(String(data.page_bg_gradient || ''))
     if (gradient) {
       presetMode.value = gradient.preset
+      starStyle.value = gradient.starStyle
       if (gradient.preset === 'starry') {
         const palette = starPalette(theme.isDark)
         start.value = palette.start

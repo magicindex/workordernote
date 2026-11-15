@@ -46,17 +46,35 @@ const stars = (page) => page.evaluate(() => {
       await sleep(1100);
       const light = await stars(page);
       const cfg = JSON.parse(String((await configs(page)).page_bg_gradient || '{}'));
-      check('套用星空后启用星点层', light.class === true && light.opacity > 0.2 && /radial-gradient/.test(light.image), JSON.stringify(light));
+      check('套用星空后启用星点层', light.class === true && light.opacity > 0.2 && /data:image\/svg/.test(light.image), JSON.stringify(light));
       check('星点固定且无动画', light.position === 'fixed' && light.animation === 'none' && Number(light.zIndex) < 0, JSON.stringify(light));
       check('星空配置已保存', cfg.preset === 'starry', JSON.stringify(cfg));
-      check('亮色主题使用浅色深空色板', light.start !== '7 13 31' && light.end !== '23 42 74', JSON.stringify(light));
+
+      await page.select('[data-page-bg-star-style]', 'cross');
+      await sleep(700);
+      const cross = await page.evaluate(() => ({
+        cls: document.documentElement.classList.contains('page-starry-cross'),
+        image: getComputedStyle(document.querySelector('.page-stars')).backgroundImage,
+      }));
+      const crossCfg = JSON.parse(String((await configs(page)).page_bg_gradient || '{}'));
+      check('星点样式可选十字星', cross.cls === true && crossCfg.starStyle === 'cross' && /svg/.test(cross.image), JSON.stringify({ cross, crossCfg }));
+      await page.select('[data-page-bg-star-style]', 'sparkle');
+      await sleep(700);
+      const sparkle = await page.evaluate(() => ({
+        cls: document.documentElement.classList.contains('page-starry-sparkle'),
+        image: getComputedStyle(document.querySelector('.page-stars')).backgroundImage,
+        animation: getComputedStyle(document.querySelector('.page-stars')).animationName,
+      }));
+      const sparkleCfg = JSON.parse(String((await configs(page)).page_bg_gradient || '{}'));
+      check('星点样式可选星芒且仍无动画', sparkle.cls === true && sparkleCfg.starStyle === 'sparkle' && /svg/.test(sparkle.image) && sparkle.animation === 'none', JSON.stringify({ sparkle, sparkleCfg }));
+      check('亮色主题使用深蓝色板', light.start === '7 20 40' && light.end === '18 42 76', JSON.stringify(light));
 
       await api(page, '/api/configs', 'PUT', { key: 'theme_mode', value: 'dark' });
       await page.evaluate(() => localStorage.setItem('reminder-theme-mode', 'dark'));
       await page.reload({ waitUntil: 'domcontentloaded' });
       await sleep(1500);
       const dark = await stars(page);
-      check('暗色主题自动换成深空色板', dark.dark === true && dark.start === '7 13 31' && dark.end === '23 42 74', JSON.stringify(dark));
+      check('暗色主题自动换成深空色板', dark.dark === true && dark.start === '2 6 23' && dark.end === '11 27 58', JSON.stringify(dark));
       check('暗色星点更明显且仍无动画', dark.opacity >= 0.85 && dark.animation === 'none', JSON.stringify(dark));
       await page.screenshot({ path: require('path').join(__dirname, 'shots', 'bg-starry-dark.png') });
     } finally {
