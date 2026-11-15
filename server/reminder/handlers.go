@@ -1171,8 +1171,14 @@ func handleSummary(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+func purgeSMSNotifications(db *gorm.DB, userID uint) {
+	// 手机短信通知已取消：历史失败回执也不在通知中心保留。
+	_ = db.Where("user_id = ? AND type = ? AND body LIKE ?", userID, "channel_failed", "手机短信：%").Delete(&Notification{}).Error
+}
+
 func handleNotifications(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		purgeSMSNotifications(db, currentUserID(c))
 		var rows []Notification
 		if err := db.Where("user_id = ?", currentUserID(c)).Order("id DESC").Limit(100).Find(&rows).Error; err != nil {
 			response.ErrorInternal(c, "读取通知失败")
@@ -1184,6 +1190,7 @@ func handleNotifications(db *gorm.DB) gin.HandlerFunc {
 
 func handleUnreadCount(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		purgeSMSNotifications(db, currentUserID(c))
 		var count int64
 		if err := db.Model(&Notification{}).Where("user_id = ? AND read_at IS NULL", currentUserID(c)).Count(&count).Error; err != nil {
 			response.ErrorInternal(c, "读取未读数量失败")
@@ -1216,6 +1223,7 @@ func handleReadNotification(db *gorm.DB) gin.HandlerFunc {
 
 func handleReadAllNotifications(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		purgeSMSNotifications(db, currentUserID(c))
 		now := time.Now()
 		if err := db.Model(&Notification{}).Where("user_id = ? AND read_at IS NULL", currentUserID(c)).Update("read_at", &now).Error; err != nil {
 			response.ErrorInternal(c, "更新通知失败")

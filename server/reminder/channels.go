@@ -430,7 +430,6 @@ func channelStatuses(db *gorm.DB, userID uint) []ChannelStatus {
 	defs := []ChannelStatus{
 		{Channel: ChannelInApp, Label: "站内消息", Configured: true, Bound: true, Status: "active", Description: "在通知中心准时提醒"},
 		{Channel: ChannelEmail, Label: "电子邮件", Configured: emailConfigured(db), Description: "适合重要事项和较长内容，可绑定多个接收邮箱"},
-		{Channel: ChannelSMS, Label: "手机短信", Configured: smsConfigured(db), Description: "无需打开应用即可收到"},
 		{Channel: ChannelFeishu, Label: "飞书机器人", Configured: feishuConfigured(db), Description: "由企业自建应用机器人单聊提醒"},
 		{Channel: ChannelQQ, Label: "QQ 机器人", Configured: qqConfigured(db), Description: "通过 QQ 机器人主动单聊提醒"},
 		{Channel: ChannelDingTalk, Label: "钉钉群机器人", Configured: true, Description: "个人群自定义机器人，无需创建钉钉应用"},
@@ -616,6 +615,10 @@ func stringValue(value []byte, err error) (string, error) {
 // narrows multi-target channels (email) to specific bindings; nil or empty
 // delivers to every active binding.
 func sendChannel(ctx context.Context, db *gorm.DB, channel string, userID uint, item Reminder, idempotencyKey string, targetIDs []uint) (sendResult, error) {
+	// 手机短信通知已取消：保留旧数据解析，但不再向任何短信网关投递。
+	if channel == ChannelSMS {
+		return sendResult{}, &deliveryError{Code: "CHANNEL_RETIRED", Message: "手机短信通知已取消", Permanent: true}
+	}
 	if channel == ChannelInApp {
 		n := Notification{UserID: userID, Type: "reminder_due", Title: item.Title, Body: notificationBody(item)}
 		if item.ID > 0 {
