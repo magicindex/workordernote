@@ -29,8 +29,13 @@ func notifyStartedAt(db *gorm.DB, now time.Time) {
 	localNow := now.In(loc)
 	startOfDay := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, loc)
 
+	// 触发窗口最多 12 小时 + 选项最大 8 小时，更早的任务不可能触发；
+	// 先按 start_at 收窄查询，任务量很大时不用每分钟扫全表。
+	windowStart := now.Add(-20 * time.Hour)
+	windowEnd := now.Add(-1 * time.Hour)
 	var rows []Reminder
-	if err := db.Where("deleted_at IS NULL AND completed_at IS NULL AND kind = ? AND start_at IS NOT NULL", KindTask).
+	if err := db.Where("deleted_at IS NULL AND completed_at IS NULL AND kind = ? AND start_at IS NOT NULL AND start_at >= ? AND start_at <= ?",
+		KindTask, windowStart, windowEnd).
 		Find(&rows).Error; err != nil {
 		logger.Error("reminder: scan started task candidates: %v", err)
 		return
@@ -49,6 +54,25 @@ func notifyStartedAt(db *gorm.DB, now time.Time) {
 		}
 		hoursCache[userID] = n
 		return n
+	}
+
+	// 一次查出今天已发过的提醒，避免每个候选任务各查一次。
+	reminderIDs := make([]uint, 0, len(rows))
+	for _, item := range rows {
+		reminderIDs = append(reminderIDs, item.ID)
+	}
+	sentKeys := map[string]bool{}
+	if len(reminderIDs) > 0 {
+		var existing []Notification
+		if err := db.Where("reminder_id IN ? AND type = ? AND created_at >= ?",
+			reminderIDs, "reminder_started", sqlTimeArg(startOfDay)).
+			Find(&existing).Error; err == nil {
+			for _, n := range existing {
+				if n.ReminderID != nil {
+					sentKeys[fmt.Sprintf("%d:%d", n.UserID, *n.ReminderID)] = true
+				}
+			}
+		}
 	}
 
 	sent := 0
@@ -71,14 +95,8 @@ func notifyStartedAt(db *gorm.DB, now time.Time) {
 		if inQuietHours(db, item.UserID, now) || dndBlocked(db, item.UserID, now) {
 			continue
 		}
-		var already int64
-		if err := db.Model(&Notification{}).
-			Where("user_id = ? AND reminder_id = ? AND type = ? AND created_at >= ?",
-				item.UserID, item.ID, "reminder_started", sqlTimeArg(startOfDay)).
-			Count(&already).Error; err != nil {
-			continue
-		}
-		if already > 0 {
+		key := fmt.Sprintf("%d:%d", item.UserID, item.ID)
+		if sentKeys[key] {
 			continue
 		}
 		reminderID := item.ID
@@ -94,6 +112,7 @@ func notifyStartedAt(db *gorm.DB, now time.Time) {
 			logger.Error("reminder: create started notification: %v", err)
 			continue
 		}
+		sentKeys[key] = true
 		publishNotification(notification)
 		sent++
 	}

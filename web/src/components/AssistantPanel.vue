@@ -165,6 +165,14 @@
                   v-html="renderMarkdown(msg.content)"
                 ></div>
               </div>
+              <button
+                v-if="msg.failed"
+                type="button"
+                class="assistant-retry"
+                data-assistant-retry
+                :disabled="pending"
+                @click="retryFailed(i)"
+              >重试这一问</button>
               <!-- 「这一轮附上了哪些数据」：写周报最怕答得漂亮却查的是空区间，
                    把区间与条数摆在下面，用户一眼能核对。 -->
               <p
@@ -855,6 +863,7 @@ async function send(text?: string, option?: string) {
       role: 'assistant',
       content: `这次没答上来：${reason}\n\n可以到「系统配置 → AI 助手」点「测试连接」看具体卡在哪。`,
       failed: true,
+      question: content,
     })
   } finally {
     pending.value = false
@@ -867,6 +876,22 @@ async function send(text?: string, option?: string) {
  * 「回答原文 + 用户问的那句话 + 这一轮的数据口径」递过去，并把结果记在这条
  * 气泡上——存过的气泡不再让点第二次。
  */
+function retryFailed(index: number) {
+  const msg = messages.value[index]
+  if (!msg?.failed || pending.value) return
+  const question = (msg.question || '').trim()
+  if (!question) return
+  // 去掉失败气泡和它前面那条用户消息，再按同一问题重发，避免对话里出现重复问题。
+  messages.value.splice(index, 1)
+  for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+    if (messages.value[i].role === 'user' && messages.value[i].content === question) {
+      messages.value.splice(i, 1)
+      break
+    }
+  }
+  void send(question)
+}
+
 async function saveNote(index: number) {
   const msg = messages.value[index]
   if (!msg || msg.role !== 'assistant' || msg.saving || msg.savedNote) return
@@ -1145,6 +1170,9 @@ onBeforeUnmount(() => {
 }
 .assistant-note-link {
   @apply text-[11px] font-semibold text-brand-600 transition hover:underline dark:text-brand-300;
+}
+.assistant-retry {
+  @apply ml-1 mt-1 inline-flex h-7 items-center rounded-lg border border-border bg-surface px-2.5 text-[11px] font-bold text-muted-foreground transition hover:border-brand-500/30 hover:text-brand-600 disabled:opacity-40;
 }
 .assistant-note-error {
   @apply text-[11px] text-destructive;

@@ -92,7 +92,7 @@ type Reminder struct {
 	//
 	// 新列由 AutoMigrate 自动加（SQLite ADD COLUMN，旧行为 NULL），因此不需要
 	// 额外的 database.Upgrades 记录。
-	StartAt    *time.Time `json:"start_at,omitempty"`
+	StartAt    *time.Time `gorm:"index:idx_reminders_start_at" json:"start_at,omitempty"`
 	EndAt      *time.Time `json:"end_at,omitempty"`
 	RepeatRule string     `gorm:"size:16;not null;default:none" json:"repeat_rule"`
 	// Calendar selects which calendar the repeat rule follows: "solar"

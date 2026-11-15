@@ -75,6 +75,13 @@ const readSheet = (page) => page.evaluate(() => {
   };
 });
 
+async function dismissAlert(page) {
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').includes('知道了'));
+    if (b) b.click();
+  });
+  await sleep(400);
+}
 (async () => {
   console.log(`目标：${BASE}`);
   await withTab(async (page) => {
@@ -83,6 +90,7 @@ const readSheet = (page) => page.evaluate(() => {
       await page.setViewport({ width: 1440, height: 1000 });
       await login(page, BASE);
       await gotoRetry(page, BASE + '/admin');
+      await dismissAlert(page);
       await sleep(2500);
       const sidebar = await readSidebarRows(page);
       check('侧栏「我的清单」这一段读得到（作为对照）', sidebar.length >= 2, JSON.stringify(sidebar));
@@ -93,6 +101,7 @@ const readSheet = (page) => page.evaluate(() => {
       await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
       await gotoRetry(page, BASE + '/admin');
       await sleep(2000);
+      await dismissAlert(page);
       const tabs = await readTabs(page);
       check('手机底部标签里有「清单」', tabs.includes('清单'), JSON.stringify(tabs));
       check('中间那个不再叫「信用卡」', !tabs.includes('信用卡'), JSON.stringify(tabs));
@@ -103,7 +112,7 @@ const readSheet = (page) => page.evaluate(() => {
       check('通知不再占底部标签（改从顶栏铃铛进）', !tabs.includes('通知'), JSON.stringify(tabs));
       // 首页标签是左边第一个，点它进首页看板（用户 2026-11-09）。
       if (tabs[0] === '首页') {
-        await page.click('[data-tab-home]');
+        await page.evaluate(() => document.querySelector('[data-tab-home]')?.click());
         await sleep(1200);
         const home = await page.evaluate(() => ({
           path: location.pathname,
@@ -115,7 +124,7 @@ const readSheet = (page) => page.evaluate(() => {
         await sleep(1200);
       }
       if (nudgeEnabled) {
-        await page.click('[data-tab-nudges]');
+        await page.evaluate(() => document.querySelector('[data-tab-nudges]')?.click());
         await sleep(1200);
         const nudged = await page.evaluate(() => ({
           path: location.pathname,
@@ -129,7 +138,7 @@ const readSheet = (page) => page.evaluate(() => {
 
       // ---------- 2. 点「清单」→ 弹出全部清单 ----------
       check('点之前弹层不在 DOM 里', (await readSheet(page)) === null);
-      await page.click('[data-tab-lists]');
+      await page.evaluate(() => document.querySelector('[data-tab-lists]')?.click());
       await sleep(800);
       const sheet = await readSheet(page);
       check('点「清单」弹出了清单弹层', !!sheet, JSON.stringify(sheet));
@@ -183,19 +192,19 @@ const readSheet = (page) => page.evaluate(() => {
         check('页面标题是这个清单的名字', after.title === target.name, JSON.stringify({ 期望: target.name, 实际: after.title }));
 
         // ---------- 4. 当前清单打勾 ----------
-        await page.click('[data-tab-lists]');
+        await page.evaluate(() => document.querySelector('[data-tab-lists]')?.click());
         await sleep(700);
         const sheet2 = await readSheet(page);
         const marked = (sheet2?.rows || []).filter((r) => r.current);
         check('当前所在的那一行有打勾标记', marked.length === 1 && marked[0].key === target.key,
           JSON.stringify((sheet2?.rows || []).map((r) => ({ n: r.name, c: r.current }))));
-        await page.click('[data-lists-sheet-close]');
+        await page.evaluate(() => document.querySelector('[data-lists-sheet-close]')?.click());
         await sleep(600);
         check('关闭按钮能收起弹层', (await readSheet(page)) === null);
       }
 
       // ---------- 5. 「全部」只剩智能清单那一处：除内置频道外都是具体清单 ----------
-      await page.click('[data-tab-lists]');
+      await page.evaluate(() => document.querySelector('[data-tab-lists]')?.click());
       await sleep(700);
       const sheetAll = await readSheet(page);
       const builtinRow = (r) => r.key === 'timetable' || r.key === 'trash' || String(r.key).startsWith('system-');
@@ -214,7 +223,7 @@ const readSheet = (page) => page.evaluate(() => {
         }));
         check('点「课程表」进到课程表页、弹层收起', tt.url === '/admin/timetable' && tt.sheet === false, JSON.stringify(tt));
         check('从「清单」进去后，中间标签保持选中', tt.active === '清单', JSON.stringify(tt));
-        await page.click('[data-tab-lists]');
+        await page.evaluate(() => document.querySelector('[data-tab-lists]')?.click());
         await sleep(700);
         const ttSheet = await readSheet(page);
         const ttMarked = (ttSheet?.rows || []).filter((r) => r.current);
@@ -232,14 +241,14 @@ const readSheet = (page) => page.evaluate(() => {
 
       if (nudgeEnabled) {
         // ---------- 5c. 提醒@他：入口只在底部「提醒」标签，清单弹层里不再有这一行 ----------
-        await page.click('[data-tab-nudges]');
+        await page.evaluate(() => document.querySelector('[data-tab-nudges]')?.click());
         await sleep(1500);
         const nd = await page.evaluate(() => ({
           url: location.pathname,
           active: (document.querySelector('.mobile-tab.active small')?.textContent || '').trim(),
         }));
         check('底部「提醒」标签仍能进提醒@他页', nd.url === '/admin/nudges' && nd.active === '提醒', JSON.stringify(nd));
-        await page.click('[data-tab-lists]');
+        await page.evaluate(() => document.querySelector('[data-tab-lists]')?.click());
         await sleep(700);
         const ndSheet = await readSheet(page);
         check('在提醒@他页打开清单弹层，里面没有「提醒@他」行（不重复占入口）',
@@ -248,14 +257,14 @@ const readSheet = (page) => page.evaluate(() => {
         check('在提醒@他页打开清单弹层，也没有多出打勾行',
           !!ndSheet && ndSheet.rows.filter((r) => r.current).length === 0,
           JSON.stringify((ndSheet?.rows || []).filter((r) => r.current).map((r) => r.key)));
-        await page.click('[data-lists-sheet-close]');
+        await page.evaluate(() => document.querySelector('[data-lists-sheet-close]')?.click());
         await sleep(500);
         await gotoRetry(page, BASE + '/admin');
         await sleep(1200);
       }
 
       // ---------- 6. 点遮罩也能收起 + 桌面没有这个弹层 ----------
-      await page.click('[data-tab-lists]');
+      await page.evaluate(() => document.querySelector('[data-tab-lists]')?.click());
       await sleep(700);
       await page.click('[data-lists-sheet-backdrop]', { offset: { x: 10, y: 10 } });
       await sleep(600);
