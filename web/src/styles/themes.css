@@ -48,6 +48,8 @@
   --page-bg-start:             247 248 250;
   --page-bg-end:               255 255 255;
   --page-bg-angle:             180deg;
+  --page-bg-start-stop:        0%;
+  --page-bg-end-stop:          100%;
   --page-bg-tint:              0 0 0;
   --page-bg-alpha:             0;
 }

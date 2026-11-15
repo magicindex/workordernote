@@ -15,6 +15,9 @@ export interface PageBgGradient {
   start: string
   end: string
   direction: PageBgDirection
+  /** 两个色阶在渐变里的位置（0–100%），1 表示起始色，2 表示结束色。 */
+  startStop: number
+  endStop: number
 }
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
@@ -27,10 +30,17 @@ export function parsePageBgGradient(raw: string): PageBgGradient | null {
     const start = String(data?.start || '')
     const end = String(data?.end || '')
     if (!HEX_COLOR.test(start) || !HEX_COLOR.test(end)) return null
+    const startStop = Number(data?.startStop)
+    const endStop = Number(data?.endStop)
+    const validStops = Number.isFinite(startStop) && Number.isFinite(endStop)
+      && startStop >= 0 && startStop <= 100 && endStop >= 0 && endStop <= 100
+      && startStop < endStop
     return {
       start: start.toLowerCase(),
       end: end.toLowerCase(),
       direction: data?.direction === 'horizontal' ? 'horizontal' : 'vertical',
+      startStop: validStops ? Math.round(startStop) : 0,
+      endStop: validStops ? Math.round(endStop) : 100,
     }
   } catch {
     return null
@@ -93,11 +103,15 @@ function applyPageBgGradient(value: PageBgGradient | null) {
   if (!value) {
     root.style.removeProperty('--page-bg-start')
     root.style.removeProperty('--page-bg-end')
+    root.style.removeProperty('--page-bg-start-stop')
+    root.style.removeProperty('--page-bg-end-stop')
     root.style.removeProperty('--page-bg-angle')
     return
   }
   root.style.setProperty('--page-bg-start', hexToRgbTriplet(value.start))
   root.style.setProperty('--page-bg-end', hexToRgbTriplet(value.end))
+  root.style.setProperty('--page-bg-start-stop', `${value.startStop}%`)
+  root.style.setProperty('--page-bg-end-stop', `${value.endStop}%`)
   root.style.setProperty('--page-bg-angle', value.direction === 'horizontal' ? '90deg' : '180deg')
 }
 

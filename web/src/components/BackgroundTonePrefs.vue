@@ -70,6 +70,51 @@
       </label>
     </div>
 
+    <div class="mt-2.5">
+      <div
+        ref="stopTrack"
+        class="relative h-7 rounded-xl border border-border/80"
+        :style="{ background: `linear-gradient(90deg, ${start} 0%, ${start} ${startStop}%, ${end} ${endStop}%, ${end} 100%)` }"
+        data-page-bg-stop-track
+      >
+        <button
+          type="button"
+          role="slider"
+          tabindex="0"
+          class="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full border-2 border-white shadow-md ring-1 ring-black/20"
+          :style="{ left: `${startStop}%`, background: start }"
+          :aria-valuenow="startStop"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-label="起始色位置"
+          data-page-bg-stop="start"
+          @pointerdown="beginStopDrag('start', $event)"
+          @keydown.left.prevent="nudgeStop('start', -1)"
+          @keydown.right.prevent="nudgeStop('start', 1)"
+        ></button>
+        <button
+          type="button"
+          role="slider"
+          tabindex="0"
+          class="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full border-2 border-white shadow-md ring-1 ring-black/20"
+          :style="{ left: `${endStop}%`, background: end }"
+          :aria-valuenow="endStop"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-label="结束色位置"
+          data-page-bg-stop="end"
+          @pointerdown="beginStopDrag('end', $event)"
+          @keydown.left.prevent="nudgeStop('end', -1)"
+          @keydown.right.prevent="nudgeStop('end', 1)"
+        ></button>
+      </div>
+      <div class="mt-1 flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
+        <span>起始色 {{ startStop }}%</span>
+        <span>拖动圆点调整颜色占比</span>
+        <span>结束色 {{ endStop }}%</span>
+      </div>
+    </div>
+
     <div class="mt-2.5 flex items-center gap-2">
       <span class="text-[11px] font-semibold text-muted-foreground">暗</span>
       <input
@@ -101,6 +146,10 @@ const theme = useThemeStore()
 const start = ref('#f7f8fa')
 const end = ref('#ffffff')
 const direction = ref<PageBgDirection>('vertical')
+const startStop = ref(0)
+const endStop = ref(100)
+const stopTrack = ref<HTMLElement | null>(null)
+const draggingStop = ref<'start' | 'end' | null>(null)
 const tone = ref(0)
 const savedTone = ref(0)
 const saving = ref(false)
@@ -129,12 +178,55 @@ function themeDefaults(): { start: string; end: string } {
 }
 
 function currentGradient(): PageBgGradient {
-  return { start: start.value, end: end.value, direction: direction.value }
+  return {
+    start: start.value,
+    end: end.value,
+    direction: direction.value,
+    startStop: startStop.value,
+    endStop: endStop.value,
+  }
 }
 
 function touchNotice() {
   notice.value = ''
   errorMsg.value = ''
+}
+
+function stopPercent(event: PointerEvent): number {
+  const rect = stopTrack.value?.getBoundingClientRect()
+  if (!rect || rect.width <= 0) return 0
+  return Math.max(0, Math.min(100, Math.round(((event.clientX - rect.left) / rect.width) * 100)))
+}
+
+function applyStopPosition(event: PointerEvent) {
+  if (!draggingStop.value) return
+  const percent = stopPercent(event)
+  if (draggingStop.value === 'start') startStop.value = Math.min(percent, endStop.value - 1)
+  else endStop.value = Math.max(percent, startStop.value + 1)
+  previewGradient()
+}
+
+function beginStopDrag(which: 'start' | 'end', event: PointerEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  draggingStop.value = which
+  applyStopPosition(event)
+  window.addEventListener('pointermove', applyStopPosition)
+  window.addEventListener('pointerup', finishStopDrag, { once: true })
+}
+
+function finishStopDrag() {
+  window.removeEventListener('pointermove', applyStopPosition)
+  if (!draggingStop.value) return
+  draggingStop.value = null
+  void saveGradient()
+}
+
+function nudgeStop(which: 'start' | 'end', delta: number) {
+  if (which === 'start') startStop.value = Math.max(0, Math.min(startStop.value + delta, endStop.value - 1))
+  else endStop.value = Math.min(100, Math.max(endStop.value + delta, startStop.value + 1))
+  previewGradient()
+  void saveGradient()
 }
 
 function previewGradient() {
@@ -153,6 +245,8 @@ function applyPreset(preset: TonePreset) {
   start.value = preset.start
   end.value = preset.end
   direction.value = preset.direction
+  startStop.value = 0
+  endStop.value = 100
   previewGradient()
   void saveGradient()
 }
@@ -212,6 +306,8 @@ async function reset() {
   start.value = defaults.start
   end.value = defaults.end
   direction.value = 'vertical'
+  startStop.value = 0
+  endStop.value = 100
   tone.value = 0
   previewGradient()
   previewTone('0')
@@ -223,6 +319,8 @@ onMounted(async () => {
   const defaults = themeDefaults()
   start.value = defaults.start
   end.value = defaults.end
+  startStop.value = 0
+  endStop.value = 100
   try {
     const res = await getAllConfigs()
     const rawTone = Number(res.data?.data?.page_bg_tone || 0) || 0
@@ -234,6 +332,8 @@ onMounted(async () => {
       start.value = gradient.start
       end.value = gradient.end
       direction.value = gradient.direction
+      startStop.value = gradient.startStop
+      endStop.value = gradient.endStop
       theme.setPageBgGradient(gradient)
     }
   } catch (err: any) {

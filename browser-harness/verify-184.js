@@ -18,6 +18,8 @@ const vars = (page) => page.evaluate(() => ({
   start: getComputedStyle(document.documentElement).getPropertyValue('--page-bg-start').trim(),
   end: getComputedStyle(document.documentElement).getPropertyValue('--page-bg-end').trim(),
   angle: getComputedStyle(document.documentElement).getPropertyValue('--page-bg-angle').trim(),
+  startStop: getComputedStyle(document.documentElement).getPropertyValue('--page-bg-start-stop').trim(),
+  endStop: getComputedStyle(document.documentElement).getPropertyValue('--page-bg-end-stop').trim(),
   tint: getComputedStyle(document.documentElement).getPropertyValue('--page-bg-tint').trim(),
   alpha: Number(getComputedStyle(document.documentElement).getPropertyValue('--page-bg-alpha')),
   body: getComputedStyle(document.body).backgroundImage,
@@ -40,8 +42,9 @@ const vars = (page) => page.evaluate(() => ({
         start: !!document.querySelector('[data-page-bg-color-start]'),
         end: !!document.querySelector('[data-page-bg-color-end]'),
         direction: !!document.querySelector('[data-page-bg-direction]'),
+        stops: document.querySelectorAll('[data-page-bg-stop]').length,
       }));
-      check('外观里有背景两色、方向、亮度控件', ui.block && ui.slider && ui.start && ui.end && ui.direction, JSON.stringify(ui));
+      check('外观里有背景两色、方向、色阶、亮度控件', ui.block && ui.slider && ui.start && ui.end && ui.direction && ui.stops === 2, JSON.stringify(ui));
       const ambient = await page.evaluate(() => getComputedStyle(document.querySelector('.ambient') || document.body).backgroundColor);
       check('页面背景不被 ambient 遮住（ambient 透明）', ambient === 'rgba(0, 0, 0, 0)' || ambient === 'transparent', ambient);
       const presetCount = await page.evaluate(() => document.querySelectorAll('[data-page-bg-preset]').length);
@@ -92,6 +95,34 @@ const vars = (page) => page.evaluate(() => ({
       const savedDirection = JSON.parse(String((await configs(page)).page_bg_gradient || '{}'));
       check('方向可选左右并保存', horizontal.angle === '90deg' && savedDirection.direction === 'horizontal', JSON.stringify({ horizontal, savedDirection }));
 
+      const startDragged = await page.evaluate(() => {
+        const track = document.querySelector('[data-page-bg-stop-track]');
+        const startHandle = document.querySelector('[data-page-bg-stop="start"]');
+        if (!track || !startHandle) return false;
+        const rect = track.getBoundingClientRect();
+        const fire = (type, x) => window.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, pointerId: 1 }));
+        startHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: rect.left, pointerId: 1 }));
+        fire('pointermove', rect.left + rect.width * 0.35);
+        fire('pointerup', rect.left + rect.width * 0.35);
+        return true;
+      });
+      await sleep(700);
+      const endDragged = await page.evaluate(() => {
+        const track = document.querySelector('[data-page-bg-stop-track]');
+        const endHandle = document.querySelector('[data-page-bg-stop="end"]');
+        if (!track || !endHandle) return false;
+        const rect = track.getBoundingClientRect();
+        const fire = (type, x) => window.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, pointerId: 1 }));
+        endHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: rect.right, pointerId: 1 }));
+        fire('pointermove', rect.left + rect.width * 0.7);
+        fire('pointerup', rect.left + rect.width * 0.7);
+        return true;
+      });
+      await sleep(1200);
+      const stopVars = await vars(page);
+      const stopCfg = JSON.parse(String((await configs(page)).page_bg_gradient || '{}'));
+      check('拖动两个色阶调整颜色占比', startDragged === true && endDragged === true && stopVars.startStop === '35%' && stopVars.endStop === '70%' && stopCfg.startStop === 35 && stopCfg.endStop === 70, JSON.stringify({ stopVars, stopCfg }));
+
       await page.evaluate(() => {
         const el = document.querySelector('[data-page-bg-tone-slider]');
         if (!el) return;
@@ -117,13 +148,13 @@ const vars = (page) => page.evaluate(() => ({
         direction: document.querySelector('[data-page-bg-direction]')?.value || '',
         tone: document.querySelector('[data-page-bg-tone-slider]')?.value || '',
       }));
-      check('刷新后颜色/方向/亮度都保留', reloadedUi.start === '#ff0000' && reloadedUi.end === '#0000ff' && reloadedUi.direction === 'horizontal' && reloadedUi.tone === '-100' && reloaded.angle === '90deg' && reloaded.alpha >= 0.7, JSON.stringify({ reloadedUi, reloaded }));
+      check('刷新后颜色/方向/色阶/亮度都保留', reloadedUi.start === '#ff0000' && reloadedUi.end === '#0000ff' && reloadedUi.direction === 'horizontal' && reloadedUi.tone === '-100' && reloaded.angle === '90deg' && reloaded.startStop === '35%' && reloaded.endStop === '70%' && reloaded.alpha >= 0.7, JSON.stringify({ reloadedUi, reloaded }));
 
       await page.evaluate(() => document.querySelector('[data-page-bg-tone-reset]')?.click());
       await sleep(1500);
       const reset = await configs(page);
       const resetVars = await vars(page);
-      check('恢复默认清回默认渐变与亮度', reset.page_bg_tone === '0' && resetVars.alpha === 0 && resetVars.angle === '180deg', JSON.stringify({ reset: { tone: reset.page_bg_tone, gradient: reset.page_bg_gradient }, resetVars }));
+      check('恢复默认清回默认渐变/色阶/亮度', reset.page_bg_tone === '0' && resetVars.alpha === 0 && resetVars.angle === '180deg' && resetVars.startStop === '0%' && resetVars.endStop === '100%', JSON.stringify({ reset: { tone: reset.page_bg_tone, gradient: reset.page_bg_gradient }, resetVars }));
     } finally {
       await api(page, '/api/configs', 'PUT', { key: 'page_bg_tone', value: String(original.page_bg_tone || 0) });
       await api(page, '/api/configs', 'PUT', { key: 'page_bg_gradient', value: String(original.page_bg_gradient || '') });
