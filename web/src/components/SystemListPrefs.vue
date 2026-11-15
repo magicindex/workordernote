@@ -1,5 +1,5 @@
 <template>
-  <section class="surface mt-4 rounded-2xl p-4 sm:p-6" data-system-placement-prefs>
+  <section class="surface rounded-2xl p-4 sm:p-6" data-system-placement-prefs>
     <div class="flex flex-wrap items-start justify-between gap-2">
       <div class="min-w-0">
         <h3 class="text-sm font-bold text-foreground">系统栏目放在哪里</h3>

@@ -35,6 +35,16 @@ const readPlacement = async (page) => JSON.parse(String(((await api(page, '/api/
       }));
       check('栏目页有「系统栏目放在哪里」设置', prefs.card && prefs.rows.length === 5, JSON.stringify(prefs));
       check('每个系统栏目都有位置选择', prefs.rows.every((r) => r.select && (r.value === 'system' || r.value === 'my')), JSON.stringify(prefs.rows));
+      const layout = await page.evaluate(() => {
+        const sys = document.querySelector('[data-system-placement-prefs]');
+        const grid = sys?.parentElement;
+        const group = [...(grid?.children || [])].find((el) => el !== sys && el.getBoundingClientRect().width > 300);
+        const sysW = Math.round(sys?.getBoundingClientRect().width || 0);
+        const groupW = Math.round(group?.getBoundingClientRect().width || 0);
+        const gridW = Math.round(grid?.getBoundingClientRect().width || 0);
+        return { sysW, groupW, gridW };
+      });
+      check('系统栏目卡片与其它设置卡同宽（统一两栏）', layout.sysW > 300 && Math.abs(layout.sysW - layout.groupW) <= 2 && layout.sysW < layout.gridW * 0.6, JSON.stringify(layout));
 
       await page.evaluate(() => {
         const sel = document.querySelector('[data-system-placement-select="cards"]');

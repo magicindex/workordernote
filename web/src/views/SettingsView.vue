@@ -63,8 +63,10 @@
             </div>
             <BackgroundTonePrefs v-show="activeTab === 'common'" />
           </template>
+          <template #extra-card>
+            <SystemListPrefs v-show="activeTab === 'modules'" />
+          </template>
         </ConfigGroupList>
-        <SystemListPrefs v-show="activeTab === 'modules'" />
       </div>
 
       <div v-show="activeTab === 'mobile'" class="mt-4" data-settings-panel="mobile">

@@ -130,6 +130,7 @@
       </div>
       <slot v-if="extraGroup === group.key" name="group-extra"></slot>
     </div>
+    <slot name="extra-card"></slot>
   </div>
 </template>
 
