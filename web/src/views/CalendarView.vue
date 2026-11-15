@@ -353,7 +353,7 @@
       </section>
 
       <!-- 选中日详情 -->
-      <aside class="surface flex min-h-0 flex-col rounded-2xl p-3 sm:p-4">
+      <aside class="surface cal-surface flex min-h-0 flex-col rounded-2xl p-3 sm:p-4">
         <div class="flex items-baseline justify-between gap-2">
           <div class="flex min-w-0 items-baseline gap-2">
             <h3 class="text-sm font-extrabold sm:text-base">{{ selectedTitle }}</h3>
@@ -1011,8 +1011,8 @@ function cellClass(c: LunarDayInfo) {
   if (selected && inActiveSpan) return 'border-brand-500/70 bg-brand-500/15 ring-2 ring-brand-500/40'
   if (inActiveSpan) return 'border-brand-500/45 bg-brand-500/8'
   if (selected) return 'border-brand-500/60 bg-brand-500/8 ring-2 ring-brand-500/25'
-  if (!c.in_month) return 'border-transparent bg-transparent opacity-45 hover:bg-muted/60'
-  return 'border-border/60 bg-surface/50 hover:border-brand-500/35 hover:bg-muted/60'
+  if (!c.in_month) return 'border-border/30 bg-surface/20 opacity-45 hover:bg-muted/60'
+  return 'border-border bg-surface hover:border-brand-500/35 hover:bg-muted/60'
 }
 
 // ---------- 时间段任务在日历上的「跨天」显示 ----------
@@ -1482,4 +1482,13 @@ onBeforeUnmount(() => {
 .cal-task { font-size: var(--cal-task-font, 10px); }
 .cal-task-lg { font-size: calc(var(--cal-task-font, 10px) + 4px); }
 .cal-cell { min-height: 0; }
+/* 日历主卡/日格与页面渐变背景拉开层次：日格用实色 surface，主卡再加一圈更明显的边界与投影。 */
+.cal-surface {
+  background-color: rgb(var(--color-surface));
+  border-color: rgb(var(--color-border));
+  box-shadow: 0 18px 50px -28px rgb(15 23 42 / 0.35), 0 2px 8px -4px rgb(15 23 42 / 0.12);
+}
+.dark .cal-surface {
+  box-shadow: 0 18px 50px -24px rgb(0 0 0 / 0.65);
+}
 </style>
