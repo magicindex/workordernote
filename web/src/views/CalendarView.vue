@@ -219,6 +219,11 @@
                 :class="dayNumberClass(cell)"
               >{{ cell.day }}</span>
               <span
+                v-if="extraCount(cell) > 0"
+                class="mt-0.5 min-w-0 flex-1 truncate text-center text-[9px] font-bold leading-none text-muted-foreground/80 sm:text-[10px]"
+                data-cal-total-count
+              >共{{ totalCount(cell) }}条</span>
+              <span
                 v-if="lunarLabel(cell)"
                 class="mt-0.5 truncate text-[9px] font-semibold leading-none sm:text-[10px]"
                 :class="lunarClass(cell)"
@@ -239,23 +244,20 @@
                  点一下就把整段（开始框 → 跨框 → 最后一天）高亮出来。底色与图标
                  参考信用卡/记事本那种「图标 + 浅色底」的样式，用清单色。 -->
             <div v-if="spansOf(cellKey(cell)).length" class="mt-1 flex flex-col gap-0.5" data-cal-spans>
-              <button
+              <div
                 v-for="span in visibleSpans(cell)"
                 :key="`span-${span.item.id}`"
-                type="button"
                 class="cal-span flex min-w-0 items-center gap-1 rounded-md px-1 py-[1px] text-left font-semibold leading-tight"
                 :class="spanClass(span)"
                 :style="{ background: chipStyle(span.item).background, color: chipStyle(span.item).color }"
                 :data-cal-span="`${span.item.id}:${span.role}`"
-                :title="`${span.item.title}（${spanRangeText(span.item)}）`"
-                @click.stop="onSpanClick(span.item)"
-                @dblclick.stop="onItemDblClick(span.item)"
+                :title="`${span.item.title}（${spanRangeText(span.item)}；只读，右侧详情卡编辑）`"
               >
                 <span class="cal-plan-mark shrink-0" :style="{ background: chipDot(span.item) }">
                   <ListIcon name="clock" :size="10" class="text-white" />
                 </span>
                 <span class="truncate">{{ span.item.title }}</span>
-              </button>
+              </div>
             </div>
 
             <!-- 桌面：显示提醒标题；手机：只显示圆点 -->
@@ -263,13 +265,11 @@
               <span
                 v-for="item in visibleItems(cell)"
                 :key="item.id"
-                class="cal-task flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1 py-[1px] font-semibold leading-tight transition hover:ring-1 hover:ring-brand-500/35"
+                class="cal-task flex min-w-0 items-center gap-1 rounded-md px-1 py-[1px] font-semibold leading-tight"
                 :class="{ 'opacity-55 line-through': item.completed && item.kind !== 'note' }"
                 :style="chipStyle(item)"
-                :title="`${item.title}（单击查看，双击编辑）`"
+                :title="`${item.title}（只读，右侧详情卡编辑）`"
                 :data-cal-task="item.id"
-                @click.stop="onItemClick(item)"
-                @dblclick.stop="onItemDblClick(item)"
               >
                 <!-- 记事用「记」字标记；其余一律用图标（不再用圆点）：
                      普通提醒用清单图标，信用卡的账单日/还款日/提前提醒用**银行卡图标**（缩到 11px），
@@ -294,49 +294,6 @@
                 />
                 <span class="truncate">{{ item.title }}</span>
               </span>
-              <!-- 超过上限的条目收进「+N 条」下拉里（用户要求：数量做限制，
-                   超了改成下拉弹窗）。点条目直接打开编辑，点空白处收回。 -->
-              <button
-                v-if="extraCount(cell) > 0"
-                type="button"
-                class="cal-task w-full px-1 text-left font-bold text-muted-foreground hover:text-brand-600"
-                data-cal-more
-                @click.stop="toggleOverflow(cell)"
-              >+{{ extraCount(cell) }} 条…</button>
-            </div>
-            <div
-              v-if="overflowFor === cellKey(cell)"
-              class="absolute inset-x-1 top-full z-30 mt-1 max-h-56 overflow-auto rounded-xl border border-border bg-surface p-1 shadow-xl"
-              data-cal-overflow
-              @click.stop
-            >
-              <button
-                v-for="span in overflowSpans(cell)"
-                :key="`ospan-${span.item.id}`"
-                type="button"
-                class="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[11px] font-semibold hover:bg-muted"
-                @click.stop="onSpanClick(span.item); overflowFor = ''"
-              >
-                <span class="cal-plan-mark shrink-0" :style="{ background: chipDot(span.item) }">
-                  <ListIcon name="clock" :size="10" class="text-white" />
-                </span>
-                <span class="truncate">{{ span.item.title }}</span>
-              </button>
-              <button
-                v-for="item in overflowItems(cell)"
-                :key="item.id"
-                type="button"
-                class="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-[11px] font-semibold hover:bg-muted"
-                @click.stop="onItemClick(item); overflowFor = ''"
-                @dblclick.stop="onItemDblClick(item); overflowFor = ''"
-              >
-                <i v-if="item.kind === 'note'" class="cal-note-mark shrink-0">记</i>
-                <span v-else-if="item.card_role" class="cal-card-mark shrink-0" :style="{ background: chipDot(item) }">
-                  <ListIcon name="card" :size="10" class="text-white" />
-                </span>
-                <ListIcon v-else :name="iconOf(item)" :size="11" class="shrink-0" :style="{ color: chipDot(item) }" />
-                <span class="truncate">{{ item.title }}</span>
-              </button>
             </div>
             <div class="mt-auto flex flex-wrap gap-0.5 pt-0.5 sm:hidden">
               <ListIcon
@@ -398,9 +355,8 @@
             </button>
             <button
               class="min-w-0 flex-1 text-left"
-              :title="`${item.title}（单击查看，双击编辑）`"
-              @click="onItemClick(item)"
-              @dblclick="onItemDblClick(item)"
+              :title="`${item.title}（点击编辑）`"
+              @click="openEditor(item)"
             >
               <div class="flex min-w-0 items-center gap-1.5">
                 <h4 class="cal-task-lg truncate font-bold" :class="{ 'line-through opacity-60': item.completed && item.kind !== 'note' }">{{ item.title }}</h4>
@@ -435,7 +391,7 @@
         <p v-else class="mt-4 flex-1 text-sm text-muted-foreground">这天没有安排。</p>
 
         <p class="mt-3 border-t border-border/60 pt-2.5 text-[11px] leading-4 text-muted-foreground">
-          双击日期格（周视图里双击空白时段）新建提醒；**单击任务看详情、双击任务就地编辑**；勾选即完成，重复提醒会自动排到下一次。
+          单击日期格只切换选中日期；格内条目只读，编辑统一走右侧列表；双击日期格（周视图里双击空白时段）在这天新建；勾选即完成，重复提醒会自动排到下一次。
         </p>
       </aside>
     </div>
@@ -884,21 +840,9 @@ const lists = ref<ReminderList[]>([])
 const navLists = computed(() => lists.value.filter((l) => l.template !== 'credit_card'))
 const channels = ref<ChannelStatus[]>([])
 const editorOpen = ref(false)
-// 超过 MAX_CHIPS 的条目收在下拉里：记住当前展开的是哪一天
-const overflowFor = ref('')
 function plainItems(c: LunarDayInfo) {
   const spanIds = new Set(spansOf(cellKey(c)).map((s) => s.item.id))
   return (byDate.value.get(cellKey(c)) || []).filter((i) => !spanIds.has(i.id))
-}
-function overflowItems(c: LunarDayInfo) {
-  return plainItems(c).slice(visibleItems(c).length)
-}
-function overflowSpans(c: LunarDayInfo) {
-  return spansOf(cellKey(c)).slice(visibleSpans(c).length)
-}
-function toggleOverflow(c: LunarDayInfo) {
-  const key = cellKey(c)
-  overflowFor.value = overflowFor.value === key ? '' : key
 }
 const editingId = ref<number | null>(null)
 // 新建模式的预填内容；非空即表示这次打开是「新建」而不是编辑。
@@ -991,6 +935,9 @@ function visibleItems(c: LunarDayInfo) {
 function extraCount(c: LunarDayInfo) {
   const total = spansOf(cellKey(c)).length + plainItems(c).length
   return Math.max(0, total - visibleSpans(c).length - visibleItems(c).length)
+}
+function totalCount(c: LunarDayInfo) {
+  return spansOf(cellKey(c)).length + plainItems(c).length
 }
 
 // 农历标签优先显示节日/节气，其次才是农历日名——节日节气更值得一眼看到。
