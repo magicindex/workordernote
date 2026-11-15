@@ -39,7 +39,8 @@ async function setFlag(page, key, on) {
   if (current !== on) {
     await page.$eval(sel, (el) => el.scrollIntoView({ block: 'center' }));
     await sleep(250);
-    await page.click(sel);
+    // 折叠栏里的开关可能被顶栏/侧栏盖住，直接触发 DOM click，避免坐标点击报 not clickable
+    await page.$eval(sel, (el) => el.click());
     await sleep(600);
   }
   const after = await page.$eval(sel, (el) => el.getAttribute('aria-checked') === 'true');

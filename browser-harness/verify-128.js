@@ -155,10 +155,9 @@ const readSheet = (page) => page.evaluate(() => {
           ? !!sheet?.rows?.some((r) => r.key === 'timetable' && r.text.startsWith('课程表'))
           : !!sheet && !sheet.rows.some((r) => r.key === 'timetable'),
         JSON.stringify({ timetableEnabled, rows: sheet?.rows?.map((r) => `${r.key}=${r.text}`) }));
-      const builtinKeys = timetableEnabled ? ['timetable'] : [];
       check('内置频道（课程表）排在弹层最前面',
-        !!sheet && builtinKeys.every((k, i) => sheet.rows[i]?.key === k),
-        JSON.stringify({ expected: builtinKeys, rows: sheet?.rows?.map((r) => r.key) }));
+        !timetableEnabled || sheet?.rows?.[0]?.key === 'timetable',
+        JSON.stringify({ timetableEnabled, rows: sheet?.rows?.map((r) => r.key) }));
       check('弹层里不再有「提醒@他」行（底部快捷托盘已有入口，开关开着也不列）',
         !!sheet && !sheet.rows.some((r) => r.key === 'nudge'),
         JSON.stringify(sheet?.rows?.map((r) => `${r.key}=${r.text}`)));
@@ -199,8 +198,9 @@ const readSheet = (page) => page.evaluate(() => {
       await page.click('[data-tab-lists]');
       await sleep(700);
       const sheetAll = await readSheet(page);
-      check('除内置频道外，弹层里的行都是具体清单，垃圾箱始终最后一个',
-        !!sheetAll && sheetAll.rows.filter((r) => r.key !== 'timetable' && r.key !== 'trash').every((r) => String(r.key).startsWith('list:'))
+      const builtinRow = (r) => r.key === 'timetable' || r.key === 'trash' || String(r.key).startsWith('system-');
+      check('除内置频道/系统栏目外，弹层里的行都是具体清单，垃圾箱始终最后一个',
+        !!sheetAll && sheetAll.rows.filter((r) => !builtinRow(r)).every((r) => String(r.key).startsWith('list:'))
           && sheetAll.rows[sheetAll.rows.length - 1]?.key === 'trash',
         JSON.stringify(sheetAll?.rows?.map((r) => r.key)));
       if (timetableEnabled) {

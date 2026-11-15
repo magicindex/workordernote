@@ -81,6 +81,12 @@ function parseCsv(text) {
 (async () => {
   await withTab(async (page) => {
     await login(page, BASE);
+    // 编辑器弹出方向：默认右侧；这个用例会切到左侧验证，先清掉之前用例留下的偏好
+    await page.evaluate(() => {
+      for (const k of Object.keys(localStorage)) {
+        if (k.startsWith('reminders.editor_side.')) localStorage.removeItem(k)
+      }
+    });
     const created = [];
     const iso = (d) => {
       const p = (n) => String(n).padStart(2, '0');
@@ -213,7 +219,7 @@ function parseCsv(text) {
       const row = [...document.querySelectorAll('.reminder-row')].find((r) => /记事/.test(r.textContent));
       const btn = row?.querySelector('.complete-button');
       const svg = btn?.querySelector('svg');
-      const h3 = row?.querySelector('h3');
+      const title = row?.querySelector('[data-note-title-markdown]');
       if (!btn) return null;
       return {
         noteClass: btn.className.includes('complete-button-note'),
@@ -222,7 +228,7 @@ function parseCsv(text) {
         disabled: btn.disabled,
         icon: !!svg,
         iconColor: svg ? getComputedStyle(svg).color : '',
-        titleColor: h3 ? getComputedStyle(h3).color : '',
+        titleColor: title ? getComputedStyle(title).color : '',
       };
     });
     check('记事行前面画的是图标，不再是那个勾选框（无边框、无底色）',
@@ -232,14 +238,21 @@ function parseCsv(text) {
       !!noteSlot && !!noteSlot.iconColor && noteSlot.iconColor === noteSlot.titleColor,
       JSON.stringify({ icon: noteSlot?.iconColor, title: noteSlot?.titleColor }));
 
-    // ---------- 4e. 点开一条记事：编辑器从**左侧**划出，备注吃掉下方剩余高度 ----------
-    // 用户 2026-10-18：「点击条目，左侧弹出编辑窗口，不改变当前格局，把下方剩余空间划给备注」。
+    // ---------- 4d2. 编辑器默认右侧，可切换到左侧 ----------
     await page.evaluate(() => {
       const btn = document.querySelector('.reminder-row button.min-w-0.flex-1.text-left');
       if (btn) btn.click();
     });
     await waitFor(page, () => !!document.querySelector('.editor-panel'), { timeout: 10000 });
-    await sleep(500);
+    await sleep(400);
+    const defaultSide = await page.evaluate(() => document.querySelector('.editor-panel')?.getAttribute('data-editor-side'));
+    check('编辑器默认从右侧划出', defaultSide === 'right', String(defaultSide));
+    await page.evaluate(() => document.querySelector('[data-editor-side-toggle]')?.click());
+    await sleep(400);
+    const switchedSide = await page.evaluate(() => document.querySelector('.editor-panel')?.getAttribute('data-editor-side'));
+    check('点方向按钮可切换为左侧划出', switchedSide === 'left', String(switchedSide));
+
+    // ---------- 4e. 已在左侧，量一下抽屉几何；备注吃掉下方剩余高度 ----------
     const noteDrawer = await page.evaluate(() => {
       const panel = document.querySelector('.editor-panel');
       if (!panel) return null;
@@ -259,6 +272,11 @@ function parseCsv(text) {
     check('编辑器跟随窗口全高，备注框吃掉下方剩余空间',
       !!noteDrawer && noteDrawer.height >= noteDrawer.viewportH - 2 && noteDrawer.notesHeight >= 180,
       noteDrawer ? JSON.stringify(noteDrawer) : '没打开');
+    await page.evaluate(() => {
+      // 还原默认右侧，避免影响后续用例
+      document.querySelector('[data-editor-side-toggle]')?.click();
+    });
+    await sleep(300);
     await page.evaluate(() => {
       const panel = document.querySelector('.editor-panel');
       const cancel = panel && [...panel.querySelectorAll('button')].find((b) => (b.textContent || '').trim() === '取消');

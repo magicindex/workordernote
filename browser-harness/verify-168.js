@@ -49,22 +49,25 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
 
       await page.goto(BASE + '/admin/settings', { waitUntil: 'domcontentloaded' });
       await sleep(1800);
+      // 2026-11-14 起 AI 入口样式搬到「更多 → AI 提示词」。
+      await page.evaluate(() => document.querySelector('[data-settings-tab="more"]')?.click());
+      await sleep(900);
       const prefRows = await page.evaluate(() => {
         const week = document.querySelector('[data-config-key="calendar_week_start"]');
-        const style = document.querySelector('[data-config-key="assistant_entry_style"]');
+        const styleSelect = document.querySelector('[data-ai-entry-style-select]');
         const opts = (row) => [...(row?.querySelectorAll('option') || [])].map((o) => (o.textContent || '').trim());
         return {
           week: !!week,
           weekOptions: opts(week),
-          style: !!style,
-          styleOptions: opts(style),
+          style: !!styleSelect,
+          styleOptions: opts(styleSelect),
         };
       });
       check('偏好设置里有「周起始日」且选项中文',
         prefRows.week && prefRows.weekOptions.includes('周一') && prefRows.weekOptions.includes('周日'),
         JSON.stringify(prefRows));
       check('偏好设置里有「AI 入口样式」且选项为顶栏图标 / 悬浮球',
-        prefRows.style && prefRows.styleOptions.includes('顶栏图标') && prefRows.styleOptions.includes('悬浮球'),
+        prefRows.style && prefRows.styleOptions.some((t) => t.includes('顶栏图标')) && prefRows.styleOptions.some((t) => t.includes('悬浮球')),
         JSON.stringify(prefRows));
 
       // ---------- 2. 周起始日：周日 → 周视图第一列变周日 ----------

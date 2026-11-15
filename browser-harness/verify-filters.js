@@ -40,7 +40,7 @@ withTab(async (page) => {
     if (!wrap) return null;
     return [...wrap.querySelectorAll('button.quick-chip')].map((b) => b.textContent.trim());
   });
-  check('日历里有清单筛选（含「全部」）', !!chips && chips[0] === '全部', JSON.stringify(chips));
+  check('日历里有清单筛选（含「全部」）', !!chips && /^全部/.test(chips[0]), JSON.stringify(chips));
 
   const beforeCount = await page.evaluate(() => {
     const el = [...document.querySelectorAll('span')].find((s) => s.textContent.includes('未完成'));

@@ -467,16 +467,16 @@ const madeIds = [];
       await sleep(1200);
       const periodBadges = await page.evaluate(() => [...document.querySelectorAll('[data-card-item]')].map((el) => ({
         id: Number(el.getAttribute('data-card-item')),
-        badge: el.querySelector('[data-card-period-index]')?.textContent.trim() || '',
+        badge: el.querySelector('[data-card-installment-badge]')?.textContent.replace(/\s+/g, ' ').trim() || '',
       })));
       const cards = (await api(page, '/api/reminder/cards')).body?.data || [];
-      const expectedById = new Map(cards.map((c) => [c.id, c.current?.period && c.created_at
-        ? (Number(c.current.period.slice(0, 4)) - Number(c.created_at.slice(0, 4))) * 12
-          + (Number(c.current.period.slice(5, 7)) - Number(c.created_at.slice(5, 7))) + 1
-        : 0]));
+      // 2026-11-15 口径：只有分期过的卡才显示「分期 第 x/N 期」，没分期不显示。
+      const expected = cards.filter((c) => Number(c.installment_periods || 0) > 0
+        && Number(c.installment_paid || 0) < Number(c.installment_periods || 0));
+      const expectedById = new Map(expected.map((c) => [c.id, `分期 第 ${Number(c.installment_paid || 0) + 1}/${Number(c.installment_periods)} 期`]));
       const shown = periodBadges.filter((x) => x.badge);
-      check('信用卡卡面显示「第 x 期」（按开卡月份算）',
-        shown.length > 0 && shown.every((x) => x.badge === `第 ${expectedById.get(x.id)} 期`),
+      check('信用卡只有分期卡显示「第 x 期」，未分期不显示',
+        shown.length === expected.length && shown.every((x) => x.badge === expectedById.get(x.id)),
         JSON.stringify({ shown: shown.slice(0, 3), expected: [...expectedById].slice(0, 3) }));
     } else {
       check('信用卡栏目存在（跳过期数断言）', false, '没有信用卡栏目');
