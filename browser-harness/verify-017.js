@@ -171,6 +171,9 @@ async function setTheme(page, mode) {
             return true;
           });
           if (opened) {
+            // 2026-11-15 起列表单击先弹只读查看页，再点「编辑」进编辑器。
+            await waitFor(page, () => !!document.querySelector('[data-reminder-view]'), { timeout: 8000 });
+            await page.evaluate(() => document.querySelector('[data-view-edit]')?.click());
             await waitFor(page, () => !!document.querySelector('.editor-panel'), { timeout: 8000 });
             await sleep(400);
           }
@@ -265,10 +268,11 @@ async function setTheme(page, mode) {
           reference: info(card.querySelector('.compact-input')),
         };
       });
-      const quickDiff = sameBox(quick && quick.notify, quick && quick.reference);
-      check('首页快速新建里「过期提醒频率」与紧凑字段等高同字号', quickDiff === '',
-        quickDiff || JSON.stringify(quick));
-      console.log(`    快速新建：频率=${JSON.stringify(quick && quick.notify)} 参照=${JSON.stringify(quick && quick.reference)}`);
+      // 2026-11-12 起「过期提醒频率」已从快速新建的「更多」撤掉，只保留编辑面板里的字段。
+      check('首页快速新建里的「过期提醒频率」已按 2026-11-12 口径撤掉',
+        !!quick && quick.notify === null && quick.reference !== null,
+        JSON.stringify(quick));
+      console.log(`    快速新建：频率已撤掉，参照=${JSON.stringify(quick && quick.reference)}`);
 
       await page.screenshot({ path: path.join(SHOTS, '017-fields.png') });
     } finally {

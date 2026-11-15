@@ -93,6 +93,8 @@ async function waitSel(page, sel, timeout = 20000) {
     await seedChecked(`自检下月-${STAMP}`, { title: `自检下月-${STAMP}`, due_at: iso(nextMonthDay), repeat_rule: 'none', channels: ['inapp'] });
     // 上个月完成的**循环**任务（计划页「全部」不该出现）
     const lastDone = await seedChecked(`自检上月完成-${STAMP}`, { title: `自检上月完成-${STAMP}`, due_at: iso(lastMonthDay), repeat_rule: 'daily', channels: ['inapp'] });
+    // 上个月还有一条未完成任务：全部页默认只看未完成，月份导航需要它来验证「能看到上月条目」。
+    const lastOpen = await seedChecked(`自检上月-${STAMP}`, { title: `自检上月-${STAMP}`, due_at: iso(lastMonthDay), repeat_rule: 'none', channels: ['inapp'] });
     // 本月完成的循环任务
     const thisDone = await seedChecked(`自检本月完成-${STAMP}`, { title: `自检本月完成-${STAMP}`, due_at: iso(new Date(now.getFullYear(), now.getMonth(), 2, 9, 0, 0, 0)), repeat_rule: 'daily', channels: ['inapp'] });
     for (const id of [lastDone, thisDone]) {
@@ -179,7 +181,7 @@ async function waitSel(page, sel, timeout = 20000) {
       rows: [...document.querySelectorAll('.reminder-row')].map((r) => r.textContent.replace(/\s+/g, ' ').trim().slice(0, 40)),
     }));
     check('能翻到有数据的最早月份（上个月）并显示上月条目',
-      prevView.rows.some((t) => t.includes(`自检上月完成-${STAMP}`)), JSON.stringify(prevView.rows).slice(0, 120));
+      prevView.rows.some((t) => t.includes(`自检上月-${STAMP}`) && !t.includes('完成')), JSON.stringify(prevView.rows).slice(0, 120));
     check('「上个月」的置灰状态与「有数据的最早一个月」一致',
       firstMonthKey ? prevView.prevDisabled === (prevKey === firstMonthKey) : prevView.prevDisabled === true,
       JSON.stringify({ prevKey, firstMonthKey, disabled: prevView.prevDisabled }));

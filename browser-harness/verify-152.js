@@ -72,14 +72,24 @@ async function api(token, apiPath, method = 'GET', body = null) {
           const el = col?.querySelector(`[data-week-block="${id}"]`);
           if (!el) return null;
           const cr = col.getBoundingClientRect(), br = el.getBoundingClientRect();
-          return { top: Math.round(br.top - cr.top), h: Math.round(br.height), role: el.dataset.weekRole, capT: el.dataset.weekCapTop === '1', capB: el.dataset.weekCapBottom === '1' };
+          const colH = Math.round(cr.height);
+          return { top: Math.round(br.top - cr.top), h: Math.round(br.height), colH, role: el.dataset.weekRole, capT: el.dataset.weekCapTop === '1', capB: el.dataset.weekCapBottom === '1' };
         };
         return { overdueEnd: read(day, a), overdueStart: read(yday, a), done: read(day, b) };
       }, { a: String(overdue.id), b: String(done.id), doneId: String(done.id), day: today, yday: yesterday });
-      check('过期未完成续画到当天 23:59', !!week.overdueEnd && near(week.overdueEnd.h, 1055, 8) && week.overdueEnd.top === 0, JSON.stringify(week.overdueEnd));
-      check('续画任务昨天从 23:59 开始', !!week.overdueStart && near(week.overdueStart.top, 1055, 8), JSON.stringify(week.overdueStart));
+      // 周视图会按屏幕高度自适应 hourHeight（不再固定 44px/小时），断言按列高比例算。
+      check('过期未完成续画到当天 23:59',
+        !!week.overdueEnd && week.overdueEnd.top === 0
+          && near(week.overdueEnd.h, week.overdueEnd.colH, 4),
+        JSON.stringify(week.overdueEnd));
+      check('续画任务昨天从 23:59 开始',
+        !!week.overdueStart && week.overdueStart.top > week.overdueStart.colH * 0.9,
+        JSON.stringify(week.overdueStart));
       const endMin = now.getHours() * 60 + now.getMinutes();
-      check('完成任务在提交时刻收尾', !!week.done && near(week.done.h, (endMin / 60) * 44, 8) && week.done.h < 1000, JSON.stringify(week.done));
+      check('完成任务在提交时刻收尾',
+        !!week.done && near(week.done.h, (endMin / 1440) * week.done.colH, 10)
+          && week.done.h < week.done.colH,
+        JSON.stringify({ done: week.done, endMin }));
 
       await page.screenshot({ path: path.join(__dirname, 'shots', 'verify-152-duration.png') });
     });

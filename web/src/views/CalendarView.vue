@@ -265,11 +265,13 @@
               <span
                 v-for="item in visibleItems(cell)"
                 :key="item.id"
-                class="cal-task flex min-w-0 items-center gap-1 rounded-md px-1 py-[1px] font-semibold leading-tight"
+                class="cal-task flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1 py-[1px] font-semibold leading-tight"
                 :class="{ 'opacity-55 line-through': item.completed && item.kind !== 'note' }"
                 :style="chipStyle(item)"
-                :title="`${item.title}（只读，右侧详情卡编辑）`"
+                :title="`${item.title}（单击查看，双击编辑）`"
                 :data-cal-task="item.id"
+                @click.stop="onItemClick(item)"
+                @dblclick.stop="onItemDblClick(item)"
               >
                 <!-- 记事用「记」字标记；其余一律用图标（不再用圆点）：
                      普通提醒用清单图标，信用卡的账单日/还款日/提前提醒用**银行卡图标**（缩到 11px），
@@ -304,6 +306,30 @@
                 :class="{ 'opacity-45': item.completed }"
                 :style="{ color: dot(item.list_color) }"
               />
+            </div>
+            <!-- 超过月历上限的条目：显示「+N 条…」，点开在本格内列出被折叠的条目。 -->
+            <button
+              v-if="extraCount(cell) > 0"
+              type="button"
+              class="relative z-10 mt-0.5 max-w-full truncate rounded px-1 text-left text-[9px] font-bold leading-4 text-muted-foreground/85 hover:bg-muted/60 hover:text-foreground sm:text-[10px]"
+              data-cal-more
+              @click.stop="openMoreKey = openMoreKey === cellKey(cell) ? null : cellKey(cell)"
+            >+{{ extraCount(cell) }} 条…</button>
+            <div
+              v-if="openMoreKey === cellKey(cell)"
+              class="absolute inset-x-0.5 bottom-0.5 z-30 max-h-24 overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-xl"
+              data-cal-overflow
+            >
+              <button
+                v-for="item in hiddenItems(cell)"
+                :key="item.id"
+                type="button"
+                class="flex w-full items-center gap-1 rounded px-1 py-1 text-left text-[10px] font-semibold hover:bg-muted"
+                @click.stop="viewItem = item"
+              >
+                <span class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ background: chipDot(item) }"></span>
+                <span class="truncate">{{ item.title }}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -355,8 +381,9 @@
             </button>
             <button
               class="min-w-0 flex-1 text-left"
-              :title="`${item.title}（点击编辑）`"
-              @click="openEditor(item)"
+              :title="`${item.title}（单击查看，双击编辑）`"
+              @click.stop="onItemClick(item)"
+              @dblclick.stop="onItemDblClick(item)"
             >
               <div class="flex min-w-0 items-center gap-1.5">
                 <h4 class="cal-task-lg truncate font-bold" :class="{ 'line-through opacity-60': item.completed && item.kind !== 'note' }">{{ item.title }}</h4>
@@ -930,11 +957,21 @@ function visibleSpans(c: LunarDayInfo) {
 }
 function visibleItems(c: LunarDayInfo) {
   const used = visibleSpans(c).length
-  return plainItems(c).slice(0, Math.max(0, monthChipLimit.value - used))
+  const slots = Math.max(0, monthChipLimit.value - used)
+  // 记事是记录不是待办；同一天任务多时也要尽量保住「记」标记，否则月历看不出记过什么。
+  // 记事优先占一个槽位，剩余槽位仍按原顺序给任务。
+  const all = plainItems(c)
+  const notes = all.filter((i) => i.kind === 'note')
+  const others = all.filter((i) => i.kind !== 'note')
+  return [...notes, ...others].slice(0, slots)
 }
 function extraCount(c: LunarDayInfo) {
   const total = spansOf(cellKey(c)).length + plainItems(c).length
   return Math.max(0, total - visibleSpans(c).length - visibleItems(c).length)
+}
+function hiddenItems(c: LunarDayInfo) {
+  const visible = new Set(visibleItems(c).map((i) => i.id))
+  return plainItems(c).filter((i) => !visible.has(i.id))
 }
 function totalCount(c: LunarDayInfo) {
   return spansOf(cellKey(c)).length + plainItems(c).length
@@ -1224,6 +1261,7 @@ function openEditor(item: CalendarItem) {
 // 浏览器的事件顺序是 click → click → dblclick，所以单击要先等一小会儿；
 // 期间来了 dblclick 就把定时器撤掉，只进编辑器，避免「先弹查看页、再弹编辑器」。
 const viewItem = ref<CalendarItem | null>(null)
+const openMoreKey = ref<string | null>(null)
 let itemClickTimer: ReturnType<typeof setTimeout> | undefined
 const CLICK_DELAY = 250
 function onItemClick(item: CalendarItem) {

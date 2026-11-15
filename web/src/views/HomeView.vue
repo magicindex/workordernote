@@ -133,6 +133,7 @@
               </button>
               <LunarDatePicker v-if="planStartOpen" v-model="planStartPicked" with-time :anchor-el="planStartAnchor" @commit="commitPlanStart" />
             </label>
+            <button v-if="quick.start_at" class="quick-chip !h-8" title="清掉开始时间，验证必须选择开始时间" data-plan-clear-start @click="clearPlanStart">清除开始</button>
             <!-- 任务周期（用户要求）：不再让用户手挑结束时间，而是选一个周期 ——
                  N 天 / 1 周 / 1 月 / 年终 / 1 年，或「自定义」自己挑结束时间。
                  结束时间由开始时间 + 周期算出来，落在**最后一天的 23:59**（整天都算在任务里）。 -->
@@ -646,7 +647,11 @@
                 <ListIcon v-if="item.kind === 'note'" :name="iconOfItem(item)" :size="19" :data-course-note-icon="isCourseNote(item) ? 'timetable' : undefined" />
                 <svg v-else-if="item.completed_at" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </button>
-              <button class="min-w-0 flex-1 text-left" @click="editItem(item)">
+              <button
+                class="min-w-0 flex-1 text-left"
+                @click="onItemClick(item, $event)"
+                @dblclick.stop="onItemDoubleClick(item)"
+              >
                 <div class="flex items-center gap-2">
                   <!-- 任务标题用所属清单的颜色：侧栏圆点、这里的标题、日历色块三处同色。
                        颜色在侧栏「编辑清单」里改，改完会广播数据变更，本页与日历立即刷新。
@@ -794,6 +799,9 @@
         <button class="btn-ghost !h-9 !px-3 text-xs sm:text-sm" :disabled="!canNextMonth" data-month-next @click="shiftMonth(1)">下个月 ›</button>
       </div>
 
+      <!-- 单击任务先看只读详情，双击直接编辑（与日历同一套查看页） -->
+      <ReminderViewDialog :item="viewItem" @close="viewItem = null" @edit="editFromView" />
+
       <!-- 提醒编辑器：与日历视图共用同一个组件，改一处两边同时生效 -->
       <ReminderEditor
         v-model="editorOpen"
@@ -869,11 +877,12 @@ import {
 } from '../utils/overdue'
 import { getAllConfigs } from '../api/config'
 import ReminderEditor from '../components/ReminderEditor.vue'
+import ReminderViewDialog from '../components/ReminderViewDialog.vue'
 import {
   completeReminder, createReminder, deleteReminder, exportReminders, getChannelStatuses, getCompletedHistory, getLists,
   convertLunarDate, getReminder, getReminderMonths, getReminders, listIdsParam, retractCompletion, restoreReminder, snoozeReminder, updateReminder,
   type ChannelStatus, type CompletedItem, type CompletedRangeOption, type ReminderChannel,
-  type ReminderItem, type ReminderKind, type ReminderList, type SaveReminderInput
+  type ReminderItem, type ReminderKind, type ReminderList, type SaveReminderInput, type CalendarItem
 } from '../api/reminder'
 
 const authStore = useAuthStore()
@@ -1370,6 +1379,10 @@ function commitPlanStart() {
   if (quick.end_at) applyPlanPeriod()
 }
 function commitPlanEnd() { planEndOpen.value = false }
+function clearPlanStart() {
+  quick.start_at = null
+  quick.end_at = null
+}
 function clearPlanEnd() { quick.end_at = null; planPeriod.value = 'none' }
 
 // 「任务周期」：开始时间 + 周期 → 结束时间（最后一天的 23:59）。
@@ -1953,6 +1966,55 @@ watch(() => quick.repeat_rule, rule => {
   if (rule !== 'monthly' && rule !== 'yearly') quick.calendar = 'solar'
 })
 
+// 单击任务先弹只读查看页；双击直接进编辑器。单击延迟用于区分双击。
+const viewItem = ref<CalendarItem | null>(null)
+let itemClickTimer: ReturnType<typeof setTimeout> | null = null
+function toViewItem(item: ReminderItem): CalendarItem {
+  return {
+    id: item.id,
+    title: item.title,
+    color: item.color,
+    list_id: item.list_id,
+    list_name: item.list_name,
+    list_color: item.list_color,
+    list_icon: iconOfItem(item),
+    due_at: item.due_at || '',
+    due_date: String(item.due_at || '').slice(0, 10),
+    start_at: item.start_at,
+    end_at: item.end_at,
+    all_day: item.all_day,
+    completed: !!item.completed_at,
+    kind: item.kind,
+    priority: item.priority,
+    repeat_rule: item.repeat_rule,
+    notes: item.notes,
+    completed_at: item.completed_at,
+  }
+}
+function onItemClick(item: ReminderItem, event: MouseEvent) {
+  // 双击的第二次 click 不排查看页，交给 dblclick 直接开编辑器。
+  if (event.detail > 1) return
+  if (itemClickTimer) clearTimeout(itemClickTimer)
+  itemClickTimer = setTimeout(() => {
+    itemClickTimer = null
+    viewItem.value = toViewItem(item)
+  }, 220)
+}
+function onItemDoubleClick(item: ReminderItem) {
+  if (itemClickTimer) {
+    clearTimeout(itemClickTimer)
+    itemClickTimer = null
+  }
+  viewItem.value = null
+  editItem(item)
+}
+function editFromView() {
+  if (!viewItem.value) return
+  const id = viewItem.value.id
+  viewItem.value = null
+  editingId.value = id
+  editorOpen.value = true
+}
 function editItem(item: ReminderItem) {
   editingId.value = item.id
   editorOpen.value = true

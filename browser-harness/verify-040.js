@@ -158,6 +158,8 @@ function csvLines(body) {
     }
 
     // ---- 1. 日历纳入记事 ----
+    // 清掉上一条用例可能留下的日历清单筛选，避免记事本被筛掉后误判「没进日历」
+    await page.evaluate(() => { try { localStorage.removeItem('ui_calendar_lists') } catch {} });
     await page.goto(BASE.replace(/\/$/, '') + '/admin/calendar', { waitUntil: 'domcontentloaded', timeout: 30000 });
     const calendarReady = await waitFor(page, () => !!document.querySelector('.cal-cell'), { timeout: 20000 });
     check('日历视图打开', calendarReady);

@@ -149,6 +149,9 @@ async function waitSel(page, sel, timeout = 15000) {
 
     // 通过 UI 新建：计划任务必须有开始时间，没选就点「添加」要被拦下并提示
     const needStart = await page.evaluate(async (title) => {
+      // 计划页默认会带当前开始时间；先点「清除开始」再造无开始时间的提交。
+      document.querySelector('[data-plan-clear-start]')?.click();
+      await new Promise((r) => setTimeout(r, 250));
       const input = document.querySelector('.quick-card input');
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
       setter.call(input, title);

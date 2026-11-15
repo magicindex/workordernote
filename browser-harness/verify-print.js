@@ -241,7 +241,8 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
       // 再去掉标题/表头约 60px。行高由「备注」列内容决定，所以阈值必须跟着实测走。
       const pageContentPx = 794 - 2 * 45 - 60;
       const fitPerPage = all.avgRowPx > 0 ? Math.floor(pageContentPx / all.avgRowPx) : 12;
-      const needPerPage = Math.max(3, Math.min(12, fitPerPage - 1));
+      // 行数本身不足 12 条时，不能要求每页排 12 行（数据少时会假红）。
+      const needPerPage = Math.min(printedRows, Math.max(3, Math.min(12, fitPerPage - 1)));
       check('PDF 页数跟行数匹配（不出现大半页空白）',
         pages >= 1 && perPage >= needPerPage,
         `${pages} 页 / ${printedRows} 行（每页 ${perPage.toFixed(1)} 行；按实测行高 ${Math.round(all.avgRowPx)}px 应 ≥ ${needPerPage}）`);

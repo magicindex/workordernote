@@ -160,6 +160,13 @@ const clickMenuItem = async (page, label) => {
         due_at: due.toISOString(), repeat_rule: 'none', channels: ['inapp'],
       });
       reminderId = made.body?.data?.id ?? null;
+      // 只筛自建清单，避免生产库当天任务太多把自检任务挤出月历格子的显示上限
+      await page.evaluate((id) => {
+        try {
+          localStorage.setItem('ui_calendar_lists', JSON.stringify([id]));
+          localStorage.removeItem('ui_list_status');
+        } catch {}
+      }, listId);
       await page.goto(ROOT + '/admin/calendar', { waitUntil: 'domcontentloaded' });
       await waitSel(page, '.cal-task', 20000);
       await sleep(1200);
@@ -179,12 +186,16 @@ const clickMenuItem = async (page, label) => {
       check('日历接口带回 list_icon', ours?.list_icon === 'fire', String(ours?.list_icon));
       await page.screenshot({ path: path.join(SHOTS, 'list-icons.png') });
 
+      // 完成记录页的筛选只列出「有完成记录」的清单；先把这条自检任务完成，才能验筛选图标。
+      if (reminderId) await api(page, `/api/reminder/items/${reminderId}/complete`, 'POST');
       // ---------- 5. 完成记录页的清单筛选 ----------
       await page.goto(ROOT + '/admin/completed', { waitUntil: 'domcontentloaded' });
       await sleep(1500);
+      await page.evaluate(() => document.querySelector('[data-list-filter-more]')?.click());
+      await sleep(300);
       const filterIcons = await page.evaluate(() => {
-        const chips = [...document.querySelectorAll('button')].filter((b) => (b.textContent || '').includes('自检图标清单'));
-        const chip = chips[0];
+        const all = [...document.querySelectorAll('button')];
+        const chip = all.find((b) => (b.textContent || '').includes('自检图标清单'));
         return chip ? { hasIcon: !!chip.querySelector('svg'), hasDot: !!chip.querySelector('i.rounded-full') } : null;
       });
       check('清单筛选里也是图标', filterIcons?.hasIcon === true && filterIcons?.hasDot === false,
@@ -192,6 +203,7 @@ const clickMenuItem = async (page, label) => {
     } finally {
       // ---------- 清理 ----------
       try {
+        await page.evaluate(() => { try { localStorage.removeItem('ui_calendar_lists') } catch {} });
         if (reminderId) await api(page, `/api/reminder/items/${reminderId}`, 'DELETE');
         if (listId) {
           const items = (await api(page, '/api/reminder/items?view=all&status=all')).body?.data || [];
