@@ -10,7 +10,7 @@ import { DEFAULT_SUN_CITY, SUN_CITIES, isNightAt } from '../utils/sun'
 // 'sun' = 日出日落：按所选城市的日出/日落时刻自动切浅色/深色。
 export type ThemeMode = 'light' | 'dark' | 'system' | 'sun'
 export type ThemeBrand = 'default'  // extend this union when adding brand-* palettes
-export type PageBgDirection = 'vertical' | 'horizontal'
+export type PageBgDirection = 'vertical' | 'horizontal' | 'diagonal'
 export interface PageBgGradient {
   start: string
   end: string
@@ -38,7 +38,7 @@ export function parsePageBgGradient(raw: string): PageBgGradient | null {
     return {
       start: start.toLowerCase(),
       end: end.toLowerCase(),
-      direction: data?.direction === 'horizontal' ? 'horizontal' : 'vertical',
+      direction: data?.direction === 'horizontal' ? 'horizontal' : data?.direction === 'diagonal' ? 'diagonal' : 'vertical',
       startStop: validStops ? Math.round(startStop) : 0,
       endStop: validStops ? Math.round(endStop) : 100,
     }
@@ -112,7 +112,7 @@ function applyPageBgGradient(value: PageBgGradient | null) {
   root.style.setProperty('--page-bg-end', hexToRgbTriplet(value.end))
   root.style.setProperty('--page-bg-start-stop', `${value.startStop}%`)
   root.style.setProperty('--page-bg-end-stop', `${value.endStop}%`)
-  root.style.setProperty('--page-bg-angle', value.direction === 'horizontal' ? '90deg' : '180deg')
+  root.style.setProperty('--page-bg-angle', value.direction === 'horizontal' ? '90deg' : value.direction === 'diagonal' ? '135deg' : '180deg')
 }
 
 function readStoredPageBgGradient(): PageBgGradient | null {

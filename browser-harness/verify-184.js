@@ -95,6 +95,24 @@ const vars = (page) => page.evaluate(() => ({
       const savedDirection = JSON.parse(String((await configs(page)).page_bg_gradient || '{}'));
       check('方向可选左右并保存', horizontal.angle === '90deg' && savedDirection.direction === 'horizontal', JSON.stringify({ horizontal, savedDirection }));
 
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-page-bg-direction]');
+        if (!el) return;
+        el.value = 'diagonal';
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await sleep(900);
+      const diagonal = await vars(page);
+      const savedDiagonal = JSON.parse(String((await configs(page)).page_bg_gradient || '{}'));
+      check('方向可选斜角并保存', diagonal.angle === '135deg' && savedDiagonal.direction === 'diagonal', JSON.stringify({ diagonal, savedDiagonal }));
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-page-bg-direction]');
+        if (!el) return;
+        el.value = 'horizontal';
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await sleep(900);
+
       const startDragged = await page.evaluate(() => {
         const track = document.querySelector('[data-page-bg-stop-track]');
         const startHandle = document.querySelector('[data-page-bg-stop="start"]');

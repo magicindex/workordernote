@@ -66,6 +66,7 @@
         >
           <option value="vertical">上下</option>
           <option value="horizontal">左右</option>
+          <option value="diagonal">斜角</option>
         </select>
       </label>
     </div>
@@ -165,7 +166,7 @@ type TonePreset = { key: string; label: string; start: string; end: string; dire
 const presets: TonePreset[] = [
   { key: 'mist', label: '晨雾', start: '#eef2ff', end: '#f8fafc', direction: 'vertical' },
   { key: 'sunset', label: '晚霞', start: '#ffecd2', end: '#fcb69f', direction: 'vertical' },
-  { key: 'aurora', label: '极光', start: '#a8edea', end: '#fed6e3', direction: 'horizontal' },
+  { key: 'aurora', label: '极光', start: '#a8edea', end: '#fed6e3', direction: 'diagonal' },
   { key: 'mint', label: '薄荷', start: '#d9f99d', end: '#a7f3d0', direction: 'vertical' },
   { key: 'ocean', label: '深海', start: '#1e3a8a', end: '#0f172a', direction: 'vertical' },
   { key: 'violet', label: '紫夜', start: '#312e81', end: '#111827', direction: 'horizontal' },
