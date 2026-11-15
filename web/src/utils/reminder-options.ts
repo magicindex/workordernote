@@ -12,7 +12,7 @@
 export const ACK_MINUTES_OPTIONS = ['0', '30', '60', '120', '240'] as const
 
 export const ACK_MINUTES_LABELS: Record<string, string> = {
-  '0': '第二天（当天不再提示）',
+  '0': '当天不再提示',
   '30': '30 分钟后',
   '60': '1 小时后',
   '120': '2 小时后',
