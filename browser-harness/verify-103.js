@@ -241,7 +241,7 @@ function parseCsv(text) {
     // ---------- 4d2. 编辑器默认右侧，可切换到左侧 ----------
     await page.evaluate(() => {
       const btn = document.querySelector('.reminder-row button.min-w-0.flex-1.text-left');
-      if (btn) btn.click();
+      if (btn) btn.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
     });
     await waitFor(page, () => !!document.querySelector('.editor-panel'), { timeout: 10000 });
     await sleep(400);

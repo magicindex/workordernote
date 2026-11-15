@@ -45,7 +45,7 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       await sleep(1700);
       await page.evaluate((s) => {
         const row = [...document.querySelectorAll('[data-reminder-row]')].find((el) => el.textContent.includes(s));
-        row?.querySelector('button.min-w-0.flex-1')?.click();
+        row?.querySelector('button.min-w-0.flex-1')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
       }, stamp);
       await sleep(750);
     };

@@ -199,7 +199,7 @@ const completedRows = (page) => page.evaluate(() => [...document.querySelectorAl
       const row = [...document.querySelectorAll('.reminder-row')].find((r) => r.textContent.includes(title));
       const btn = row?.querySelector('button.min-w-0');
       if (!btn) return false;
-      btn.click();
+      btn.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
       return true;
     }, T_REPEAT);
     await sleep(1600);

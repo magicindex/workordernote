@@ -32,6 +32,14 @@ const vars = (page) => page.evaluate(() => ({
     await page.setViewport({ width: 1440, height: 1000 });
     await login(page, BASE);
     const original = await configs(page);
+    // 明度断言只对亮色主题成立；先固定亮色。
+    await page.evaluate(async (base) => {
+      const token = localStorage.getItem('reminders.token') || sessionStorage.getItem('reminders.token');
+      await fetch(base + '/api/configs', { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'theme_mode', value: 'light' }) });
+      localStorage.setItem('reminder-theme-mode', 'light');
+    }, BASE);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await sleep(700);
     try {
       await page.goto(BASE + '/admin/settings', { waitUntil: 'domcontentloaded' });
       await sleep(1400);

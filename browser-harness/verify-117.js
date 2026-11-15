@@ -72,7 +72,7 @@ const api = (page, p, method = 'GET', body = null) => page.evaluate(async ({ bas
       const row = rows.find((r) => (r.textContent || '').includes(title));
       if (!row) return { found: false };
       const clickable = row.querySelector('button.min-w-0') || row.querySelector('button');
-      clickable?.click();
+      clickable?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
       return { found: true };
     }, TITLE);
     check('在列表里找到这条提醒并点开', opened.found === true);

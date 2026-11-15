@@ -33,7 +33,7 @@ const closeEditor = async (page) => {
         popup: !!document.querySelector('[data-cal-overflow]'),
       };
     });
-    check('溢出条目改为顶部「共 N 条」', /^共\d+条$/.test(overflow.count) && !overflow.more && !overflow.popup, JSON.stringify(overflow));
+    check('溢出条目有顶部「共 N 条」和「+N 条…」入口', /^共\d+条$/.test(overflow.count) && overflow.more, JSON.stringify(overflow));
 
     const target = await page.evaluate(() => {
       const cell = [...document.querySelectorAll('[data-cal-date]')].find((c) => c.querySelector('[data-cal-task]') && !c.classList.contains('ring-2'));
@@ -43,8 +43,13 @@ const closeEditor = async (page) => {
     if (target) {
       await page.evaluate(({ date }) => document.querySelector(`[data-cal-date="${date}"] [data-cal-task]`)?.click(), target);
       await sleep(500);
-      const afterTaskClick = { selected: await selectedDate(page), editor: await editorOpen(page) };
-      check('点格内项目只切换日期，不打开编辑', afterTaskClick.selected === target.date && afterTaskClick.editor === false, JSON.stringify(afterTaskClick));
+      const afterTaskClick = {
+        view: await page.evaluate(() => !!document.querySelector('[data-reminder-view]')),
+        editor: await editorOpen(page),
+      };
+      check('点格内项目打开只读查看页，不直接进编辑', afterTaskClick.view === true && afterTaskClick.editor === false, JSON.stringify(afterTaskClick));
+      await page.evaluate(() => document.querySelector('[data-view-close]')?.click());
+      await sleep(400);
     }
 
     const empty = await page.evaluate(() => {
@@ -68,14 +73,17 @@ const closeEditor = async (page) => {
     // 先选回有任务的日期，再点右侧列表编辑
     await page.evaluate(({ date }) => document.querySelector(`[data-cal-date="${date}"]`)?.click(), target || { date: '' });
     await sleep(400);
-    const rightEdit = await page.evaluate(() => {
+    const rightView = await page.evaluate(() => {
       const btn = document.querySelector('aside.cal-surface article button.min-w-0');
       if (!btn) return false;
       btn.click();
       return true;
     });
     await sleep(500);
-    check('右侧列表点击进入编辑', rightEdit && await editorOpen(page));
+    check('右侧列表单击打开查看页', rightView && await page.evaluate(() => !!document.querySelector('[data-reminder-view]')), rightView ? '' : '没找到右侧列表按钮');
+    await page.evaluate(() => document.querySelector('[data-view-edit]')?.click());
+    await sleep(600);
+    check('查看页「编辑」进入编辑器', await editorOpen(page));
     await closeEditor(page);
   }, { width: 1440, height: 1000 });
   console.log(`\n结果：${passed} 项通过，${failed} 项失败`);

@@ -48,9 +48,9 @@ async function api(token, apiPath, method = 'GET', body = null) {
       };
       // 放在未来，避免「超时未完成自动续日」把 10 分钟的短线拉长。
       const longId = await mk('竖排任务内容自检', 30, 120);
-      const shortId = await mk('短线任务', 240, 10, 'rose');
-      const shortB = await mk('短线任务乙', 240, 10, 'emerald');
-      const shortC = await mk('短线任务丙', 240, 10, 'amber');
+      const shortId = await mk('短线任务', 60, 10, 'rose');
+      const shortB = await mk('短线任务乙', 60, 10, 'emerald');
+      const shortC = await mk('短线任务丙', 60, 10, 'amber');
       await page.evaluate((id) => localStorage.setItem('ui_calendar_lists', JSON.stringify([id])), listId);
       await page.goto(ROOT + '/admin/calendar', { waitUntil: 'domcontentloaded' });
       await sleep(1500);

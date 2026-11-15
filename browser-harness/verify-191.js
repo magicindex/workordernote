@@ -36,6 +36,10 @@ const stars = (page) => page.evaluate(() => {
     await page.setViewport({ width: 1440, height: 1000 });
     await login(page, BASE);
     const original = await configs(page);
+    await api(page, '/api/configs', 'PUT', { key: 'theme_mode', value: 'light' });
+    await page.evaluate(() => localStorage.setItem('reminder-theme-mode', 'light'));
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await sleep(900);
     const originalMode = String(original.theme_mode || 'system');
     try {
       await page.goto(BASE + '/admin/settings', { waitUntil: 'domcontentloaded' });

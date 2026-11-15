@@ -96,6 +96,16 @@ async function waitSavedChip(page, name, timeout = 12000) {
   console.log(`目标：${BASE}`);
   await withTab(async (page) => {
     await login(page, BASE);
+    // 条件套件只验证「未接模型」的本地草稿；生产已接 Ollama 时跳过。
+    const pre = await page.evaluate(async (base) => {
+      const token = localStorage.getItem('reminders.token') || sessionStorage.getItem('reminders.token');
+      const res = await fetch(base + '/api/assistant/status', { headers: { Authorization: 'Bearer ' + token } });
+      return (await res.json()).data || {};
+    }, BASE);
+    if (pre.active === true) {
+      console.log('  （已接模型，跳过未接模型草稿套件）');
+      return;
+    }
 
     // ---------------- 0. 手机端的 AI 入口（用户 2026-10-19：「在手机端 铃铛旁边增加 ai 图标」） ----------------
     // 先切到手机宽，验「铃铛旁边、点开就是小秘面板」，再把视口还原，后面的桌面流程照常。

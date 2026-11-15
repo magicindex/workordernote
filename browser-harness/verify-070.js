@@ -284,7 +284,7 @@ const clickNewInDayPanel = (page) => page.evaluate(() => {
     await sleep(900);
     await page.evaluate(() => {
       const h3 = document.querySelector('article.reminder-row h3');
-      if (h3) h3.closest('button').click();
+      if (h3) h3.closest('button').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
     });
     await waitFor(page, () => !!document.querySelector('.editor-panel'), { timeout: 10000 });
     await sleep(500);
@@ -326,7 +326,7 @@ const clickNewInDayPanel = (page) => page.evaluate(() => {
     await page.evaluate(() => {
       const row = document.querySelector('article.reminder-row');
       const btn = row && row.querySelector('button.min-w-0.flex-1.text-left');
-      if (btn) btn.click();
+      if (btn) btn.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
     });
     await waitFor(page, () => !!document.querySelector('.editor-panel'), { timeout: 10000 });
     await sleep(600);
