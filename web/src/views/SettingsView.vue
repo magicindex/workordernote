@@ -26,7 +26,9 @@
       </div>
 
       <div v-show="activeTab === 'common' || activeTab === 'modules'" class="mt-4" data-settings-panel="config">
+        <!-- 常用：外观 / 提醒两栏，外观卡底部带默认清单与背景设置 -->
         <ConfigGroupList
+          v-show="activeTab === 'common'"
           ref="listRef"
           :items="items"
           :visible-groups="activeGroups"
@@ -63,10 +65,16 @@
             </div>
             <BackgroundTonePrefs v-show="activeTab === 'common'" />
           </template>
-          <template #extra-card>
-            <SystemListPrefs v-show="activeTab === 'modules'" />
-          </template>
         </ConfigGroupList>
+
+        <!-- 栏目：左栏功能开关，右栏免打扰 + 系统栏目位置，右侧补满 -->
+        <div v-show="activeTab === 'modules'" class="grid items-start gap-4 sm:gap-5 md:grid-cols-2" data-modules-two-cols>
+          <ConfigGroupList :items="featureItems" :columns="1" @save="handleSave" />
+          <div class="space-y-4">
+            <ConfigGroupList :items="dndItems" :columns="1" @save="handleSave" />
+            <SystemListPrefs />
+          </div>
+        </div>
       </div>
 
       <div v-show="activeTab === 'mobile'" class="mt-4" data-settings-panel="mobile">
@@ -140,6 +148,8 @@ const selectedGroups: Record<SettingsTab, string[]> = {
   more: [],
 }
 const activeGroups = computed(() => selectedGroups[activeTab.value])
+const featureItems = computed(() => items.value.filter((it) => it.group === 'features'))
+const dndItems = computed(() => items.value.filter((it) => it.group === 'dnd'))
 const defaultListId = ref(0)
 const savingDefault = ref(false)
 const defaultSaved = ref(false)

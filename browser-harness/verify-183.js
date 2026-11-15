@@ -37,14 +37,22 @@ const readPlacement = async (page) => JSON.parse(String(((await api(page, '/api/
       check('每个系统栏目都有位置选择', prefs.rows.every((r) => r.select && (r.value === 'system' || r.value === 'my')), JSON.stringify(prefs.rows));
       const layout = await page.evaluate(() => {
         const sys = document.querySelector('[data-system-placement-prefs]');
-        const grid = sys?.parentElement;
-        const group = [...(grid?.children || [])].find((el) => el !== sys && el.getBoundingClientRect().width > 300);
-        const sysW = Math.round(sys?.getBoundingClientRect().width || 0);
-        const groupW = Math.round(group?.getBoundingClientRect().width || 0);
-        const gridW = Math.round(grid?.getBoundingClientRect().width || 0);
-        return { sysW, groupW, gridW };
+        const right = sys?.parentElement;
+        const neighbor = sys?.previousElementSibling;
+        const dnd = neighbor?.querySelector('.surface');
+        const r = (el) => el?.getBoundingClientRect();
+        const sysBox = r(sys);
+        const dndBox = r(dnd);
+        const grid = right?.parentElement;
+        return {
+          sysW: Math.round(sysBox?.width || 0),
+          dndW: Math.round(dndBox?.width || 0),
+          gridW: Math.round(r(grid)?.width || 0),
+          belowDnd: !!sysBox && !!dndBox && sysBox.top >= dndBox.bottom - 2,
+          sameColumn: !!sysBox && !!dndBox && Math.abs(sysBox.left - dndBox.left) <= 2,
+        };
       });
-      check('系统栏目卡片与其它设置卡同宽（统一两栏）', layout.sysW > 300 && Math.abs(layout.sysW - layout.groupW) <= 2 && layout.sysW < layout.gridW * 0.6, JSON.stringify(layout));
+      check('系统栏目卡片在右侧、补在免打扰卡下面', layout.sysW > 300 && layout.sysW < layout.gridW * 0.6 && layout.belowDnd && layout.sameColumn && Math.abs(layout.sysW - layout.dndW) <= 2, JSON.stringify(layout));
 
       await page.evaluate(() => {
         const sel = document.querySelector('[data-system-placement-select="cards"]');
