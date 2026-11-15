@@ -190,6 +190,9 @@ const readPage = (page) => page.evaluate((content) => {
     // ---------------- 1. 入口与两列 ----------------
     await gotoRetry(page, BASE + '/admin');
     await sleep(2500);
+    // 2026-11-14 起「提醒@他」收进系统清单二级菜单，先展开再找入口
+    await page.evaluate(() => document.querySelector('[data-nav-system]')?.click());
+    await sleep(350);
     const nav = await page.evaluate(() => {
       const row = document.querySelector('[data-nav-nudges]');
       if (!row) return { present: false };

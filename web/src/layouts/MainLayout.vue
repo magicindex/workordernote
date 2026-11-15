@@ -569,6 +569,23 @@
               </span>
             </button>
             <button
+              v-for="item in systemSheetItems"
+              :key="'sheet-' + item.key"
+              type="button"
+              class="lists-sheet-row"
+              :class="{ 'lists-sheet-row-active': route.path === item.to }"
+              :data-lists-sheet-row="'system-' + item.key"
+              :data-list-name="item.label"
+              @click="pickSystemItem(item)"
+            >
+              <span class="nav-symbol h-5 w-5" :class="item.tone" v-html="item.icon"></span>
+              <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
+              <span v-if="item.count" class="nav-count">{{ item.count }}</span>
+              <span v-if="route.path === item.to" class="shrink-0 text-brand-500" data-lists-sheet-current aria-label="当前页面">
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="m5 12.5 4.5 4.5L19 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
+            <button
               v-for="row in myListRows"
               :key="row.key"
               type="button"
@@ -895,6 +912,13 @@ const myListKey = (id: number) => `list:${id}`
 const MY_SYSTEM_ORDER = ['credit_card', 'notebook', 'ceremony']
 const sidebarOrder = ref<string[]>([])
 const sortingMyLists = ref(false)
+// 系统栏目已从「我的清单」挪到系统清单菜单，旧 sidebar_order 里可能还留着它们的 list:<id>。
+// 排序/加载时清掉，避免它们占着位置、让自建清单的保存顺序看起来没生效。
+const systemListOrderKeys = computed(() => new Set(
+  lists.value
+    .filter((l) => ['credit_card', 'notebook', 'ceremony'].includes(String(l.template || 'general')))
+    .map((l) => `list:${l.id}`),
+))
 
 // 可见性判断必须与模板里的 v-if 完全一致，否则「隐藏的行」会被当成可排的行插进顺序里
 function myRowVisible(l: ReminderList): boolean {
@@ -965,6 +989,10 @@ function pickMyRow(row: MyListRow) {
   listsSheetOpen.value = false
   if (route.path !== to) void router.push(to)
 }
+function pickSystemItem(item: { to: string }) {
+  listsSheetOpen.value = false
+  if (route.path !== item.to) void router.push(item.to)
+}
 // 已经是这段的第一/最后一行时，↑（或 ↓）按钮置灰
 function isMyRowEdge(key: string, delta: number): boolean {
   const rows = myListRows.value
@@ -987,7 +1015,7 @@ function moveMyRow(key: string, delta: number) {
  */
 async function saveMyOrder(visibleKeys: string[]) {
   const prev = (sidebarOrder.value.length ? sidebarOrder.value.slice() : defaultMyRows.value.map((r) => r.key))
-    .filter((k) => k !== 'nudge')
+    .filter((k) => k !== 'nudge' && k !== 'all' && !systemListOrderKeys.value.has(k))
   const visible = new Set(visibleKeys)
   let cursor = 0
   const next = prev.map((k) => (visible.has(k) ? visibleKeys[cursor++] : k))
@@ -1026,7 +1054,7 @@ async function loadSidebarOrder() {
     // 'nudge' 是旧版「提醒@他」在「我的清单」里的排序 token；2026-10-19 挪到「课程表」下面后不再参与排序。
     // 'all' 是旧版「我的清单 → 全部」，已并入「智能清单」的「全部」，同样丢掉。
     sidebarOrder.value = Array.isArray(parsed)
-      ? parsed.filter((k) => typeof k === 'string' && k !== 'nudge' && k !== 'all')
+      ? parsed.filter((k) => typeof k === 'string' && k !== 'nudge' && k !== 'all' && !systemListOrderKeys.value.has(k))
       : []
   } catch {
     sidebarOrder.value = []
@@ -1064,7 +1092,7 @@ function parseSystemPlacement(raw: string): Record<SystemItemKey, 'system' | 'my
 const systemIcons = {
   timetable: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="5" width="16" height="15" rx="2.5" stroke-width="1.7"/><path d="M4 10h16M9 3.5v3M15 3.5v3M8.5 14h2M13.5 14h2M8.5 17h2" stroke-width="1.7" stroke-linecap="round"/></svg>',
   cards: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="6" width="18" height="12" rx="2.5" stroke-width="1.7"/><path d="M3 10h18M6.5 14h4" stroke-width="1.7" stroke-linecap="round"/></svg>',
-  notebook: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="5" y="4" width="14" height="16" rx="2" stroke-width="1.7"/><path d="M8 4v16M11 8h5M11 12h5M11 16h3" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  notebook: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="6" y="3.5" width="13.5" height="17" rx="2.5" stroke-width="1.7"/><path d="M6 8h2.2M6 12h2.2M6 16h2.2" stroke-width="1.7" stroke-linecap="round"/><path d="M12.5 3.5v6.4l2.4-1.5 2.4 1.5V3.5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   ceremony: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3l2.4 5.2 5.6.7-4.1 3.9 1.1 5.6-5-2.8-5 2.8 1.1-5.6L4 8.9l5.6-.7L12 3Z" stroke-width="1.7" stroke-linejoin="round"/></svg>',
   nudges: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15.5 8.5a3.5 3.5 0 1 0-7 0c0 4-2 4-2 5.5h11c0-1.5-2-1.5-2-5.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 17a1.6 1.6 0 0 0 3 0" stroke-width="1.7" stroke-linecap="round"/><circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/></svg>',
 }
@@ -1092,6 +1120,8 @@ const allSystemItems = computed(() => {
 })
 const systemNavItems = computed(() => allSystemItems.value.filter((item) => systemPlacement.value[item.key as SystemItemKey] !== 'my'))
 const independentSystemItems = computed(() => allSystemItems.value.filter((item) => systemPlacement.value[item.key as SystemItemKey] === 'my'))
+// 手机「清单」弹层是全部清单总入口：系统栏目即使收进二级菜单也要在这里出现（课程表/提醒@他另有固定入口，不重复）。
+const systemSheetItems = computed(() => allSystemItems.value.filter((item) => item.key !== 'timetable' && item.key !== 'nudges'))
 const systemTotal = computed(() => systemNavItems.value.reduce((sum, item) => sum + (Number(item.count) || 0), 0))
 const systemActive = computed(() => systemNavItems.value.some((item) => route.path === item.to))
 function toggleSystemMenu() {

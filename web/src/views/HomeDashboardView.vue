@@ -4,9 +4,9 @@
          手机端全局的悬浮 + 也在 Dashboard 路由隐藏（见 MainLayout 的 FAB_HIDE_ROUTES）。 -->
     <div class="mb-4 flex flex-wrap items-end justify-between gap-3 sm:mb-6">
       <div class="min-w-0">
-        <p class="mb-1 text-xs font-extrabold uppercase tracking-[.18em] text-brand-500 sm:mb-2">首页</p>
-        <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl">接下来 14 天</h1>
-        <p class="mt-0.5 text-[13px] text-muted-foreground sm:mt-2">
+        <p class="page-on-bg-muted mb-1 text-xs font-extrabold uppercase tracking-[.18em] text-brand-500 sm:mb-2">首页</p>
+        <h1 class="page-on-bg font-display text-2xl font-extrabold tracking-tight sm:text-3xl">接下来 14 天</h1>
+        <p class="page-on-bg-muted mt-0.5 text-[13px] text-muted-foreground sm:mt-2">
           左边是 14 天内要办的事，右边是已经逾期的。标题前面那个字就是级别：
           <b class="text-rose-500">急</b>=已逾期、
           <b class="text-amber-500">今</b>=今天、

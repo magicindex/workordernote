@@ -1,9 +1,9 @@
 <template>
   <div class="mx-auto max-w-5xl">
     <div class="mb-4 sm:mb-7">
-      <p class="mb-1 text-xs font-extrabold uppercase tracking-[.18em] text-violet-500 sm:mb-2">随时触达</p>
-      <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl">通知方式</h1>
-      <p class="mt-0.5 max-w-2xl text-[13px] leading-5 text-muted-foreground sm:mt-2 sm:text-sm sm:leading-6">站内消息默认可用。已开通的方式，绑定一次即可在每条提醒中自由选择。</p>
+      <p class="page-on-bg-muted mb-1 text-xs font-extrabold uppercase tracking-[.18em] text-violet-500 sm:mb-2">随时触达</p>
+      <h1 class="page-on-bg font-display text-2xl font-extrabold tracking-tight sm:text-3xl">通知方式</h1>
+      <p class="page-on-bg-muted mt-0.5 max-w-2xl text-[13px] leading-5 text-muted-foreground sm:mt-2 sm:text-sm sm:leading-6">站内消息默认可用。已开通的方式，绑定一次即可在每条提醒中自由选择。</p>
     </div>
 
     <div class="mb-4 rounded-2xl border border-blue-500/15 bg-blue-500/[.06] px-3.5 py-2.5 text-xs leading-5 text-blue-700 dark:text-blue-200 sm:mb-5 sm:px-4 sm:py-3">

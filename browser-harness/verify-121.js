@@ -103,14 +103,19 @@ async function main() {
     if (flagOn('notebook_enabled') && listsAll.some((l) => l.template === 'notebook')) sysLabels.push('随手记事本')
     if (flagOn('ceremony_enabled') && listsAll.some((l) => l.template === 'ceremony')) sysLabels.push('人生要有仪式感')
 
-    check('这一段渲染成可排的行（系统栏目 / 自建清单，不再有「全部」）',
-      before.length >= 4 && !before.some((r) => r.label === '全部'),
+    check('这一段只渲染自建清单（系统栏目已收进系统清单，不再有「全部」）',
+      before.length >= 1 && before.every((r) => r.key.startsWith('list:') && !sysLabels.includes(r.label)) && !before.some((r) => r.label === '全部'),
       JSON.stringify(before.map((r) => `${r.key}=${r.label}`)))
     check('日常态不显示 ↑ ↓', before.every((r) => !r.up && !r.down))
-    check('开着的系统栏目都在侧栏里（信用卡 / 记事本 / 仪式感）',
-      sysLabels.every((n) => before.some((r) => r.label === n)),
-      JSON.stringify({ sysLabels, labels: before.map((r) => r.label) }))
+    const systemMenu = await page.evaluate(() => {
+      document.querySelector('[data-nav-system]')?.click();
+      return [...document.querySelectorAll('[data-nav-system-item] .flex-1')].map((el) => (el.textContent || '').trim());
+    });
+    check('开着的系统栏目都在「系统清单」里（信用卡 / 记事本 / 仪式感）',
+      sysLabels.every((n) => systemMenu.includes(n)),
+      JSON.stringify({ sysLabels, systemMenu }))
 
+    await page.evaluate(() => document.querySelector('[data-nav-system]')?.click())
     // ---------- 1. 进排序模式 ----------
     await page.click('[data-my-order-toggle]')
     await sleep(400)
@@ -124,9 +129,9 @@ async function main() {
       const down = rows[rows.length - 1]?.querySelector('[data-my-move] button[aria-label*="下移"]')
       return !!(up && up.disabled && down && down.disabled)
     }))
-    check('系统内置栏目在排序模式下也能挪（「全部」已并入智能清单、不在这段）',
-      sysLabels.every((n) => sorting.some((r) => r.label === n && r.up && r.down))
-      && !sorting.some((r) => r.label === '全部' || r.label === '提醒@他'),
+    check('自建清单在排序模式下都能挪（「全部」和系统栏目不在这段）',
+      sorting.every((r) => r.up && r.down)
+      && !sorting.some((r) => r.label === '全部' || r.label === '提醒@他' || sysLabels.includes(r.label)),
       JSON.stringify(sorting.map((r) => r.label)))
 
     // ---------- 2. 排序模式下点行本体不跳页 ----------
@@ -154,8 +159,9 @@ async function main() {
     }
     let parsed = []
     try { parsed = JSON.parse(cfgRaw) } catch { parsed = [] }
+    const parsedVisible = parsed.filter((k) => moved.some((r) => r.key === k))
     check('顺序已存到服务端（配置 sidebar_order）',
-      parsed[0] === moved[0].key && parsed[1] === moved[1].key,
+      parsedVisible[0] === moved[0].key && parsedVisible[1] === moved[1].key,
       cfgRaw)
 
     // ---------- 5. 清单行的先后写回 position ----------

@@ -16,8 +16,8 @@
         <button class="icon-button" aria-label="下个月" @click="shiftMonth(1)">
           <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m9 6 6 6-6 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <h2 class="ml-1 text-base font-extrabold tracking-tight sm:text-lg">{{ monthTitle }}</h2>
-        <span v-if="lunarYearName" class="hidden text-xs font-semibold text-muted-foreground md:inline">{{ lunarYearName }}</span>
+        <h2 class="page-on-bg ml-1 text-base font-extrabold tracking-tight sm:text-lg">{{ monthTitle }}</h2>
+        <span v-if="lunarYearName" class="page-on-bg-muted hidden text-xs font-semibold text-muted-foreground md:inline">{{ lunarYearName }}</span>
       </div>
       <div class="flex items-center justify-end gap-2">
         <button
@@ -48,7 +48,7 @@
         <!-- 用全部清单：信用卡账单栏目的提醒（账单日/还款日/提前提醒）也在日历里，要能按它筛 -->
         <ListFilter v-model="listFilter" :lists="lists" class="w-full" more-align-end />
       </div>
-      <div class="flex items-center justify-end gap-3 text-[11px] font-semibold text-muted-foreground sm:text-xs">
+      <div class="page-on-bg-muted flex items-center justify-end gap-3 text-[11px] font-semibold text-muted-foreground sm:text-xs">
         <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-brand-500"></i>未完成 {{ openCount }}</span>
         <span class="inline-flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-emerald-500"></i>已完成 {{ doneCount }}</span>
         <!-- 记事既不是未完成也不是「做完的任务」，单独计数，免得两个数字互相污染 -->

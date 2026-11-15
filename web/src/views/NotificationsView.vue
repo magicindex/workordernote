@@ -2,9 +2,9 @@
   <div class="mx-auto max-w-4xl">
     <div class="mb-4 flex items-end justify-between sm:mb-7">
       <div class="min-w-0">
-        <p class="mb-1 text-xs font-extrabold uppercase tracking-[.18em] text-brand-500 sm:mb-2">消息与动态</p>
-        <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl">通知中心</h1>
-        <p class="mt-0.5 text-[13px] text-muted-foreground sm:mt-2 sm:text-sm">{{ unread }} 条未读通知</p>
+        <p class="page-on-bg-muted mb-1 text-xs font-extrabold uppercase tracking-[.18em] text-brand-500 sm:mb-2">消息与动态</p>
+        <h1 class="page-on-bg font-display text-2xl font-extrabold tracking-tight sm:text-3xl">通知中心</h1>
+        <p class="page-on-bg-muted mt-0.5 text-[13px] text-muted-foreground sm:mt-2 sm:text-sm">{{ unread }} 条未读通知</p>
       </div>
       <button v-if="unread" class="shrink-0 rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-bold text-foreground transition hover:bg-muted sm:px-4 sm:py-2" @click="readAll">全部标为已读</button>
     </div>
