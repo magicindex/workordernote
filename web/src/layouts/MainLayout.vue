@@ -2144,7 +2144,7 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
   .shell { transition: none; }
 }
-.sidebar { @apply fixed inset-y-0 left-0 z-50 w-[292px] -translate-x-full border-r border-border/80 bg-surface/90 backdrop-blur-2xl transition-transform duration-300; }
+.sidebar { @apply fixed inset-y-0 left-0 z-50 w-[292px] -translate-x-full border-r border-border/80 bg-background/10 backdrop-blur-2xl transition-transform duration-300; }
 /* 手机：抽屉打开 */
 .sidebar-open { @apply translate-x-0; }
 /* 桌面：停靠在左侧常驻；不加这个类就是折叠成抽屉的状态 */
@@ -2191,7 +2191,7 @@ onBeforeUnmount(() => {
 }
 .nav-caption { @apply px-3 pb-2 text-[10px] font-extrabold uppercase tracking-[.18em] text-muted-foreground/75; }
 /* 侧栏两个分区（用户 2026-10-19）：「智能清单」「我的清单」各用一圈细线框住，中间留一条缝 */
-.nav-group { @apply rounded-2xl border border-border/70 bg-surface/40 p-2; }
+.nav-group { @apply rounded-2xl border border-border/70 bg-surface/20 p-2; }
 .nav-group + .nav-group { @apply mt-3; }
 .nav-row { @apply my-0.5 flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-foreground/80 transition-all hover:bg-muted hover:text-foreground; }
 .nav-row-active { @apply bg-brand-500/10 text-brand-600 shadow-[inset_3px_0_0_rgb(var(--color-brand-500))] dark:text-brand-300; }
