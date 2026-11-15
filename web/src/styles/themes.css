@@ -60,7 +60,8 @@
   --page-bg-end:                17 24 39;
   --color-background:          11 15 26;
   --color-foreground:           243 244 246;
-  --color-surface:              17 24 39;
+  /* 暗色卡片要比页面背景亮一档，避免叠在深色星空/渐变上糊成一片 */
+  --color-surface:              30 41 59;
   --color-surface-foreground:  243 244 246;
   --color-muted:                31 41 55;
   --color-muted-foreground:    156 163 175;
