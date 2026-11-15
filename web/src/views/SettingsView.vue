@@ -83,6 +83,7 @@
       </div>
 
       <div v-show="activeTab === 'more'" class="mt-4" data-settings-panel="more">
+        <EmailSenderSettings v-if="authStore.isAdmin" />
         <AiPromptPrefs />
 
         <!-- 原项目信息：本应用是上游开源作品的衍生作品，按 MIT 许可保留出处与著作权 -->
@@ -116,6 +117,7 @@ import ConfigGroupList from '../components/ConfigGroupList.vue'
 import CalendarSyncCard from '../components/CalendarSyncCard.vue'
 import InstallAppCard from '../components/InstallAppCard.vue'
 import AiPromptPrefs from '../components/AiPromptPrefs.vue'
+import EmailSenderSettings from '../components/EmailSenderSettings.vue'
 import SystemListPrefs from '../components/SystemListPrefs.vue'
 import BackgroundTonePrefs from '../components/BackgroundTonePrefs.vue'
 import { getUserConfigMeta, updateConfig } from '../api/config'

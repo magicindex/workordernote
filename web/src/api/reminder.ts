@@ -452,6 +452,8 @@ export const unbindChannelTarget = (channel: ReminderChannel, id: number) =>
 export const testChannel = (channel: ReminderChannel) =>
   request.post(`/api/reminder/channels/${channel}/test`)
 export const getProviderStatuses = () => request.get('/api/reminder/admin/providers')
+export const getEmailProvider = () => request.get('/api/reminder/admin/providers/email')
+export const testEmailProvider = (to: string) => request.post('/api/reminder/admin/providers/email/test', { to })
 export const getNotificationBrand = () => request.get('/api/reminder/admin/notification-brand')
 export const saveNotificationBrand = (name: string) => request.put('/api/reminder/admin/notification-brand', { name })
 export const saveFeishuProvider = (data: { app_id: string; app_secret: string }) =>

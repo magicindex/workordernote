@@ -105,7 +105,11 @@
           <p class="mt-3 text-[10px] leading-4 text-muted-foreground">还需在飞书开放平台启用机器人、设置应用可见范围，并开通“通过邮箱或手机号获取用户 ID”的通讯录权限。</p>
         </div>
 
-        <div v-else-if="!channel.configured && channel.channel === 'email' && authStore.isAdmin" class="provider-form"><p class="text-sm font-extrabold">开通邮件提醒</p><p class="provider-help">先配置用于发出提醒的发件邮箱和授权码；配置完成后，还需在邮件卡片中绑定实际接收提醒的邮箱。</p><button class="bind-button mt-4 w-full" @click="openEmailSetup">配置邮件服务</button></div>
+        <div v-else-if="!channel.configured && channel.channel === 'email' && authStore.isAdmin" class="mt-4 rounded-2xl border border-amber-500/15 bg-amber-500/[.06] p-4 text-xs leading-5 text-muted-foreground sm:mt-5">
+          <p class="text-sm font-extrabold text-foreground">邮件发件服务未配置</p>
+          <p class="mt-1">通知中心只负责绑定接收邮箱；发件用的 SMTP 服务器、账号和授权码请到「偏好设置 → 更多 → 邮箱发件配置」填写。</p>
+          <a href="/admin/settings" class="mt-3 inline-flex rounded-xl border border-border bg-surface px-3 py-2 font-bold text-foreground hover:bg-muted">去配置发件服务</a>
+        </div>
 
         <div v-else-if="!channel.configured && channel.channel === 'sms' && authStore.isAdmin" class="provider-form">
           <p class="text-sm font-extrabold">开通短信提醒</p><p class="provider-help">填写你的短信服务转发地址。系统会向该地址发送手机号、提醒标题、时间和幂等标识。</p>

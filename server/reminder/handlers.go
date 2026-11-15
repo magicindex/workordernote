@@ -108,6 +108,8 @@ func setupAdminRoutes(api *gin.RouterGroup, db *gorm.DB) {
 	api.GET("/reminder/admin/notification-brand", handleNotificationBrand(db))
 	api.PUT("/reminder/admin/notification-brand", handleNotificationBrand(db))
 	api.PUT("/reminder/admin/providers/feishu", handleSaveFeishuProvider(db))
+	api.GET("/reminder/admin/providers/email", handleGetEmailProvider(db))
+	api.POST("/reminder/admin/providers/email/test", handleTestEmailProvider(db))
 	api.PUT("/reminder/admin/providers/:provider", handleSaveProvider(db))
 	api.GET("/reminder/admin/deliveries", func(c *gin.Context) {
 		var jobs []DeliveryJob

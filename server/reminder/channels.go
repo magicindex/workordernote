@@ -128,11 +128,78 @@ func handleSaveProvider(db *gorm.DB) gin.HandlerFunc {
 			response.ErrorBadRequest(c, "请填写必填配置")
 			return
 		}
+		if provider == ChannelEmail {
+			if port := strings.TrimSpace(values["port"]); port != "" {
+				n, err := strconv.Atoi(port)
+				if err != nil || n < 1 || n > 65535 {
+					response.ErrorBadRequest(c, "SMTP 端口应为 1–65535")
+					return
+				}
+			}
+			// 密码留空表示沿用已保存的授权码，避免管理员只改服务器/发件人时把密码清空。
+			if values["password"] == "" {
+				if old, err := providerSettings(db, ChannelEmail); err == nil {
+					values["password"] = old["password"]
+				}
+			}
+		}
 		if err := saveProviderSettings(db, provider, values); err != nil {
 			response.ErrorInternal(c, "保存通知服务配置失败")
 			return
 		}
 		response.Success(c, gin.H{"configured": true})
+	}
+}
+
+// handleGetEmailProvider 返回发件配置给后台设置页；密码不回显，只返回 has_password。
+func handleGetEmailProvider(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		values, err := providerSettings(db, ChannelEmail)
+		if err != nil {
+			response.ErrorInternal(c, "读取邮件发件配置失败")
+			return
+		}
+		response.Success(c, gin.H{
+			"host": values["host"], "port": values["port"],
+			"username": values["username"], "from_address": values["from_address"],
+			"from_name": values["from_name"], "has_password": values["password"] != "",
+			"configured": emailConfigured(db),
+		})
+	}
+}
+
+// handleTestEmailProvider 用已保存的 SMTP 配置向指定地址真实发送测试邮件。
+// 错误原因会返回给后台页面；不会回显授权码。
+func handleTestEmailProvider(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var in struct {
+			To string `json:"to"`
+		}
+		if err := c.ShouldBindJSON(&in); err != nil {
+			response.ErrorBadRequest(c, "请输入测试收件邮箱")
+			return
+		}
+		to, err := normalizeTarget(ChannelEmail, in.To)
+		if err != nil {
+			response.ErrorBadRequest(c, err.Error())
+			return
+		}
+		values, err := providerSettings(db, ChannelEmail)
+		if err != nil || values["host"] == "" || values["from_address"] == "" {
+			response.ErrorBadRequest(c, "邮件发件服务尚未配置")
+			return
+		}
+		subject := "工作序记 SMTP 测试"
+		body := "这是一封测试邮件。\n\n发件服务已配置成功；收到这封邮件说明 SMTP 服务器、账号和授权码可用。\n\n发送时间：" + time.Now().In(shanghai()).Format("2006-01-02 15:04:05")
+		if err := sendMailMessage(values, []string{to}, subject, body); err != nil {
+			msg := smtpErrorMessage(values["host"], err)
+			if detail := safeError(err); detail != "" && !strings.Contains(msg, detail) {
+				msg += "（" + detail + "）"
+			}
+			response.ErrorBadRequest(c, msg)
+			return
+		}
+		response.Success(c, gin.H{"sent": true, "to": to})
 	}
 }
 
