@@ -270,21 +270,26 @@ async function dismissAlert(page) {
       await sleep(600);
       check('点遮罩能收起弹层', (await readSheet(page)) === null);
 
-      // 桌面宽度复检：部分生产实例在切视口后仍在跑页面过渡，等待/导航可能超时；
-      // 这里只做一次轻量 DOM 复检，不因环境导航超时把整套已经通过的用例判红。
+      // 桌面宽度复检：用新页，避免当前页从手机视图切桌面时被未完成的路由/过渡拖住。
+      const deskPage = await page.browser().newPage();
       try {
-        await page.setViewport({ width: 1280, height: 900 });
+        await deskPage.setViewport({ width: 1280, height: 900 });
+        await login(deskPage, BASE);
+        await deskPage.goto(BASE + '/admin', { waitUntil: 'domcontentloaded', timeout: 30000 });
         await sleep(1200);
-        const desk = await page.evaluate(() => ({
+        const desk = await deskPage.evaluate(() => ({
           tabbar: !!document.querySelector('.mobile-tabbar'),
           visible: !!document.querySelector('.mobile-tabbar')?.getBoundingClientRect().height,
           sheet: !!document.querySelector('[data-lists-sheet]'),
         }));
         check('桌面宽度下没有手机弹层（手机专用）', desk.sheet === false, JSON.stringify(desk));
-        const finalState = await page.evaluate(() => !!document.querySelector('[data-lists-sheet]'));
+        const finalState = await deskPage.evaluate(() => !!document.querySelector('[data-lists-sheet]'));
         check('收尾：弹层没留在页面上', finalState === false);
       } catch (err) {
-        console.log(`  （桌面复检因页面导航超时跳过：${err.message.slice(0, 80)}）`);
+        console.log(`  （桌面复检失败：${err.message.slice(0, 80)}）`);
+        failed += 1;
+      } finally {
+        await deskPage.close();
       }
     } catch (err) {
       failed += 1;
