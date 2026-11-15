@@ -13,7 +13,7 @@
  *
  * 用法：APP_URL=http://127.0.0.1:8920 node verify-124.js
  */
-const { withTab, sleep } = require('./harness');
+const { withTab, sleep, waitFor } = require('./harness');
 const { login, APP } = require('./reminders-app');
 
 const BASE = (process.env.APP_URL || APP).replace(/\/$/, '');
@@ -141,7 +141,15 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
       const chip = [...document.querySelectorAll('[data-assistant-chip]')].find((b) => (b.textContent || '').includes('周报'));
       if (chip) chip.click();
     });
-    await sleep(preLive ? 12000 : 2500);
+    if (preLive) {
+      // 本机 Ollama qwen3:8b 冷启动/思考可能要 20–60 秒，不能固定等 12 秒就断言。
+      await waitFor(page, () => {
+        const els = [...document.querySelectorAll('[data-assistant-role]')];
+        return els.length >= 2 && (els[1].textContent || '').trim().length > 0;
+      }, { timeout: 120000 });
+    } else {
+      await sleep(2500);
+    }
     const afterChip = await bubblesOf(page);
     check('点快捷问法后一问一答', afterChip.length === 2 && afterChip[0].role === 'user' && afterChip[1].role === 'assistant',
       JSON.stringify(afterChip.map((b) => b.role)));
@@ -167,7 +175,11 @@ const bubblesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[
     });
     check('输入内容后发送按钮可用', sendEnabled);
     await clickEl(page, '[data-assistant-send]');
-    await sleep(preLive ? 12000 : 1800);
+    if (preLive) {
+      await waitFor(page, () => document.querySelectorAll('[data-assistant-role]').length >= 4, { timeout: 120000 });
+    } else {
+      await sleep(1800);
+    }
     const afterSend = await bubblesOf(page);
     check('发送后一共两问两答', afterSend.length === 4 && afterSend.filter((b) => b.role === 'assistant').length === 2,
       JSON.stringify(afterSend.map((b) => b.role)));
