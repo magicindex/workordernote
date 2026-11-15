@@ -2195,6 +2195,37 @@ onBeforeUnmount(() => {
 .nav-group { @apply rounded-2xl border border-border/70 bg-surface/20 p-2; }
 .nav-group + .nav-group { @apply mt-3; }
 .nav-row { @apply my-0.5 flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-foreground/80 transition-all hover:bg-muted hover:text-foreground; }
+/* 菜单项之间的细分隔线（用户 2026-11-15）：智能清单、系统清单、我的清单统一加一条淡线，
+   图标栏收起时隐藏，避免 56px 图标栏里出现一截截线头。 */
+.sidebar nav .nav-row { position: relative; }
+.sidebar nav .nav-row::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 1px;
+  background: rgb(var(--color-border));
+  opacity: 1;
+  pointer-events: none;
+}
+.sidebar nav .nav-row:last-child::after { display: none; }
+.sidebar nav [data-my-row] { position: relative; }
+.sidebar nav [data-my-row]::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 1px;
+  background: rgb(var(--color-border));
+  opacity: 1;
+  pointer-events: none;
+}
+.sidebar nav [data-my-row] .nav-row::after { display: none; }
+.sidebar nav [data-my-row]:last-child::after { display: none; }
+.sidebar-rail .sidebar nav .nav-row::after,
+.sidebar-rail .sidebar nav [data-my-row]::after { display: none; }
 .nav-row-active { @apply bg-brand-500/10 text-brand-600 shadow-[inset_3px_0_0_rgb(var(--color-brand-500))] dark:text-brand-300; }
 .nav-symbol { @apply flex h-8 w-8 items-center justify-center rounded-[10px]; }
 /* 清单行的图标块：比原来的小圆点占位大一点，但比 nav-symbol 小，免得跟「智能清单」抢视线 */
