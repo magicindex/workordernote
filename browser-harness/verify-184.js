@@ -42,6 +42,17 @@ const vars = (page) => page.evaluate(() => ({
         direction: !!document.querySelector('[data-page-bg-direction]'),
       }));
       check('外观里有背景两色、方向、亮度控件', ui.block && ui.slider && ui.start && ui.end && ui.direction, JSON.stringify(ui));
+      const ambient = await page.evaluate(() => getComputedStyle(document.querySelector('.ambient') || document.body).backgroundColor);
+      check('页面背景不被 ambient 遮住（ambient 透明）', ambient === 'rgba(0, 0, 0, 0)' || ambient === 'transparent', ambient);
+      const presetCount = await page.evaluate(() => document.querySelectorAll('[data-page-bg-preset]').length);
+      check('提供多个渐变预设', presetCount >= 4, String(presetCount));
+
+      await page.evaluate(() => document.querySelector('[data-page-bg-preset="sunset"]')?.click());
+      await sleep(1000);
+      const preset = await vars(page);
+      const presetCfg = JSON.parse(String((await configs(page)).page_bg_gradient || '{}'));
+      check('预设一键套用后背景立即变化并保存', preset.start === '255 236 210' && preset.end === '252 182 159' && presetCfg.start === '#ffecd2' && presetCfg.end === '#fcb69f', JSON.stringify({ preset, presetCfg }));
+      const beforeCustom = await configs(page);
 
       await page.evaluate(() => {
         const a = document.querySelector('[data-page-bg-color-start]');
@@ -56,7 +67,7 @@ const vars = (page) => page.evaluate(() => ({
       const preview = await vars(page);
       const beforeSave = await configs(page);
       check('选色时页面背景实时预览两种颜色', preview.start === '255 0 0' && preview.end === '0 0 255' && /linear-gradient/.test(preview.body), JSON.stringify(preview));
-      check('预览阶段尚未写入配置', (beforeSave.page_bg_gradient || '') === (original.page_bg_gradient || ''), JSON.stringify({ before: original.page_bg_gradient, now: beforeSave.page_bg_gradient }));
+      check('预览阶段尚未写入配置', (beforeSave.page_bg_gradient || '') === (beforeCustom.page_bg_gradient || ''), JSON.stringify({ before: beforeCustom.page_bg_gradient, now: beforeSave.page_bg_gradient }));
       check('选色不改卡片底色/文字色', preview.cardBg === before.cardBg && preview.cardColor === before.cardColor, JSON.stringify({ before, preview }));
 
       await page.evaluate(() => {

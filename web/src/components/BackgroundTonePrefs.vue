@@ -16,6 +16,23 @@
     </div>
     <p class="mt-1 text-xs text-muted-foreground">选两种颜色做页面背景渐变，再调亮度；只影响页面背景，卡片和文字不变。</p>
 
+    <div class="mt-2.5 flex flex-wrap items-center gap-1.5" data-page-bg-presets>
+      <span class="text-[11px] font-semibold text-muted-foreground">预设</span>
+      <button
+        v-for="preset in presets"
+        :key="preset.key"
+        type="button"
+        class="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-1 text-[11px] font-semibold text-foreground transition hover:border-brand-400 hover:bg-brand-500/5 disabled:opacity-60"
+        :disabled="saving"
+        :data-page-bg-preset="preset.key"
+        :title="`一键套用「${preset.label}」`"
+        @click="applyPreset(preset)"
+      >
+        <span class="h-3 w-3 rounded-full border border-black/10" :style="{ background: `linear-gradient(135deg, ${preset.start}, ${preset.end})` }"></span>
+        {{ preset.label }}
+      </button>
+    </div>
+
     <div class="mt-2.5 flex flex-wrap items-end gap-2.5">
       <label class="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
         起始色
@@ -95,6 +112,16 @@ const toneLabel = computed(() => {
   return tone.value < 0 ? `偏暗 ${-tone.value}%` : `偏亮 ${tone.value}%`
 })
 
+type TonePreset = { key: string; label: string; start: string; end: string; direction: PageBgDirection }
+const presets: TonePreset[] = [
+  { key: 'mist', label: '晨雾', start: '#eef2ff', end: '#f8fafc', direction: 'vertical' },
+  { key: 'sunset', label: '晚霞', start: '#ffecd2', end: '#fcb69f', direction: 'vertical' },
+  { key: 'aurora', label: '极光', start: '#a8edea', end: '#fed6e3', direction: 'horizontal' },
+  { key: 'mint', label: '薄荷', start: '#d9f99d', end: '#a7f3d0', direction: 'vertical' },
+  { key: 'ocean', label: '深海', start: '#1e3a8a', end: '#0f172a', direction: 'vertical' },
+  { key: 'violet', label: '紫夜', start: '#312e81', end: '#111827', direction: 'horizontal' },
+]
+
 function themeDefaults(): { start: string; end: string } {
   return theme.isDark
     ? { start: '#0b0f1a', end: '#111827' }
@@ -120,6 +147,14 @@ function previewTone(raw: string) {
   tone.value = next
   touchNotice()
   theme.setPageBgTone(next)
+}
+
+function applyPreset(preset: TonePreset) {
+  start.value = preset.start
+  end.value = preset.end
+  direction.value = preset.direction
+  previewGradient()
+  void saveGradient()
 }
 
 function onDirectionChange() {

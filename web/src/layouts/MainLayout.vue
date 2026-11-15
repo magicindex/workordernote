@@ -2114,7 +2114,7 @@ onBeforeUnmount(() => {
 .stale-bundle-text { @apply min-w-0 flex-1 leading-5 text-foreground; }
 .stale-bundle-btn { @apply shrink-0 rounded-xl bg-brand-500 px-3 py-1 text-[12px] font-bold text-white transition hover:brightness-110; }
 
-.ambient { position: fixed; inset: 0; z-index: -20; overflow: hidden; pointer-events: none; background: rgb(var(--color-background)); }
+.ambient { position: fixed; inset: 0; z-index: -20; overflow: hidden; pointer-events: none; background: transparent; }
 .ambient-orb { position: absolute; border-radius: 999px; filter: blur(110px); opacity: .16; }
 .ambient-orb-one { width: 32rem; height: 32rem; left: 12%; top: -18rem; background: #60a5fa; }
 .ambient-orb-two { width: 28rem; height: 28rem; right: -10rem; bottom: -12rem; background: #a78bfa; opacity: .11; }
