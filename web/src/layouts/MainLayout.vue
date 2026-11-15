@@ -1012,8 +1012,14 @@ async function loadSidebarOrder() {
     const style = String(res.data?.data?.assistant_entry_style || 'topbar')
     assistantEntryStyle.value = style === 'floating' ? 'floating' : 'topbar'
     systemPlacement.value = parseSystemPlacement(String(res.data?.data?.system_list_placement || ''))
-    themeStore.setPageBgTone(Number(res.data?.data?.page_bg_tone || 0) || 0)
-    themeStore.setPageBgGradient(parsePageBgGradient(String(res.data?.data?.page_bg_gradient || '')))
+    const cfg = res.data?.data || {}
+    const legacyTone = String(cfg.page_bg_tone ?? '')
+    const legacyManual = legacyTone !== '' && Number(legacyTone) !== 0
+    const lightTone = String(cfg.page_bg_tone_light ?? '')
+    const darkTone = String(cfg.page_bg_tone_dark ?? '')
+    themeStore.setPageBgToneFor(false, lightTone !== '' ? Number(lightTone) : legacyManual ? Number(legacyTone) : 0)
+    themeStore.setPageBgToneFor(true, darkTone !== '' ? Number(darkTone) : legacyManual ? Number(legacyTone) : -20)
+    themeStore.setPageBgGradient(parsePageBgGradient(String(cfg.page_bg_gradient || '')))
     const raw = String(res.data?.data?.sidebar_order ?? '')
     const parsed = raw ? JSON.parse(raw) : []
     // 'nudge' 是旧版「提醒@他」在「我的清单」里的排序 token；2026-10-19 挪到「课程表」下面后不再参与排序。
@@ -1290,6 +1296,14 @@ function onConfigChanged(event: Event) {
   }
   if (detail?.key === 'system_list_placement') {
     systemPlacement.value = parseSystemPlacement(String(detail.value || ''))
+    return
+  }
+  if (detail?.key === 'page_bg_tone_light') {
+    themeStore.setPageBgToneFor(false, Number(detail.value || 0) || 0)
+    return
+  }
+  if (detail?.key === 'page_bg_tone_dark') {
+    themeStore.setPageBgToneFor(true, Number(detail.value || 0) || 0)
     return
   }
   if (detail?.key === 'page_bg_tone') {

@@ -151,15 +151,15 @@ const startStop = ref(0)
 const endStop = ref(100)
 const stopTrack = ref<HTMLElement | null>(null)
 const draggingStop = ref<'start' | 'end' | null>(null)
-const tone = ref(0)
-const savedTone = ref(0)
+const tone = computed(() => theme.pageBgTone)
 const saving = ref(false)
 const notice = ref('')
 const errorMsg = ref('')
 
 const toneLabel = computed(() => {
-  if (tone.value === 0) return '默认亮度'
-  return tone.value < 0 ? `偏暗 ${-tone.value}%` : `偏亮 ${tone.value}%`
+  const themeName = theme.isDark ? '暗色主题' : '亮色主题'
+  if (tone.value === 0) return `${themeName} · 默认亮度`
+  return tone.value < 0 ? `${themeName} · 偏暗 ${-tone.value}%` : `${themeName} · 偏亮 ${tone.value}%`
 })
 
 type TonePreset = { key: string; label: string; start: string; end: string; direction: PageBgDirection }
@@ -237,8 +237,8 @@ function previewGradient() {
 
 function previewTone(raw: string) {
   const next = Math.max(-100, Math.min(100, Math.round(Number(raw) || 0)))
-  tone.value = next
   touchNotice()
+  // 只改当前主题的值；另一个主题的值保留，切主题时自动换成对应值。
   theme.setPageBgTone(next)
 }
 
@@ -280,17 +280,18 @@ async function saveGradient() {
 }
 
 async function saveTone() {
-  if (saving.value || tone.value === savedTone.value) return
+  if (saving.value) return
   saving.value = true
   errorMsg.value = ''
   notice.value = ''
+  const isDark = theme.isDark
+  const key = isDark ? 'page_bg_tone_dark' : 'page_bg_tone_light'
+  const value = String(tone.value)
   try {
-    const value = String(tone.value)
-    const res = await updateConfig('page_bg_tone', value)
+    const res = await updateConfig(key, value)
     if (res.data?.code === 0) {
-      savedTone.value = tone.value
       notice.value = '已保存'
-      window.dispatchEvent(new CustomEvent('config-changed', { detail: { key: 'page_bg_tone', value } }))
+      window.dispatchEvent(new CustomEvent('config-changed', { detail: { key, value } }))
       setTimeout(() => { notice.value = '' }, 2400)
     } else {
       errorMsg.value = res.data?.message || '保存失败'
@@ -301,7 +302,6 @@ async function saveTone() {
     saving.value = false
   }
 }
-
 async function reset() {
   const defaults = themeDefaults()
   start.value = defaults.start
@@ -309,9 +309,8 @@ async function reset() {
   direction.value = 'vertical'
   startStop.value = 0
   endStop.value = 100
-  tone.value = 0
   previewGradient()
-  previewTone('0')
+  theme.resetPageBgTone()
   await saveGradient()
   await saveTone()
 }
@@ -324,11 +323,14 @@ onMounted(async () => {
   endStop.value = 100
   try {
     const res = await getAllConfigs()
-    const rawTone = Number(res.data?.data?.page_bg_tone || 0) || 0
-    tone.value = Math.max(-100, Math.min(100, rawTone))
-    savedTone.value = tone.value
-    theme.setPageBgTone(tone.value)
-    const gradient = parsePageBgGradient(String(res.data?.data?.page_bg_gradient || ''))
+    const data = res.data?.data || {}
+    const legacyTone = String(data.page_bg_tone ?? '')
+    const legacyManual = legacyTone !== '' && Number(legacyTone) !== 0
+    const lightTone = String(data.page_bg_tone_light ?? '')
+    const darkTone = String(data.page_bg_tone_dark ?? '')
+    theme.setPageBgToneFor(false, lightTone !== '' ? Number(lightTone) : legacyManual ? Number(legacyTone) : 0)
+    theme.setPageBgToneFor(true, darkTone !== '' ? Number(darkTone) : legacyManual ? Number(legacyTone) : -20)
+    const gradient = parsePageBgGradient(String(data.page_bg_gradient || ''))
     if (gradient) {
       start.value = gradient.start
       end.value = gradient.end

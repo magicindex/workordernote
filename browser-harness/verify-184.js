@@ -155,7 +155,9 @@ const vars = (page) => page.evaluate(() => ({
 
       await page.evaluate(() => document.querySelector('[data-page-bg-tone-slider]')?.dispatchEvent(new Event('change', { bubbles: true })));
       await sleep(900);
-      check('松手后保存亮度', Number((await configs(page)).page_bg_tone) === -100);
+      const toneDark = await page.evaluate(() => document.documentElement.classList.contains('dark'));
+      const toneKey = toneDark ? 'page_bg_tone_dark' : 'page_bg_tone_light';
+      check('松手后保存当前主题亮度', Number((await configs(page))[toneKey]) === -100, toneKey);
 
       await page.reload({ waitUntil: 'domcontentloaded' });
       await sleep(1400);
@@ -172,9 +174,14 @@ const vars = (page) => page.evaluate(() => ({
       await sleep(1500);
       const reset = await configs(page);
       const resetVars = await vars(page);
-      check('恢复默认清回默认渐变/色阶/亮度', reset.page_bg_tone === '0' && resetVars.alpha === 0 && resetVars.angle === '180deg' && resetVars.startStop === '0%' && resetVars.endStop === '100%', JSON.stringify({ reset: { tone: reset.page_bg_tone, gradient: reset.page_bg_gradient }, resetVars }));
+      const resetDark = await page.evaluate(() => document.documentElement.classList.contains('dark'));
+      const resetToneKey = resetDark ? 'page_bg_tone_dark' : 'page_bg_tone_light';
+      const resetExpectedTone = resetDark ? -20 : 0;
+      check('恢复默认清回当前主题默认亮度/渐变/色阶', Number(reset[resetToneKey] || 0) === resetExpectedTone && resetVars.alpha >= 0 && resetVars.angle === '180deg' && resetVars.startStop === '0%' && resetVars.endStop === '100%', JSON.stringify({ resetToneKey, reset: { tone: reset[resetToneKey], gradient: reset.page_bg_gradient }, resetVars }));
     } finally {
-      await api(page, '/api/configs', 'PUT', { key: 'page_bg_tone', value: String(original.page_bg_tone || 0) });
+      await api(page, '/api/configs', 'PUT', { key: 'page_bg_tone_light', value: String(original.page_bg_tone_light ?? '') });
+      await api(page, '/api/configs', 'PUT', { key: 'page_bg_tone_dark', value: String(original.page_bg_tone_dark ?? '') });
+      await api(page, '/api/configs', 'PUT', { key: 'page_bg_tone', value: String(original.page_bg_tone ?? '') });
       await api(page, '/api/configs', 'PUT', { key: 'page_bg_gradient', value: String(original.page_bg_gradient || '') });
     }
   }, { width: 1440, height: 1000 });

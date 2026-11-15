@@ -51,7 +51,13 @@ const STORAGE_MODE = 'reminder-theme-mode'
 const STORAGE_BRAND = 'reminder-theme-brand'
 const STORAGE_SUN_CITY = 'reminder-theme-sun-city'
 const STORAGE_PAGE_BG_TONE = 'reminder-page-bg-tone'
+const STORAGE_PAGE_BG_TONE_LIGHT = 'reminder-page-bg-tone-light'
+const STORAGE_PAGE_BG_TONE_DARK = 'reminder-page-bg-tone-dark'
 const STORAGE_PAGE_BG_GRADIENT = 'reminder-page-bg-gradient'
+
+// 亮度基准：亮色主题默认 0；暗色主题自动压暗一点，让渐变更柔和。
+const PAGE_BG_TONE_LIGHT = 0
+const PAGE_BG_TONE_DARK = -20
 
 function readStoredMode(): ThemeMode {
   const v = localStorage.getItem(STORAGE_MODE)
@@ -86,9 +92,21 @@ function applyPageBgTone(value: number) {
   root.style.setProperty('--page-bg-alpha', alpha.toFixed(3))
 }
 
-function readStoredPageBgTone(): number {
-  const v = localStorage.getItem(STORAGE_PAGE_BG_TONE)
-  return v === null ? 0 : clampPageBgTone(Number(v))
+function readStoredTones(): { light: number; dark: number } {
+  const lightRaw = localStorage.getItem(STORAGE_PAGE_BG_TONE_LIGHT)
+  const darkRaw = localStorage.getItem(STORAGE_PAGE_BG_TONE_DARK)
+  const legacyRaw = localStorage.getItem(STORAGE_PAGE_BG_TONE)
+  const light = lightRaw === null ? null : Number(lightRaw)
+  const dark = darkRaw === null ? null : Number(darkRaw)
+  // 旧版只有一个值；如果用户以前手动调过，亮/暗都先沿用，之后分开记住。
+  if (light === null && dark === null && legacyRaw !== null && Number(legacyRaw) !== 0) {
+    const legacy = clampPageBgTone(Number(legacyRaw))
+    return { light: legacy, dark: legacy }
+  }
+  return {
+    light: light === null ? PAGE_BG_TONE_LIGHT : clampPageBgTone(light),
+    dark: dark === null ? PAGE_BG_TONE_DARK : clampPageBgTone(dark),
+  }
 }
 
 function hexToRgbTriplet(hex: string): string {
@@ -183,7 +201,9 @@ if (typeof window !== 'undefined') {
 export const useThemeStore = defineStore('theme', () => {
   const mode = ref<ThemeMode>(readStoredMode())
   const brand = ref<ThemeBrand>(readStoredBrand())
-  const pageBgTone = ref(readStoredPageBgTone())
+  const storedTones = readStoredTones()
+  const pageBgToneLight = ref(storedTones.light)
+  const pageBgToneDark = ref(storedTones.dark)
   const pageBgGradient = ref<PageBgGradient | null>(readStoredPageBgGradient())
   const sunCity = ref<string>(readStoredSunCity())
   // 当前时刻按日出日落算出来是不是夜间。只在 mode === 'sun' 时参与判断。
@@ -210,6 +230,9 @@ export const useThemeStore = defineStore('theme', () => {
     || (mode.value === 'system' && systemDark.value)
     || (mode.value === 'sun' && sunDark.value),
   )
+
+  // 亮色/暗色各记一个亮度值，切主题时自动用对应值。
+  const pageBgTone = computed(() => isDark.value ? pageBgToneDark.value : pageBgToneLight.value)
 
   function resolveDark(): boolean {
     if (mode.value === 'dark') return true
@@ -268,9 +291,35 @@ export const useThemeStore = defineStore('theme', () => {
     setMode(next)
   }
 
+  function persistTones() {
+    localStorage.setItem(STORAGE_PAGE_BG_TONE_LIGHT, String(pageBgToneLight.value))
+    localStorage.setItem(STORAGE_PAGE_BG_TONE_DARK, String(pageBgToneDark.value))
+    localStorage.removeItem(STORAGE_PAGE_BG_TONE)
+  }
+
+  /** 设置当前主题的亮度值；切到另一个主题时仍保留各自的值。 */
   function setPageBgTone(value: number) {
-    pageBgTone.value = clampPageBgTone(value)
-    localStorage.setItem(STORAGE_PAGE_BG_TONE, String(pageBgTone.value))
+    const next = clampPageBgTone(value)
+    if (isDark.value) pageBgToneDark.value = next
+    else pageBgToneLight.value = next
+    persistTones()
+    applyPageBgTone(pageBgTone.value)
+  }
+
+  /** 由配置加载时分别写入亮色/暗色值（不必等切到该主题）。 */
+  function setPageBgToneFor(dark: boolean, value: number) {
+    const next = clampPageBgTone(value)
+    if (dark) pageBgToneDark.value = next
+    else pageBgToneLight.value = next
+    persistTones()
+    if (isDark.value === dark) applyPageBgTone(pageBgTone.value)
+  }
+
+  /** 恢复默认只重置当前主题；另一个主题的手动值保留。 */
+  function resetPageBgTone() {
+    if (isDark.value) pageBgToneDark.value = PAGE_BG_TONE_DARK
+    else pageBgToneLight.value = PAGE_BG_TONE_LIGHT
+    persistTones()
     applyPageBgTone(pageBgTone.value)
   }
 
@@ -283,5 +332,5 @@ export const useThemeStore = defineStore('theme', () => {
 
   apply()
 
-  return { mode, brand, sunCity, sunDark, pageBgTone, pageBgGradient, isDark, toggle, setMode, setBrand, setSunCity, setPageBgTone, setPageBgGradient, refreshSun, apply }
+  return { mode, brand, sunCity, sunDark, pageBgTone, pageBgToneLight, pageBgToneDark, pageBgGradient, isDark, toggle, setMode, setBrand, setSunCity, setPageBgTone, setPageBgToneFor, resetPageBgTone, setPageBgGradient, refreshSun, apply }
 })
