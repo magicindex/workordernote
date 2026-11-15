@@ -207,6 +207,7 @@ body {
   background-color: rgb(var(--color-background));
   background-image:
     linear-gradient(rgb(var(--page-bg-tint) / var(--page-bg-alpha)), rgb(var(--page-bg-tint) / var(--page-bg-alpha))),
+    linear-gradient(var(--page-bg-angle), rgb(var(--page-bg-start)), rgb(var(--page-bg-end))),
     radial-gradient(at 0% 0%, rgb(var(--color-brand-500) / 0.08) 0px, transparent 50%),
     radial-gradient(at 100% 0%, rgb(var(--color-accent) / 0.06) 0px, transparent 50%);
   background-attachment: fixed;
@@ -223,6 +224,7 @@ textarea {
 .dark body {
   background-image:
     linear-gradient(rgb(var(--page-bg-tint) / var(--page-bg-alpha)), rgb(var(--page-bg-tint) / var(--page-bg-alpha))),
+    linear-gradient(var(--page-bg-angle), rgb(var(--page-bg-start)), rgb(var(--page-bg-end))),
     radial-gradient(at 0% 0%, rgb(var(--color-brand-500) / 0.14) 0px, transparent 50%),
     radial-gradient(at 100% 0%, rgb(var(--color-accent) / 0.1) 0px, transparent 50%);
 }

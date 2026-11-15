@@ -44,12 +44,17 @@
   --color-accent:              168 85 247;
   --color-destructive:         220 38 38;
 
-  /* 页面背景亮度叠加层（用户 2026-11-14）：只叠在 body 背景上。 */
+  /* 页面背景：两色渐变 + 亮度叠加层（用户 2026-11-15）。只画在 body 上。 */
+  --page-bg-start:             247 248 250;
+  --page-bg-end:               255 255 255;
+  --page-bg-angle:             180deg;
   --page-bg-tint:              0 0 0;
   --page-bg-alpha:             0;
 }
 
 .dark {
+  --page-bg-start:              11 15 26;
+  --page-bg-end:                17 24 39;
   --color-background:          11 15 26;
   --color-foreground:           243 244 246;
   --color-surface:              17 24 39;

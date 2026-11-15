@@ -10,11 +10,38 @@ import { DEFAULT_SUN_CITY, SUN_CITIES, isNightAt } from '../utils/sun'
 // 'sun' = 日出日落：按所选城市的日出/日落时刻自动切浅色/深色。
 export type ThemeMode = 'light' | 'dark' | 'system' | 'sun'
 export type ThemeBrand = 'default'  // extend this union when adding brand-* palettes
+export type PageBgDirection = 'vertical' | 'horizontal'
+export interface PageBgGradient {
+  start: string
+  end: string
+  direction: PageBgDirection
+}
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
+/** 解析偏好里的两色渐变；任何字段不合法都回退到主题默认，不让坏值进 CSS。 */
+export function parsePageBgGradient(raw: string): PageBgGradient | null {
+  if (!raw) return null
+  try {
+    const data = JSON.parse(raw)
+    const start = String(data?.start || '')
+    const end = String(data?.end || '')
+    if (!HEX_COLOR.test(start) || !HEX_COLOR.test(end)) return null
+    return {
+      start: start.toLowerCase(),
+      end: end.toLowerCase(),
+      direction: data?.direction === 'horizontal' ? 'horizontal' : 'vertical',
+    }
+  } catch {
+    return null
+  }
+}
 
 const STORAGE_MODE = 'reminder-theme-mode'
 const STORAGE_BRAND = 'reminder-theme-brand'
 const STORAGE_SUN_CITY = 'reminder-theme-sun-city'
 const STORAGE_PAGE_BG_TONE = 'reminder-page-bg-tone'
+const STORAGE_PAGE_BG_GRADIENT = 'reminder-page-bg-gradient'
 
 function readStoredMode(): ThemeMode {
   const v = localStorage.getItem(STORAGE_MODE)
@@ -44,7 +71,7 @@ function applyPageBgTone(value: number) {
   if (typeof document === 'undefined') return
   const tone = clampPageBgTone(value)
   const root = document.documentElement
-  const alpha = Math.min(0.58, Math.abs(tone) / 100 * 0.58)
+  const alpha = Math.min(0.72, Math.abs(tone) / 100 * 0.72)
   root.style.setProperty('--page-bg-tint', tone < 0 ? '0 0 0' : '255 255 255')
   root.style.setProperty('--page-bg-alpha', alpha.toFixed(3))
 }
@@ -52,6 +79,30 @@ function applyPageBgTone(value: number) {
 function readStoredPageBgTone(): number {
   const v = localStorage.getItem(STORAGE_PAGE_BG_TONE)
   return v === null ? 0 : clampPageBgTone(Number(v))
+}
+
+function hexToRgbTriplet(hex: string): string {
+  const n = Number.parseInt(hex.slice(1), 16)
+  return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`
+}
+
+// 页面背景两色渐变：只写 body 使用的 CSS 变量，卡片/文字颜色完全不动。
+function applyPageBgGradient(value: PageBgGradient | null) {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  if (!value) {
+    root.style.removeProperty('--page-bg-start')
+    root.style.removeProperty('--page-bg-end')
+    root.style.removeProperty('--page-bg-angle')
+    return
+  }
+  root.style.setProperty('--page-bg-start', hexToRgbTriplet(value.start))
+  root.style.setProperty('--page-bg-end', hexToRgbTriplet(value.end))
+  root.style.setProperty('--page-bg-angle', value.direction === 'horizontal' ? '90deg' : '180deg')
+}
+
+function readStoredPageBgGradient(): PageBgGradient | null {
+  return parsePageBgGradient(localStorage.getItem(STORAGE_PAGE_BG_GRADIENT) || '')
 }
 
 const systemDark = ref(
@@ -68,6 +119,7 @@ export const useThemeStore = defineStore('theme', () => {
   const mode = ref<ThemeMode>(readStoredMode())
   const brand = ref<ThemeBrand>(readStoredBrand())
   const pageBgTone = ref(readStoredPageBgTone())
+  const pageBgGradient = ref<PageBgGradient | null>(readStoredPageBgGradient())
   const sunCity = ref<string>(readStoredSunCity())
   // 当前时刻按日出日落算出来是不是夜间。只在 mode === 'sun' 时参与判断。
   const sunDark = ref<boolean>(isNightAt(new Date(), sunCity.value))
@@ -114,6 +166,7 @@ export const useThemeStore = defineStore('theme', () => {
       root.classList.add(`brand-${brand.value}`)
     }
     applyPageBgTone(pageBgTone.value)
+    applyPageBgGradient(pageBgGradient.value)
   }
 
   function setMode(m: ThemeMode) {
@@ -156,7 +209,14 @@ export const useThemeStore = defineStore('theme', () => {
     applyPageBgTone(pageBgTone.value)
   }
 
+  function setPageBgGradient(value: PageBgGradient | null) {
+    pageBgGradient.value = value
+    if (value) localStorage.setItem(STORAGE_PAGE_BG_GRADIENT, JSON.stringify(value))
+    else localStorage.removeItem(STORAGE_PAGE_BG_GRADIENT)
+    applyPageBgGradient(value)
+  }
+
   apply()
 
-  return { mode, brand, sunCity, sunDark, pageBgTone, isDark, toggle, setMode, setBrand, setSunCity, setPageBgTone, refreshSun, apply }
+  return { mode, brand, sunCity, sunDark, pageBgTone, pageBgGradient, isDark, toggle, setMode, setBrand, setSunCity, setPageBgTone, setPageBgGradient, refreshSun, apply }
 })
