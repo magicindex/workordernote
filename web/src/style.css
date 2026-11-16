@@ -205,6 +205,11 @@ select optgroup {
 .surface {
   background-color: rgb(var(--color-surface) / var(--card-bg-opacity, 0.9));
 }
+/* 侧边栏与卡片共用同一透明度；侧栏原先是 bg-background/10，和卡片差得太远。 */
+.sidebar {
+  background-color: rgb(var(--color-surface) / var(--card-bg-opacity, 0.9)) !important;
+}
+
 /* 顶栏（标题栏）与卡片共用同一个透明度偏好。 */
 .topbar {
   background-color: rgb(var(--color-background) / var(--card-bg-opacity, 0.9)) !important;

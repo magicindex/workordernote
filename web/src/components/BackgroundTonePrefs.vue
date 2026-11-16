@@ -150,7 +150,7 @@
       <span class="text-[11px] font-semibold text-muted-foreground">卡片透明度</span>
       <input
         type="range"
-        min="0"
+        min="20"
         max="100"
         step="1"
         class="h-1.5 flex-1 cursor-pointer accent-brand-500"
@@ -163,7 +163,7 @@
       />
       <span class="w-9 text-right text-[11px] font-semibold text-muted-foreground" data-card-bg-opacity-value>{{ cardOpacity }}%</span>
     </div>
-    <p class="mt-1 text-[11px] text-muted-foreground">拖动卡片透明度时实时预览；100% 不透明，0% 全透明，松手自动保存到当前用户。</p>
+    <p class="mt-1 text-[11px] text-muted-foreground">拖动卡片透明度时实时预览；100% 不透明，最低 20%，松手自动保存到当前用户。侧边栏、顶栏、手机底栏与卡片共用同一透明度。</p>
     <p class="mt-1.5 text-[11px] text-muted-foreground">拖动/选色时实时预览；松手自动保存到当前用户。</p>
     <p v-if="errorMsg" class="mt-1 text-[11px] font-medium text-destructive" data-page-bg-tone-error>{{ errorMsg }}</p>
   </div>

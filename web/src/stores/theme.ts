@@ -400,7 +400,8 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   function setCardBgOpacity(value: number) {
-    const next = Math.max(0, Math.min(100, Math.round(Number(value) || 0)))
+    // 最低 20%：全透明会让卡片/侧栏/顶栏内容难以辨认（用户 2026-11-16）。
+    const next = Math.max(20, Math.min(100, Math.round(Number(value) || 0)))
     cardBgOpacity.value = next
     if (typeof document !== 'undefined') {
       document.documentElement.style.setProperty('--card-bg-opacity', String(next / 100))

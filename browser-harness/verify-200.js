@@ -39,7 +39,20 @@ const setRange = (page, selector, value) => page.evaluate(({ selector, value }) 
         max: document.querySelector('[data-card-bg-opacity-slider]')?.getAttribute('max'),
         value: document.querySelector('[data-card-bg-opacity-value]')?.textContent?.trim(),
       }));
-      check('页面背景下方有卡片透明度滑块', init.slider && init.min === '0' && init.max === '100', JSON.stringify(init));
+      check('页面背景下方有卡片透明度滑块（最低 20%）', init.slider && init.min === '20' && init.max === '100', JSON.stringify(init));
+
+      await setRange(page, '[data-card-bg-opacity-slider]', 0);
+      await sleep(700);
+      const floor = await page.evaluate(() => ({
+        label: document.querySelector('[data-card-bg-opacity-value]')?.textContent?.trim(),
+        cssVar: getComputedStyle(document.documentElement).getPropertyValue('--card-bg-opacity').trim(),
+        surface: getComputedStyle(document.querySelector('.surface')).backgroundColor,
+        sidebar: getComputedStyle(document.querySelector('.sidebar')).backgroundColor,
+        topbar: getComputedStyle(document.querySelector('.topbar')).backgroundColor,
+      }));
+      check('透明度最低保护 20%，侧栏/卡片/顶栏一起生效',
+        floor.label === '20%' && floor.cssVar === '0.2' && /0\.2/.test(floor.surface) && /0\.2/.test(floor.sidebar) && /0\.2/.test(floor.topbar),
+        JSON.stringify(floor));
 
       await setRange(page, '[data-card-bg-opacity-slider]', 55);
       await sleep(900);
@@ -47,9 +60,10 @@ const setRange = (page, selector, value) => page.evaluate(({ selector, value }) 
         label: document.querySelector('[data-card-bg-opacity-value]')?.textContent?.trim(),
         cssVar: getComputedStyle(document.documentElement).getPropertyValue('--card-bg-opacity').trim(),
         surface: getComputedStyle(document.querySelector('.surface')).backgroundColor,
+        sidebar: getComputedStyle(document.querySelector('.sidebar')).backgroundColor,
         topbar: getComputedStyle(document.querySelector('.topbar')).backgroundColor,
       }));
-      check('拖到 55% 实时预览（卡片与标题栏同步）', preview.label === '55%' && preview.cssVar === '0.55' && /0\.55/.test(preview.surface) && /0\.55/.test(preview.topbar), JSON.stringify(preview));
+      check('拖到 55% 实时预览（卡片、侧栏、标题栏同步）', preview.label === '55%' && preview.cssVar === '0.55' && /0\.55/.test(preview.surface) && /0\.55/.test(preview.sidebar) && /0\.55/.test(preview.topbar), JSON.stringify(preview));
       const saved = (await api(page, '/api/configs')).data || {};
       check('透明度已保存到偏好设置', String(saved.card_bg_opacity) === '55', String(saved.card_bg_opacity));
 
