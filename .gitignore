@@ -80,3 +80,15 @@ tmp-iter-bin/
 browser-harness/node_modules/
 browser-harness/shots/
 browser-harness/*.log
+
+# ---------- 发布快照 / 旧工作区产物（本地大文件，不入库） ----------
+# GitHub 发布快照仓的本地 clone 与 bundle（几十 MB～几百 MB）
+publish-workordernote/
+publish-workordernote.bundle
+publish-workordernote-*.bundle
+# 旧工作区布局里的部署目录与数据快照（当前仓库使用 ops/）
+workordernote-deploy/
+# 旧 README 发布截图；当前 README 使用 docs/screenshots/
+publish-assets/
+# Vite 临时缓存
+.vite/

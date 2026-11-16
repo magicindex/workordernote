@@ -81,7 +81,7 @@
 | 前端 | `web/` Vue 3 应用：列表、日历/周视图、首页看板、信用卡、课程表、仪式感、设置与 AI 面板 |
 | 构建与部署 | `Dockerfile*`、`docker-compose.yml`、`scripts/`、`ops/`（部署记录、离线包模板、数据校验脚本） |
 | 回归测试 | `browser-harness/`（同仓库维护的浏览器用例，随功能同步更新） |
-| 发行产物 | `release/`（本地产物，已 git 忽略）、`publish-assets/`（README 截图） |
+| 发行产物 | `release/`（本地产物，已 git 忽略）；README 截图见 `docs/screenshots/` |
 
 ### 本仓库不负责 / 只读
 
