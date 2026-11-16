@@ -1479,6 +1479,14 @@ onBeforeUnmount(() => {
 .cal-card-title,
 .cal-card-meta { font-size: 14px; font-weight: 400; line-height: 1.45; }
 .cal-cell { min-height: 0; }
+/* 日历卡片里的日期/任务/时间段文字只作为卡片内容，不允许被鼠标/触屏选中复制；
+   点哪里都只触发卡片选中，避免出现文字高亮选区。 */
+.cal-cell,
+.cal-cell * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
 /* 日历主卡/日格与页面渐变背景拉开层次：日格用实色 surface，主卡再加一圈更明显的边界与投影。 */
 .cal-surface {
   background-color: rgb(var(--color-surface));
