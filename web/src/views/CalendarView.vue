@@ -1040,9 +1040,10 @@ function spanRangeText(item: CalendarItem) {
 }
 /** 点某一天：这一天有时间段任务就把它整段高亮出来；否则取消高亮（恢复单框显示）。 */
 function selectCell(key: string) {
+  // 点卡片只选中这一天的卡片；不自动把格内第一个时间段/条目设为选中态
+  // （用户 2026-11-16：点击卡片选中卡片，不再选中内容）。
   selectedDate.value = key
-  const span = spansOf(key)[0]
-  activeSpanId.value = span ? span.item.id : null
+  activeSpanId.value = null
 }
 function activateSpan(item: CalendarItem) {
   activeSpanId.value = activeSpanId.value === item.id ? null : item.id
