@@ -202,7 +202,7 @@
             tabindex="0"
             class="cal-cell group relative flex flex-col overflow-hidden rounded-xl border p-1 text-left transition sm:p-1.5"
             :class="cellClass(cell)"
-            @click="selectCell(cellKey(cell))"
+            @click.capture="selectCell(cellKey(cell))"
             @dblclick="openCreateForDate(cellKey(cell))"
             @keydown.enter.prevent="selectCell(cellKey(cell))"
             :title="`双击在这天新建提醒`"
