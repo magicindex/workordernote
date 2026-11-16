@@ -359,6 +359,11 @@ func notifyOverdueAt(db *gorm.DB, now time.Time) {
 		if p.quiet {
 			continue
 		}
+		// 「当天任务提醒」开启后，带开始时间的任务不再单独发逾期弹窗；
+		// 统一由开始 + X 小时的 reminder_started 提醒接管。
+		if item.StartAt != nil && sameDayHours(db, item.UserID) > 0 {
+			continue
+		}
 		deadline := overdueDeadlineOf(item, p.cutoff)
 		if deadline.IsZero() {
 			continue

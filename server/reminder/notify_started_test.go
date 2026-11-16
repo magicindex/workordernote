@@ -1,6 +1,7 @@
 package reminder
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -56,5 +57,40 @@ func TestNotifyStartedTasksAfterHours(t *testing.T) {
 	notifyStartedAt(appDB, now.Add(2*time.Hour))
 	if got := count(); got != 1 {
 		t.Fatalf("关闭后不该再发，实际 %d", got)
+	}
+}
+
+// 「当天任务提醒」开启后，带开始时间的任务不能在开始 + X 小时前先弹普通到点提醒。
+func TestSameDayHoursSuppressesEarlierDuePopup(t *testing.T) {
+	cleanup := testDB(t)
+	defer cleanup()
+
+	const userID = 332
+	setUserConfig(t, "reminder_same_day_hours", "1", userID)
+	now := time.Now()
+	start := now.Add(-30 * time.Minute)
+	due := start
+	row := Reminder{UserID: userID, ListID: 1, Title: "自检当天提醒接管", Kind: KindTask, StartAt: &start, DueAt: &due, RepeatRule: "none"}
+	if err := appDB.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	count := func() int64 {
+		var n int64
+		appDB.Model(&Notification{}).Where("user_id = ? AND reminder_id = ? AND type = ?", userID, row.ID, "reminder_due").Count(&n)
+		return n
+	}
+	if _, err := sendChannel(context.Background(), appDB, ChannelInApp, userID, row, "same-day-test", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := count(); got != 0 {
+		t.Fatalf("设定 1 小时、开始仅 30 分钟，不该发到点弹窗，实际 %d", got)
+	}
+
+	setUserConfig(t, "reminder_same_day_hours", "0", userID)
+	if _, err := sendChannel(context.Background(), appDB, ChannelInApp, userID, row, "same-day-test-off", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := count(); got != 1 {
+		t.Fatalf("关闭当天任务提醒后应恢复正常到点弹窗，实际 %d", got)
 	}
 }

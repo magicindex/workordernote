@@ -53,7 +53,7 @@ func handleChannelStatuses(db *gorm.DB) gin.HandlerFunc {
 func handleProviderStatuses(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		response.Success(c, gin.H{
-			"email": gin.H{"configured": emailConfigured(db)},
+			"email":  gin.H{"configured": emailConfigured(db)},
 			"feishu": gin.H{"configured": feishuConfigured(db)}, "qq": gin.H{"configured": qqConfigured(db)},
 		})
 	}
@@ -620,6 +620,12 @@ func sendChannel(ctx context.Context, db *gorm.DB, channel string, userID uint, 
 		return sendResult{}, &deliveryError{Code: "CHANNEL_RETIRED", Message: "手机短信通知已取消", Permanent: true}
 	}
 	if channel == ChannelInApp {
+		// 「当天任务提醒」开启后，带开始时间的任务由 notifyStartedAt 在
+		// 开始 + X 小时发提醒；这里不再发普通到点弹窗，否则用户会在设定
+		// 时间之前先看到弹窗（用户 2026-11-16 反馈）。
+		if item.StartAt != nil && sameDayHours(db, userID) > 0 {
+			return sendResult{}, nil
+		}
 		n := Notification{UserID: userID, Type: "reminder_due", Title: item.Title, Body: notificationBody(item)}
 		if item.ID > 0 {
 			n.ReminderID = &item.ID

@@ -243,7 +243,7 @@ func init() {
 		Key: "reminder_same_day_hours", Scope: sysconfig.ScopeUser, Type: sysconfig.TypeSelect,
 		Default: "0", Options: []string{"0", "1", "2", "4", "8"},
 		Public: true, Group: "reminder", Label: "当天任务提醒",
-		Description: "任务开始后 X 小时仍未完成时提醒；0 = 关闭；距开始不足该小时数则不提醒",
+		Description: "任务开始后 X 小时仍未完成时提醒；0 = 关闭；距开始不足该小时数则不提醒；开启后到点/逾期弹窗也延后到这个时间",
 	})
 
 	// 免打扰（用户 2026-10-16）：「首行铃铛（消息）旁边放一个喇叭标志，点击进入静音标志，

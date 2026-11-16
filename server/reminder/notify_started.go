@@ -17,6 +17,24 @@ import (
 // 选项 1/2/4/8 小时，按 StartAt 触发；距开始不足 X 小时不提醒。
 // 每个任务每天最多一条（type=reminder_started），与逾期提醒互不影响。
 
+// sameDayHours 读取用户「当天任务提醒」设置；0 表示不接管到点/逾期弹窗。
+// 设置开启后，带开始时间的任务不再在到点/逾期时弹窗，统一在开始 + X 小时由
+// notifyStartedAt 发一条，避免用户在设定时间之前先收到普通到点提醒。
+func sameDayHours(db *gorm.DB, userID uint) int {
+	if db == nil {
+		return 0
+	}
+	v, err := sysconfig.GetConfig(db, "reminder_same_day_hours", userID)
+	if err != nil {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
+
 func notifyStartedTasks(db *gorm.DB) {
 	notifyStartedAt(db, time.Now())
 }
@@ -46,12 +64,7 @@ func notifyStartedAt(db *gorm.DB, now time.Time) {
 		if n, ok := hoursCache[userID]; ok {
 			return n
 		}
-		n := 0
-		if v, err := sysconfig.GetConfig(db, "reminder_same_day_hours", userID); err == nil {
-			if parsed, convErr := strconv.Atoi(strings.TrimSpace(v)); convErr == nil && parsed > 0 {
-				n = parsed
-			}
-		}
+		n := sameDayHours(db, userID)
 		hoursCache[userID] = n
 		return n
 	}
