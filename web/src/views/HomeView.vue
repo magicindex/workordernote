@@ -2437,7 +2437,7 @@ function onShortcut(e: KeyboardEvent) {
    卡片里的条目**不再各自是一张小卡**（用户 2026-10-09：「合并的自身卡片将不再使用，
    使用横线分割」）—— 去掉边框/圆角/阴影/悬浮位移，行与行之间用一条细横线分隔，
    整张卡片只有一个外框，看起来就是「这一天的清单」。 */
-.day-card { @apply overflow-hidden rounded-2xl border border-border/70 bg-surface/85 shadow-[0_10px_30px_-26px_rgba(15,23,42,.45)] backdrop-blur sm:rounded-[22px]; }
+.day-card { @apply overflow-hidden rounded-2xl border border-border/70 bg-surface/85 shadow-[0_10px_30px_-26px_rgba(15,23,42,.45)] backdrop-blur sm:rounded-[22px]; background-color: rgb(var(--color-surface) / var(--card-bg-opacity, .85)); }
 .day-card-head { @apply flex items-center gap-2 border-b border-border/60 bg-muted/40 px-3 py-2 sm:px-4; }
 .day-card-label { @apply text-[13px] font-extrabold tracking-tight text-foreground sm:text-sm; }
 .day-card-weekday { @apply text-[11px] font-bold text-muted-foreground; }

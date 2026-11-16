@@ -201,6 +201,11 @@ select optgroup {
   color: rgb(var(--color-foreground));
 }
 
+/* 卡片表面透明度：统一由 --card-bg-opacity 控制，范围 0–1。 */
+.surface {
+  background-color: rgb(var(--color-surface) / var(--card-bg-opacity, 0.9));
+}
+
 /* 亮色主题 + 深色页面背景（星空 / 深色渐变）时，整页切换到深色语义 token：
    卡片、顶栏、弹窗、下拉、边框和文字一起变深/变浅，避免「深色背景 + 浅色主题的深字」看不清。
    只影响这类组合，不改暗色主题本身，也不动品牌色。 */
@@ -220,12 +225,12 @@ html.page-bg-dark:not(.dark) {
 /* 卡片保持可读的高透明度玻璃感：背景深色 token 已就位，90% 已足够，
    这里再略提一点不透明度，避免星点在正文下透出来干扰阅读。 */
 html.page-bg-dark:not(.dark) .surface {
-  background-color: rgb(30 41 59 / 0.90);
+  background-color: rgb(30 41 59 / var(--card-bg-opacity, 0.9));
   border-color: rgb(148 163 184 / 0.18);
 }
 /* 暗色主题卡片：更亮的 slate-800 半透明表面 + 细边框，和深色页面拉开层次。 */
 html.dark .surface {
-  background-color: rgb(30 41 59 / 0.88);
+  background-color: rgb(30 41 59 / var(--card-bg-opacity, 0.88));
   border-color: rgb(148 163 184 / 0.18);
 }
 html.page-bg-dark:not(.dark) .surface-modal {

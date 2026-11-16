@@ -272,6 +272,8 @@ export const useThemeStore = defineStore('theme', () => {
   const pageBgToneLight = ref(storedTones.light)
   const pageBgToneDark = ref(storedTones.dark)
   const pageBgGradient = ref<PageBgGradient | null>(readStoredPageBgGradient())
+  // 卡片表面透明度（0 = 全透明，100 = 不透明）；由偏好设置里的滑块下发到 CSS 变量。
+  const cardBgOpacity = ref(90)
   const sunCity = ref<string>(readStoredSunCity())
   // 当前时刻按日出日落算出来是不是夜间。只在 mode === 'sun' 时参与判断。
   const sunDark = ref<boolean>(isNightAt(new Date(), sunCity.value))
@@ -320,6 +322,7 @@ export const useThemeStore = defineStore('theme', () => {
     if (brand.value !== 'default') {
       root.classList.add(`brand-${brand.value}`)
     }
+    setCardBgOpacity(cardBgOpacity.value)
     applyPageBgTone(pageBgTone.value)
     applyPageBgGradient(pageBgGradient.value)
     applyPageBgContrast(pageBgGradient.value, pageBgTone.value)
@@ -396,6 +399,14 @@ export const useThemeStore = defineStore('theme', () => {
     applyPageBgContrast(pageBgGradient.value, pageBgTone.value)
   }
 
+  function setCardBgOpacity(value: number) {
+    const next = Math.max(0, Math.min(100, Math.round(Number(value) || 0)))
+    cardBgOpacity.value = next
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.setProperty('--card-bg-opacity', String(next / 100))
+    }
+  }
+
   function setPageBgGradient(value: PageBgGradient | null) {
     pageBgGradient.value = value
     if (value) localStorage.setItem(STORAGE_PAGE_BG_GRADIENT, JSON.stringify(value))
@@ -406,5 +417,5 @@ export const useThemeStore = defineStore('theme', () => {
 
   apply()
 
-  return { mode, brand, sunCity, sunDark, pageBgTone, pageBgToneLight, pageBgToneDark, pageBgGradient, isDark, toggle, setMode, setBrand, setSunCity, setPageBgTone, setPageBgToneFor, resetPageBgTone, setPageBgGradient, refreshSun, apply }
+  return { mode, brand, sunCity, sunDark, pageBgTone, pageBgToneLight, pageBgToneDark, pageBgGradient, cardBgOpacity, isDark, toggle, setMode, setBrand, setSunCity, setPageBgTone, setPageBgToneFor, resetPageBgTone, setPageBgGradient, setCardBgOpacity, refreshSun, apply }
 })

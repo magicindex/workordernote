@@ -146,6 +146,24 @@
       />
       <span class="text-[11px] font-semibold text-muted-foreground">亮</span>
     </div>
+    <div class="mt-3 flex items-center gap-2" data-card-bg-opacity>
+      <span class="text-[11px] font-semibold text-muted-foreground">卡片透明度</span>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="1"
+        class="h-1.5 flex-1 cursor-pointer accent-brand-500"
+        :value="cardOpacity"
+        :disabled="saving"
+        aria-label="卡片背景透明度"
+        data-card-bg-opacity-slider
+        @input="previewCardOpacity(($event.target as HTMLInputElement).value)"
+        @change="saveCardOpacity()"
+      />
+      <span class="w-9 text-right text-[11px] font-semibold text-muted-foreground" data-card-bg-opacity-value>{{ cardOpacity }}%</span>
+    </div>
+    <p class="mt-1 text-[11px] text-muted-foreground">拖动卡片透明度时实时预览；100% 不透明，0% 全透明，松手自动保存到当前用户。</p>
     <p class="mt-1.5 text-[11px] text-muted-foreground">拖动/选色时实时预览；松手自动保存到当前用户。</p>
     <p v-if="errorMsg" class="mt-1 text-[11px] font-medium text-destructive" data-page-bg-tone-error>{{ errorMsg }}</p>
   </div>
@@ -167,6 +185,7 @@ const endStop = ref(100)
 const stopTrack = ref<HTMLElement | null>(null)
 const draggingStop = ref<'start' | 'end' | null>(null)
 const tone = computed(() => theme.pageBgTone)
+const cardOpacity = computed(() => theme.cardBgOpacity)
 const saving = ref(false)
 const notice = ref('')
 const errorMsg = ref('')
@@ -266,6 +285,33 @@ function previewGradient(keepStarry = false) {
   theme.setPageBgGradient(currentGradient())
 }
 
+function previewCardOpacity(raw: string) {
+  touchNotice()
+  theme.setCardBgOpacity(Number(raw) || 0)
+}
+
+async function saveCardOpacity() {
+  if (saving.value) return
+  saving.value = true
+  errorMsg.value = ''
+  notice.value = ''
+  const value = String(theme.cardBgOpacity)
+  try {
+    const res = await updateConfig('card_bg_opacity', value)
+    if (res.data?.code === 0) {
+      notice.value = '已保存'
+      window.dispatchEvent(new CustomEvent('config-changed', { detail: { key: 'card_bg_opacity', value } }))
+      setTimeout(() => { notice.value = '' }, 2400)
+    } else {
+      errorMsg.value = res.data?.message || '保存失败'
+    }
+  } catch (err: any) {
+    errorMsg.value = err?.response?.data?.message || '保存失败'
+  } finally {
+    saving.value = false
+  }
+}
+
 function previewTone(raw: string) {
   const next = Math.max(-100, Math.min(100, Math.round(Number(raw) || 0)))
   touchNotice()
@@ -355,10 +401,12 @@ async function reset() {
   endStop.value = 100
   presetMode.value = ''
   starStyle.value = 'dot'
+  theme.setCardBgOpacity(90)
   previewGradient(true)
   theme.resetPageBgTone()
   await saveGradient()
   await saveTone()
+  await saveCardOpacity()
 }
 
 watch(() => theme.isDark, (dark) => {
@@ -384,6 +432,8 @@ onMounted(async () => {
     const darkTone = String(data.page_bg_tone_dark ?? '')
     theme.setPageBgToneFor(false, lightTone !== '' ? Number(lightTone) : legacyManual ? Number(legacyTone) : 0)
     theme.setPageBgToneFor(true, darkTone !== '' ? Number(darkTone) : legacyManual ? Number(legacyTone) : -20)
+    const opacity = Number(data.card_bg_opacity)
+    theme.setCardBgOpacity(Number.isFinite(opacity) && data.card_bg_opacity !== undefined ? opacity : 90)
     const gradient = parsePageBgGradient(String(data.page_bg_gradient || ''))
     if (gradient) {
       presetMode.value = gradient.preset

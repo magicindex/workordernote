@@ -1049,6 +1049,8 @@ async function loadSidebarOrder() {
     themeStore.setPageBgToneFor(false, lightTone !== '' ? Number(lightTone) : legacyManual ? Number(legacyTone) : 0)
     themeStore.setPageBgToneFor(true, darkTone !== '' ? Number(darkTone) : legacyManual ? Number(legacyTone) : -20)
     themeStore.setPageBgGradient(parsePageBgGradient(String(cfg.page_bg_gradient || '')))
+    const cardOpacity = Number(cfg.card_bg_opacity)
+    themeStore.setCardBgOpacity(Number.isFinite(cardOpacity) && cfg.card_bg_opacity !== undefined ? cardOpacity : 90)
     const raw = String(res.data?.data?.sidebar_order ?? '')
     const parsed = raw ? JSON.parse(raw) : []
     // 'nudge' 是旧版「提醒@他」在「我的清单」里的排序 token；2026-10-19 挪到「课程表」下面后不再参与排序。
@@ -1343,6 +1345,10 @@ function onConfigChanged(event: Event) {
   }
   if (detail?.key === 'page_bg_gradient') {
     themeStore.setPageBgGradient(parsePageBgGradient(String(detail.value || '')))
+    return
+  }
+  if (detail?.key === 'card_bg_opacity') {
+    themeStore.setCardBgOpacity(Number(detail.value || 0) || 0)
   }
 }
 // 关掉浮窗（Esc / 关闭按钮 / 点遮罩）后，下一次打开仍按「窄桌面先收起侧栏」的规矩来，
