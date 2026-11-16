@@ -59,7 +59,7 @@
     <div class="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_19rem]">
       <!-- 月历网格 -->
       <section
-        class="surface flex min-h-0 flex-col rounded-2xl p-2 sm:p-3"
+        class="surface cal-table flex min-h-0 flex-col rounded-2xl p-2 sm:p-3"
         :class="viewMode === 'week' ? 'overflow-visible' : 'overflow-hidden'"
       >
         <!-- 月 / 周 切换（周视图＝7 列天 × 纵向小时，用户要求） -->
@@ -129,7 +129,7 @@
               <div
                 v-for="b in (weekBlocks[dayKey(d)] || [])"
                 :key="b.item.id"
-                class="absolute cursor-pointer"
+                class="absolute cursor-pointer overflow-hidden rounded-md"
                 :class="{ 'opacity-55': b.item.completed && b.item.kind !== 'note' }"
                 :style="{ top: b.top + 'px', height: b.height + 'px', left: (b.lane * 100) / b.lanes + '%', width: 100 / b.lanes + '%' }"
                 :data-week-block="b.item.id"
@@ -174,9 +174,9 @@
                     />
                     <span
                       data-week-label-mode="right"
-                      class="pointer-events-none z-10 ml-1 block whitespace-nowrap rounded bg-surface/95 px-0.5 py-0.5 text-[10px] font-bold leading-[10px]"
+                      class="pointer-events-none z-10 ml-1 block max-h-full overflow-hidden whitespace-nowrap rounded bg-surface/95 px-0.5 py-0.5 text-[10px] font-bold leading-[10px]"
                       :style="{ color: taskInk(b.item), writingMode: 'vertical-rl', textOrientation: 'mixed' }"
-                    >{{ b.item.title }}</span>
+                    >{{ weekBlockLabel(b) }}</span>
                   </div>
                 </div>
               </div>
@@ -809,6 +809,14 @@ function minutesFromEvent(e: MouseEvent, cols = 4) {
   const step = 60 / cols
   return Math.floor((y / hourHeight.value) * 60 / step) * step
 }
+/** 周视图竖排标签按块高度截断：每个汉字约 10px 高，超过可用高度就加省略号。 */
+function weekBlockLabel(b: { item: CalendarItem; height: number }) {
+  const available = Math.max(10, b.height - 8)
+  const maxChars = Math.max(1, Math.floor(available / 10))
+  const title = b.item.title || ''
+  return title.length > maxChars ? title.slice(0, maxChars) + '…' : title
+}
+
 function onWeekMove(e: MouseEvent, d: Date) {
   const minutes = minutesFromEvent(e)
   hoverTime.value = { day: dayKey(d), y: (minutes / 60) * hourHeight.value, label: `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}` }
@@ -1479,6 +1487,15 @@ onBeforeUnmount(() => {
 .cal-card-title,
 .cal-card-meta { font-size: 14px; font-weight: 400; line-height: 1.45; }
 .cal-cell { min-height: 0; }
+/* 周视图/月历的表格底色：浅蓝、低饱和，只做底，不抢内容。 */
+.cal-table {
+  background-color: rgb(247 250 255);
+  border-color: rgb(214 231 255);
+}
+.dark .cal-table {
+  background-color: rgb(17 24 39 / 0.72);
+  border-color: rgb(71 85 105 / 0.6);
+}
 /* 日历卡片里的日期/任务/时间段文字只作为卡片内容，不允许被鼠标/触屏选中复制；
    点哪里都只触发卡片选中，避免出现文字高亮选区。 */
 .cal-cell,

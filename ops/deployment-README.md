@@ -218,9 +218,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 ## 版本与迭代
 
 - 软件版本见根目录 `VERSION`，当前 `0.48.1`，规则为 `主版本号.小版本号.修正号`。
-  **部署状态（2026-11-16 12:48）**：**201 生产 8906 / 200 生产已部署 0.48.1 卡片禁选文字热修**
-  （源码提交 `6e4a329` + 前端卡片禁选，镜像 `workordernote:0.48.1-noselect-20261116-124715` =
-  `sha256:48a4e7c3bc82f07ad921dfc554cce1febf21351e49433c63e9a2dc2548beadf8`；
+  **部署状态（2026-11-16 13:01）**：**201 生产 8906 / 200 生产已部署 0.48.1 周视图热修**
+  （源码提交 `6e4a329` + 前端周视图，镜像 `workordernote:0.48.1-weekfit-20261116-125954` =
+  `sha256:cce12c2e51bc258f1c534fba7fa48febf277db84367f8ab81555dbab4af1434a`；
   `:latest` 已指向该热修；正式 0.48.1 基线镜像仍为 `sha256:fe43…`）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
@@ -242,6 +242,18 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 200 的 compose 镜像地址从本地 tag 改成 Gitea registry 地址 `127.0.0.1:3000/cyberzero/workordernote:...`，
   之后 `docker compose pull` 不再误连 Docker Hub；备份 `docker-compose.yml.bak-preallupdate-20261116-125230`。
 - 其它 NAS 服务（gitea、mariadb、jumpserver 等）未改动，本次只更新工作序记容器。
+
+### 2026-11-16：0.48.1 热修 —— 周视图溢出省略号 + 浅蓝表格
+
+> **热修镜像**：`workordernote:0.48.1-weekfit-20261116-125954` =
+> `sha256:cce12c2e51bc258f1c534fba7fa48febf277db84367f8ab81555dbab4af1434a`；前端 `index-Cz3ZhHmj.js`；后端 `6e4a329`。
+> 版本号仍为 `0.48.1`，`:latest` 已切到本热修。
+
+- 周视图竖排标签按任务块高度截断（约每字 10px），超出加 `…`；任务块 `overflow-hidden`，不再把文字撑出卡片。
+- 日历表格（`.cal-table`）浅色底改为低饱和浅蓝 `rgb(247 250 255)`，暗色用深 slate，不抢内容。
+- 验证：新增 `verify-208` **4/4**（标签不超出块、长标题有省略号、表格底色蓝分量不低）；`verify-203` 10/10。
+- 201：备份 `docker-compose.yml.bak-preweekfit-20261116-130050`；13:00 重建，healthy。
+- 200：备份 `docker-compose.yml.bak-preweekfit-20261116-130130`；13:01 重建，healthy。
 
 ### 2026-11-16：0.48.1 热修 —— 日历卡片彻底禁选文字
 
