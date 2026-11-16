@@ -235,6 +235,12 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-16：0.48.1 Release 资产上传
+
+- Gitea Release `v0.48.1` 已创建并设为 latest：<http://192.168.3.200:3000/cyberzero/WorkOrderNote/releases/tag/v0.48.1>。
+- GitHub Release `v0.48.1` 已创建并设为 latest：<https://github.com/magicindex/workordernote/releases/tag/v0.48.1>。
+- 两个 Release 均上传 5 个资产：fpk、Linux tar、screenshots zip、SHA256SUMS、docker-compose.yml；与最终镜像 `f51d837f…` 一致。
+
 ### 2026-11-16：0.48.1 正式包重切（热修全部带上）
 
 > **最终 0.48.1**：源码提交 `d5f0e16`；镜像 `workordernote:0.48.1` 与 `:latest` =

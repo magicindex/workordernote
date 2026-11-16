@@ -5,6 +5,7 @@
 
 - 仓库：<http://192.168.3.200:3000/cyberzero/WorkOrderNote>
 - 发布与安装包：<http://192.168.3.200:3000/cyberzero/WorkOrderNote/releases>
+- GitHub 镜像与 Release：<https://github.com/magicindex/workordernote/releases>
 - GitHub 镜像：<https://github.com/magicindex/workordernote>
 - 当前版本：`0.48.1`
 
