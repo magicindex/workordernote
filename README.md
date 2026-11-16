@@ -6,7 +6,7 @@
 - 仓库：<http://192.168.3.200:3000/cyberzero/WorkOrderNote>
 - 发布与安装包：<http://192.168.3.200:3000/cyberzero/WorkOrderNote/releases>
 - GitHub 镜像：<https://github.com/magicindex/workordernote>
-- 当前版本：`0.48.0`
+- 当前版本：`0.48.1`
 
 > **本项目是衍生作品。** 基于开源项目
 > [TechFunWay/reminders](https://github.com/TechFunWay/reminders)（MIT 许可）衍生开发，
@@ -51,7 +51,7 @@
 
 ---
 
-## 最近更新（0.47.1 → 0.48.0）
+## 最近更新（0.47.1 → 0.48.1）
 
 > 逐条的开发记录在 [`ops/待发布改动.md`](ops/待发布改动.md)，部署记录在
 > [`ops/deployment-README.md`](ops/deployment-README.md)。
@@ -65,6 +65,7 @@
 | 0.47.5 | — | AI 对话超时只回「Request failed with status code 502」：前端改为显示服务端原因，超时文案带出秒数并提示调大；两台超时 60 → 180 秒（qwen3:8b 写周报实测 90 秒级） |
 | 0.47.6 | 文档与发行：README 增加「最近更新」与「边界关系」，补全 CHANGELOG；打 Linux 发行包与新镜像 | 代码无功能性改动 |
 | 0.47.7 | — | 新建卡片芯片行的「清空」去掉（它把日期清成空、任务存成无日期），日期只剩相对芯片与「选择日期」两个来源 |
+| 0.48.1 | **主题/背景、日历、AI、通知的一轮完整收口**：页面渐变/星空、亮度与卡片透明度、深色可读性；日历单击查看、月历 `+N 条…`；AI Markdown/统一提示词/浮窗；邮箱发件配置与真实 SMTP 测试；同日任务提醒；取消短信并清理旧数据 | 编辑器方向统一、单击任务查看页、计划开始时间校验、月历折叠/重叠、深色顶栏/卡片对比度、侧栏排序/分隔线、手机首屏固定首页；全量 115/115 回归 |
 | 0.48.0 | **AI 入口改成桌面悬浮球**：右下角可拖动、拖完记住位置，点击展开右侧浮窗；浮窗不铺遮罩、正文让出等宽槽；窄桌面展开时侧栏自动收成图标栏 | 侧栏「呼叫小秘」占位置、桌面没有可随手拖动的入口；手机端保持原有顶栏图标 + 全屏抽屉不变 |
 
 ## 边界关系
@@ -117,10 +118,10 @@
 镜像发布在仓库自带的容器仓库，可直接拉取：
 
 ```bash
-docker pull 192.168.3.200:3000/cyberzero/workordernote:0.48.0
+docker pull 192.168.3.200:3000/cyberzero/workordernote:0.48.1
 ```
 
-同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.48.0`；Gitea 容器仓库不可用时可直接改用。
+同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.48.1`；Gitea 容器仓库不可用时可直接改用。
 
 ### 用仓库里的 compose 文件安装
 
@@ -145,7 +146,7 @@ curl -fsSLO https://raw.githubusercontent.com/magicindex/workordernote/main/dock
 ```yaml
 services:
   workordernote:
-    image: 192.168.3.200:3000/cyberzero/workordernote:0.48.0
+    image: 192.168.3.200:3000/cyberzero/workordernote:0.48.1
     container_name: workordernote
     # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
     user: "1000:1001"
