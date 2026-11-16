@@ -247,7 +247,7 @@
               <div
                 v-for="span in visibleSpans(cell)"
                 :key="`span-${span.item.id}`"
-                class="cal-span flex min-w-0 items-center gap-1 rounded-md px-1 py-[1px] text-left font-semibold leading-tight"
+                class="cal-span flex min-w-0 items-center gap-1 rounded-md px-1 py-[1px] text-left font-normal leading-tight"
                 :class="spanClass(span)"
                 :style="{ background: chipStyle(span.item).background, color: chipStyle(span.item).color }"
                 :data-cal-span="`${span.item.id}:${span.role}`"
@@ -265,7 +265,7 @@
               <span
                 v-for="item in visibleItems(cell)"
                 :key="item.id"
-                class="cal-task flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1 py-[1px] font-semibold leading-tight"
+                class="cal-task flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1 py-[1px] font-normal leading-tight"
                 :class="{ 'opacity-55 line-through': item.completed && item.kind !== 'note' }"
                 :style="chipStyle(item)"
                 :title="`${item.title}（单击查看，双击编辑）`"
@@ -386,15 +386,15 @@
               @dblclick.stop="onItemDblClick(item)"
             >
               <div class="flex min-w-0 items-center gap-1.5">
-                <h4 class="cal-task-lg truncate font-bold" :class="{ 'line-through opacity-60': item.completed && item.kind !== 'note' }">{{ item.title }}</h4>
+                <h4 class="cal-card-title truncate" :class="{ 'line-through opacity-60': item.completed && item.kind !== 'note' }">{{ item.title }}</h4>
                 <span v-if="item.kind === 'note'" class="tiny-badge shrink-0">记事</span>
                 <span v-if="item.priority" class="shrink-0 text-[10px] font-black text-rose-500">{{ '!'.repeat(item.priority) }}</span>
               </div>
-              <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+              <div class="cal-card-meta mt-0.5 flex flex-wrap items-center gap-1.5 text-muted-foreground">
                 <span>{{ timeLabel(item) }}</span>
                 <span v-if="item.repeat_rule && item.repeat_rule !== 'none'" class="tiny-badge">{{ ruleLabel(item.repeat_rule) }}</span>
               </div>
-              <div class="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+              <div class="cal-card-meta mt-1 flex min-w-0 items-center gap-1.5 text-muted-foreground">
                 <ListIcon :name="iconOf(item)" :size="13" class="shrink-0" :style="{ color: dot(item.list_color) }" />
                 <span class="truncate">{{ item.list_name }}</span>
               </div>
@@ -1469,7 +1469,9 @@ onBeforeUnmount(() => {
 .cal-task,
 .cal-span,
 [data-cal-more] { font-size: var(--cal-task-font, 10px); }
-.cal-task-lg { font-size: calc(var(--cal-task-font, 10px) + 4px); }
+/* 右侧当天卡片：标题、时间、清单统一为正文级 12px，不加粗；长标题由 truncate 省略。 */
+.cal-card-title,
+.cal-card-meta { font-size: 12px; font-weight: 400; line-height: 1.4; }
 .cal-cell { min-height: 0; }
 /* 日历主卡/日格与页面渐变背景拉开层次：日格用实色 surface，主卡再加一圈更明显的边界与投影。 */
 .cal-surface {

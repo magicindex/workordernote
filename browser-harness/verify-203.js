@@ -33,6 +33,12 @@ function check(name, ok, extra = '') {
           rootH: root ? Math.round(root.getBoundingClientRect().height) : 0,
           taskFont: task ? getComputedStyle(task).fontSize : '',
           spanFont: span ? getComputedStyle(span).fontSize : '',
+          taskWeight: task ? getComputedStyle(task).fontWeight : '',
+          spanWeight: span ? getComputedStyle(span).fontWeight : '',
+          cardTitleFont: document.querySelector('.cal-card-title') ? getComputedStyle(document.querySelector('.cal-card-title')).fontSize : '',
+          cardMetaFont: document.querySelector('.cal-card-meta') ? getComputedStyle(document.querySelector('.cal-card-meta')).fontSize : '',
+          cardTitleWeight: document.querySelector('.cal-card-title') ? getComputedStyle(document.querySelector('.cal-card-title')).fontWeight : '',
+          cardMetaWeight: document.querySelector('.cal-card-meta') ? getComputedStyle(document.querySelector('.cal-card-meta')).fontWeight : '',
           hasTask: !!task,
           hasSpan: !!span,
           taskOverflow: !!taskTitle && taskTitle.scrollWidth > taskTitle.clientWidth + 1,
@@ -45,7 +51,12 @@ function check(name, ok, extra = '') {
       check(`桌面 ${h}px 无页面纵向滚动条`, info.docH <= info.viewH + 1 && info.bodyH <= info.viewH + 1, JSON.stringify(info));
       check(`桌面 ${h}px 日历卡片不横向溢出`, info.docW <= info.viewW + 1, JSON.stringify(info));
       if (info.hasTask && info.hasSpan) {
-        check(`桌面 ${h}px 任务与时间段字号一致`, info.taskFont === info.spanFont, JSON.stringify({ task: info.taskFont, span: info.spanFont }));
+        check(`桌面 ${h}px 任务与时间段字号/字重一致且不加粗`,
+          info.taskFont === info.spanFont && info.taskWeight === '400' && info.spanWeight === '400',
+          JSON.stringify({ task: info.taskFont, span: info.spanFont, tw: info.taskWeight, sw: info.spanWeight }));
+        check(`桌面 ${h}px 右侧卡片标题与描述同为正文级 12px、不加粗`,
+          info.cardTitleFont === '12px' && info.cardMetaFont === '12px'
+            && info.cardTitleWeight === '400' && info.cardMetaWeight === '400', JSON.stringify(info));
       } else {
         check(`桌面 ${h}px 有任务/时间段可检查字号`, false, JSON.stringify(info));
       }
