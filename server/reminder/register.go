@@ -292,6 +292,9 @@ func init() {
 			if err := BackfillSyncUIDs(db); err != nil {
 				return err
 			}
+			if err := PurgeSMSData(db); err != nil {
+				return err
+			}
 			return timetable.BackfillSyncUIDs(db)
 		},
 	})
@@ -389,5 +392,40 @@ func init() {
 				ensureQQGateway(appDB)
 			}
 		},
+	})
+}
+
+// PurgeSMSData 彻底移除已下线的手机短信通知数据：绑定、发件配置、投递任务与尝试记录、
+// 提醒上选中的 SMS 渠道，以及通知中心里旧的短信失败回执。启动迁移时幂等执行。
+func PurgeSMSData(db *gorm.DB) error {
+	if db == nil {
+		return nil
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		var jobIDs []uint
+		if err := tx.Model(&DeliveryJob{}).Where("channel = ?", ChannelSMS).Pluck("id", &jobIDs).Error; err != nil {
+			return err
+		}
+		if len(jobIDs) > 0 {
+			if err := tx.Where("job_id IN ?", jobIDs).Delete(&DeliveryAttempt{}).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Where("channel = ?", ChannelSMS).Delete(&DeliveryJob{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("channel = ?", ChannelSMS).Delete(&ChannelBinding{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("channel = ?", ChannelSMS).Delete(&ReminderChannel{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("provider = ?", ChannelSMS).Delete(&ProviderConfig{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("type = ? AND body LIKE ?", "channel_failed", "手机短信：%").Delete(&Notification{}).Error; err != nil {
+			return err
+		}
+		return nil
 	})
 }

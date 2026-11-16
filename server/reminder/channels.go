@@ -53,7 +53,7 @@ func handleChannelStatuses(db *gorm.DB) gin.HandlerFunc {
 func handleProviderStatuses(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		response.Success(c, gin.H{
-			"email": gin.H{"configured": emailConfigured(db)}, "sms": gin.H{"configured": smsConfigured(db)},
+			"email": gin.H{"configured": emailConfigured(db)},
 			"feishu": gin.H{"configured": feishuConfigured(db)}, "qq": gin.H{"configured": qqConfigured(db)},
 		})
 	}
@@ -91,7 +91,7 @@ func handleNotificationBrand(db *gorm.DB) gin.HandlerFunc {
 func handleSaveProvider(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		provider := strings.ToLower(c.Param("provider"))
-		if provider != ChannelEmail && provider != ChannelSMS && provider != ChannelQQ {
+		if provider != ChannelEmail && provider != ChannelQQ {
 			response.ErrorBadRequest(c, "不支持的通知服务")
 			return
 		}

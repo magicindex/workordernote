@@ -17,7 +17,7 @@ const (
 )
 
 var supportedChannels = map[string]bool{
-	ChannelInApp: true, ChannelEmail: true, ChannelSMS: true,
+	ChannelInApp: true, ChannelEmail: true,
 	ChannelFeishu: true, ChannelQQ: true, ChannelDingTalk: true,
 }
 
