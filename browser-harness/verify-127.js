@@ -113,8 +113,16 @@ const created = [];
       for (const [w, pages] of [[390, ['/admin', '/admin/all']], [320, ['/admin']]]) {
         await page.setViewport({ width: w, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
         for (const p of pages) {
-          await gotoRetry(page, BASE + p);
-          await sleep(2500);
+          if (p === '/admin') {
+            // 手机端首屏固定首页，裸 /admin 会回首页；点底栏「待办」再断言。
+            await gotoRetry(page, BASE + '/admin/home');
+            await sleep(1300);
+            await page.click('[data-tab-today]');
+            await sleep(1600);
+          } else {
+            await gotoRetry(page, BASE + p);
+            await sleep(2500);
+          }
           const info = id ? await readRow(page, id) : null;
           const label = `${w}px ${p}`;
           if (!info || !info.title) {

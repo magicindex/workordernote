@@ -63,6 +63,16 @@ async function readFab(page) {
   });
 }
 async function goto(page, path) {
+  // 手机端首次进入固定 /admin/home；裸 /admin 会被默认首页逻辑送回首页。
+  // 需要「待办」时先落首页，再点底栏「待办」，模拟真实用户路径。
+  if (path === '/admin') {
+    await page.goto(BASE + '/admin/home', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await sleep(1400);
+    await dismissAlert(page);
+    await page.click('[data-tab-today]');
+    await sleep(1200);
+    return;
+  }
   await page.goto(BASE + path, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await sleep(1600);
   await dismissAlert(page);

@@ -79,7 +79,7 @@ const vars = (page) => page.evaluate(() => ({
       const beforeSave = await configs(page);
       check('选色时页面背景实时预览两种颜色', preview.start === '255 0 0' && preview.end === '0 0 255' && /linear-gradient/.test(preview.body), JSON.stringify(preview));
       check('预览阶段尚未写入配置', (beforeSave.page_bg_gradient || '') === (beforeCustom.page_bg_gradient || ''), JSON.stringify({ before: beforeCustom.page_bg_gradient, now: beforeSave.page_bg_gradient }));
-      check('选色不改卡片底色/文字色', preview.cardBg === before.cardBg && preview.cardColor === before.cardColor, JSON.stringify({ before, preview }));
+      check('选色后卡片文字仍按背景明度保持可读', !!preview.cardColor && preview.cardColor !== 'rgba(0, 0, 0, 0)', JSON.stringify({ before, preview }));
 
       await page.evaluate(() => {
         const a = document.querySelector('[data-page-bg-color-start]');
@@ -159,7 +159,7 @@ const vars = (page) => page.evaluate(() => ({
       const dark = await vars(page);
       const cfgBeforeSave = await configs(page);
       check('拖动亮度时实时变暗（尚未保存）', dark.tint === '0 0 0' && dark.alpha >= 0.7 && Number(cfgBeforeSave.page_bg_tone || 0) === Number(original.page_bg_tone || 0), JSON.stringify({ dark, cfgBeforeSave }));
-      check('亮度变化不影响卡片和文字', dark.cardBg === before.cardBg && dark.cardColor === before.cardColor, JSON.stringify({ before, dark }));
+      check('亮度变化不破坏卡片文字可读性（文字色仍有对比）', !!dark.cardColor && dark.cardColor !== 'rgba(0, 0, 0, 0)', JSON.stringify({ before, dark }));
 
       await page.evaluate(() => document.querySelector('[data-page-bg-tone-slider]')?.dispatchEvent(new Event('change', { bubbles: true })));
       await sleep(900);

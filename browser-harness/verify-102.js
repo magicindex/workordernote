@@ -127,7 +127,13 @@ async function waitSel(page, sel, timeout = 20000) {
 
     // 翻到下个月：显示下月那条、本月那条消失
     await page.evaluate(() => document.querySelector('[data-month-next]')?.click());
-    await sleep(1800);
+    // 月份切换后列表重渲染可能慢于固定 1.8s，轮询到标题/行变化。
+    for (let i = 0; i < 20; i += 1) {
+      await sleep(400);
+      const changed = await page.evaluate(() => (document.querySelector('[data-month-label]')?.innerText || '').trim());
+      if (!changed.includes('11') || i >= 12) break;
+    }
+    await sleep(800);
     const nextView = await page.evaluate(() => ({
       label: document.querySelector('[data-month-label]')?.innerText.trim() || '',
       // textContent：.reminder-row 带 content-visibility:auto，屏外的行 innerText 是空串

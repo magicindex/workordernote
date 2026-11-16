@@ -99,8 +99,11 @@ const quickShape = (page) => page.evaluate(() => ({
 
     // 手机端保持现状（用户 2026-11-11「手机版保持现状」）
     await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
-    await gotoRetry(page, BASE + '/admin');
-    await sleep(2000);
+    // 手机端首次进入固定首页；点底栏「待办」模拟真实操作。
+    await gotoRetry(page, BASE + '/admin/home');
+    await sleep(1400);
+    await page.click('[data-tab-today]');
+    await sleep(1600);
     st = await quickShape(page);
     check('手机端待办页仍是收起的「新建提醒」按钮（保持现状）',
       st.newButton === true && st.card === false && st.input === false, JSON.stringify(st));

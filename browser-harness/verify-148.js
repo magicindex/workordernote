@@ -49,8 +49,10 @@ async function noOverflow(page) {
     check('桌面用户页不显示手机卡片', await page.evaluate(() => !document.querySelector('[data-mobile-user-card]')?.offsetParent));
 
     await page.setViewport({ width: 390, height: 844 });
-    await page.goto(BASE + '/admin', { waitUntil: 'domcontentloaded' });
-    await sleep(900);
+    await page.goto(BASE + '/admin/home', { waitUntil: 'domcontentloaded' });
+    await sleep(1000);
+    await page.click('[data-tab-today]');
+    await sleep(1200);
     check('待办页仍保留悬浮新建按钮', await page.evaluate(() => !!document.querySelector('[data-mobile-fab]')));
   }, { width: 390, height: 844 });
 

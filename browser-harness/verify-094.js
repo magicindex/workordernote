@@ -122,12 +122,12 @@ const calendarFootprint = (page) => page.evaluate(() => {
       await page.goto(ROOT + '/admin', { waitUntil: 'domcontentloaded', timeout: 30000 });
       await sleep(2000);
       const mobileHome = await calendarFootprint(page);
-      check('手机端即使默认首页设成「日历」，进应用也落在列表视图',
-        !mobileHome.url.includes('calendar') && mobileHome.cells === 0, `URL=${mobileHome.url}`);
+      check('手机端即使默认首页设成「日历」，进应用也落在固定首页（不是日历）',
+        mobileHome.url === '/admin/home' && mobileHome.cells === 0, `URL=${mobileHome.url}`);
 
       await page.setViewport({ width: 1440, height: 900 });
       await page.goto(ROOT + '/admin', { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await sleep(2200);
+      await sleep(4500);
       const desktopHome = await page.evaluate(() => location.pathname);
       check('电脑端同一偏好仍然生效（默认首页=日历就进日历）',
         desktopHome.includes('calendar'), desktopHome);

@@ -101,8 +101,9 @@ const visible = (page, sel) => page.evaluate((sel) => {
     const dashboardFab = await visible(page, '[data-mobile-fab]');
     check('手机端首页不显示全局「悬浮 +」新建入口', dashboardFab === false);
 
-    await gotoRetry(page, BASE + '/admin');
-    await sleep(2200);
+    // 手机端首次进入固定首页；点底栏「待办」模拟真实操作，不能再用裸 /admin 直达。
+    await page.click('[data-tab-today]');
+    await sleep(1600);
     check('手机端「待办」页仍保留「悬浮 +」新建入口', await visible(page, '[data-mobile-fab]'));
     check('手机端顶栏 AI 星星仍在', await visible(page, '[data-assistant-topbar]'));
 

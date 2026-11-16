@@ -65,7 +65,10 @@ async function api(token, apiPath, method = 'GET', body = null) {
 
       await page.evaluate(() => document.querySelector('[data-cal-view="week"]')?.click());
       await sleep(800);
-      if (!(await page.$('[data-week-block]'))) { await page.evaluate(() => document.querySelector('[data-cal-view="week"]')?.click()); await sleep(700); }
+      for (let i = 0; i < 20 && !(await page.$('[data-week-block]')); i += 1) {
+        if (i === 8) await page.evaluate(() => document.querySelector('[data-cal-view="week"]')?.click());
+        await sleep(400);
+      }
       const week = await page.evaluate(({ a, b, doneId, day, yday }) => {
         const read = (key, id) => {
           const col = document.querySelector(`[data-week-col="${key}"]`);
