@@ -40,6 +40,23 @@ const info = (page) => page.evaluate(() => {
     check('桌面右上角有偏好设置按钮', desktop.exists && desktop.visible && desktop.href === '/admin/settings', JSON.stringify(desktop));
     check('偏好设置紧挨着免打扰按钮（后一个兄弟）', desktop.afterDnd, JSON.stringify(desktop));
     check('按钮有无障碍名称', desktop.title === '偏好设置' && desktop.aria === '偏好设置', JSON.stringify(desktop));
+    const icons = await page.evaluate(() => {
+      const norm = (svg) => {
+        const p = svg?.querySelector('path')?.getAttribute('d') || ''
+        const c = svg?.querySelector('circle')
+        return { d: p, r: c?.getAttribute('r') || '', cw: c?.getAttribute('stroke-width') || '', pw: svg?.querySelector('path')?.getAttribute('stroke-width') || '' }
+      }
+      return {
+        top: norm(document.querySelector('[data-preferences-topbar] svg')),
+        menu: norm(document.querySelector('a[href="/admin/settings"] svg')),
+        admin: norm(document.querySelector('a[href="/admin/configs"] svg')),
+        toggle: norm(document.querySelector('.nav-settings-toggle svg')),
+      }
+    })
+    check('顶栏/菜单/管理入口使用同一套齿轮图标',
+      JSON.stringify(icons.top) === JSON.stringify(icons.menu)
+        && JSON.stringify(icons.top) === JSON.stringify(icons.admin)
+        && JSON.stringify(icons.top) === JSON.stringify(icons.toggle), JSON.stringify(icons));
     await dismissAlert(page);
     // 生产上可能正好有到点提醒弹窗盖住顶栏；用 DOM click 验证链接本身可直达。
     await page.evaluate(() => document.querySelector('[data-preferences-topbar]').click());
