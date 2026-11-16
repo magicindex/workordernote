@@ -143,27 +143,38 @@ const madeIds = [];
       mine.some((m) => m.attr.endsWith(':start')) && mine.some((m) => m.attr.endsWith(':mid')) && mine.some((m) => m.attr.endsWith(':end')),
       JSON.stringify(mine.map((m) => m.attr)));
 
-    // ---------- 4. 点选高亮整段 / 点别处恢复 ----------
+    // ---------- 4. 点格子只选中这一天（2026-11-16「点卡片只选中卡片，不再选中内容」） ----------
     const dates = mine.map((m) => m.date).sort();
+    const cellHighlight = () => page.evaluate(() => [...document.querySelectorAll('[data-cal-date]')]
+      .filter((c) => c.className.split(/\s+/).some((cl) =>
+        cl === 'border-brand-500' || cl.startsWith('border-brand-500/') || cl === 'bg-brand-500/15'))
+      .map((c) => c.getAttribute('data-cal-date')));
+    // 普通格子带着 hover:border-brand-500/45，必须按「整串 class」判断，
+    // 不能用 className.includes(...)（那样所有普通格子都会被算成高亮）。
     await page.evaluate((d) => document.querySelector(`[data-cal-date="${d}"]`)?.click(), dates[1]);
     await sleep(600);
-    const highlighted = await page.evaluate(() => [...document.querySelectorAll('[data-cal-date]')]
-      .filter((c) => c.className.includes('ring-brand-500/40') || c.className.includes('border-brand-500/45'))
-      .map((c) => c.getAttribute('data-cal-date')));
-    check('点区间中间那天 → 整段三天都高亮',
-      dates.every((d) => highlighted.includes(d)) && highlighted.length === 3,
-      JSON.stringify({ dates, highlighted }));
+    const hi1 = await cellHighlight();
+    check('点区间中间那天 → 只高亮这一天（不再自动整段高亮）',
+      hi1.length === 1 && hi1[0] === dates[1], JSON.stringify({ dates, highlighted: hi1 }));
+    const boxAfterMid = await page.evaluate((d) => {
+      const cell = document.querySelector(`[data-cal-date="${d}"]`);
+      const span = cell?.querySelector('[data-cal-span]');
+      return { hasSpan: !!span, spanRing: span ? /ring-/.test(span.className) : false };
+    }, dates[1]);
+    check('点格子不会把卡内的时间段条带顺手选中（无 ring）',
+      boxAfterMid.hasSpan && boxAfterMid.spanRing === false, JSON.stringify(boxAfterMid));
+
     const outside = await page.evaluate(() => {
       const cell = [...document.querySelectorAll('[data-cal-date]')]
-        .find((c) => !c.querySelector('[data-cal-span]') && c.className.includes('in_month'));
-      const fallback = cell || [...document.querySelectorAll('[data-cal-date]')].find((c) => !c.querySelector('[data-cal-span]'));
-      fallback?.click();
-      return fallback?.getAttribute('data-cal-date') || '';
+        .find((c) => c.getAttribute('data-cal-date') && !c.querySelector('[data-cal-span]'));
+      cell?.click();
+      return cell?.getAttribute('data-cal-date') || '';
     });
     await sleep(600);
-    const stillHl = await page.evaluate(() => [...document.querySelectorAll('[data-cal-date]')]
-      .filter((c) => c.className.includes('ring-brand-500/40')).length);
-    check('点其他框 → 恢复单框显示（高亮清零）', stillHl === 0, JSON.stringify({ outside, stillHl }));
+    const hi2 = await cellHighlight();
+    check('点其他框 → 高亮跟着换到那一格',
+      !!outside && hi2.length === 1 && hi2[0] === outside,
+      JSON.stringify({ outside, highlighted: hi2 }));
 
     // ---------- 5. 逾期口径：看最后一天 ----------
     const now = new Date();

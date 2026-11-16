@@ -346,6 +346,9 @@ type CompletedItemDTO struct {
 	// 「完成时段：录入 → 完成 · 共多久」（用户 2026-10-22 要求）。
 	// 历史行靠回查提醒取得；提醒即使已软删除也还能取到，取不到时为空。
 	CreatedAt    *time.Time `json:"created_at,omitempty"`
+	// StartAt 是**计划任务**的开始时间（计划页建的才有，普通待办为空）。
+	// 打印「开始时间」列用：有它就印它，没有退回录入时间（用户 2026-11-16 明确）。
+	StartAt      *time.Time `json:"start_at,omitempty"`
 	ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
 	ListID       uint       `json:"list_id"`
 	ListName     string     `json:"list_name"`

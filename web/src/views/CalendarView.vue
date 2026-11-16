@@ -240,8 +240,9 @@
               </span>
             </div>
 
-            <!-- 时间段任务（计划页「任务周期」建的）：在**区间内每一天**都显示一条，
-                 点一下就把整段（开始框 → 跨框 → 最后一天）高亮出来。底色与图标
+            <!-- 时间段任务（计划页「任务周期」建的）：在**区间内每一天**都显示一条。
+                 点条带**不会**整段高亮，点哪天就只选中哪天（用户 2026-11-16 明确：
+                 「不恢复条带的点击高亮，保持现在点条带只选中当天」）。底色与图标
                  参考信用卡/记事本那种「图标 + 浅色底」的样式，用清单色。 -->
             <div v-if="spansOf(cellKey(cell)).length" class="mt-1 flex flex-col gap-0.5" data-cal-spans>
               <div
@@ -539,6 +540,11 @@ function startOfWeek(d: Date) {
   s.setDate(s.getDate() - offset)
   return s
 }
+/** 某时刻所在自然日的 23:59（周视图「未完成的待办续到当天结束」用）。 */
+function endOfDay(ms: number) {
+  const d = new Date(ms)
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 0).getTime()
+}
 const weekStart = ref(startOfWeek(new Date()))
 // 今天的高亮块要跟着实际时间走：每分钟刷新一次当前分钟。
 const clockNow = ref(new Date())
@@ -646,20 +652,18 @@ const weekLayout = computed<Record<string, WeekBlock[]>>(() => {
     // 只有真的填了「结束时间」才跨天；单点任务固定一小时，23:59 的任务不能溢出到次日。
     let end = explicitEnd > start ? explicitEnd : fromCreation ? dueMs : Math.min(start + 3600_000, nextMidnight)
     if (end <= start) end = Math.min(start + 3600_000, nextMidnight)
-    // 已完成的用「实际提交完成时刻」收尾；未完成的过期任务逐日续到下一次同一时刻，
-    // 这样 23:59 的任务跨过午夜后会继续铺到次日 23:59，直到提交为止。
+    // 收尾规则（用户 2026-11-16 报「今天新建的待办线段自动加 24 小时」）：
+    //   · 已完成 → 截到**实际完成时刻**（明天 9 点完成就截到 9 点，不再画到 23:59）；
+    //   · 未完成且已过到期时间、又没填「结束时间」→ 续到**当前这一天 23:59**。
+    //     旧写法是「到期时刻 + N 天」（次日同一时刻），于是 08:19 到期的待办会画成
+    //     08:19 → 次日 08:19 的 24 小时长线；现在跨过午夜只会长到次日 23:59。
+    //   · 还没到期 → 用原本算出来的 end（显式结束时间 / 创建到到期 / 单点一小时）。
     const doneMs = it.completed_at ? new Date(it.completed_at).getTime() : 0
+    const nowMs = clockNow.value.getTime()
     if (it.completed && doneMs > 0) {
       end = Math.max(start + 60_000, doneMs)
-    } else if (!it.completed && dueMs > 0) {
-      let rolled = dueMs
-      let guard = 0
-      while (rolled <= clockNow.value.getTime() && guard++ < 3660) {
-        const next = new Date(rolled)
-        next.setDate(next.getDate() + 1)
-        rolled = next.getTime()
-      }
-      if (rolled > dueMs) end = rolled
+    } else if (!it.completed && dueMs > 0 && explicitEnd <= start && dueMs <= nowMs) {
+      end = endOfDay(nowMs)
     }
     if (end <= weekStartMs || start >= weekEndMs) continue
     spans.push({ item: it, start, end, explicit: explicitEnd > start || fromCreation })
@@ -1000,13 +1004,10 @@ function lunarClass(c: LunarDayInfo) {
 function cellClass(c: LunarDayInfo) {
   const key = cellKey(c)
   const selected = key === selectedDate.value
-  const inActiveSpan = activeSpanId.value !== null && spansOf(key).some((s) => s.item.id === activeSpanId.value)
   const today = key === todayKey.value
   // 今天的格子由 .today-flow 负责唯一的边框（2px 流光）；去掉外边框，避免两层线叠加。
   // 选中/悬停也只改底色，不再加 ring，保证任何状态都只有一条边。
-  if (today) return `!border-0 ${selected || inActiveSpan ? 'bg-brand-500/15' : 'bg-surface hover:bg-muted/60'}`
-  if (selected && inActiveSpan) return 'border-brand-500/75 bg-brand-500/15'
-  if (inActiveSpan) return 'border-brand-500/55 bg-brand-500/8'
+  if (today) return `!border-0 ${selected ? 'bg-brand-500/15' : 'bg-surface hover:bg-muted/60'}`
   if (selected) return 'border-brand-500 bg-brand-500/8'
   if (!c.in_month) return 'border-border/30 bg-surface/20 opacity-45 hover:bg-muted/60'
   return 'border-border bg-surface hover:border-brand-500/45 hover:bg-muted/60'
@@ -1016,7 +1017,6 @@ function cellClass(c: LunarDayInfo) {
 // 后端把区间与窗口相交的任务都带回来了（见 listCalendarItems），这里按天判断：
 // 某一天落在 [start_at, end_at] 之内就画一条；role 决定圆角（start / mid / end），
 // 一天内首尾同格时按 start 处理，看起来还是一整段。
-const activeSpanId = ref<number | null>(null)
 /** ISO → 上海时区的 YYYY-MM-DD（与后端 due_date 同一口径；中国没有夏令时，直接 +8h 取日期）。 */
 function isoDayKey(iso: string) {
   return new Date(new Date(iso).getTime() + 8 * 3600_000).toISOString().slice(0, 10)
@@ -1034,27 +1034,22 @@ function spansOf(key: string) {
   return out
 }
 function spanClass(span: { item: CalendarItem; role: string }) {
-  const active = activeSpanId.value === span.item.id
-  const ring = active ? 'ring-2 ring-brand-500/50' : ''
-  if (span.role === 'start') return `rounded-r-none ${ring}`.trim()
-  if (span.role === 'end') return `rounded-l-none ${ring}`.trim()
-  if (span.role === 'mid') return `rounded-none ${ring}`.trim()
-  return ring
+  // 条带没有「整段选中」态了（见模板注释），这里只负责首/中/尾的圆角。
+  if (span.role === 'start') return 'rounded-r-none'
+  if (span.role === 'end') return 'rounded-l-none'
+  if (span.role === 'mid') return 'rounded-none'
+  return ''
 }
 function spanRangeText(item: CalendarItem) {
   const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('zh-CN', { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '')
   if (!item.start_at || !item.end_at) return ''
   return `${fmt(item.start_at)} – ${fmt(item.end_at)}`
 }
-/** 点某一天：这一天有时间段任务就把它整段高亮出来；否则取消高亮（恢复单框显示）。 */
+/** 点某一天：只选中这一天（不自动选中格内的时间段/条目，也不整段高亮）。 */
 function selectCell(key: string) {
-  // 点卡片只选中这一天的卡片；不自动把格内第一个时间段/条目设为选中态
-  // （用户 2026-11-16：点击卡片选中卡片，不再选中内容）。
+  // 用户 2026-11-16：「点击卡片选中卡片，不再选中内容」；同一天又确认
+  // 「不恢复条带的点击高亮，保持现在点条带只选中当天」。
   selectedDate.value = key
-  activeSpanId.value = null
-}
-function activateSpan(item: CalendarItem) {
-  activeSpanId.value = activeSpanId.value === item.id ? null : item.id
 }
 function dayNumberClass(c: LunarDayInfo) {
   if (isToday(c)) return 'bg-brand-500 text-white shadow-sm'
@@ -1286,11 +1281,6 @@ function onItemDblClick(item: CalendarItem) {
   if (itemClickTimer) { clearTimeout(itemClickTimer); itemClickTimer = undefined }
   viewItem.value = null
   openEditor(item)
-}
-/** 时间段任务：单击仍然把整段高亮出来（0.18.0 的行为），同时弹出查看页。 */
-function onSpanClick(item: CalendarItem) {
-  activateSpan(item)
-  onItemClick(item)
 }
 function closeView() { viewItem.value = null }
 function editFromView() {

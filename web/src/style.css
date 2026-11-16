@@ -205,6 +205,16 @@ select optgroup {
 .surface {
   background-color: rgb(var(--color-surface) / var(--card-bg-opacity, 0.9));
 }
+/*
+ * 页面级「卡片」底色（首页两列、通知、垃圾箱、提醒@他、渠道卡片、快速新建卡…）。
+ *
+ * 这些地方原来写死 `bg-surface/85`（固定 85%），拖动「卡片透明度」时纹丝不动
+ * （用户 2026-11-16：「首页卡片透明度没有变化」）。`.surface` 管的是列表卡片，
+ * 这个类给那些走 Tailwind 固定透明度的页面卡片用，一律跟随同一个偏好。
+ */
+.card-bg {
+  background-color: rgb(var(--color-surface) / var(--card-bg-opacity, 0.85));
+}
 /* 侧边栏与卡片共用同一透明度；侧栏原先是 bg-background/10，和卡片差得太远。 */
 .sidebar {
   background-color: rgb(var(--color-surface) / var(--card-bg-opacity, 0.9)) !important;

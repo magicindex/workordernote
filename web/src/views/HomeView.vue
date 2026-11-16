@@ -91,7 +91,7 @@
              反了）。外面这层 shell 负责 .flow-frame/.flow-glow：卡片自己有 overflow-hidden
              （用来裁左边那条品牌色竖条），把发光放在它身上会被裁掉，所以套一层不裁剪的壳。 -->
         <div class="quick-shell flow-frame flow-glow">
-          <div class="quick-card" :class="{ 'quick-card-expanded': quickExpanded }">
+          <div class="quick-card card-bg" :class="{ 'quick-card-expanded': quickExpanded }">
         <div class="flex items-start gap-3">
           <button
             type="button"
@@ -2417,7 +2417,7 @@ function onShortcut(e: KeyboardEvent) {
 <style scoped>
 .search-box { @apply flex h-10 min-w-0 flex-1 items-center gap-2 rounded-2xl border border-border/80 bg-surface/80 px-3 text-muted-foreground shadow-sm backdrop-blur transition focus-within:border-brand-500/40 focus-within:ring-4 focus-within:ring-brand-500/10 sm:h-11 sm:w-64 sm:flex-none; }
 .search-box input { @apply min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/65; }
-.quick-card { @apply relative overflow-hidden rounded-[24px] border border-border/70 bg-surface/90 p-3 shadow-[0_20px_50px_-30px_rgba(15,23,42,.35)] backdrop-blur-xl transition-all sm:p-5; }
+.quick-card { @apply relative overflow-hidden rounded-[24px] border border-border/70 p-3 shadow-[0_20px_50px_-30px_rgba(15,23,42,.35)] backdrop-blur-xl transition-all sm:p-5; }
 /* 收起态的「新建」按钮（用户要求：新建提醒控件折叠成一个按钮、放到搜索框左边）：
    **实线边框 + 流光**（.flow-frame 那条旋转的 1px 光带，见 style.css）——
    边框本身仍是实线，光带叠在它上面转，所以看起来是「实线在流动」。 */

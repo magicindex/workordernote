@@ -29,7 +29,7 @@
     </div>
 
     <div v-else class="grid gap-4 md:grid-cols-2">
-      <article v-for="channel in channels" :key="channel.channel" class="channel-card">
+      <article v-for="channel in channels" :key="channel.channel" class="channel-card card-bg">
         <div class="flex items-start gap-4">
           <span class="channel-icon" :class="channel.channel" v-html="icon(channel.channel)"></span>
           <div class="min-w-0 flex-1">
@@ -407,7 +407,7 @@ onBeforeUnmount(() => { if (qqRefreshTimer) window.clearInterval(qqRefreshTimer)
 </script>
 
 <style scoped>
-.channel-card { @apply rounded-[24px] border border-border/70 bg-surface/85 p-4 shadow-[0_16px_44px_-34px_rgba(15,23,42,.55)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-brand-500/15 sm:p-5; }
+.channel-card { @apply rounded-[24px] border border-border/70 p-4 shadow-[0_16px_44px_-34px_rgba(15,23,42,.55)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-brand-500/15 sm:p-5; }
 .channel-icon { @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:h-12 sm:w-12 sm:rounded-2xl; }
 .channel-icon :deep(svg) { @apply h-5 w-5 sm:h-6 sm:w-6; }
 .channel-icon.inapp { @apply bg-blue-500/10 text-blue-500; }.channel-icon.email { @apply bg-violet-500/10 text-violet-500; }.channel-icon.sms { @apply bg-amber-500/10 text-amber-500; }.channel-icon.feishu { @apply bg-cyan-500/10 text-cyan-500; }.channel-icon.qq { @apply bg-rose-500/10 text-rose-500; }.channel-icon.dingtalk { @apply bg-sky-500/10 text-sky-500; }

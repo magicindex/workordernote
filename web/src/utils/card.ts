@@ -48,6 +48,17 @@ export function formatCardDate(d: Date): string {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
+/**
+ * 完整日期 YYYY-MM-DD。
+ *
+ * 卡面上的「还款日」用它（用户 2026-11-16：「还款日期需要精确到具体日期，方便用户安排还款」）：
+ * 只写月-日的话，跨年那几期（12 月账单 / 次年 1 月还款）分不清是哪一年。
+ */
+export function formatCardDateFull(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 /** 卡号只显示尾号：多余的空格与分隔符都去掉。 */
 export function cardTail(no?: string | null): string {
   const digits = String(no || '').replace(/\D/g, '')

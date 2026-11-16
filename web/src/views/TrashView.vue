@@ -28,7 +28,7 @@
       <button type="button" class="shrink-0 underline" @click="errorMsg = ''">知道了</button>
     </div>
 
-    <section class="overflow-hidden rounded-[24px] border border-border/70 bg-surface/85 shadow-card backdrop-blur-xl">
+    <section class="card-bg overflow-hidden rounded-[24px] border border-border/70 shadow-card backdrop-blur-xl">
       <header class="flex items-center justify-between border-b border-border/60 px-4 py-3 sm:px-5">
         <div class="flex items-center gap-2 text-sm font-extrabold">
           <svg viewBox="0 0 24 24" class="h-4 w-4 text-slate-500" fill="none" stroke="currentColor"><path d="M4 7h16M9 7V5h6v2M7 7l.8 12.2A2 2 0 0 0 9.8 21h4.4a2 2 0 0 0 2-1.8L17 7M10 11v6M14 11v6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>

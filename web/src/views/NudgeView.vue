@@ -39,7 +39,7 @@
 
     <div v-else class="grid gap-4 lg:grid-cols-2">
       <!-- 左列：我提醒他人 -->
-      <section class="order-2 rounded-[24px] border border-border/70 bg-surface/85 p-4 shadow-card backdrop-blur-xl sm:p-5 lg:order-1" data-nudge-column="sent">
+      <section class="card-bg order-2 rounded-[24px] border border-border/70 p-4 shadow-card backdrop-blur-xl sm:p-5 lg:order-1" data-nudge-column="sent">
         <header class="mb-3 flex items-center justify-between gap-2">
           <h2 class="text-sm font-extrabold">我提醒他人</h2>
           <span class="rounded-full bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-bold text-sky-600 dark:text-sky-300">
@@ -109,7 +109,7 @@
       </section>
 
       <!-- 右列：别人提醒我 -->
-      <section class="order-1 rounded-[24px] border border-border/70 bg-surface/85 p-4 shadow-card backdrop-blur-xl sm:p-5 lg:order-2" data-nudge-column="received">
+      <section class="card-bg order-1 rounded-[24px] border border-border/70 p-4 shadow-card backdrop-blur-xl sm:p-5 lg:order-2" data-nudge-column="received">
         <header class="mb-3 flex items-center justify-between gap-2">
           <h2 class="text-sm font-extrabold">别人提醒我</h2>
           <span class="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-300">

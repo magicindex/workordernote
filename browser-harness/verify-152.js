@@ -40,6 +40,10 @@ async function api(token, apiPath, method = 'GET', body = null) {
       listId = Number(list.id);
       const mk = async (body) => { const it = await api(token, '/api/reminder/items', 'POST', { kind: 'task', repeat_rule: 'none', channels: ['inapp'], list_id: listId, ...body }); ids.push(String(it.id)); return it; };
       const overdue = await mk({ title: '昨日未完成', due_at: `${yesterday}T23:59:00+08:00` });
+      // 今天是本周第一天时（默认周一为一周之始），「昨天」落在**上一周**：日历只会取本周区间内的
+      // 任务，昨天的任务根本不会被返回。所以另外造一条「今天 00:01 到期、已过时」的，保证
+      // 「过期未完成续到当天 23:59」这条断言在任何一天都成立。
+      const odToday = await mk({ title: '今日已过时', due_at: `${today}T00:01:00+08:00` });
       const done = await mk({ title: '今天完成', start_at: `${today}T00:00:00+08:00`, end_at: `${today}T23:59:00+08:00`, due_at: `${today}T23:59:00+08:00` });
       await api(token, `/api/reminder/items/${done.id}/complete`, 'POST', {});
       for (let i = 0; i < 4; i++) await mk({ title: `月历溢出-${i}`, due_at: `${today}T${String(10 + i).padStart(2, '0')}:00:00+08:00` });
@@ -69,7 +73,7 @@ async function api(token, apiPath, method = 'GET', body = null) {
         if (i === 8) await page.evaluate(() => document.querySelector('[data-cal-view="week"]')?.click());
         await sleep(400);
       }
-      const week = await page.evaluate(({ a, b, doneId, day, yday }) => {
+      const week = await page.evaluate(({ a, b, odTodayId, day, yday }) => {
         const read = (key, id) => {
           const col = document.querySelector(`[data-week-col="${key}"]`);
           const el = col?.querySelector(`[data-week-block="${id}"]`);
@@ -78,16 +82,25 @@ async function api(token, apiPath, method = 'GET', body = null) {
           const colH = Math.round(cr.height);
           return { top: Math.round(br.top - cr.top), h: Math.round(br.height), colH, role: el.dataset.weekRole, capT: el.dataset.weekCapTop === '1', capB: el.dataset.weekCapBottom === '1' };
         };
-        return { overdueEnd: read(day, a), overdueStart: read(yday, a), done: read(day, b) };
-      }, { a: String(overdue.id), b: String(done.id), doneId: String(done.id), day: today, yday: yesterday });
+        return {
+          overdueEnd: read(day, a), overdueStart: read(yday, a), done: read(day, b),
+          odToday: read(day, odTodayId),
+          hasYesterdayCol: !!document.querySelector(`[data-week-col="${yday}"]`),
+        };
+      }, { a: String(overdue.id), b: String(done.id), odTodayId: String(odToday.id), day: today, yday: yesterday });
       // 周视图会按屏幕高度自适应 hourHeight（不再固定 44px/小时），断言按列高比例算。
+      // 今天 00:01 到期、已过时 → 从上到下铺到当天 23:59（任何一天都成立）
       check('过期未完成续画到当天 23:59',
-        !!week.overdueEnd && week.overdueEnd.top === 0
-          && near(week.overdueEnd.h, week.overdueEnd.colH, 4),
-        JSON.stringify(week.overdueEnd));
-      check('续画任务昨天从 23:59 开始',
-        !!week.overdueStart && week.overdueStart.top > week.overdueStart.colH * 0.9,
-        JSON.stringify(week.overdueStart));
+        !!week.odToday && week.odToday.top < week.odToday.colH * 0.02
+          && near(week.odToday.h, week.odToday.colH, 4),
+        JSON.stringify(week.odToday));
+      if (week.hasYesterdayCol) {
+        check('续画任务昨天从 23:59 开始',
+          !!week.overdueStart && week.overdueStart.top > week.overdueStart.colH * 0.9,
+          JSON.stringify(week.overdueStart));
+      } else {
+        console.log('  · 今天是本周第一天（昨天在上一周），「昨天的续画」这条跳过');
+      }
       const endMin = now.getHours() * 60 + now.getMinutes();
       check('完成任务在提交时刻收尾',
         !!week.done && near(week.done.h, (endMin / 1440) * week.done.colH, 10)

@@ -91,11 +91,11 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
 
     const chipCount = await page.evaluate(() => document.querySelectorAll('.channel-pill').length);
     // 2026-11-13 起那一列改成「备注」= 新建备注 + 完成备注按时间戳拼在一起，默认勾上
-    check('可选的列共 9 项', chipCount === 9, String(chipCount));
+    check('可选的列共 10 项（2026-11-16 加了「开始时间」）', chipCount === 10, String(chipCount));
 
     const defaultLabels = await headerLabels('#print-root', page);
-    check('默认打印 6 列（序号/标题/类型/清单/完成时间/备注）',
-      defaultLabels.join('/') === '序号/标题/类型/清单/完成时间/备注', defaultLabels.join('/'));
+    check('默认打印 7 列（序号/标题/类型/清单/开始时间/完成时间/备注）',
+      defaultLabels.join('/') === '序号/标题/类型/清单/开始时间/完成时间/备注', defaultLabels.join('/'));
 
     // ── 3. 按内容自适应 ──
     const box = () => page.evaluate(() => {
@@ -107,13 +107,13 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
       } : null;
     });
     const before = await box();
-    check('6 列（默认）时自动横向', before && before.orientation === 'landscape', JSON.stringify(before));
-    check('6 列时字号自动=小', before && before.font === 'small', JSON.stringify(before));
+    check('7 列（默认）时自动横向', before && before.orientation === 'landscape', JSON.stringify(before));
+    check('7 列时字号自动=小', before && before.font === 'small', JSON.stringify(before));
 
     await toggleColumn(page, '重复');
     await sleep(500);
     const six = await box();
-    check('勾上「重复」后 7 列，字号仍是小', six && six.columns === 7 && six.font === 'small', JSON.stringify(six));
+    check('勾上「重复」后 8 列，字号仍是小', six && six.columns === 8 && six.font === 'small', JSON.stringify(six));
     const sixLabels = await headerLabels('#print-root', page);
     check('打印区同步增加「重复」列', sixLabels.includes('重复'), sixLabels.join('/'));
     const previewLabels = await page.evaluate(() => {
@@ -122,6 +122,57 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
       return preview ? [...preview.querySelectorAll('thead th')].map((th) => th.textContent.trim()) : [];
     });
     check('预览也同步增加「重复」列', previewLabels.includes('重复'), previewLabels.join('/'));
+
+    // ── 2b. 「开始时间」列：计划任务印 start_at，普通待办退回录入时间（用户 2026-11-16） ──
+    const startCol = await page.evaluate(async () => {
+      const token = localStorage.getItem('reminders.token');
+      const res = await fetch('/api/reminder/completed?range=all', { headers: { Authorization: 'Bearer ' + token } });
+      const json = await res.json().catch(() => null);
+      const items = (json && json.data && (json.data.items || json.data)) || [];
+      const pad = (n) => String(n).padStart(2, '0');
+      const fmt = (v) => {
+        if (!v) return '';
+        const d = new Date(v);
+        if (Number.isNaN(d.getTime())) return '';
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      };
+      const byTitle = new Map();
+      for (const it of items) {
+        const key = String(it.title || '').trim();
+        if (!byTitle.has(key)) byTitle.set(key, []);
+        byTitle.get(key).push(it);
+      }
+      const table = document.querySelector('#print-root table');
+      const ths = [...table.querySelectorAll('thead th')].map((t) => t.textContent.trim());
+      const iTitle = ths.indexOf('标题');
+      const iStart = ths.indexOf('开始时间');
+      const iDone = ths.indexOf('完成时间');
+      if (iTitle < 0 || iStart < 0 || iDone < 0) return { err: 'columns-missing', ths };
+      const rows = [...table.querySelectorAll('tbody tr')];
+      let checked = 0, mismatch = 0, planned = 0;
+      const samples = [];
+      for (const tr of rows) {
+        const tds = [...tr.querySelectorAll('td')].map((t) => t.textContent.trim());
+        const title = tds[iTitle] || '';
+        const cand = byTitle.get(title) || [];
+        const item = cand.find((c) => fmt(c.completed_at) === tds[iDone]) || cand[0];
+        if (!item) continue;
+        const expect = fmt(item.start_at) || fmt(item.created_at);
+        if (!expect) continue;
+        checked += 1;
+        if (item.start_at && fmt(item.start_at) !== fmt(item.created_at)) planned += 1;
+        if (tds[iStart] !== expect) {
+          mismatch += 1;
+          if (samples.length < 3) samples.push({ title: title.slice(0, 16), got: tds[iStart], expect });
+        }
+      }
+      return { checked, mismatch, planned, samples };
+    });
+    check('「开始时间」列按「计划任务=开始时间，其余=录入时间」取值',
+      startCol && startCol.err === undefined && startCol.checked >= 5 && startCol.mismatch === 0,
+      JSON.stringify(startCol));
+    check('至少有一条计划任务印的是真实开始时间（start_at，不是录入时间）',
+      startCol && startCol.planned >= 1, JSON.stringify(startCol && { planned: startCol.planned }));
 
     const pageRule = await page.evaluate(() => {
       const el = document.getElementById('print-page-rule');
@@ -186,7 +237,7 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
     check('打印区包含全部记录行', printLayout.rows >= 1, `${printLayout.rows} 行`);
     await page.screenshot({ path: path.join(SHOTS, 'print-preview.png') });
 
-    // 全选 9 列（最宽的情况）再量一次：字号应自动收小、仍然不溢出、页数不失控
+    // 全选 10 列（最宽的情况）再量一次：字号应自动收小、仍然不溢出、页数不失控
     await page.evaluate(() => {
       const btn = [...document.querySelectorAll('button')].find((b) => (b.textContent || '').trim() === '全选');
       if (btn) btn.click();
@@ -210,9 +261,9 @@ const headerLabels = (rootSelector, page) => page.evaluate((sel) => {
         avgRowPx: trs.length ? sumRowPx / trs.length : 0,
       };
     });
-    console.log('    全选 9 列：' + JSON.stringify(all));
-    check('全选 9 列后字号自动=小', all.columns === 9 && all.font === 'small', JSON.stringify(all));
-    check('8 列时仍然不超纸面、单元格不溢出',
+    console.log('    全选 10 列：' + JSON.stringify(all));
+    check('全选 10 列后字号自动=小', all.columns === 10 && all.font === 'small', JSON.stringify(all));
+    check('10 列时仍然不超纸面、单元格不溢出',
       all.width <= all.printable && all.overflow === 0, JSON.stringify(all));
 
     // 再出一次真正的 PDF：按 A4 横向 + 12mm 页边距出，校验纸张尺寸与页数。

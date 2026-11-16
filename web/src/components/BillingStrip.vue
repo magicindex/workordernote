@@ -62,12 +62,21 @@
 import { computed, ref, watch } from 'vue'
 import { getBillingCards, getCards, type Billing, type BillingCard, type CreditCard } from '../api/reminder'
 import { formatCents } from '../utils/card'
-import { DEFAULT_GRADIENT, URGENT_GRADIENT, urgencyOf } from '../utils/card-urgency'
+import {
+  DEFAULT_FROM, DEFAULT_TO, URGENT_FROM, URGENT_TO, faceAlpha, faceStyle, urgencyOf, type FaceOptions,
+} from '../utils/card-urgency'
+import { useThemeStore } from '../stores/theme'
 
 const props = defineProps<{
   /** 变了就重新拉一次（卡片增删改之后由父组件 +1） */
   refreshKey?: number
 }>()
+
+const theme = useThemeStore()
+/** 缩略卡面也跟随「卡片透明度」（与大卡面同一口径，见 card-urgency.faceStyle）。 */
+function faceOpts(): FaceOptions {
+  return { alpha: faceAlpha(theme.cardBgOpacity), dark: theme.isDark || theme.pageBgIsDark }
+}
 
 const billing = ref<Billing | null>(null)
 const cards = ref<CreditCard[]>([])
@@ -95,9 +104,11 @@ async function load() {
 function urgencyOfItem(item: BillingCard) {
   const card = cards.value.find((c) => c.id === item.card_id)
   if (!card) {
-    return { gradient: item.overdue ? URGENT_GRADIENT : DEFAULT_GRADIENT, ink: '#ffffff' }
+    // 找不回这张卡（刚删/同步中）：按逾期标记给一套同口径的兜底配色，透明度照样跟随
+    const [from, to] = item.overdue ? [URGENT_FROM, URGENT_TO] : [DEFAULT_FROM, DEFAULT_TO]
+    return faceStyle(from, to, faceOpts())
   }
-  const u = urgencyOf(card)
+  const u = urgencyOf(card, faceOpts())
   return { gradient: u.gradient, ink: u.ink }
 }
 function gradientOf(item: BillingCard) { return urgencyOfItem(item).gradient }
@@ -126,7 +137,10 @@ watch(() => props.refreshKey, () => { void load() }, { immediate: true })
 <style scoped>
 /* 时间卡片：整体可换行——页面窄时「今天」与小卡面自动分行 */
 .billing-strip {
-  @apply flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-2xl border border-border/70 bg-surface px-4 py-2.5;
+  @apply flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-2xl border border-border/70 px-4 py-2.5;
+  /* 跟随「卡片透明度」：用户 2026-11-16「卡片透明度没有跟随变化」——这块时间卡片原来写死
+     bg-surface（不透明白），拖动滑块时别的卡片都透明了，只有这还是实心的一块。 */
+  background-color: rgb(var(--color-surface) / var(--card-bg-opacity, 0.9));
 }
 /* 小卡面一行排开，超出就横向滚动；**不显示滚动条**，用鼠标按住拖动看 */
 .billing-cards {

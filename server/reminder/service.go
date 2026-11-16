@@ -1590,6 +1590,12 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 			created := owner.CreatedAt
 			item.CreatedAt = &created
 		}
+		// 计划任务的开始时间：只在真的选了开始时间时才有（普通待办为空，
+		// 打印那列会退回录入时间）。
+		if owner.StartAt != nil {
+			startAt := *owner.StartAt
+			item.StartAt = &startAt
+		}
 		// 历史行本身不带清单归属，只能回查后在这里按清单过滤
 		if len(listIDs) > 0 && !containsID(listIDs, item.ListID) {
 			continue
@@ -1605,6 +1611,7 @@ func listCompletedHistory(db *gorm.DB, userID uint, rng CompletedRange, query st
 			ID: r.ID, Source: "reminder", ReminderID: r.ID,
 			Title: r.Title, CompletedAt: *r.CompletedAt, Kind: r.Kind,
 			CreatedAt: &created,
+			StartAt:   r.StartAt,
 			ListID:    r.ListID, ListName: listNames[r.ListID],
 			RepeatRule: r.RepeatRule, ReminderExists: true,
 			Note:       r.CompletedNote,

@@ -1,6 +1,9 @@
 services:
   workordernote:
-    image: 192.168.3.200:3000/cyberzero/workordernote:0.48.1
+    # 公开镜像走 GitHub Container Registry（用户 2026-11-16：「改为 github 路径」）。
+    # 原来写的 192.168.3.200:3000 是内网 Gitea registry，只有本机局域网能用，
+    # 外面的人 `docker compose up` 会拉不到；GHCR 匿名可拉，随包发布的 compose 用它。
+    image: ghcr.io/magicindex/workordernote:0.48.2
     container_name: workordernote
     # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
     user: "1000:1001"

@@ -139,9 +139,11 @@ async function waitSel(page, sel, timeout = 20000) {
     check('「本周」回到本周', backLabel === before, `${backLabel} vs ${before}`);
 
     // 3) 任务块 + 重叠并排
-    const blocks = await page.evaluate(() => {
+    const blocks = await page.evaluate(({ idA, idB }) => {
       const all = [...document.querySelectorAll('[data-week-block]')];
-      const mine = all.filter((b) => /自检周块/.test(b.innerText));
+      // 标签按块高截断（0.48.1 起 1 小时的块只剩「自…」），所以按 id 认块，别用标题匹配。
+      const ids = new Set([String(idA), String(idB)]);
+      const mine = all.filter((b) => ids.has(b.getAttribute('data-week-block')));
       const col = mine[0]?.closest('[data-week-col]');
       const colW = col ? col.getBoundingClientRect().width : 0;
       return {
@@ -162,7 +164,7 @@ async function waitSel(page, sel, timeout = 20000) {
           };
         }),
       };
-    });
+    }, { idA, idB });
     check('两条时间段任务都画成了块', blocks.mineCount === 2, JSON.stringify(blocks));
     // 实例上用户自己的日程可能正好和这两块同一时段（实测踩到：当天还有别的任务，
     // 分栏会多留一条道，宽度不再等于 colW/overlap）。所以只钉「并排」这件事本身：

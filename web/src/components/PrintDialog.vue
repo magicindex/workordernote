@@ -173,6 +173,10 @@ const columns = [
   { key: 'title', label: '标题', cls: '', defaultValue: true, value: (i: CompletedItem) => i.title },
   { key: 'kind', label: '类型', cls: 'col-tight', defaultValue: true, value: (i: CompletedItem) => kindLabel(i) },
   { key: 'list', label: '清单', cls: 'col-tight', defaultValue: true, value: (i: CompletedItem) => i.list_name || '—' },
+  // 开始时间（用户 2026-11-16）：**计划任务**印真实的开始时间（start_at），
+  // 其余（普通待办没有 start_at）退回录入时间（created_at）——这样每行都有值，
+  // 又能看出计划任务到底什么时候开始。
+  { key: 'started', label: '开始时间', cls: 'col-time', defaultValue: true, value: (i: CompletedItem) => formatTime(i.start_at) || formatTime(i.created_at) || '—' },
   { key: 'completed', label: '完成时间', cls: 'col-time', defaultValue: true, value: (i: CompletedItem) => formatTime(i.completed_at) },
   { key: 'scheduled', label: '原定时间', cls: 'col-time', defaultValue: false, value: (i: CompletedItem) => formatTime(i.scheduled_for) || '—' },
   // 备注（2026-11-13）：新建备注与完成备注是两条，这里按时间戳拼在一列里打印，

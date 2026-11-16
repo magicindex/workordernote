@@ -1609,13 +1609,24 @@ async function removeEntry() {
 .timetable-share-chip.is-write { @apply bg-emerald-500/15 text-emerald-700 dark:text-emerald-300; }
 
 /* 七天共用一块底板：列间只留 1px 细线，整块像一张纸上的周历 */
-.timetable-shell { @apply overflow-hidden rounded-[22px] border border-border bg-surface bg-no-repeat shadow-sm; }
+/* 底板本身不再铺不透明底色（只留一圈边框 + 径向光晕），白底交给七天格子，
+   这样格子按「卡片透明度」半透明时，光晕和页面背景能透上来。 */
+.timetable-shell { @apply overflow-hidden rounded-[22px] border border-border bg-no-repeat shadow-sm; }
 .timetable-grid { @apply grid grid-cols-1 gap-px bg-border/70 sm:grid-cols-2 xl:grid-cols-7; }
-.timetable-day { @apply flex min-h-[13rem] flex-col gap-2 bg-surface p-3; }
+.timetable-day {
+  @apply flex min-h-[13rem] flex-col gap-2 p-3;
+  /* 七天格子跟随「卡片透明度」（用户 2026-11-16：「让七天格子跟着卡片透明度变」） */
+  background-color: rgb(var(--color-surface) / var(--card-bg-opacity, 0.9));
+}
 @media (max-width: 639px) {
   .timetable-day[data-mobile-hidden='true'] { display: none; }
 }
-.timetable-day-today { @apply bg-brand-500/[0.07] ring-1 ring-inset ring-brand-500/20; }
+/* 今天那一列：底色仍是「卡片透明度」的表面色，品牌色只做一层**叠加**（background-image），
+   否则会把 .timetable-day 的白底盖掉、整列变成全透明。 */
+.timetable-day-today {
+  @apply ring-1 ring-inset ring-brand-500/20;
+  background-image: linear-gradient(rgb(var(--color-brand-500, 59 130 246) / 0.07), rgb(var(--color-brand-500, 59 130 246) / 0.07));
+}
 .timetable-day-head { @apply flex items-center justify-between pb-0.5; }
 .timetable-day-name { @apply text-[12.5px] font-extrabold tracking-wide; }
 .timetable-day-date { @apply text-[10.5px] font-semibold tabular-nums text-muted-foreground/80; }

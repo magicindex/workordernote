@@ -111,9 +111,14 @@ async function main() {
       document.querySelector('[data-nav-system]')?.click();
       return [...document.querySelectorAll('[data-nav-system-item] .flex-1')].map((el) => (el.textContent || '').trim());
     });
-    check('开着的系统栏目都在「系统清单」里（信用卡 / 记事本 / 仪式感）',
-      sysLabels.every((n) => systemMenu.includes(n)),
-      JSON.stringify({ sysLabels, systemMenu }))
+    // 栏目的归处是用户偏好（system_list_placement）：被拖到「我的清单」的栏目本来就不在
+    // 系统清单菜单里，不能要求它出现（实测本机把「信用卡账单」放到了我的清单）。
+    const placement = (() => { try { return JSON.parse(cfgs['system_list_placement'] || '{}') } catch { return {} } })()
+    const placeKey = { 信用卡账单: 'cards', 随手记事本: 'notebook', 人生要有仪式感: 'ceremony' }
+    const expectedInMenu = sysLabels.filter((n) => (placement[placeKey[n]] ?? 'system') !== 'my')
+    check('开着的系统栏目都在「系统清单」里（按 system_list_placement 过滤）',
+      expectedInMenu.every((n) => systemMenu.includes(n)),
+      JSON.stringify({ sysLabels, expectedInMenu, systemMenu, placement }))
 
     await page.evaluate(() => document.querySelector('[data-nav-system]')?.click())
     // ---------- 1. 进排序模式 ----------

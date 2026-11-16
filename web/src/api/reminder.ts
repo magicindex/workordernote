@@ -21,6 +21,8 @@ export interface CompletedItem {
   completed_at: string
   /** 底层提醒的录入时间：用来显示「完成时段（录入 → 完成）· 共多久」 */
   created_at?: string | null
+  /** 计划任务的开始时间（计划页建的任务才有）；普通待办为空 */
+  start_at?: string | null
   scheduled_for?: string | null
   list_id: number
   list_name: string

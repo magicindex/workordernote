@@ -19,7 +19,7 @@
       <button class="rounded-xl border border-border bg-surface px-4 py-2 text-xs font-bold text-foreground transition hover:bg-muted" @click="load()">重试</button>
     </div>
 
-    <div v-else-if="notifications.length" class="overflow-hidden rounded-[24px] border border-border/70 bg-surface/85 shadow-card backdrop-blur-xl">
+    <div v-else-if="notifications.length" class="card-bg overflow-hidden rounded-[24px] border border-border/70 shadow-card backdrop-blur-xl">
       <button
         v-for="item in notifications"
         :key="item.id"

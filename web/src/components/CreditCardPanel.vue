@@ -53,9 +53,9 @@
              看起来就是一张银行卡，而不是一条信息框（用户要求「增加卡片高度」）。 -->
         <div
           class="relative flex aspect-[1.586/1] flex-col overflow-hidden rounded-2xl px-3 py-2.5 shadow-lg sm:px-3.5"
-          :style="{ background: urgencyOf(card).gradient, color: urgencyOf(card).ink }"
+          :style="{ background: urgencyOf(card, faceOpts()).gradient, color: urgencyOf(card, faceOpts()).ink }"
           :data-card-face="card.id"
-          :data-card-urgency="urgencyOf(card).level"
+          :data-card-urgency="urgencyOf(card, faceOpts()).level"
         >
           <span class="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10"></span>
           <span class="pointer-events-none absolute -bottom-10 -left-4 h-24 w-24 rounded-full bg-black/10"></span>
@@ -106,9 +106,9 @@
           </p>
           <!-- 账期进度：账单日 → 还款日前三天；进了最后 3 天整条变红 -->
           <div class="relative mt-2.5 h-1.5 overflow-hidden rounded-full bg-black/15">
-            <span class="block h-full rounded-full" :style="{ width: urgencyOf(card).barWidth, background: urgencyOf(card).barColor }"></span>
+            <span class="block h-full rounded-full" :style="{ width: urgencyOf(card, faceOpts()).barWidth, background: urgencyOf(card, faceOpts()).barColor }"></span>
           </div>
-          <p class="relative mt-1 text-[11px] font-extrabold" data-card-status>{{ urgencyOf(card).status }}</p>
+          <p class="relative mt-1 text-[11px] font-extrabold" data-card-status>{{ urgencyOf(card, faceOpts()).status }}</p>
         </div>
 
         <!-- 本期应还 + 还款闭环 -->
@@ -132,9 +132,13 @@
             <span class="sm:hidden">本期</span>应还 <b class="text-[14px]">¥{{ formatCents(card.current?.amount_cents) }}</b>
             <span v-if="!card.current?.amount_cents" class="text-[11px] font-medium text-muted-foreground">（还没填金额）</span>
           </span>
-          <span class="inline-flex items-center gap-1.5" style="color: #e11d48" data-card-due-countdown>
-            <i class="h-2 w-2 rounded-full" style="background: #f43f5e"></i>
-            还款日 {{ summaryOf(card).dueText }}（{{ summaryOf(card).daysToDue === 0 ? '就是今天' : `还有 ${summaryOf(card).daysToDue} 天` }}）
+          <!-- 还款日精确到**具体日期**（年-月-日）：用户 2026-11-16「还款日期需要精确到具体日期，
+               方便用户安排还款」。两段各不许在中间折行（`whitespace-nowrap`），窄卡片上放不下时
+               整段换行：宁可「（还有 12 天）」掉到下一行，也不要断成「（还有 12」/「天）」。 -->
+          <span class="inline-flex max-w-full flex-wrap items-center gap-x-1.5" style="color: #e11d48" data-card-due-countdown>
+            <i class="h-2 w-2 shrink-0 rounded-full" style="background: #f43f5e"></i>
+            <span class="whitespace-nowrap">还款日 {{ summaryOf(card).dueText }}</span>
+            <span class="whitespace-nowrap">（{{ summaryOf(card).daysToDue === 0 ? '就是今天' : `还有 ${summaryOf(card).daysToDue} 天` }}）</span>
           </span>
           <!-- 刚还过的那一期：当期已经跳到下一期了，这里保留一行「已还」记录；
                撤销入口收进下面的「⋯ 更多」（用户 2026-11-11）。 -->
@@ -359,11 +363,21 @@ import {
   type CreditCard, type ReminderList,
 } from '../api/reminder'
 import { bankFaceLabelOf, bankLogoOf } from '../utils/banks'
-import { daysFromToday, urgencyOf } from '../utils/card-urgency'
-import { cardTail, daysUntil, formatCardDate, formatCents, graceDays, nextDayOccurrence, parseYuanToCents } from '../utils/card'
+import { daysFromToday, faceAlpha, urgencyOf, type FaceOptions } from '../utils/card-urgency'
+import { useThemeStore } from '../stores/theme'
+import { cardTail, daysUntil, formatCardDate, formatCardDateFull, formatCents, graceDays, nextDayOccurrence, parseYuanToCents } from '../utils/card'
 import {
   estimateInstallment, findInstallmentRule, type InstallmentEstimate, type RateRange,
 } from '../data/card-installment-rules'
+
+const theme = useThemeStore()
+/**
+ * 卡面跟随「卡片透明度」偏好（用户 2026-11-16：「卡片透明度没有跟随变化」）：
+ * 彩色卡面也按同一个百分比半透明，低透明度时字色按透出来的底色自动转深/转白。
+ */
+function faceOpts(): FaceOptions {
+  return { alpha: faceAlpha(theme.cardBgOpacity), dark: theme.isDark || theme.pageBgIsDark }
+}
 
 const props = defineProps<{ list: ReminderList }>()
 const emit = defineEmits<{
@@ -527,7 +541,9 @@ function summaryOf(card: CreditCard) {
   const due = cur?.due_date ? new Date(cur.due_date) : nextDayOccurrence(card.due_day, now)
   return {
     statementText: formatCardDate(statement),
-    dueText: formatCardDate(due),
+    // 还款日精确到**具体日期**（年-月-日），不用月-日：跨年那几期分不清是哪一年，
+    // 用户 2026-11-16：「还款日期需要精确到具体日期，方便用户安排还款」。
+    dueText: formatCardDateFull(due),
     daysToDue: daysUntil(due, now),
     grace: graceDays(card.statement_day, card.due_day, now),
   }

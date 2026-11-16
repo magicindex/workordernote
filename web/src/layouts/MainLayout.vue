@@ -112,7 +112,16 @@
               <span class="flex-1">系统清单</span>
               <span v-if="summary.unread" class="h-2 w-2 rounded-full bg-rose-500" title="有新消息提醒" data-nav-system-unread></span>
               <span v-if="systemTotal" class="nav-count" data-nav-system-count>{{ systemTotal }}</span>
-              <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="{ 'rotate-180': systemOpen }" fill="none" stroke="currentColor"><path d="m6 9 6 6 6-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <!-- 图标栏（56px）里不显示这个箭头：挤在图标旁边很难看，用户 2026-11-16 要求去掉；
+                   点图标本身就会展开（见 toggleSystemMenu）。 -->
+              <svg
+                data-nav-system-chevron
+                viewBox="0 0 24 24"
+                class="rail-hide h-4 w-4 shrink-0 text-muted-foreground transition-transform"
+                :class="{ 'rotate-180': systemOpen }"
+                fill="none"
+                stroke="currentColor"
+              ><path d="m6 9 6 6 6-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <div v-show="systemOpen" class="mt-0.5 space-y-0.5" data-nav-system-menu>
               <RouterLink
@@ -1138,6 +1147,18 @@ const systemSheetItems = computed(() => allSystemItems.value.filter((item) => it
 const systemTotal = computed(() => systemNavItems.value.reduce((sum, item) => sum + (Number(item.count) || 0), 0))
 const systemActive = computed(() => systemNavItems.value.some((item) => route.path === item.to))
 function toggleSystemMenu() {
+  // 图标栏里点「系统清单」：先把侧栏展开再打开菜单。
+  // 56px 宽装不下菜单里的文字，原地展开只会多出一列没有名字的图标 —— 看着像「点了没反应」
+  // （用户 2026-11-16：「点击图标正常展开」）。日历视图的临时收起也按 toggleSidebar 的
+  // 同一套退掉：手动动过之后，这次访问里不再强行收起。
+  if (railActive.value) {
+    railForced.value = false
+    if (assistantRailForced.value) assistantRailDismissed.value = true
+    railCollapsed.value = false
+    lsSet('ui_rail_collapsed', '0')
+    systemOpen.value = true
+    return
+  }
   systemOpen.value = !systemOpen.value
 }
 function closeSystemOnOutsideClick(event: MouseEvent) {

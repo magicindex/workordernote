@@ -27,7 +27,7 @@
 
     <div v-else class="grid gap-4 lg:grid-cols-2">
       <!-- 第 1 列：未来 14 天待办（标题条带底色，与「今天」页的按天卡片同一套样式） -->
-      <section class="home-col" data-home-column="upcoming">
+      <section class="home-col card-bg" data-home-column="upcoming">
         <header class="home-col-head" data-home-head="upcoming">
           <h2 class="home-col-label">未来 14 天待办</h2>
           <span class="home-col-count">{{ upcoming.length }} 条</span>
@@ -76,7 +76,7 @@
       </section>
 
       <!-- 第 2 列：所有逾期任务（标题条染一点红，与「今天」页那张「已逾期」卡片一致） -->
-      <section class="home-col" data-home-column="overdue">
+      <section class="home-col card-bg" data-home-column="overdue">
         <header class="home-col-head" data-home-head="overdue">
           <h2 class="home-col-label">已逾期</h2>
           <span class="home-col-count">{{ overdue.length }} 条</span>
@@ -291,7 +291,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* 栏目卡片：与「今天」页的按天卡片同一套观感（标题条带底色 + 卡片圆角/边框/阴影） */
-.home-col { @apply overflow-hidden rounded-[22px] border border-border/70 bg-surface/85 shadow-card backdrop-blur-xl; }
+/* 底色见全局 .card-bg（跟随「卡片透明度」），不再写死 85% */
+.home-col { @apply overflow-hidden rounded-[22px] border border-border/70 shadow-card backdrop-blur-xl; }
 .home-col-head { @apply flex items-center gap-2 border-b border-border/60 bg-brand-500/10 px-4 py-2.5 sm:px-5; }
 .home-col-label { @apply text-[13px] font-extrabold tracking-tight text-brand-700 sm:text-sm dark:text-brand-300; }
 .home-col-count { @apply ml-auto text-[11px] font-bold text-brand-600/80 dark:text-brand-300/80; }

@@ -151,8 +151,8 @@ function relativeLuminance(rgb: number[]): number {
  * 深色模式下的有效渐变颜色：保留用户选色的色相，但压暗并收窄对比，
  * 免得亮色渐变在暗色页面里刺眼；同时保证至少有一点明暗差，渐变不会糊成一块。
  */
-function effectiveGradientColors(value: PageBgGradient): [string, string] {
-  const dark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+function effectiveGradientColors(value: PageBgGradient, darkOverride?: boolean): [string, string] {
+  const dark = darkOverride ?? (typeof document !== 'undefined' && document.documentElement.classList.contains('dark'))
   let a = parseHex(value.start)
   let b = parseHex(value.end)
   if (!dark) return [rgbTriplet(a), rgbTriplet(b)]
@@ -177,6 +177,30 @@ function parseRgbTriplet(value: string): [number, number, number] {
 }
 
 /**
+ * 页面背景是否够暗（同一套口径：渐变两色 + 亮度调整后的平均明度）。
+ *
+ * `applyPageBgContrast()` 用它决定 `html.page-bg-dark`；
+ * 卡片里的彩色卡面（信用卡大卡面/缩略卡面）也用它决定文字用深色还是白色
+ * —— 页面背景是深色时，半透明的卡面叠在深色底上，字得用白色。
+ */
+function pageBgDarkFor(value: PageBgGradient | null, tone: number, dark: boolean): boolean {
+  if (!value) return false
+  let colors: [string, string]
+  if (value.preset === 'starry') {
+    colors = dark ? ['2 6 23', '11 27 58'] : ['7 20 40', '18 42 76']
+  } else {
+    colors = effectiveGradientColors(value, dark)
+  }
+  const alpha = Math.min(0.72, Math.abs(tone) / 100 * 0.72)
+  const tint = tone < 0 ? [0, 0, 0] : [255, 255, 255]
+  const toneColor = (rgb: [number, number, number]): [number, number, number] => mixRgb(rgb, tint, alpha)
+  const a = toneColor(parseRgbTriplet(colors[0]))
+  const b = toneColor(parseRgbTriplet(colors[1]))
+  const avgLum = (relativeLuminance(a) + relativeLuminance(b)) / 2
+  return avgLum < 0.42
+}
+
+/**
  * 按页面背景的实际明度给页面级文字切换深浅。
  * 只设置 --page-fg / --page-fg-muted，并给 html 加 page-bg-dark；
  * 组件需要显式使用 .page-on-bg / .page-on-bg-muted，卡片内文字不受影响。
@@ -190,20 +214,7 @@ function applyPageBgContrast(value: PageBgGradient | null, tone: number) {
     root.style.removeProperty('--page-fg-muted')
     return
   }
-  let colors: [string, string]
-  if (value.preset === 'starry') {
-    const dark = root.classList.contains('dark')
-    colors = dark ? ['2 6 23', '11 27 58'] : ['7 20 40', '18 42 76']
-  } else {
-    colors = effectiveGradientColors(value)
-  }
-  const alpha = Math.min(0.72, Math.abs(tone) / 100 * 0.72)
-  const tint = tone < 0 ? [0, 0, 0] : [255, 255, 255]
-  const toneColor = (rgb: [number, number, number]): [number, number, number] => mixRgb(rgb, tint, alpha)
-  const a = toneColor(parseRgbTriplet(colors[0]))
-  const b = toneColor(parseRgbTriplet(colors[1]))
-  const avgLum = (relativeLuminance(a) + relativeLuminance(b)) / 2
-  const darkBg = avgLum < 0.42
+  const darkBg = pageBgDarkFor(value, tone, root.classList.contains('dark'))
   root.classList.toggle('page-bg-dark', darkBg)
   if (darkBg) {
     root.style.setProperty('--page-fg', '248 250 252')
@@ -302,6 +313,12 @@ export const useThemeStore = defineStore('theme', () => {
 
   // 亮色/暗色各记一个亮度值，切主题时自动用对应值。
   const pageBgTone = computed(() => isDark.value ? pageBgToneDark.value : pageBgToneLight.value)
+
+  /**
+   * 页面背景是否够暗（响应式版，和 `html.page-bg-dark` 同一口径）。
+   * 半透明卡面要按「透出来的底色」选文字深浅：暗底配白字、亮底配深字。
+   */
+  const pageBgIsDark = computed(() => pageBgDarkFor(pageBgGradient.value, pageBgTone.value, isDark.value))
 
   function resolveDark(): boolean {
     if (mode.value === 'dark') return true
@@ -418,5 +435,5 @@ export const useThemeStore = defineStore('theme', () => {
 
   apply()
 
-  return { mode, brand, sunCity, sunDark, pageBgTone, pageBgToneLight, pageBgToneDark, pageBgGradient, cardBgOpacity, isDark, toggle, setMode, setBrand, setSunCity, setPageBgTone, setPageBgToneFor, resetPageBgTone, setPageBgGradient, setCardBgOpacity, refreshSun, apply }
+  return { mode, brand, sunCity, sunDark, pageBgTone, pageBgToneLight, pageBgToneDark, pageBgGradient, pageBgIsDark, cardBgOpacity, isDark, toggle, setMode, setBrand, setSunCity, setPageBgTone, setPageBgToneFor, resetPageBgTone, setPageBgGradient, setCardBgOpacity, refreshSun, apply }
 })
