@@ -205,6 +205,13 @@ select optgroup {
 .surface {
   background-color: rgb(var(--color-surface) / var(--card-bg-opacity, 0.9));
 }
+/* 顶栏（标题栏）与卡片共用同一个透明度偏好。 */
+.topbar {
+  background-color: rgb(var(--color-background) / var(--card-bg-opacity, 0.9)) !important;
+}
+.mobile-tabbar {
+  background-color: rgb(var(--color-surface) / var(--card-bg-opacity, 0.9)) !important;
+}
 
 /* 亮色主题 + 深色页面背景（星空 / 深色渐变）时，整页切换到深色语义 token：
    卡片、顶栏、弹窗、下拉、边框和文字一起变深/变浅，避免「深色背景 + 浅色主题的深字」看不清。
@@ -242,21 +249,21 @@ html.dark .surface-modal {
 /* 顶栏/手机栏显式跟随深色页面背景；backdrop-blur 在部分浏览器会把浅色底透出来。 */
 /* 暗色主题顶栏/手机栏：直接不透明深色，避免 backdrop-filter 把浅色层透出来。 */
 html.dark .topbar {
-  background-color: rgb(11 15 26);
+  background-color: rgb(11 15 26 / var(--card-bg-opacity, 0.9)) !important;
   border-color: rgb(71 85 105 / 0.7);
   color: rgb(243 244 246);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 html.dark .mobile-tabbar {
-  background-color: rgb(17 24 39 / 0.96);
+  background-color: rgb(17 24 39 / var(--card-bg-opacity, 0.9)) !important;
   border-color: rgb(71 85 105 / 0.6);
   color: rgb(243 244 246);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 html.page-bg-dark:not(.dark) .topbar {
-  background-color: rgb(11 15 26);
+  background-color: rgb(11 15 26 / var(--card-bg-opacity, 0.9)) !important;
   border-color: rgb(71 85 105 / 0.7);
   color: rgb(243 244 246);
   isolation: isolate;
@@ -265,7 +272,7 @@ html.page-bg-dark:not(.dark) .topbar {
   -webkit-backdrop-filter: none;
 }
 html.page-bg-dark:not(.dark) .mobile-tabbar {
-  background-color: rgb(17 24 39 / 0.94);
+  background-color: rgb(17 24 39 / var(--card-bg-opacity, 0.9)) !important;
   border-color: rgb(71 85 105 / 0.6);
   color: rgb(243 244 246);
   backdrop-filter: none;

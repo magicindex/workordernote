@@ -47,8 +47,9 @@ const setRange = (page, selector, value) => page.evaluate(({ selector, value }) 
         label: document.querySelector('[data-card-bg-opacity-value]')?.textContent?.trim(),
         cssVar: getComputedStyle(document.documentElement).getPropertyValue('--card-bg-opacity').trim(),
         surface: getComputedStyle(document.querySelector('.surface')).backgroundColor,
+        topbar: getComputedStyle(document.querySelector('.topbar')).backgroundColor,
       }));
-      check('拖到 55% 实时预览', preview.label === '55%' && preview.cssVar === '0.55' && /0\.55/.test(preview.surface), JSON.stringify(preview));
+      check('拖到 55% 实时预览（卡片与标题栏同步）', preview.label === '55%' && preview.cssVar === '0.55' && /0\.55/.test(preview.surface) && /0\.55/.test(preview.topbar), JSON.stringify(preview));
       const saved = (await api(page, '/api/configs')).data || {};
       check('透明度已保存到偏好设置', String(saved.card_bg_opacity) === '55', String(saved.card_bg_opacity));
 
