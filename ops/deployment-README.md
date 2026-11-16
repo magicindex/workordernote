@@ -1,4 +1,4 @@
-# 工作序记 (WorkOrderNote) 0.48.1
+# 工作序记 (WorkOrderNote) 0.48.2
 
 任务、记事与日历一体的提醒应用。飞牛 NAS 上以 Docker 部署。
 
@@ -8,7 +8,7 @@
 ## 访问
 
 - <http://192.168.3.201:8906/>
-- 容器 `workordernote`，镜像 `workordernote:0.48.1`（本地自建 / Gitea Registry 同源）
+- 容器 `workordernote`，镜像 `workordernote:0.48.2`（Gitea / GHCR 同源）
 - 对比实例：<http://192.168.3.201:8907/> 官方原版 v0.3.0；<http://192.168.3.201:8908/> 沙盒
 
 ## 仓库与镜像地址（2026-10-22 起）
@@ -217,11 +217,11 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 版本与迭代
 
-- 软件版本见根目录 `VERSION`，当前 `0.48.1`，规则为 `主版本号.小版本号.修正号`。
-  **部署状态（2026-11-16 13:18）**：**201 生产 8906 / 200 生产均已升级到最终 0.48.1 正式包**
-  （源码提交 `d5f0e16`，镜像 `workordernote:0.48.1` / `:latest` =
-  `sha256:f51d837f53cbb75a7967d9389faee1ffb37586dadd172581a6c9e39e8305d5e0`；
-  Gitea/GHCR manifest `sha256:18d17162e701c08109ba8ec293e029785dfd0f7f4f9c42d6a126185770796469`）。
+- 软件版本见根目录 `VERSION`，当前 `0.48.2`，规则为 `主版本号.小版本号.修正号`。
+  **部署状态（2026-11-16 18:23）**：**201 生产 8906 / 200 生产 / 沙箱 8908 均已升级到 0.48.2**
+  （源码提交 `b88d3f9`，镜像 `workordernote:0.48.2` / `:latest` =
+  `sha256:9178d214b7622a2a38b876b107db06427756dbd7e9ce0a280ce2386b4d8d14f0`；
+  Gitea/GHCR manifest `sha256:40d87c84c3dc072cb1eba2b94c7a8e94b70515586e274a31dfc00bdb5ab8d94b`）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
   **公开设置 9 项三台一致**；**个人偏好 201 与 200 一致，沙箱单独一套**（开始提醒时间 `00:00`、
@@ -234,6 +234,34 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 应用内「侧栏 → 关于 → 版本信息」可查看迭代说明与原项目信息。
 
 ## 变更记录
+
+### 2026-11-16：0.48.2 发版（201 / 200 / 沙箱）——信用卡、透明度、时间线、打印
+
+> **最终 0.48.2**：源码提交 `b88d3f9`；镜像 `workordernote:0.48.2` / `:latest`；
+> Gitea 与 GHCR manifest 都是 `sha256:40d87c84c3dc072cb1eba2b94c7a8e94b70515586e274a31dfc00bdb5ab8d94b`。
+
+- 内容：还款日精确到年月日；卡片透明度覆盖信用卡卡面/首页/通知/垃圾箱/提醒@他/通知方式/快速新建卡/课表七天格子；
+  周视图未完成待办收在当天 23:59（完成截到完成时刻）；打印新增「开始时间」列（计划任务 start_at、其余 created_at）；
+  图标栏去掉系统清单箭头。
+- 201（本机，18:21）：备份 `docker-compose.yml.bak-pre0482-20261116-182039` + `data.bak-pre0482-20261116-182039.tgz`（13 MB），
+  compose 指向 GHCR `0.48.2` 后重建，healthy，`/api/version` = `0.48.2 / b88d3f9`。
+- 200（远端，18:23）：镜像 `docker save` → scp → `docker load`（45 MB，md5 一致）→ tag 成 `127.0.0.1:3000/cyberzero/workordernote:0.48.2`；
+  备份 `docker-compose.yml.bak-pre0482-20261116-182039` + `data.bak-pre0482-20261116-182039.tgz`（5.3 MB），改 tag 后 `docker compose up -d`，
+  healthy，`/api/version` = `0.48.2 / b88d3f9`。
+- 沙箱 8908：`workordernote-sandbox` 用 `workordernote:0.48.2` + `workordernote-deploy/staging-data-local` 起；**同步已关闭**
+  （`sync_direction=off`、`interval=0`，实例标识与令牌换成新的，避免测试数据被推到 200）。
+- 镜像：Gitea `192.168.3.200:3000/cyberzero/workordernote:0.48.2`+`:latest`、GHCR `ghcr.io/magicindex/workordernote:0.48.2`+`:latest` 均已推。
+- 三台数据指纹（清单/卡片/提醒/完成记录）完全一致；版本均为 `0.48.2`。
+- 发行资产：`release/0.48.2/`（Linux amd64 tar、fnOS fpk、screenshots zip、SHA256SUMS、docker-compose.yml、CHANGELOG）。
+- **回归**：126 套件全跑（36 + 90 两批，单套超时 300s）。**116 套件全绿**；10 套件在本机生产数据下红，
+  但把同一份数据灌进 **0.48.1 基线容器**重跑，失败项**一模一样**（环境/数据相关，不是本版引入）：
+  `verify-100`（本机默认首页=看板 → `/admin` 落在 `/admin/home`，悬浮按钮本就隐藏）、`verify-096/102`（依赖库里的测试条目）、
+  `verify-114/115/116`（本机免打扰/通知状态导致弹窗断言不成立）、`verify-180/187/188`（主题与半透明断言按另一套偏好写的）、
+  `verify-128`（导航超时偶发）。`verify-040`、`verify-print` 首轮因残留数据/并发失败，单跑即绿（33/33、26/26）。
+  新增 `verify-209..213` 全绿。
+- **GitHub 仓库同步未完成（已解决）**：`git push github` 用 SSH 会被拒（本机无 GitHub key），
+  改用 `$HOME/.secrets/github_token` + Clash 代理推 `main` 成功（`3765034..b88d3f9`）；
+  GitHub Release `v0.48.2` 与其 5 个资产也已用同一 token 上传。
 
 ### 2026-11-16：0.48.1 Release 资产上传
 
