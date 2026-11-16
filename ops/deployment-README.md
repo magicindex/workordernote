@@ -218,9 +218,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 ## 版本与迭代
 
 - 软件版本见根目录 `VERSION`，当前 `0.48.0`，规则为 `主版本号.小版本号.修正号`。
-  **部署状态（2026-11-16 01:33）**：**201 生产 8906 / 200 生产均已升级到最新 0.48.0 热更新**
-  （源码提交 `84d8a85`，镜像 `workordernote:0.48.0-nosms-20261116-013239` =
-  `sha256:1f7ea5239aa2ac7113c7398b5848766cf341f02b2497cd9ac95445dff319f34d`）。
+  **部署状态（2026-11-16 08:22）**：**201 生产 8906 / 200 生产均已升级到最新 0.48.0 热更新**
+  （源码提交 `dd021e1`，镜像 `workordernote:0.48.0-smsclean-20261116-081958` =
+  `sha256:a9db75bbab2b951a7080b3f8a0c24e71117835358f091bf79427058405360d27`）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
   **公开设置 9 项三台一致**；**个人偏好 201 与 200 一致，沙箱单独一套**（开始提醒时间 `00:00`、
@@ -233,6 +233,21 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 应用内「侧栏 → 关于 → 版本信息」可查看迭代说明与原项目信息。
 
 ## 变更记录
+
+### 2026-11-16：0.48.0 热更新（201 / 200）—— 彻底清理旧短信数据
+
+> **热更新记录**（软件版本仍为 `0.48.0`；后端重建 `dd021e1`；前端 `index-utWIYWyN.js`）
+> 镜像：`workordernote:0.48.0-smsclean-20261116-081958` =
+> `sha256:a9db75bbab2b951a7080b3f8a0c24e71117835358f091bf79427058405360d27`；
+> Gitea registry manifest `sha256:79538be464cc5c0b60cbc11f6d96cc6bacf5385a23c686a265e0061b5bc389ff`（仅推 Gitea registry）
+
+- 启动迁移幂等删除 SMS 绑定、SMS ProviderConfig、SMS DeliveryJob/Attempt、提醒上的 SMS 渠道、短信失败通知。
+- `supportedChannels` 移除 SMS；后台服务状态不再返回 sms；保存 SMS 配置被拒绝。
+- 201 实际库核对：`channel_bindings` / `provider_configs` / `delivery_jobs` / `reminder_channels` / 短信失败通知均为 **0**。
+- 验证：201/200 `verify-199` 3/3。
+- 201：备份 `docker-compose.yml.bak-pre0480smsclean-20261116-082044`；08:20 重建，healthy。
+- 200：备份 `docker-compose.yml.bak-pre0480smsclean-20261116-082131`；08:21 重建，healthy。
+- 注意：0.48.0 的 Linux 包/fpk/GHCR/Release 不包含 110–169 五十九项热更新；下一次正式发版（0.48.1）会带上此前列表 + 短信数据清理。
 
 ### 2026-11-16：0.48.0 热更新（201 / 200）—— 取消手机短信通知
 
