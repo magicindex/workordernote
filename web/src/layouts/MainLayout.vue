@@ -444,6 +444,16 @@
             <svg v-else viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 8.5a5 5 0 0 1 0 7" stroke-width="1.8" stroke-linecap="round"/><path d="M18.5 5.5a9 9 0 0 1 0 13" stroke-width="1.8" stroke-linecap="round"/></svg>
             <span v-if="dndInWindow" class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-amber-400" data-dnd-window-dot></span>
           </button>
+          <!-- 全局偏好设置入口（用户 2026-11-16）：放在免打扰按钮旁边，任何页面右上角都能直接进偏好。 -->
+          <RouterLink
+            to="/admin/settings"
+            class="icon-button"
+            aria-label="偏好设置"
+            title="偏好设置"
+            data-preferences-topbar
+          >
+            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06-1.9 1.9-.06-.06A1.7 1.7 0 0 0 16 18.43a1.7 1.7 0 0 0-1.03 1.56V20h-2.7v-.09A1.7 1.7 0 0 0 11 18.36a1.7 1.7 0 0 0-1.87.34l-.06.06-1.9-1.9.06-.06A1.7 1.7 0 0 0 7.57 15a1.7 1.7 0 0 0-1.56-1.03H5.9v-2.7h.11A1.7 1.7 0 0 0 7.57 10a1.7 1.7 0 0 0-.34-1.87l-.06-.06 1.9-1.9.06.06A1.7 1.7 0 0 0 11 6.57a1.7 1.7 0 0 0 1.03-1.56V4.9h2.7v.11A1.7 1.7 0 0 0 16 6.57a1.7 1.7 0 0 0 1.87-.34l.06-.06 1.9 1.9-.06.06A1.7 1.7 0 0 0 19.43 10a1.7 1.7 0 0 0 1.56 1.03h.11v2.7h-.11A1.7 1.7 0 0 0 19.4 15Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </RouterLink>
           <!-- 列表 / 日历 切换。放在主题按钮旁边，与它同为「换个看法」类操作。 -->
           <div
             v-if="showViewSwitch && !isNarrow"
