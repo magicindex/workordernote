@@ -1,5 +1,5 @@
 <template>
-  <div class="animate-fade-in flex flex-col gap-2.5 lg:h-[calc(100dvh-8.5rem)]" :style="{ '--cal-task-font': calendarFontPx + 'px' }">
+  <div class="animate-fade-in flex flex-col gap-2.5 lg:h-[calc(100dvh-8.75rem)] lg:min-h-0" :style="{ '--cal-task-font': calendarFontPx + 'px' }">
     <!-- 不再单独放一个页头：顶栏和侧栏已经表明当前在日历，重复的标题+描述白占 52px
          （外加两段 24px 间距），把这段还给日历格子。 -->
     <div v-if="errorMsg" class="surface rounded-2xl px-5 py-3 text-sm text-destructive">
@@ -1460,11 +1460,15 @@ onBeforeUnmount(() => {
 .cal-plan-mark { @apply flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px]; }
 /* 跨天的条：一天内首尾同格时也保持可点区域 */
 .cal-span { min-height: 15px; }
+.cal-task, .cal-span { max-width: 100%; }
+.cal-task > .truncate, .cal-span > .truncate { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 字号由根元素上的 --cal-task-font 变量驱动（见 calendarFontPx）。
    日期格不再设最小高度：浏览器变矮时 5/6 行要能跟着压缩，内容在格子内裁切，
    否则最小高度会把网格顶出卡片。 */
-.cal-task { font-size: var(--cal-task-font, 10px); }
+.cal-task,
+.cal-span,
+[data-cal-more] { font-size: var(--cal-task-font, 10px); }
 .cal-task-lg { font-size: calc(var(--cal-task-font, 10px) + 4px); }
 .cal-cell { min-height: 0; }
 /* 日历主卡/日格与页面渐变背景拉开层次：日格用实色 surface，主卡再加一圈更明显的边界与投影。 */
