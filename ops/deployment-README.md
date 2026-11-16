@@ -235,6 +235,14 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-16：全容器更新（201 / 200）
+
+- 201/200 均只有 **1 个**工作序记容器 `workordernote`；两台都已拉到同一镜像
+  `workordernote:0.48.1-noselect-20261116-124715`（ID `sha256:48a4e7c3bc82f07ad921dfc554cce1febf21351e49433c63e9a2dc2548beadf8`），healthy，`/api/version` = 0.48.1 / `6e4a329`。
+- 200 的 compose 镜像地址从本地 tag 改成 Gitea registry 地址 `127.0.0.1:3000/cyberzero/workordernote:...`，
+  之后 `docker compose pull` 不再误连 Docker Hub；备份 `docker-compose.yml.bak-preallupdate-20261116-125139`。
+- 其它 NAS 服务（gitea、mariadb、jumpserver 等）未改动，本次只更新工作序记容器。
+
 ### 2026-11-16：0.48.1 热修 —— 日历卡片彻底禁选文字
 
 > **热修镜像**：`workordernote:0.48.1-noselect-20261116-124715` =
