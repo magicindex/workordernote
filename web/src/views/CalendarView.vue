@@ -990,13 +990,18 @@ function lunarClass(c: LunarDayInfo) {
   return 'text-muted-foreground/85'
 }
 function cellClass(c: LunarDayInfo) {
-  const selected = cellKey(c) === selectedDate.value
-  const inActiveSpan = activeSpanId.value !== null && spansOf(cellKey(c)).some((s) => s.item.id === activeSpanId.value)
-  if (selected && inActiveSpan) return 'border-brand-500/70 bg-brand-500/15 ring-2 ring-brand-500/40'
-  if (inActiveSpan) return 'border-brand-500/45 bg-brand-500/8'
-  if (selected) return 'border-brand-500/60 bg-brand-500/8 ring-2 ring-brand-500/25'
+  const key = cellKey(c)
+  const selected = key === selectedDate.value
+  const inActiveSpan = activeSpanId.value !== null && spansOf(key).some((s) => s.item.id === activeSpanId.value)
+  const today = key === todayKey.value
+  // 今天的格子由 .today-flow 负责唯一的边框（2px 流光）；去掉外边框，避免两层线叠加。
+  // 选中/悬停也只改底色，不再加 ring，保证任何状态都只有一条边。
+  if (today) return `!border-0 ${selected || inActiveSpan ? 'bg-brand-500/15' : 'bg-surface hover:bg-muted/60'}`
+  if (selected && inActiveSpan) return 'border-brand-500/75 bg-brand-500/15'
+  if (inActiveSpan) return 'border-brand-500/55 bg-brand-500/8'
+  if (selected) return 'border-brand-500 bg-brand-500/8'
   if (!c.in_month) return 'border-border/30 bg-surface/20 opacity-45 hover:bg-muted/60'
-  return 'border-border bg-surface hover:border-brand-500/35 hover:bg-muted/60'
+  return 'border-border bg-surface hover:border-brand-500/45 hover:bg-muted/60'
 }
 
 // ---------- 时间段任务在日历上的「跨天」显示 ----------
