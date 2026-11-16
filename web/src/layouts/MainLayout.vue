@@ -399,7 +399,34 @@
           <h2 class="truncate text-base font-bold">{{ greeting }}，{{ authStore.user?.username }}</h2>
         </div>
         <div class="ml-auto flex items-center gap-1 sm:gap-2">
-          <RouterLink to="/admin/notifications" class="icon-button relative" aria-label="通知中心">
+          <!-- 列表 / 日历切换（用户 2026-11-16）：放到全局右上角铃铛左边，和通知/免打扰同一组图标。 -->
+          <div
+            v-if="showViewSwitch && !isNarrow"
+            class="flex items-center gap-1"
+            role="group"
+            aria-label="切换列表或日历视图"
+            data-view-switch
+          >
+            <RouterLink
+              :to="listRoute"
+              class="icon-button"
+              :class="!isCalendar ? 'bg-brand-500/10 text-brand-600 dark:text-brand-300' : ''"
+              title="列表视图"
+              aria-label="列表视图"
+            >
+              <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h16" stroke-width="1.9" stroke-linecap="round"/></svg>
+            </RouterLink>
+            <RouterLink
+              to="/admin/calendar"
+              class="icon-button"
+              :class="isCalendar ? 'bg-brand-500/10 text-brand-600 dark:text-brand-300' : ''"
+              title="日历视图"
+              aria-label="日历视图"
+            >
+              <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2.5" stroke-width="1.9"/><path d="M3 10h18M8 3v4m8-4v4" stroke-width="1.9" stroke-linecap="round"/></svg>
+            </RouterLink>
+          </div>
+          <RouterLink to="/admin/notifications" class="icon-button relative" aria-label="通知中心" data-notification-bell>
             <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span v-if="summary.unread" class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-red-500"></span>
           </RouterLink>
@@ -454,32 +481,6 @@
           >
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="3.2" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.13.38.35.72.65 1 .3.28.7.42 1.1.4H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </RouterLink>
-          <!-- 列表 / 日历 切换。放在主题按钮旁边，与它同为「换个看法」类操作。 -->
-          <div
-            v-if="showViewSwitch && !isNarrow"
-            class="flex items-center gap-0.5 rounded-xl border border-border/70 bg-muted/55 p-0.5"
-            role="group"
-            aria-label="切换列表或日历视图"
-          >
-            <RouterLink
-              :to="listRoute"
-              class="inline-flex items-center justify-center rounded-[0.6rem] p-2 text-xs font-bold transition"
-              :class="!isCalendar ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-              title="列表视图"
-              aria-label="列表视图"
-            >
-              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h16" stroke-width="2" stroke-linecap="round"/></svg>
-            </RouterLink>
-            <RouterLink
-              to="/admin/calendar"
-              class="inline-flex items-center justify-center rounded-[0.6rem] p-2 text-xs font-bold transition"
-              :class="isCalendar ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-              title="日历视图"
-              aria-label="日历视图"
-            >
-              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2.5" stroke-width="1.9"/><path d="M3 10h18M8 3v4m8-4v4" stroke-width="1.9" stroke-linecap="round"/></svg>
-            </RouterLink>
-          </div>
           <UiThemeToggle />
           <div class="mx-1 hidden h-7 w-px bg-border sm:block"></div>
           <RouterLink to="/admin/profile" class="flex items-center gap-2 rounded-xl p-1.5 pr-2 hover:bg-muted">
