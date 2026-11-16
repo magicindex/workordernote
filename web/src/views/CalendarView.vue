@@ -1471,7 +1471,7 @@ onBeforeUnmount(() => {
 [data-cal-more] { font-size: var(--cal-task-font, 10px); }
 /* 右侧当天卡片：标题、时间、清单统一为正文级 12px，不加粗；长标题由 truncate 省略。 */
 .cal-card-title,
-.cal-card-meta { font-size: 12px; font-weight: 400; line-height: 1.4; }
+.cal-card-meta { font-size: 14px; font-weight: 400; line-height: 1.45; }
 .cal-cell { min-height: 0; }
 /* 日历主卡/日格与页面渐变背景拉开层次：日格用实色 surface，主卡再加一圈更明显的边界与投影。 */
 .cal-surface {

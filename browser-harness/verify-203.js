@@ -54,8 +54,8 @@ function check(name, ok, extra = '') {
         check(`桌面 ${h}px 任务与时间段字号/字重一致且不加粗`,
           info.taskFont === info.spanFont && info.taskWeight === '400' && info.spanWeight === '400',
           JSON.stringify({ task: info.taskFont, span: info.spanFont, tw: info.taskWeight, sw: info.spanWeight }));
-        check(`桌面 ${h}px 右侧卡片标题与描述同为正文级 12px、不加粗`,
-          info.cardTitleFont === '12px' && info.cardMetaFont === '12px'
+        check(`桌面 ${h}px 右侧卡片标题与描述同为正文级 14px、不加粗`,
+          info.cardTitleFont === '14px' && info.cardMetaFont === '14px'
             && info.cardTitleWeight === '400' && info.cardMetaWeight === '400', JSON.stringify(info));
       } else {
         check(`桌面 ${h}px 有任务/时间段可检查字号`, false, JSON.stringify(info));
