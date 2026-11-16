@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteLocationNormalized } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { getAllConfigs } from '../api/config'
 import { isNarrowNow } from '../utils/use-narrow'
 import { SK } from '../utils/storage-keys'
 
@@ -76,6 +77,8 @@ const router = createRouter({
   ]
 })
 
+let initialViewChecked = false
+
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   await authStore.init()
@@ -92,6 +95,22 @@ router.beforeEach(async (to, from, next) => {
   if (to.name === 'Calendar' && isNarrowNow()) {
     next({ path: '/admin' })
     return
+  }
+
+  // 「默认首页=日历」在首次进入 /admin 时就决定，不能只靠 MainLayout 的挂载时序：
+  // 首页看板异步挂载时可能先读到旧状态，导致设置不同步。这里只检查一次，
+  // 不影响之后用户手动点「待办」等导航。
+  if (!initialViewChecked && authStore.isAuthenticated && to.name === 'Home' && !isNarrowNow()) {
+    initialViewChecked = true
+    try {
+      const res = await getAllConfigs()
+      if (String(res.data?.data?.default_view || 'home') === 'calendar') {
+        next({ name: 'Calendar' })
+        return
+      }
+    } catch {
+      // 配置读不到就按首页看板继续；MainLayout 还有一次兜底。
+    }
   }
 
   if (to.meta.requiresAuth !== false && !authStore.isAuthenticated && authStore.requireLogin) {
