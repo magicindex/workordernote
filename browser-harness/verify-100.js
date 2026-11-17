@@ -286,8 +286,13 @@ const overflowFinder = () => {
       logoInfo.some((x) => x && x.w / x.h > 1.5), JSON.stringify(logoInfo));
 
     // ---------- 3. 悬浮新建按钮 ----------
+    // 手机端冷启动 /admin 固定落「首页」看板（0.48.1 起），而看板上按用户要求
+    // 不显示悬浮 +（看板「只是用来展示」）。先点底栏「待办」回到列表页再断言，
+    // 否则测的是首页而不是悬浮按钮本身。
     await gotoRetry(page, ROOT + '/admin');
     await sleep(1400);
+    await page.evaluate(() => document.querySelector('[data-tab-today]')?.click());
+    await sleep(1200);
     const fab = await page.evaluate(() => {
       const el = document.querySelector('[data-mobile-fab]');
       const bar = document.querySelector('.mobile-tabbar');

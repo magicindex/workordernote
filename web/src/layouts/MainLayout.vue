@@ -2341,9 +2341,9 @@ onBeforeUnmount(() => {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
-  /* 手机端禁用了 backdrop-blur，半透明底会让滚动内容透出来；
-     改为不透明背景，接近原生导航栏的观感。 */
-  .topbar { background: rgb(var(--color-background)); }
-  .mobile-tabbar { background: rgb(var(--color-surface)); }
+  /* 手机端禁用了 backdrop-blur，半透明底会让滚动内容透出来。
+     导航栏不透明度的下限统一在 style.css 的 --nav-bg-opacity 里给出
+     （96%，用户 2026-11-17 报「菜单栏透明度太高导致看不清」），
+     这里不再单写一遍背景色，免得两处各说一套。 */
 }
 </style>

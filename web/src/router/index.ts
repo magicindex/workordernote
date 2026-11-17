@@ -123,6 +123,14 @@ router.beforeEach(async (to, from, next) => {
     next({ path: '/admin' })
   } else if (to.meta.requiresAdmin && !authStore.isAdmin) {
     next({ name: 'Home' })
+  } else if (isNarrowNow() && to.name === 'Home' && !from.matched.length) {
+    // 手机端「打开应用的第一页」固定是首页看板（用户 2026-11-17 再次要求
+    // 「增加手机打开后的初始页面，默认显示首页」）。
+    // 关键是在**守卫里**就改道：原来靠 MainLayout 挂载后 applyDefaultViewOnce
+    // 再 replace，会先渲染出「待办」列表（实测约 130ms）再跳首页，看起来像
+    // 默认页是待办。这里只在「冷启动的第一次导航」（from 为空）生效，
+    // 之后用户点底栏「待办」不会被拽回首页。
+    next({ name: 'Dashboard', replace: true })
   } else {
     next()
   }
