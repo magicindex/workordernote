@@ -30,4 +30,8 @@ export const SK = {
   editorSide: `${P}editor_side`,
   // AI 对话浮窗拖拽后的宽高（按用户存；没拖过就用默认）。
   assistantPanelSize: `${P}assistant_panel_size`,
+  // 手机底部导航顺序与「打开先显示」页面（偏好存服务端，这里缓存一份供首屏
+  // 路由守卫同步读取；见 utils/mobile-nav.ts）。
+  mobileTabOrder: `${P}mobile_tab_order`,
+  mobileHomeView: `${P}mobile_home_view`,
 } as const

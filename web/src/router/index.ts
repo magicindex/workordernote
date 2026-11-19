@@ -3,6 +3,8 @@ import type { RouteLocationNormalized } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { getAllConfigs } from '../api/config'
 import { isNarrowNow } from '../utils/use-narrow'
+import { mobileHomeRouteName, resolveMobileHomeView } from '../utils/mobile-nav'
+import { useMobileNavStore } from '../stores/mobile'
 import { SK } from '../utils/storage-keys'
 
 const router = createRouter({
@@ -124,13 +126,19 @@ router.beforeEach(async (to, from, next) => {
   } else if (to.meta.requiresAdmin && !authStore.isAdmin) {
     next({ name: 'Home' })
   } else if (isNarrowNow() && to.name === 'Home' && !from.matched.length) {
-    // 手机端「打开应用的第一页」固定是首页看板（用户 2026-11-17 再次要求
-    // 「增加手机打开后的初始页面，默认显示首页」）。
-    // 关键是在**守卫里**就改道：原来靠 MainLayout 挂载后 applyDefaultViewOnce
-    // 再 replace，会先渲染出「待办」列表（实测约 130ms）再跳首页，看起来像
-    // 默认页是待办。这里只在「冷启动的第一次导航」（from 为空）生效，
-    // 之后用户点底栏「待办」不会被拽回首页。
-    next({ name: 'Dashboard', replace: true })
+    // 手机端「打开应用的第一页」默认是首页看板（用户 2026-11-17），2026-11-19 起
+    // 可以在「偏好设置 → 手机 → 打开先显示」里改成 待办 / 计划 / 提醒@他。
+    // 关键是在**守卫里**就改道：等 MainLayout 挂载后再 replace 会先渲染出一帧
+    // 「待办」（实测约 130ms），看起来像默认页是待办。偏好值用 localStorage 缓存
+    // 同步读取（见 utils/mobile-nav.ts），所以这里不依赖接口。
+    // 只在「冷启动的第一次导航」（from 为空）生效，之后用户点底栏不会被拽回去。
+    // 偏好值来自启动引导（authStore.init 已经跑完，见上面的 applyBootstrap），
+    // 不依赖接口 —— 所以首屏可以直接落对，不会先渲染一帧再跳。
+    const mobileNav = useMobileNavStore()
+    const view = resolveMobileHomeView(mobileNav.homeView, authStore.nudgeEnabled)
+    const target = mobileHomeRouteName(view)
+    if (target !== 'Home') next({ name: target, replace: true })
+    else next()
   } else {
     next()
   }

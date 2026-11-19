@@ -514,44 +514,39 @@
     <IosInstallTip />
 
     <nav class="mobile-tabbar" :class="{ 'mobile-tabbar-hidden': keyboardOpen }">
-      <!-- 底部顺序（用户 2026-11-09：「把通知改成首页，点击弹出首页，调整位置为左边第一个，
-           同时把待办调整到通知原来位置，重新构建首页图标」）：首页 / 计划 / 清单 / 待办 / 提醒。
-           通知中心仍从顶栏的铃铛进（带未读角标），底部不再占一格。 -->
-      <RouterLink
-        to="/admin/home"
-        class="mobile-tab"
-        :class="{ active: route.path === '/admin/home' }"
-        data-tab-home
-        aria-label="首页"
-      ><span v-html="smartNav[0].icon"></span><small>首页</small></RouterLink>
-      <RouterLink to="/admin/planned" class="mobile-tab" :class="{ active: route.path === '/admin/planned' }"><span v-html="smartNav[2].icon"></span><small>计划</small></RouterLink>
-      <!-- 手机端中间那个标签：原来是「信用卡账单」的直接入口（只在开了信用卡、且确实有那一栏
-           时出现）。用户 2026-10-16 要求改成「清单」——点它弹出**所有清单**的列表，选一个就切
-           过去（信用卡账单 / 随手记事本 / 人生要有仪式感 / 自建清单都在里面，顺序与侧栏
-           「我的清单」那一段一致，见 listsSheetOpen）。 -->
-      <button
-        type="button"
-        class="mobile-tab"
-        :class="{ active: isListTabActive }"
-        data-tab-lists
-        aria-label="清单"
-        @click="openListsSheet"
-      >
-        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8.5 6h11m-11 6h11m-11 6h11M4 6h.01M4 12h.01M4 18h.01" stroke-width="1.9" stroke-linecap="round"/></svg></span>
-        <small>清单</small>
-      </button>
-      <RouterLink to="/admin" class="mobile-tab" :class="{ active: route.path === '/admin' }" data-tab-today><span v-html="smartNav[1].icon"></span><small>待办</small></RouterLink>
-      <RouterLink
-        v-if="authStore.nudgeEnabled"
-        to="/admin/nudges"
-        class="mobile-tab"
-        :class="{ active: route.path === '/admin/nudges' }"
-        data-tab-nudges
-        aria-label="提醒"
-      >
-        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15.5 8.5a3.5 3.5 0 1 0-7 0c0 4-2 4-2 5.5h11c0-1.5-2-1.5-2-5.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 17a1.6 1.6 0 0 0 3 0" stroke-width="1.7" stroke-linecap="round"/><circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/></svg></span>
-        <small>提醒</small>
-      </RouterLink>
+      <!-- 底部标签栏（用户 2026-11-19）：「偏好设置 → 手机」里可以拖拽调整顺序、
+           选择「打开先显示」哪一页，预览确认后生效。顺序/图标/文字都来自
+           utils/mobile-nav.ts 一份定义；未设置时仍是默认的 首页 / 计划 / 清单 / 待办 / 提醒。
+           通知中心仍从顶栏的铃铛进（带未读角标），底部不占一格。
+           「清单」是弹层入口（点它弹出全部清单，见 listsSheetOpen），所以是 button 不是链接。 -->
+      <template v-for="tab in mobileTabs" :key="tab.key">
+        <button
+          v-if="tab.key === 'lists'"
+          type="button"
+          class="mobile-tab"
+          :class="{ active: isListTabActive }"
+          data-tab-lists
+          :aria-label="tab.label"
+          @click="openListsSheet"
+        >
+          <span v-html="tab.icon"></span>
+          <small>{{ tab.label }}</small>
+        </button>
+        <RouterLink
+          v-else
+          :to="tab.to || '/admin'"
+          class="mobile-tab"
+          :class="{ active: isMobileTabActive(tab.key) }"
+          :data-tab-home="tab.key === 'home' ? '' : undefined"
+          :data-tab-today="tab.key === 'today' ? '' : undefined"
+          :data-tab-nudges="tab.key === 'nudges' ? '' : undefined"
+          :data-mobile-tab="tab.key"
+          :aria-label="tab.label"
+        >
+          <span v-html="tab.icon"></span>
+          <small>{{ tab.label }}</small>
+        </RouterLink>
+      </template>
     </nav>
 
     <!-- 「清单」标签弹出的清单列表（用户 2026-10-16）：手机底部弹层，列的就是侧栏「我的清单」
@@ -838,6 +833,8 @@ import ReminderAlert from '../components/ReminderAlert.vue'
 import IosInstallTip from '../components/IosInstallTip.vue'
 import { useAuthStore } from '../stores/auth'
 import { parsePageBgGradient, useThemeStore } from '../stores/theme'
+import { useMobileNavStore } from '../stores/mobile'
+import { MOBILE_TAB_META, mobileHomeRouteName, type MobileTabKey } from '../utils/mobile-nav'
 import {
   completeReminder,
   getDNDState,
@@ -863,6 +860,8 @@ import { onFnOSGatewayOrigin } from '../utils/gateway'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+// 手机底部导航顺序 + 「打开先显示」页面（个人偏好，见 stores/mobile.ts）。
+const mobileNav = useMobileNavStore()
 const themeStore = useThemeStore()
 // 小秘的名字：每个人可在「偏好设置 → AI 提示词」里改，侧栏入口与面板共用。
 const assistantStore = useAssistantStore()
@@ -983,6 +982,17 @@ function myRowLabel(row: MyListRow): string {
 // （点一下就进去）——只是多了「所有清单」这一层。
 const listsSheetOpen = ref(false)
 const isListTabActive = computed(() => route.path.startsWith('/admin/list/') || route.path === '/admin/timetable')
+// 底部标签栏按个人偏好顺序渲染（用户 2026-11-19）；「提醒@他」关掉时不占格。
+const mobileTabs = computed(() => mobileNav.tabOrder
+  .filter((key) => key !== 'nudges' || authStore.nudgeEnabled)
+  .map((key) => MOBILE_TAB_META[key]))
+function isMobileTabActive(key: MobileTabKey): boolean {
+  if (key === 'home') return route.path === '/admin/home'
+  if (key === 'planned') return route.path === '/admin/planned'
+  if (key === 'today') return route.path === '/admin'
+  if (key === 'nudges') return route.path === '/admin/nudges'
+  return false
+}
 function openListsSheet() { listsSheetOpen.value = true }
 function closeListsSheet() { listsSheetOpen.value = false }
 /** 课程表（用户 2026-10-23）：这一页现在也从「清单」弹层进，切过去就收起弹层 */
@@ -1071,6 +1081,8 @@ async function loadSidebarOrder() {
     themeStore.setPageBgGradient(parsePageBgGradient(String(cfg.page_bg_gradient || '')))
     const cardOpacity = Number(cfg.card_bg_opacity)
     themeStore.setCardBgOpacity(Number.isFinite(cardOpacity) && cfg.card_bg_opacity !== undefined ? cardOpacity : 90)
+    // 手机栏目偏好（顺序 + 打开先显示）：和侧栏顺序一起从同一份配置里取。
+    mobileNav.applyFromConfigs(cfg)
     const raw = String(res.data?.data?.sidebar_order ?? '')
     const parsed = raw ? JSON.parse(raw) : []
     // 'nudge' 是旧版「提醒@他」在「我的清单」里的排序 token；2026-10-19 挪到「课程表」下面后不再参与排序。
@@ -1381,6 +1393,14 @@ function onConfigChanged(event: Event) {
   }
   if (detail?.key === 'card_bg_opacity') {
     themeStore.setCardBgOpacity(Number(detail.value || 0) || 0)
+    return
+  }
+  if (detail?.key === 'mobile_tabs_order') {
+    mobileNav.setTabOrder(String(detail.value || ''))
+    return
+  }
+  if (detail?.key === 'mobile_home_view') {
+    mobileNav.setHomeView(String(detail.value || ''))
   }
 }
 // 关掉浮窗（Esc / 关闭按钮 / 点遮罩）后，下一次打开仍按「窄桌面先收起侧栏」的规矩来，
@@ -2095,8 +2115,12 @@ let defaultViewApplied = false
 // 手机上没有日历视图，设成日历也按列表进。
 const defaultView = ref<'home' | 'list' | 'calendar'>('home')
 function defaultViewTarget(): { name: string } {
-  // 手机端打开应用第一页固定是「首页」看板，不再跟随桌面的默认视图偏好。
-  if (isNarrowNow()) return { name: 'Dashboard' }
+  // 手机端打开应用第一页按「偏好设置 → 手机 → 打开先显示」来（用户 2026-11-19 起可调，
+  // 默认仍是首页看板），不再跟随桌面的默认视图偏好；提醒@他关掉时退回首页看板。
+  if (isNarrowNow()) {
+    const view = mobileNav.effectiveHomeView(authStore.nudgeEnabled)
+    return { name: mobileHomeRouteName(view) }
+  }
   if (defaultView.value === 'calendar' && !isNarrowNow()) return { name: 'Calendar' }
   if (defaultView.value === 'home') return { name: 'Dashboard' }
   return { name: 'Home' }
@@ -2106,8 +2130,12 @@ async function applyDefaultViewOnce() {
   defaultViewApplied = true
   try {
     const res = await getAllConfigs()
-    const value = String(res.data?.data?.default_view || 'home')
+    const cfg = res.data?.data || {}
+    const value = String(cfg.default_view || 'home')
     defaultView.value = value === 'calendar' ? 'calendar' : value === 'list' ? 'list' : 'home'
+    // 手机首屏偏好也在这里先落一次：缓存可能是旧的（换设备/别的端改过），
+    // 以服务端为准再决定要不要改道。loadSidebarOrder 之后还会再取一次同样的值。
+    mobileNav.applyFromConfigs(cfg)
   } catch {
     /* 读不到就按首页看板来，不该因为一个偏好读失败挡住进入应用 */
   }

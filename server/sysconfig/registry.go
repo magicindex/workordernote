@@ -250,6 +250,28 @@ func init() {
 		Group: "appearance", Label: "默认首页",
 		Description: "打开应用时先进哪个视图（首页看板 / 列表视图 / 日历视图）；之后仍可随时用右上角按钮切换",
 	})
+	// 手机端「栏目」偏好（用户 2026-11-19）：
+	//   · mobile_tabs_order —— 底部标签栏从左到右的顺序，逗号分隔的固定 token；
+	//   · mobile_home_view  —— 手机打开应用时先进入哪一页。
+	// 顺序值由前端归一化（只认 home/planned/lists/today/nudges，缺的补在末尾），
+	// 所以这里用 TypeString 而不是 Select —— 排列组合没法当选项枚举。
+	// 老的「默认首页」（default_view）继续管桌面端，手机端不再跟着它走。
+	// Public: 进启动引导（bootstrap），登录后的首屏与底栏不用再多等一次接口；
+	// 与 credit_card_enabled 等个人开关同一套取法（用户自己的值 → 注册表默认）。
+	RegisterConfig(ConfigDef{
+		Key: "mobile_tabs_order", Scope: ScopeUser, Type: TypeString,
+		Default: "home,planned,lists,today,nudges",
+		Public: true,
+		Group:  "mobile", Label: "手机底部导航顺序",
+		Description: "手机底部标签栏从左到右的顺序：home=首页、planned=计划、lists=清单、today=待办、nudges=提醒@他（在偏好设置「手机」里拖拽调整，预览确认后生效）",
+	})
+	RegisterConfig(ConfigDef{
+		Key: "mobile_home_view", Scope: ScopeUser, Type: TypeSelect,
+		Default: "home", Options: []string{"home", "today", "planned", "nudges"},
+		Public: true,
+		Group: "mobile", Label: "手机打开先显示",
+		Description: "手机打开应用时先进哪一页：首页看板 / 待办 / 计划 / 提醒@他（清单是弹层入口，不能作为首屏）",
+	})
 	// 提醒频率：控制「到点的提醒多久再提醒一次」与「点『知道了』之后多久再提醒」。
 	// 都是个人偏好（每人一份），选项值是分钟数。
 	RegisterConfig(ConfigDef{

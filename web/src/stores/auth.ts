@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { useMobileNavStore } from './mobile'
 import { ref, computed, watch } from 'vue'
 import { checkAuth, checkSetupRequired as apiCheckSetupRequired, logout as apiLogout } from '../api/auth'
 import { getBootstrap, type BootstrapData } from '../api/bootstrap'
@@ -136,6 +137,9 @@ export const useAuthStore = defineStore('auth', () => {
     reminderAckMinutes.value = Number(configs.reminder_ack_minutes || 0) || 0
     reminderOverdueTime.value = normalizeClockValue(configs.task_overdue_time) || '23:59'
     if (configs.site_title) siteTitle.value = configs.site_title
+    // 手机栏目偏好（底部导航顺序 + 打开先显示）也是 public 用户级配置，随引导回来；
+    // 交给 mobile store 落一份缓存，路由守卫在首屏渲染前就能按它决定落点。
+    useMobileNavStore().applyFromConfigs(configs)
     if (data.service_port) servicePort.value = data.service_port
     // 服务端运行形态是按钮显隐的唯一权威；字段缺席（旧后端）时保留编译期
     // 兜底默认，不做无据降级。

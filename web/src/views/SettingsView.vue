@@ -78,6 +78,8 @@
       </div>
 
       <div v-show="activeTab === 'mobile'" class="mt-4" data-settings-panel="mobile">
+        <!-- 手机栏目（用户 2026-11-19）：首屏页面 + 底部导航顺序，拖拽调整、预览确认后生效。 -->
+        <MobileNavPrefs />
         <InstallAppCard heading="手机 App 设置说明" card-title="把工作序记加到手机主屏幕" mobile-only />
         <CalendarSyncCard :lists="navLists" />
       </div>
@@ -120,6 +122,7 @@ import AiPromptPrefs from '../components/AiPromptPrefs.vue'
 import EmailSenderSettings from '../components/EmailSenderSettings.vue'
 import SystemListPrefs from '../components/SystemListPrefs.vue'
 import BackgroundTonePrefs from '../components/BackgroundTonePrefs.vue'
+import MobileNavPrefs from '../components/MobileNavPrefs.vue'
 import { getUserConfigMeta, updateConfig } from '../api/config'
 import type { ConfigMeta } from '../api/config'
 import { getLists, updateList, type ReminderList } from '../api/reminder'

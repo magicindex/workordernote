@@ -93,6 +93,8 @@ import { useAuthStore } from '../stores/auth'
 import { resolveFnOSGatewayEntry, startFnOSAccountSwitch, startFnOSAuthorize, startFnOSFullPageAuthorize, tryIssueFnOSTicket, fnOSMobileClient } from '../utils/fnos-auth'
 import { SK } from '../utils/storage-keys'
 import { isNarrowNow } from '../utils/use-narrow'
+import { mobileHomePath } from '../utils/mobile-nav'
+import { useMobileNavStore } from '../stores/mobile'
 import AuthShell from '../components/auth/AuthShell.vue'
 import AuthField from '../components/auth/AuthField.vue'
 
@@ -172,8 +174,11 @@ async function handleLogin() {
       // 重新拉一次启动引导：init() 在登录页那次是「未登录」跑的，个人偏好
       // （信用卡栏目开关等）不会回填，侧栏会少东西（用户报过的初次加载 bug）。
       await authStore.reloadBootstrap()
-      // 手机端登录后第一页固定是首页看板；桌面端仍走默认视图偏好。
-      router.push(isNarrowNow() ? '/admin/home' : '/admin')
+      // 手机端登录后第一页按「偏好设置 → 手机 → 打开先显示」（默认首页看板）；
+      // 桌面端仍走默认视图偏好。偏好已随 reloadBootstrap 落到 mobile store 里。
+      router.push(isNarrowNow()
+        ? mobileHomePath(useMobileNavStore().effectiveHomeView(authStore.nudgeEnabled))
+        : '/admin')
     } else {
       errorMsg.value = res.data?.message || '登录失败'
     }
