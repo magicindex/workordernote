@@ -3,10 +3,8 @@
 任务、记事与日历一体的提醒应用。清单管理、定时提醒、记事归档、月历总览，
 支持站内消息、电子邮件、飞书机器人和 QQ 机器人通知（手机短信已取消）。
 
-- 仓库：<http://192.168.3.200:3000/cyberzero/WorkOrderNote>
-- 发布与安装包：<http://192.168.3.200:3000/cyberzero/WorkOrderNote/releases>
-- GitHub 镜像与 Release：<https://github.com/magicindex/workordernote/releases>
-- GitHub 镜像：<https://github.com/magicindex/workordernote>
+- 源码与 Release：<https://github.com/magicindex/workordernote>
+- 镜像：`ghcr.io/magicindex/workordernote`（GitHub Container Registry，匿名可拉）
 - 当前版本：`0.48.4`
 
 > **本项目是衍生作品。** 基于开源项目
@@ -92,24 +90,18 @@
 | 对象 | 关系 |
 | --- | --- |
 | `reminders-upstream/` | 上游 [TechFunWay/reminders](https://github.com/TechFunWay/reminders) 的只读快照，是衍生的来源；不向上游提交、也不改它 |
-| 外部模型服务 | 本机 Ollama（`http://192.168.3.201:11434/v1`）或各云厂商 API，由「系统配置 → AI 助手」配置，不属于本仓库代码 |
+| 外部模型服务 | 本机或自建 Ollama（如 `http://localhost:11434/v1`）或各云厂商 API，由「系统配置 → AI 助手」配置，不属于本仓库代码 |
 | fnOS 系统与统一网关 | 通过 `fnpack/` 打包接入，系统本身不修改 |
 
-### 依赖的其他仓库需要同步什么
+### 发布
 
-| 仓库 / 镜像 | 同步内容 | 触发时机 |
+| 产物 | 位置 | 触发时机 |
 | --- | --- | --- |
-| `origin`（Gitea `cyberzero/WorkOrderNote`） | 本仓库全部提交与 tag（主来源） | 每次提交 / 发版 |
-| `github`（`magicindex/workordernote`） | 同一个 commit（镜像仓库） | 发版后 `git push github main` |
-| GHCR `ghcr.io/magicindex/workordernote` | 镜像 `:<版本>` 与 `:latest` | 发版构建后推送 |
-| Gitea Registry `192.168.3.200:3000/cyberzero/workordernote` | 同一镜像（两台生产机从这里拉） | 同上 |
-| 两台生产机的 `docker-compose.yml`（`/vol1/1000/Docker/workordernote/`） | 镜像 tag 改为新版本 | 发版时同步 |
-| `README.md` / `CHANGELOG.md` / `web/src/data/release-notes.ts` / `ops/deployment-README.md` | 版本号与更新说明 | 每次发版 |
+| 源码与 git tag | <https://github.com/magicindex/workordernote> | 每次发版 |
+| 镜像 `:<版本>` / `:latest` | `ghcr.io/magicindex/workordernote` | 发版构建后推送 |
+| 发行包（Linux tar / fnOS fpk / compose / 截图） | <https://github.com/magicindex/workordernote/releases> | 每次发版 |
 
-发版标准顺序：改 `VERSION` → 核对四处版本号一致（`VERSION` / `docker-compose.yml` /
-`README.md` / `web/src/data/release-notes.ts`）→ 构建镜像 → 推两个 registry →
-两台容器拉取重建 → `verify-128` + 双机同步校验 → 写 `ops/deployment-README.md` →
-提交并推 `origin` 与 `github`。
+> 自建部署的内部运维细节（本机部署路径、同步拓扑、回归流程）在仓库外维护，不在本 README 里。
 
 ## 技术栈
 
@@ -122,23 +114,15 @@
 镜像发布在仓库自带的容器仓库，可直接拉取：
 
 ```bash
-docker pull 192.168.3.200:3000/cyberzero/workordernote:0.48.4
+docker pull ghcr.io/magicindex/workordernote:0.48.4
 ```
-
-同一版本也发布在 GHCR：`ghcr.io/magicindex/workordernote:0.48.4`；Gitea 容器仓库不可用时可直接改用。
 
 ### 用仓库里的 compose 文件安装
 
 ```bash
 mkdir -p ~/workordernote && cd ~/workordernote
-curl -fsSLO http://192.168.3.200:3000/cyberzero/WorkOrderNote/raw/branch/main/docker-compose.yml
-docker compose up -d
-```
-
-从 GitHub 镜像下载同款文件：
-
-```bash
 curl -fsSLO https://raw.githubusercontent.com/magicindex/workordernote/main/docker-compose.yml
+docker compose up -d
 ```
 
 启动后访问 `http://<主机>:8906`，首次打开按页面提示注册管理员账号。
@@ -150,7 +134,7 @@ curl -fsSLO https://raw.githubusercontent.com/magicindex/workordernote/main/dock
 ```yaml
 services:
   workordernote:
-    image: 192.168.3.200:3000/cyberzero/workordernote:0.48.1
+    image: ghcr.io/magicindex/workordernote:0.48.4
     container_name: workordernote
     # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
     user: "1000:1001"
@@ -218,7 +202,7 @@ docker build -f Dockerfile.custom \
   --build-arg VERSION=$(cat VERSION) \
   --build-arg BUILD_TIME=$(date +%Y-%m-%dT%H:%M:%S) \
   --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) \
-  -t 192.168.3.200:3000/cyberzero/workordernote:$(cat VERSION) .
+  -t workordernote:$(cat VERSION) .
 ```
 
 > tzdata 不是可选项：服务端多处调用 `time.LoadLocation("Asia/Shanghai")`，

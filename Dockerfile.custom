@@ -73,9 +73,11 @@ LABEL org.opencontainers.image.title="WorkOrderNote" \
       org.opencontainers.image.created="${BUILD_TIME}" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.vendor="WorkOrderNote" \
-      org.opencontainers.image.source="http://192.168.3.200:3000/cyberzero/workordernote" \
-      org.opencontainers.image.url="http://192.168.3.200:3000/cyberzero/workordernote" \
-      org.opencontainers.image.documentation="http://192.168.3.200:3000/cyberzero/workordernote/src/branch/main/README.md" \
+      # 公开镜像的 OCI 标签只写公开仓库地址；内网私服与自建拓扑不进镜像
+      #（用户 2026-11-19 要求）。内网运维信息见 ops/ 下的部署文档。
+      org.opencontainers.image.source="https://github.com/magicindex/workordernote" \
+      org.opencontainers.image.url="https://github.com/magicindex/workordernote" \
+      org.opencontainers.image.documentation="https://github.com/magicindex/workordernote/blob/main/README.md" \
       org.workordernote.upstream="https://github.com/TechFunWay/reminders"
 COPY --from=backend-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=tzdata-source /usr/share/zoneinfo /usr/share/zoneinfo
