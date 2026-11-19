@@ -112,17 +112,21 @@ const calendarFootprint = (page) => page.evaluate(() => {
     // ---------- 3. 「默认首页=日历」的偏好在手机上要被忽略 ----------
     const before = await api(page, '/api/configs');
     const originalView = before.body?.data?.default_view ?? null;
+    const originalMobileHome = String(before.body?.data?.mobile_home_view || 'home');
     check('读到了「默认首页」原值', originalView !== null, String(originalView));
     try {
       if (originalView !== 'calendar') {
         const put = await api(page, '/api/configs', 'PUT', { key: 'default_view', value: 'calendar' });
         check('已把默认首页临时改成「日历」', put.status === 200, `status=${put.status}`);
       }
+      // 0.48.4 起手机首屏按「手机栏目 → 打开先显示」走；这里固定成首页，
+      // 验「电脑端默认=日历 不会把手机首屏带跑」，跑完还原用户自己的选择。
+      await api(page, '/api/configs', 'PUT', { key: 'mobile_home_view', value: 'home' });
       await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
       await page.goto(ROOT + '/admin', { waitUntil: 'domcontentloaded', timeout: 30000 });
       await sleep(2000);
       const mobileHome = await calendarFootprint(page);
-      check('手机端即使默认首页设成「日历」，进应用也落在固定首页（不是日历）',
+      check('手机端「默认首页=日历」不影响手机首屏（仍按手机栏目偏好=首页）',
         mobileHome.url === '/admin/home' && mobileHome.cells === 0, `URL=${mobileHome.url}`);
 
       await page.setViewport({ width: 1440, height: 900 });
@@ -135,6 +139,7 @@ const calendarFootprint = (page) => page.evaluate(() => {
       if (originalView !== 'calendar') {
         await api(page, '/api/configs', 'PUT', { key: 'default_view', value: originalView });
       }
+      await api(page, '/api/configs', 'PUT', { key: 'mobile_home_view', value: originalMobileHome });
       const after = await api(page, '/api/configs');
       check('默认首页已还原为原值并回读确认',
         (after.body?.data?.default_view ?? null) === originalView,

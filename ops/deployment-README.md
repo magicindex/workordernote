@@ -1,4 +1,4 @@
-# 工作序记 (WorkOrderNote) 0.48.3
+# 工作序记 (WorkOrderNote) 0.48.4
 
 任务、记事与日历一体的提醒应用。飞牛 NAS 上以 Docker 部署。
 
@@ -8,7 +8,7 @@
 ## 访问
 
 - <http://192.168.3.201:8906/>
-- 容器 `workordernote`，镜像 `workordernote:0.48.3`（Gitea / GHCR 同源）
+- 容器 `workordernote`，镜像 `workordernote:0.48.4`（Gitea / GHCR 同源）
 - 对比实例：<http://192.168.3.201:8907/> 官方原版 v0.3.0；<http://192.168.3.201:8908/> 沙盒
 
 ## 仓库与镜像地址（2026-10-22 起）
@@ -217,11 +217,11 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 版本与迭代
 
-- 软件版本见根目录 `VERSION`，当前 `0.48.3`，规则为 `主版本号.小版本号.修正号`。
-  **部署状态（2026-11-19 18:23）**：**201 生产 8906 / 200 生产 / 沙箱 8908 均已升级到 0.48.3**
-  （源码提交 `edcc33b`，镜像 `workordernote:0.48.3` / `:latest` =
-  `sha256:6439da5b6eb17c020820d48b4356b7834855d9ff11e229f8e07950cd780108cb`；
-  Gitea/GHCR manifest `sha256:e81e2dab4b843ee634861e2bfab82d59fbcf9292804bdf77ccc2ef5290ff16ef`）。
+- 软件版本见根目录 `VERSION`，当前 `0.48.4`，规则为 `主版本号.小版本号.修正号`。
+  **部署状态（2026-11-19 19:32）**：**201 生产 8906 / 200 生产 / 沙箱 8908 均已升级到 0.48.4**
+  （源码提交 `85b4ad4`，镜像 `workordernote:0.48.4` / `:latest` =
+  `sha256:734ce07a1257af7e5414d6174f2355a9dee44c7b2d210760574530be8ab8000d`；
+  Gitea/GHCR manifest `sha256:60b796c0eb3a7809b12584ef9f7442e846c97277edd5c1064e8ccb2ca46fda1d`）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
   **公开设置 9 项三台一致**；**个人偏好 201 与 200 一致，沙箱单独一套**（开始提醒时间 `00:00`、
@@ -234,6 +234,21 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 应用内「侧栏 → 关于 → 版本信息」可查看迭代说明与原项目信息。
 
 ## 变更记录
+
+### 2026-11-19：0.48.4 发版（201 / 200 / 沙箱）——偏好设置「手机栏目」
+
+> **0.48.4**：源码提交 `85b4ad4`；镜像 `workordernote:0.48.4` =
+> `sha256:734ce07a1257af7e5414d6174f2355a9dee44c7b2d210760574530be8ab8000d`（92.6 MB，构建于 2026-11-19T11:27:07Z）；
+> Gitea / GHCR manifest 均为 `sha256:60b796c0eb3a7809b12584ef9f7442e846c97277edd5c1064e8ccb2ca46fda1d`。
+
+- 改动：偏好设置「手机 → 手机栏目」——手机首屏可选（首页看板 / 待办 / 计划 / 提醒@他）、底部导航 5 个栏目可拖拽排序（↑↓ 微调也可）、恢复默认值、预览确认后才写库；顺序与首屏按人存（`mobile_tabs_order` / `mobile_home_view`，随 bootstrap 下发）。桌面端「默认首页」不变。
+- 201（19:31）：备份 `docker-compose.yml.bak-pre0484-20261119-192928` / `data.bak-pre0484-20261119-192928.tgz`（18.2M）；compose 改 `ghcr.io/magicindex/workordernote:0.48.4` 后 `docker compose up -d` 重建，healthy，`/api/version` = `0.48.4 / 85b4ad4`。
+- 200（19:32）：备份 `docker-compose.yml.bak-pre0484-20261119-192928` / `data.bak-pre0484-20261119-192928.tgz`（8.6M）；`docker save` → gzip（46,489,209 B，md5 `009667b543a5c336529901e4bc0657ac`）→ ssh `docker load`，tag 成 `127.0.0.1:3000/cyberzero/workordernote:0.48.4`，compose 改 tag 后重建，19:32:19 起 healthy，`/api/version` = `0.48.4 / 85b4ad4`。
+- 沙箱 8908（19:29）：`workordernote-sandbox` 换 0.48.4 重建（数据仍为 `staging-data-local`，升级前备份 `tmp/staging-data.bak-pre0484-20261119-192928.tgz`，18M），同步仍关闭。
+- 验证：沙箱 `verify-215` 23/23、`verify-128` 31/31、`verify-197` 4/4；201 `verify-215` 23/23、`verify-197` 4/4、`verify-094` 17/17、`verify-214` 10/10；200 `verify-197` 4/4。两台 `integrity_check = ok`，未删除提醒各 **157** 条。
+- 用例口径变化（0.48.4 起）：`verify-197` / `verify-094` / `verify-214` 不再假设「手机首屏固定首页」，而是先把 `mobile_home_view` 固定成 `home` 再验、跑完还原 —— 因为首屏现在可以按人配置（发布时用户已在 200 上把首屏设为「待办」，两台同步后 201 也是「待办」，旧断言会假红）。
+- 镜像：Gitea `192.168.3.200:3000/cyberzero/workordernote:0.48.4` + `:latest`、GHCR `ghcr.io/magicindex/workordernote:0.48.4` + `:latest` 均已推（manifest `sha256:60b796c0…`）。
+- 未做：离线一键安装包、fnOS fpk、GitHub Release 资产、生产全量回归（本轮按用户要求只做「更新所有容器」）。
 
 ### 2026-11-19：0.48.3 发版（201 / 200 / 沙箱）——手机导航栏不透明度、手机打开默认首页
 

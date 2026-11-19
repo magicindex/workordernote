@@ -68,11 +68,14 @@ async function sampleFrames(page, totalMs = 1800, stepMs = 40) {
     await login(page, BASE);
 
     const cfg = (await api(page, '/api/configs'))?.data || {};
-    const original = { default_view: cfg.default_view, card_bg_opacity: cfg.card_bg_opacity };
+    const original = { default_view: cfg.default_view, card_bg_opacity: cfg.card_bg_opacity, mobile_home_view: cfg.mobile_home_view };
     try {
       // 回归辅助 loginViaApi 对本机实例会把 default_view 写成 list；这里保持不动，
       // 正好验证「手机端即使默认首页偏好是列表，第一页也必须是首页看板」。
       await api(page, '/api/configs', 'PUT', { key: 'card_bg_opacity', value: '40' });
+      // 手机首屏自 0.48.4 起按「偏好设置 → 手机 → 打开先显示」走（默认=首页看板）。
+      // 这条用例验的是「默认首屏不闪待办」，所以先把偏好固定成首页，跑完还原。
+      await api(page, '/api/configs', 'PUT', { key: 'mobile_home_view', value: 'home' });
       await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
       await sleep(1200);
 
