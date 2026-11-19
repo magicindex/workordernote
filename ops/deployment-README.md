@@ -1,4 +1,4 @@
-# 工作序记 (WorkOrderNote) 0.48.2
+# 工作序记 (WorkOrderNote) 0.48.3
 
 任务、记事与日历一体的提醒应用。飞牛 NAS 上以 Docker 部署。
 
@@ -8,7 +8,7 @@
 ## 访问
 
 - <http://192.168.3.201:8906/>
-- 容器 `workordernote`，镜像 `workordernote:0.48.2`（Gitea / GHCR 同源）
+- 容器 `workordernote`，镜像 `workordernote:0.48.3`（Gitea / GHCR 同源）
 - 对比实例：<http://192.168.3.201:8907/> 官方原版 v0.3.0；<http://192.168.3.201:8908/> 沙盒
 
 ## 仓库与镜像地址（2026-10-22 起）
@@ -217,11 +217,11 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 版本与迭代
 
-- 软件版本见根目录 `VERSION`，当前 `0.48.2`，规则为 `主版本号.小版本号.修正号`。
-  **部署状态（2026-11-16 18:23）**：**201 生产 8906 / 200 生产 / 沙箱 8908 均已升级到 0.48.2**
-  （源码提交 `b88d3f9`，镜像 `workordernote:0.48.2` / `:latest` =
-  `sha256:9178d214b7622a2a38b876b107db06427756dbd7e9ce0a280ce2386b4d8d14f0`；
-  Gitea/GHCR manifest `sha256:40d87c84c3dc072cb1eba2b94c7a8e94b70515586e274a31dfc00bdb5ab8d94b`）。
+- 软件版本见根目录 `VERSION`，当前 `0.48.3`，规则为 `主版本号.小版本号.修正号`。
+  **部署状态（2026-11-19 18:23）**：**201 生产 8906 / 200 生产 / 沙箱 8908 均已升级到 0.48.3**
+  （源码提交 `edcc33b`，镜像 `workordernote:0.48.3` / `:latest` =
+  `sha256:6439da5b6eb17c020820d48b4356b7834855d9ff11e229f8e07950cd780108cb`；
+  Gitea/GHCR manifest `sha256:e81e2dab4b843ee634861e2bfab82d59fbcf9292804bdf77ccc2ef5290ff16ef`）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
   **公开设置 9 项三台一致**；**个人偏好 201 与 200 一致，沙箱单独一套**（开始提醒时间 `00:00`、
@@ -234,6 +234,21 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 应用内「侧栏 → 关于 → 版本信息」可查看迭代说明与原项目信息。
 
 ## 变更记录
+
+### 2026-11-19：0.48.3 发版（201 / 200 / 沙箱）——手机导航栏不透明度、手机打开默认首页
+
+> **0.48.3**：源码提交 `edcc33b`；镜像 `workordernote:0.48.3` =
+> `sha256:6439da5b6eb17c020820d48b4356b7834855d9ff11e229f8e07950cd780108cb`（92.6 MB，构建于 2026-11-19T10:16:37Z）；
+> Gitea / GHCR manifest 均为 `sha256:e81e2dab4b843ee634861e2bfab82d59fbcf9292804bdf77ccc2ef5290ff16ef`。
+
+- 改动：手机端顶栏 / 抽屉菜单 / 底部标签栏改用 `--nav-bg-opacity`（手机与平板 ≤1023px 或触屏固定不低于 96%，桌面仍跟随「卡片透明度」）；手机冷启动 `/admin` 在路由守卫里直接改道首页看板，不再先渲染一帧「待办」。
+- 201（18:21）：备份 `docker-compose.yml.bak-pre0483-20261119-182103` / `data.bak-pre0483-20261119-182103.tgz`（18.8M）；compose 改成 `ghcr.io/magicindex/workordernote:0.48.3` 后 `docker compose up -d` 重建，healthy，`/api/version` = `0.48.3 / edcc33b`。
+- 200（18:23）：备份 `docker-compose.yml.bak-pre0483-20261119-182103` / `data.bak-pre0483-20261119-182103.tgz`（8.9M）；`docker save` → gzip（46,479,630 B，md5 `8f80fe26d887bd55b16fee1ac965c6be`）→ ssh `docker load`，tag 成 `127.0.0.1:3000/cyberzero/workordernote:0.48.3`，compose 改 tag 后重建，18:23:30 起 healthy，`/api/version` = `0.48.3 / edcc33b`。
+- 沙箱 8908（18:20）：`workordernote-sandbox` 换 0.48.3 重建（数据仍为 `staging-data-local`，升级前备份 `tmp/staging-data.bak-pre0483-20261119-182005.tgz`，18M），同步仍关闭。
+- 验证：新增 `verify-214`（手机导航栏 alpha ≥ 0.9、冷启动无待办帧、底栏「待办」不回弹、桌面仍跟卡片透明度）在 201 / 200 各 **10/10**、沙箱 10/10；201 另跑 `verify-197` 4/4、`verify-094` 17/17；200 `verify-197` 4/4；沙箱 `verify-120` 31/31。数据：两台 `integrity_check = ok`、未删除提醒各 **156** 条（201 另 25 张表 / 195 条完成记录，200 131 条）。
+- 镜像：Gitea `192.168.3.200:3000/cyberzero/workordernote:0.48.3` + `:latest`、GHCR `ghcr.io/magicindex/workordernote:0.48.3` + `:latest` 均已推（manifest `sha256:e81e2dab…`）。
+- 备注：本机 NAS 的 `prunemate-lite` 会清理「未被容器使用」的本地镜像 tag（本次 18:22 与 18:30 两次手动触发把 `workordernote:0.48.3` 等 tag 解掉，registry 里的副本不受影响）；本地再打 tag 要当场用掉或当场推。
+- 未做：离线一键安装包、fnOS fpk、GitHub Release 资产、生产全量回归（本轮按用户要求只做「更新所有容器 + 仓库 + 文档」）。
 
 ### 2026-11-16：0.48.2 发版（201 / 200 / 沙箱）——信用卡、透明度、时间线、打印
 
