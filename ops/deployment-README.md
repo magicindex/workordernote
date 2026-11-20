@@ -250,7 +250,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 用例口径变化（0.48.4 起）：`verify-197` / `verify-094` / `verify-214` 不再假设「手机首屏固定首页」，而是先把 `mobile_home_view` 固定成 `home` 再验、跑完还原 —— 因为首屏现在可以按人配置（发布时用户已在 200 上把首屏设为「待办」，两台同步后 201 也是「待办」，旧断言会假红）。
 - 镜像：Gitea `192.168.3.200:3000/cyberzero/workordernote:0.48.4` + `:latest`、GHCR `ghcr.io/magicindex/workordernote:0.48.4` + `:latest` 均已推（manifest `sha256:3096d425…`；OCI `source`/`url`/`documentation` 只写公开仓库）。
 - 发行物 `release/0.48.4/`：`workordernote-0.48.4-linux-amd64.tar.gz`（`574ffe9852d9…`）、`workordernote_0.48.4_amd64.fpk`（`8f1a58faa208…`）、`screenshots-0.48.4.zip`（`2a19c2af38bf…`）、`docker-compose.yml`（`071203928c59…`，公开版）、`CHANGELOG.md`（`86c141eb72d3…`，已去掉内网仓库名）、`SHA256SUMS`；
-  Gitea Release `v0.48.4` 与 GitHub Release `v0.48.4` 各上传 5 个资产（SHA256SUMS / compose / 截图 / Linux tar / fpk）。
+  Gitea Release `v0.48.4`（id 184）与 GitHub Release `v0.48.4`（id 452854596）各上传 5 个资产（SHA256SUMS / compose / 截图 / Linux tar / fpk）。
 - 生产全量回归：`APP_URL=http://127.0.0.1:8906 bash browser-harness/run-all.sh` 结果见下方「生产全量回归」条目。
 - README（GitHub 首页）已清掉内网 Gitea 地址与内网 IP，镜像与发行包统一指向 GHCR / GitHub Releases；内网部署细节只留在 `ops/` 文档里。
 - 生产全量回归（2026-11-20 晚）：生产上共执行 **133 个套件**（`verify-119` 跳过，改在沙箱验）+ 沙箱投递类 **4 套**。
