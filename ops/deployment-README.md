@@ -238,8 +238,9 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 ### 2026-11-19：0.48.4 发版（201 / 200 / 沙箱）——偏好设置「手机栏目」
 
 > **0.48.4**：源码提交 `85b4ad4`；镜像 `workordernote:0.48.4` =
-> `sha256:734ce07a1257af7e5414d6174f2355a9dee44c7b2d210760574530be8ab8000d`（92.6 MB，构建于 2026-11-19T11:27:07Z）；
-> Gitea / GHCR manifest 均为 `sha256:60b796c0eb3a7809b12584ef9f7442e846c97277edd5c1064e8ccb2ca46fda1d`。
+> `sha256:d0c6815c0773e7e102bdfa90a8cc4a4b70cf3208d2f326cca3a78f04cc5fa8d2`（92.6 MB，构建于 2026-11-19T11:27:07Z；
+> 发版收尾时按「公开仓库不显示内网信息」的要求重建过一次，只改了 OCI 标签）；
+> Gitea / GHCR manifest 均为 `sha256:3096d4254697e6a5e6c5333dd9e306e621742cda667156d56e859008f5f1d8ca`。
 
 - 改动：偏好设置「手机 → 手机栏目」——手机首屏可选（首页看板 / 待办 / 计划 / 提醒@他）、底部导航 5 个栏目可拖拽排序（↑↓ 微调也可）、恢复默认值、预览确认后才写库；顺序与首屏按人存（`mobile_tabs_order` / `mobile_home_view`，随 bootstrap 下发）。桌面端「默认首页」不变。
 - 201（19:31）：备份 `docker-compose.yml.bak-pre0484-20261119-192928` / `data.bak-pre0484-20261119-192928.tgz`（18.2M）；compose 改 `ghcr.io/magicindex/workordernote:0.48.4` 后 `docker compose up -d` 重建，healthy，`/api/version` = `0.48.4 / 85b4ad4`。
@@ -247,11 +248,18 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 沙箱 8908（19:29）：`workordernote-sandbox` 换 0.48.4 重建（数据仍为 `staging-data-local`，升级前备份 `tmp/staging-data.bak-pre0484-20261119-192928.tgz`，18M），同步仍关闭。
 - 验证：沙箱 `verify-215` 23/23、`verify-128` 31/31、`verify-197` 4/4；201 `verify-215` 23/23、`verify-197` 4/4、`verify-094` 17/17、`verify-214` 10/10；200 `verify-197` 4/4。两台 `integrity_check = ok`，未删除提醒各 **157** 条。
 - 用例口径变化（0.48.4 起）：`verify-197` / `verify-094` / `verify-214` 不再假设「手机首屏固定首页」，而是先把 `mobile_home_view` 固定成 `home` 再验、跑完还原 —— 因为首屏现在可以按人配置（发布时用户已在 200 上把首屏设为「待办」，两台同步后 201 也是「待办」，旧断言会假红）。
-- 镜像：Gitea `192.168.3.200:3000/cyberzero/workordernote:0.48.4` + `:latest`、GHCR `ghcr.io/magicindex/workordernote:0.48.4` + `:latest` 均已推（manifest `sha256:60b796c0…`）。
-- 发行物 `release/0.48.4/`：`workordernote-0.48.4-linux-amd64.tar.gz`（`574ffe9852d9…`）、`workordernote_0.48.4_amd64.fpk`（`8f1a58faa208…`）、`screenshots-0.48.4.zip`（`2a19c2af38bf…`）、`docker-compose.yml`（`f699736c4b52…`）、`CHANGELOG.md`（`28e56286a3ec…`）、`SHA256SUMS`；
+- 镜像：Gitea `192.168.3.200:3000/cyberzero/workordernote:0.48.4` + `:latest`、GHCR `ghcr.io/magicindex/workordernote:0.48.4` + `:latest` 均已推（manifest `sha256:3096d425…`；OCI `source`/`url`/`documentation` 只写公开仓库）。
+- 发行物 `release/0.48.4/`：`workordernote-0.48.4-linux-amd64.tar.gz`（`574ffe9852d9…`）、`workordernote_0.48.4_amd64.fpk`（`8f1a58faa208…`）、`screenshots-0.48.4.zip`（`2a19c2af38bf…`）、`docker-compose.yml`（`071203928c59…`，公开版）、`CHANGELOG.md`（`86c141eb72d3…`，已去掉内网仓库名）、`SHA256SUMS`；
   Gitea Release `v0.48.4` 与 GitHub Release `v0.48.4` 各上传 5 个资产（SHA256SUMS / compose / 截图 / Linux tar / fpk）。
 - 生产全量回归：`APP_URL=http://127.0.0.1:8906 bash browser-harness/run-all.sh` 结果见下方「生产全量回归」条目。
 - README（GitHub 首页）已清掉内网 Gitea 地址与内网 IP，镜像与发行包统一指向 GHCR / GitHub Releases；内网部署细节只留在 `ops/` 文档里。
+- 生产全量回归（2026-11-20 晚）：生产上共执行 **133 个套件**（`verify-119` 跳过，改在沙箱验）+ 沙箱投递类 **4 套**。
+  · 结论：**未发现 0.48.4 引入的回归**。
+  · 投产复跑转绿（运行环境/重试造成）：`090`、`091`、`112`、`138`、`189`、`209`、`213`。
+  · 过时断言已修：`verify-187`（0.48.2 起侧栏跟随「卡片透明度」，旧断言要求 alpha<0.3 → 改为先把透明度调到 40% 再验；3/3）、`verify-212`（23:00 后「已完成线段 <23:00」的代理断言必然假红 → 改为 <23:59；10/10）。
+  · 投递类：生产上 `verify-114/115/116` 因 201 **手动免打扰开启**（11-16 20:04 起，投递按设计全部拦下，库里 75 个 pending）失败；在沙箱关掉免打扰后 `114` 16/16、`115` 34/34、`116` 11/11、`119` 34/34 全绿。
+  · 数据/配置/时间条件造成的失败（非回归）：`verify-040`（前置要求今天有记事，生产当天没有）、`verify-print`（71 条完成记录下 PDF 每页行数阈值）、`verify-102`（「历史逾期」区常驻旧月条目 + 当月无信用卡标记数据）、`verify-150`（3 字竖排标签的对齐边缘，0.48.4 未改该处）、`verify-180`（用户把「信用卡账单」移到了「我的清单」，系统清单里没有子项）、`verify-210`（当前账期没有卡，头部缩略卡面不出现）。
+- 收尾：三台容器在 23:2x 统一切到「干净标签」镜像（同功能、只改 OCI 标签，`d0c6815c0773…`）并重建；重建后冒烟 201 `verify-215` 23/23、`197` 4/4、`094` 17/17、`214` 10/10，200 `197` 4/4。回归期间临时改的逾期/静默配置已还原（201：逾期提醒 21:00、宽限 0、开始提醒 06:00；首屏「待办」与手动免打扰保持不变）。
 - 未做：离线一键安装包、fnOS fpk、GitHub Release 资产、生产全量回归（本轮按用户要求只做「更新所有容器」）。
 
 ### 2026-11-19：0.48.3 发版（201 / 200 / 沙箱）——手机导航栏不透明度、手机打开默认首页

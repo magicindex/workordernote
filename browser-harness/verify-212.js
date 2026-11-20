@@ -143,8 +143,9 @@ const KEY = '自检时间线';
       check('已完成的待办线段截到完成时刻（约现在）',
         cToday.length === 1 && Math.abs(cToday[0].endMin - nowMin) <= 8,
         JSON.stringify({ block: cToday, nowMin }));
+      // 注意不能拿「< 23:00」当代理：23:00 之后跑，完成时刻本身就是 23:0x。
       check('已完成的待办不再画到 23:59',
-        cToday.length === 1 && cToday[0].endMin < 23 * 60, JSON.stringify(cToday));
+        cToday.length === 1 && cToday[0].endMin < 23 * 60 + 59, JSON.stringify(cToday));
 
       await page.screenshot({ path: 'shots/verify-212-week-timeline.png' });
     } finally {
