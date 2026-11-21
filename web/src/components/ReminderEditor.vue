@@ -114,49 +114,14 @@
                 </div>
               </div>
               <label class="editor-field"><span>清单</span><select v-model.number="editing.list_id"><option v-for="list in lists" :key="list.id" :value="list.id">{{ list.name }}</option></select></label>
-              <div v-if="!isNoteEditing" class="editor-field" :class="isModal ? 'col-span-2 sm:col-span-3' : 'col-span-2'">
-                <span>颜色</span>
-                <div class="flex flex-wrap items-center gap-1.5">
-                  <button type="button" data-editor-color="" class="h-6 rounded-md border px-2 text-[11px] font-semibold" :class="!editing.color ? 'border-brand-500/45 bg-brand-500/10 text-brand-600 dark:text-brand-300' : 'border-border text-muted-foreground'" @click="editing.color = ''">自动配色</button>
-                  <button v-for="c in LIST_COLOR_NAMES" :key="c" type="button" :data-editor-color="c" class="h-6 w-6 rounded-full border-2 transition" :class="editing.color === c ? 'border-foreground' : 'border-transparent'" :style="{ background: listColorHex(c) }" :aria-label="listColorLabel(c)" :title="listColorLabel(c)" @click="editing.color = c" />
-                </div>
-              </div>
-              <label class="editor-field"><span>优先级</span><select v-model.number="editing.priority"><option :value="0">无</option><option :value="1">低</option><option :value="2">中</option><option :value="3">高</option></select></label>
+              <!-- 2026-11-21 精简（用户要求）：编辑页只留 标题 / 备注 / 日期时间 / 类型 / 清单。
+                   颜色、优先级、通知方式、过期提醒频率、按农历循环不再显示 —— 编辑一般只是改内容，
+                   这些值保持原样（旧提醒沿用原值，新建用默认值）；「重复」算在「时间」里，仍可改。 -->
               <label class="editor-field"><span>重复</span><select v-model="editing.repeat_rule"><option value="none">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option></select></label>
-              <label class="editor-field"><span>按农历循环</span><select v-model="editing.calendar" @change="upgradeCalendarToYearly"><option value="solar">公历</option><option value="lunar">农历</option></select></label>
-              <label class="editor-field"><span>过期提醒频率</span><RepeatNotifySelect :model-value="editing.repeat_notify_minutes ?? 0" @update:model-value="editing.repeat_notify_minutes = $event" /></label>
-              <p class="mt-1 text-[10px] leading-4 text-muted-foreground" :class="isModal ? 'col-span-2 sm:col-span-3' : 'col-span-2'">“过期提醒频率”在到点未完成时按所选间隔重复通知，点击完成后停止；配合“每天”等重复规则可实现固定时间的每日催办。</p>
-              <p v-if="editing.calendar === 'lunar'" class="text-[10px] leading-4 text-muted-foreground" :class="isModal ? 'col-span-2 -mt-2 sm:col-span-3' : 'col-span-2 -mt-3'">“按农历循环”按所选日期对应的农历月/日重复，适合农历生日等纪念日期；腊月三十遇小年自动改为除夕当天，闰月日期遇无闰月年份自动用对应平月。</p>
             </div>
             <p v-else class="rounded-2xl bg-muted/65 p-3 text-xs leading-5 text-muted-foreground">记事只作记录：不需要日期、重复和通知，保存后直接归入「已完成」。</p>
 
-            <!-- 弹窗（日历里的新建/编辑）不摆渠道选择：六个渠道格子就占掉两百多像素，
-                 卡片再也装不下整张表单。渠道沿用默认设置（编辑时沿用这条提醒原有的），
-                 要逐条指定就去列表视图的抽屉里改。 -->
-            <p v-if="isModal && editing.kind !== 'note'" class="rounded-xl bg-muted/60 px-3 py-2 text-[11px] leading-4 text-muted-foreground">
-              通知方式沿用{{ isCreate ? '默认设置' : '原有设置' }}，需要逐条调整时请在列表视图里打开这条提醒。
-            </p>
 
-            <div v-if="editing.kind !== 'note' && !isModal">
-              <p class="mb-3 text-xs font-bold text-muted-foreground">通知方式</p>
-              <div class="grid grid-cols-2 gap-2">
-                <button v-for="channel in channels" :key="channel.channel" type="button" class="channel-option" :class="{ selected: isChannelSelected(channel.channel) }" :disabled="channel.channel !== 'inapp' && (!channel.bound || channel.status !== 'active')" @click="toggleChannel(channel.channel)">
-                  <span class="channel-check"><svg v-if="isChannelSelected(channel.channel)" viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor"><path d="m6 12 4 4 8-9" stroke-width="2.5" stroke-linecap="round"/></svg></span>
-                  <span class="text-left"><strong>{{ channel.label }}</strong><small>{{ channel.bound || channel.channel === 'inapp' ? '可用' : '未绑定' }}</small></span>
-                </button>
-              </div>
-              <RouterLink to="/admin/channels" class="mt-3 inline-flex text-xs font-semibold text-brand-600 hover:underline dark:text-brand-300">管理通知方式 →</RouterLink>
-              <div v-if="isChannelSelected('email') && emailBindings.length > 1" class="mt-4 rounded-2xl bg-muted/65 p-3">
-                <p class="mb-2 text-xs font-bold text-muted-foreground">这个提醒发送到</p>
-                <div class="flex flex-wrap gap-2">
-                  <button type="button" class="channel-pill" :class="{ selected: emailTargets.length === 0 }" @click="editing.channel_targets = undefined">全部接收邮箱</button>
-                  <button v-for="binding in emailBindings" :key="binding.id" type="button" class="channel-pill" :class="{ selected: emailTargets.includes(binding.id) }" @click="toggleEmailTarget(binding.id)">
-                    {{ binding.target_masked }}
-                  </button>
-                </div>
-                <p class="mt-2 text-[10px] leading-4 text-muted-foreground">选择“全部接收邮箱”时不指定具体邮箱；所选邮箱被删除后会自动改发全部已启用的邮箱。</p>
-              </div>
-            </div>
           </div>
 
           <div
@@ -228,17 +193,14 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import NoteTimeline from './NoteTimeline.vue'
-import { RouterLink } from 'vue-router'
 import LunarDatePicker from './LunarDatePicker.vue'
-import RepeatNotifySelect from './RepeatNotifySelect.vue'
-import { LIST_COLOR_NAMES, listColorHex, listColorLabel } from '../utils/list-colors'
 import { buildMergedNoteText, buildNoteTimeline, parseMergedNoteText } from '../utils/note-timeline'
 import { SK } from '../utils/storage-keys'
 import { useAuthStore } from '../stores/auth'
 import {
   createReminder, deleteReminder, getReminder, updateReminder,
   updateCompletionNote,
-  type ChannelStatus, type ReminderChannel, type ReminderItem, type ReminderKind,
+  type ReminderChannel, type ReminderItem, type ReminderKind,
   type ReminderList, type SaveReminderInput,
 } from '../api/reminder'
 
@@ -252,7 +214,6 @@ const props = defineProps<{
    */
   preset?: SaveReminderInput | null
   lists: ReminderList[]
-  channels: ChannelStatus[]
   /**
    * 呈现方式：抽屉（默认，从右侧划出）或居中悬浮弹窗。
    * 日历视图用弹窗——日历本身已经铺满一屏，再从右边划出一整条会把人从「这天」里拽走；
@@ -275,7 +236,6 @@ const emit = defineEmits<{
 }>()
 
 const isCreate = computed(() => props.preset != null)
-const isNoteEditing = computed(() => (editing.kind as string) === 'note')
 const isModal = computed(() => props.presentation === 'modal')
 const authStore = useAuthStore()
 const currentSide = ref<'left' | 'right'>(props.side === 'left' ? 'left' : 'right')
@@ -448,9 +408,6 @@ const datePicked = computed({
   set: value => { editing.due_at = value ? toLocalIso(value) : null },
 })
 
-const emailBindings = computed(() => props.channels.find(c => c.channel === 'email')?.bindings || [])
-const emailTargets = computed(() => editing.channel_targets?.email || [])
-
 // toLocalIso 序列化为带本地时区偏移的 RFC3339 串（后端 time.Time 只认 RFC3339），
 // 既保住所选墙钟时间又不会因缺时区后缀被拒。
 function toLocalIso(d: Date) {
@@ -518,13 +475,6 @@ watch(() => [props.modelValue, props.reminderId, props.preset] as const, async (
   }
 }, { immediate: true })
 
-// 农历循环只对每月/每年重复生效（后端会拒绝其余组合）。用户直接选农历时
-// 自动把重复规则升到每年（农历生日等纪念日的默认用法）。
-function upgradeCalendarToYearly() {
-  if (editing.calendar === 'lunar' && editing.repeat_rule !== 'monthly' && editing.repeat_rule !== 'yearly') {
-    editing.repeat_rule = 'yearly'
-  }
-}
 watch(() => editing.repeat_rule, rule => {
   if (rule !== 'monthly' && rule !== 'yearly') editing.calendar = 'solar'
 })
@@ -541,20 +491,6 @@ function setKind(kind: ReminderKind) {
     editing.repeat_notify_minutes = 0
   }
 }
-function toggleChannel(channel: ReminderChannel) {
-  const list = editing.channels || []
-  editing.channels = list.includes(channel) ? list.filter(x => x !== channel) : [...list, channel]
-  if (!editing.channels.length) editing.channels = ['inapp']
-  if (!editing.channels.includes('email')) editing.channel_targets = undefined
-}
-function isChannelSelected(channel: ReminderChannel) { return (editing.channels || []).includes(channel) }
-function toggleEmailTarget(id: number) {
-  const picked = new Set(editing.channel_targets?.email || [])
-  if (picked.has(id)) picked.delete(id)
-  else picked.add(id)
-  editing.channel_targets = picked.size ? { email: [...picked] } : undefined
-}
-
 function close() { emit('update:modelValue', false) }
 
 /**
@@ -669,17 +605,7 @@ async function save() {
 .editor-panel { @apply relative z-10 flex h-full w-full max-w-[510px] flex-col border-l border-border bg-background/95 shadow-2xl backdrop-blur-2xl; }
 .editor-field { @apply block text-xs font-bold text-muted-foreground; }
 .editor-field input, .editor-field textarea, .editor-field select { @apply mt-1.5 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground outline-none transition placeholder:text-muted-foreground/55 focus:border-brand-500/45 focus:ring-4 focus:ring-brand-500/10 sm:mt-2 sm:rounded-2xl sm:px-4 sm:py-3; }
-/* 「过期提醒频率」是子组件（RepeatNotifySelect），scoped 样式穿不进它内部，
-   上面那条选择器管不到它的控件，所以用 :deep() 把它对齐成同一套字段样式 ——
-   否则这一格比旁边「重复 / 按农历循环」矮一截、字号也小一号。 */
-.editor-field :deep(.repeat-notify) { @apply mt-1.5 sm:mt-2; }
-.editor-field :deep(.repeat-notify select), .editor-field :deep(.repeat-notify input) { @apply w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground outline-none transition focus:border-brand-500/45 focus:ring-4 focus:ring-brand-500/10 sm:rounded-2xl sm:px-4 sm:py-3; }
 .editor-field textarea { @apply resize-none leading-6; }
-.channel-option { @apply flex items-center gap-3 rounded-2xl border border-border bg-surface p-2.5 text-muted-foreground transition disabled:opacity-35 sm:p-3; }
-.channel-option.selected { @apply border-brand-500/30 bg-brand-500/10 text-brand-600 dark:text-brand-300; }
-.channel-option strong { @apply block text-xs; }
-.channel-option small { @apply mt-0.5 block text-[10px] opacity-70; }
-.channel-check { @apply flex h-5 w-5 items-center justify-center rounded-full border border-current; }
 /* 居中弹窗：宽度与抽屉同量级（510px 起，宽屏放到 640px），高度最多 88vh，
    内部滚动区自己滚（表单区已经是 min-h-0 flex-1 overflow-y-auto）。 */
 .editor-panel-modal {

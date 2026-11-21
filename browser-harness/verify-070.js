@@ -112,7 +112,7 @@ const clickNewInDayPanel = (page) => page.evaluate(() => {
     });
     check('弹窗里不再显示「通知方式」渠道格子', modalDetail.channelButtons === 0,
       `渠道按钮 ${modalDetail.channelButtons} 个`);
-    check('弹窗里有一行说明（渠道沿用默认，要改去列表视图）', modalDetail.hint === true);
+    check('弹窗里也不再需要「通知方式沿用默认」说明（编辑器已精简掉通知方式）', modalDetail.hint === false);
     // 0.7.1 时这个编辑器的定位是「一张卡片显示完整」，但 0.44 起字段多了（日期时间+结束、
     // 颜色、农历、过期提醒频率…），手机上 390×844 已经装不下。现在的口径是：内容允许在
     // 表单内部滚动，但**保存按钮必须始终在视野内**（下面那条单独钉住），且不出现横向溢出。
@@ -300,8 +300,8 @@ const clickNewInDayPanel = (page) => page.evaluate(() => {
         hasTitle: /通知方式/.test(panel.innerText),
       };
     });
-    check('列表视图的抽屉里「通知方式」仍然完整可编辑',
-      drawerChannels.channels >= 1 && drawerChannels.hasTitle === true, JSON.stringify(drawerChannels));
+    check('列表视图的抽屉里也不再摆「通知方式」（2026-11-21 精简，编辑只改内容）',
+      drawerChannels.channels === 0 && drawerChannels.hasTitle === false, JSON.stringify(drawerChannels));
     await page.evaluate(() => {
       const panel = document.querySelector('.editor-panel');
       const close = panel ? [...panel.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === '关闭') : null;

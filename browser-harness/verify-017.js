@@ -1,7 +1,8 @@
 /**
  * 验证 0.1.7 的两项修复：
  *   1) 深色模式下原生下拉（<select> 弹层 / option）文字可读
- *   2) 「过期提醒频率」控件与同行其它字段尺寸一致（编辑面板 + 首页快速新建）
+ *   2) 2026-11-21 精简后：编辑面板里不再有「过期提醒频率」（颜色/优先级/农历/通知方式一并撤掉），
+ *      首页快速新建里也没有它；编辑面板仍保留 标题 / 备注 / 日期时间 / 类型 / 清单 / 重复。
  *
  * 用法：APP_URL=http://192.168.3.201:8908 node verify-017.js
  *
@@ -154,68 +155,46 @@ async function setTheme(page, mode) {
       check(`浅色下对比度仍然足够（实测 ${lightContrast}:1）`, lightContrast >= 4.5,
         JSON.stringify(lightInfo));
 
-      // ── 2. 「过期提醒频率」与同行字段尺寸一致 ──
-      // 2a. 编辑面板（日历双击新建，字段与列表页共用同一个编辑器）
+      // ── 2. 2026-11-21 精简：编辑面板里不再摆「过期提醒频率」等字段 ──
       for (const [name, width, height] of [['桌面', 1440, 900], ['手机', 390, 844]]) {
         await page.setViewport({ width, height, isMobile: width < 500, hasTouch: width < 500 });
-        if (width < 500) {
-          // 手机端没有日历视图（入口隐藏 + 路由守卫），所以改用列表视图打开编辑面板：
-          // 点任务行标题即打开同一个编辑器（抽屉形态），要验的字段与尺寸规则完全一样。
-          await page.goto(BASE.replace(/\/$/, '') + '/admin/all', { waitUntil: 'domcontentloaded', timeout: 30000 });
-          await sleep(2200);
-          const opened = await page.evaluate(() => {
-            const row = document.querySelector('article.reminder-row');
-            const btn = row && row.querySelector('button.min-w-0.flex-1.text-left');
-            if (!btn) return false;
-            btn.click();
-            return true;
-          });
-          if (opened) {
-            // 2026-11-15 起列表单击先弹只读查看页，再点「编辑」进编辑器。
-            await waitFor(page, () => !!document.querySelector('[data-reminder-view]'), { timeout: 8000 });
-            await page.evaluate(() => document.querySelector('[data-view-edit]')?.click());
-            await waitFor(page, () => !!document.querySelector('.editor-panel'), { timeout: 8000 });
-            await sleep(400);
-          }
-        } else {
-          await page.goto(BASE.replace(/\/$/, '') + '/admin/calendar', { waitUntil: 'domcontentloaded', timeout: 30000 });
-          await sleep(2200);
-          const cell = await page.evaluate(() => {
-            const target = [...document.querySelectorAll('.cal-cell')]
-              .find((c) => (c.querySelector('span')?.textContent || '').trim() === '15');
-            if (!target) return null;
-            target.scrollIntoView({ block: 'center' });
-            const rect = target.getBoundingClientRect();
-            // 任务条自己吃双击（= 编辑），点格子上方的空白处才会走「双击新建」
-            return { x: rect.left + rect.width / 2, y: rect.top + 8 };
-          });
-          if (cell) {
-            await page.mouse.click(cell.x, cell.y, { clickCount: 2, delay: 40 });
-            await waitFor(page, () => (document.body.innerText || '').includes('新建提醒'), { timeout: 8000 });
-            await sleep(400);
-          }
+        // 手机端没有日历视图，统一用列表视图打开编辑器（抽屉/弹窗共用同一个组件）。
+        await page.goto(BASE.replace(/\/$/, '') + '/admin/all', { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await sleep(2200);
+        const opened = await page.evaluate(() => {
+          const row = document.querySelector('article.reminder-row');
+          const btn = row && row.querySelector('button.min-w-0.flex-1.text-left');
+          if (!btn) return false;
+          btn.click();
+          return true;
+        });
+        if (opened) {
+          await waitFor(page, () => !!document.querySelector('[data-reminder-view]'), { timeout: 8000 }).catch(() => {});
+          await page.evaluate(() => document.querySelector('[data-view-edit]')?.click());
+          await waitFor(page, () => !!document.querySelector('.editor-panel'), { timeout: 8000 }).catch(() => {});
+          await sleep(500);
         }
         const panel = await page.evaluate(() => {
-          const fields = [...document.querySelectorAll('.editor-panel .editor-field')];
-          const byLabel = (text) => fields.find((f) => (f.textContent || '').trim().startsWith(text));
-          const notify = byLabel('过期提醒频率');
-          const repeat = byLabel('重复');
-          const sel = (el) => (el ? el.querySelector('select') : null);
-          const info = (el) => {
-            if (!el) return null;
-            const s = getComputedStyle(el);
-            const r = el.getBoundingClientRect();
-            return {
-              height: Math.round(r.height * 10) / 10, width: Math.round(r.width),
-              fontSize: s.fontSize, radius: s.borderTopLeftRadius,
-              paddingY: s.paddingTop + '/' + s.paddingBottom, borderWidth: s.borderTopWidth,
-            };
+          const root = document.querySelector('.editor-panel');
+          const text = root ? root.innerText : '';
+          return {
+            open: !!root,
+            hasRepeatNotify: text.includes('过期提醒频率'),
+            hasLunar: text.includes('按农历循环'),
+            hasChannels: text.includes('通知方式'),
+            hasColor: !!root?.querySelector('[data-editor-color]'),
+            hasPriority: [...(root?.querySelectorAll('.editor-field') || [])].some((f) => (f.textContent || '').trim().startsWith('优先级')),
+            fields: [...(root?.querySelectorAll('.editor-field') || [])].map((f) => ((f.querySelector(':scope > span')?.textContent || '').trim())
+              || (f.textContent || '').trim().split('\n')[0]),
           };
-          return { notify: info(sel(notify)), reference: info(sel(repeat)) };
         });
-        const diff = sameBox(panel.notify, panel.reference);
-        check(`编辑面板（${name}）「过期提醒频率」与「重复」尺寸一致`, diff === '', diff || JSON.stringify(panel));
-        console.log(`    ${name}：频率=${JSON.stringify(panel.notify)} 重复=${JSON.stringify(panel.reference)}`);
+        check(`${name}：编辑面板能打开`, panel.open === true, JSON.stringify(panel));
+        check(`${name}：编辑面板不再有 过期提醒频率 / 按农历循环 / 通知方式 / 颜色 / 优先级`,
+          panel.open && !panel.hasRepeatNotify && !panel.hasLunar && !panel.hasChannels && !panel.hasColor && !panel.hasPriority,
+          JSON.stringify(panel));
+        check(`${name}：保留 标题 / 备注 / 日期时间 / 类型 / 清单 / 重复`,
+          ['标题', '备注', '日期时间', '类型', '清单', '重复'].every((label) => panel.fields.includes(label)),
+          JSON.stringify(panel.fields));
         await page.evaluate(() => {
           const cancel = [...document.querySelectorAll('.editor-panel button')].find((b) => (b.textContent || '').trim() === '取消');
           if (cancel) cancel.click();

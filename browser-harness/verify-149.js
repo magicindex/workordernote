@@ -2,7 +2,7 @@
  * 验证周视图的「任务颜色 / 今天标记 / 星期行」：
  *   1) 去掉重复的「一 二 三…」行，只保留「周一 10/26」日期头
  *   2) 今天日期头有色块「今天」
- *   3) 标题文字与线段同色；自定义颜色可保存并在重新加载后生效
+ *   3) 标题文字与线段同色；颜色值可保存，重新加载后仍按颜色渲染（编辑器自 2026-11-21 起不再提供颜色选择）
  *   4) 不同任务颜色不同
  *
  * 用法：APP_URL=http://127.0.0.1:8919 node verify-149.js
@@ -84,18 +84,24 @@ async function api(token, apiPath, method = 'GET', body = null) {
       check('不同任务使用不同颜色', lineColors.size >= 3, [...lineColors].join(','));
       check('标题与线段颜色一致', before.every(b => b.line === b.title), JSON.stringify(before.map(b => [b.line, b.title])));
 
-      // 双击打开编辑器，把第一条改成蓝色，保存后色块应更新。
+      // 双击仍能打开编辑器；2026-11-21 起编辑器精简掉「颜色」，颜色改由接口设置，
+      // 这里验证「重新加载后线段/标题仍按颜色渲染、颜色值已落库」。
       const block = await page.$(`[data-week-block="${idA}"]`);
       await block.click({ clickCount: 2 });
-      await sleep(700);
-      check('编辑器有颜色选择', !!(await page.$('[data-editor-color="rose"]')));
-      await page.click('[data-editor-color="blue"]');
-      const btns = await page.$$('button');
-      for (const b of btns) {
-        const txt = await b.evaluate(el => el.textContent || '');
-        if (txt.includes('保存提醒')) { await b.click(); break; }
-      }
-      await sleep(1200);
+      await sleep(900);
+      check('双击能打开编辑器', !!(await page.$('.editor-panel')));
+      check('编辑器里已没有颜色选择', !(await page.$('[data-editor-color]')));
+      await page.evaluate(() => {
+        const cancel = [...document.querySelectorAll('.editor-panel button')].find((b) => (b.textContent || '').trim() === '取消');
+        if (cancel) cancel.click();
+      });
+      await sleep(600);
+      const cur = await api(token, '/api/reminder/items/' + idA);
+      await api(token, '/api/reminder/items/' + idA, 'PUT', { ...cur, color: 'blue' });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await sleep(1800);
+      await page.click('[data-cal-view="week"]').catch(() => {});
+      await sleep(800);
       const after = await readBlocks();
       const changed = after.find(b => b.id === idA);
       const blue = 'rgb(49, 130, 246)';
