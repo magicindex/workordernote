@@ -59,6 +59,12 @@ type WorkDigestItem struct {
 	NoDue       bool   `json:"no_due,omitempty"` // 没设截止时间
 	// 归属清单 id：只用来挑「这条数据所在栏目的 AI 提示词」，不序列化给前端。
 	ListID uint `json:"-"`
+	// ID / ReminderID 是底层记录标识，只用于回答里「引用来源」的回查
+	// （见 Sources），不序列化给前端。
+	//   - 完成记录：ID 是 completions 行 id，ReminderID 是对应的 reminders.id；
+	//   - 未完成 / 记事：ID 就是 reminders.id。
+	ID         uint `json:"-"`
+	ReminderID uint `json:"-"`
 }
 
 // WorkDigestList 是清单维度的分布，让模型能说出「哪块最忙」。
@@ -66,11 +72,15 @@ type WorkDigestList struct {
 	Name      string `json:"name"`
 	Completed int    `json:"completed"`
 	Open      int    `json:"open"`
+	// ID 是清单 id，只用于引用来源回查（不序列化给前端）。
+	ID uint `json:"-"`
 }
 
 // WorkDigestCourse 是本周课表里的一节。课程按周几固定，所以给的是本周那天的日期，
 // 让模型能说「周三下午有机器人社团」而不是只看到「weekday=3」。
 type WorkDigestCourse struct {
+	// ID 是 timetable_entries.id，只用于引用来源回查（不序列化给前端）。
+	ID       uint   `json:"-"`
 	Table    string `json:"table"`
 	Day      string `json:"day"` // YYYY-MM-DD（本周那一天）
 	Weekday  int    `json:"weekday"`
@@ -174,6 +184,14 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 	if option == WorkOptionOpen {
 		completed = nil
 	}
+	// 统计用**截断前**的总数：列表最多列 60 条，但「这段时间完成了多少」不能
+	// 跟着变成 60，否则模型会把「列出来的条数」当成总数报给用户。
+	completedTotal := 0
+	for _, row := range completed {
+		if row.Kind != KindNote {
+			completedTotal++
+		}
+	}
 	if len(completed) > workDigestMaxCompleted {
 		digest.Truncated = true
 		completed = completed[:workDigestMaxCompleted]
@@ -186,9 +204,11 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 			continue
 		}
 		item := WorkDigestItem{
-			Title:    row.Title,
-			ListName: row.ListName,
-			ListID:   row.ListID,
+			Title:      row.Title,
+			ListName:   row.ListName,
+			ListID:     row.ListID,
+			ID:         row.ID,
+			ReminderID: row.ReminderID,
 		}
 		at := row.CompletedAt.In(loc)
 		item.Day = at.Format("2006-01-02")
@@ -200,6 +220,7 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 	if err != nil {
 		return WorkDigest{}, err
 	}
+	openTotal := len(open)
 	if len(open) > workDigestMaxOpen {
 		digest.Truncated = true
 		open = open[:workDigestMaxOpen]
@@ -221,8 +242,8 @@ func BuildWorkDigest(db *gorm.DB, userID uint, opts WorkDigestOptions, now time.
 
 	digest.Lists = mergeWorkLists(digest.Completed, digest.Open, digest.Notes)
 	digest.Stats = WorkDigestStats{
-		Completed: len(digest.Completed),
-		Open:      len(digest.Open),
+		Completed: completedTotal,
+		Open:      openTotal,
 		Overdue:   overdueCount,
 		Notes:     notesTotal,
 		Lists:     len(digest.Lists),
@@ -302,7 +323,7 @@ func listOpenWork(db *gorm.DB, userID uint, rng CompletedRange, keyword string, 
 	listNames := listNamesOf(db, userID, rows)
 	overdue := 0
 	for _, row := range rows {
-		item := WorkDigestItem{Title: row.Title, ListName: listNames[row.ListID], ListID: row.ListID}
+		item := WorkDigestItem{Title: row.Title, ListName: listNames[row.ListID], ListID: row.ListID, ID: row.ID}
 		if row.DueAt == nil {
 			item.NoDue = true
 			items = append(items, item)
@@ -392,6 +413,7 @@ func listWorkNotes(db *gorm.DB, userID uint, rng CompletedRange, keyword string,
 			Clock:    at.Format("15:04"),
 			ListName: listNames[row.ListID],
 			ListID:   row.ListID,
+			ID:       row.ID,
 		})
 	}
 	return items, total, nil
@@ -463,26 +485,29 @@ func FindMentionedList(db *gorm.DB, userID uint, text string) (uint, string, boo
 func mergeWorkLists(completed, open, notes []WorkDigestItem) []WorkDigestList {
 	index := map[string]*WorkDigestList{}
 	order := []string{}
-	ensure := func(name string) *WorkDigestList {
+	ensure := func(name string, listID uint) *WorkDigestList {
 		if name == "" {
 			name = "未归入清单"
 		}
 		if row, ok := index[name]; ok {
+			if row.ID == 0 {
+				row.ID = listID
+			}
 			return row
 		}
-		row := &WorkDigestList{Name: name}
+		row := &WorkDigestList{Name: name, ID: listID}
 		index[name] = row
 		order = append(order, name)
 		return row
 	}
 	for _, item := range completed {
-		ensure(item.ListName).Completed++
+		ensure(item.ListName, item.ListID).Completed++
 	}
 	for _, item := range open {
-		ensure(item.ListName).Open++
+		ensure(item.ListName, item.ListID).Open++
 	}
 	for _, item := range notes {
-		ensure(item.ListName).Completed++
+		ensure(item.ListName, item.ListID).Completed++
 	}
 	out := make([]WorkDigestList, 0, len(order))
 	for _, name := range order {
@@ -536,6 +561,7 @@ func sectionResolver(raw string) func(string) string {
 
 func collectCourses(db *gorm.DB, userID uint, keyword string, rng CompletedRange, now time.Time) ([]WorkDigestCourse, bool) {
 	type courseRow struct {
+		ID        uint
 		TableID   uint
 		TableName string
 		Weekday   int
@@ -548,7 +574,7 @@ func collectCourses(db *gorm.DB, userID uint, keyword string, rng CompletedRange
 		Note      string
 	}
 	q := db.Table("timetable_entries AS e").
-		Select("t.id AS table_id, t.name AS table_name, e.weekday, e.title, e.kind, e.start_time, e.end_time, e.location, e.teacher, e.note").
+		Select("e.id AS id, t.id AS table_id, t.name AS table_name, e.weekday, e.title, e.kind, e.start_time, e.end_time, e.location, e.teacher, e.note").
 		Joins("JOIN timetables AS t ON t.id = e.timetable_id").
 		Where("t.user_id = ? AND e.user_id = ?", userID, userID)
 	if keyword != "" {
@@ -595,7 +621,7 @@ func collectCourses(db *gorm.DB, userID uint, keyword string, rng CompletedRange
 			section = resolve(row.StartTime)
 		}
 		out = append(out, WorkDigestCourse{
-			Table: row.TableName, Section: section, Day: day.Format("2006-01-02"), Weekday: row.Weekday,
+			ID: row.ID, Table: row.TableName, Section: section, Day: day.Format("2006-01-02"), Weekday: row.Weekday,
 			Title: row.Title, Kind: row.Kind, Start: row.StartTime, End: row.EndTime,
 			Location: row.Location, Teacher: row.Teacher, Note: row.Note,
 		})
@@ -603,49 +629,161 @@ func collectCourses(db *gorm.DB, userID uint, keyword string, rng CompletedRange
 	return out, truncated
 }
 
-// writeCourseItems 按表 → 天分组，一天一行，便于模型直接复述。
-func writeCourseItems(b *strings.Builder, courses []WorkDigestCourse) {
-	weekdays := []string{"", "周一", "周二", "周三", "周四", "周五", "周六", "周日"}
-	lastTable, lastDay := "", ""
-	for _, course := range courses {
-		if course.Table != lastTable {
-			fmt.Fprintf(b, "- %s：\n", course.Table)
-			lastTable = course.Table
-			lastDay = ""
+// WorkDigestSource 是快照里一条可被引用的数据出处。编号与 Markdown() 里每条
+// 数据前的 [编号] 一一对应：回答里写 [3]，用户就能在「数据来源」里查到第 3 条
+// 是哪个清单、哪一天、哪条记录。
+type WorkDigestSource struct {
+	ID       int
+	Kind     string // summary / completed / open / list / note / course
+	Title    string
+	Day      string
+	Clock    string
+	ListName string
+	Detail   string
+	Ref      string // reminder:12 / completion:34 / list:5 / timetable_entry:6
+	// line 是 Markdown() 里这一条怎么显示（不含前面的 [编号]）。只在本包内用：
+	// 让「给模型看的文本」与「回给面板的来源列表」共用同一份编号与文案，不会漂。
+	line string
+}
+
+// Sources 按 Markdown() 的展示顺序生成引用出处（汇总永远排第 1）。
+// 编号在这里统一回填，Markdown() 直接复用同一份切片，两边不会算出不同的号。
+func (d WorkDigest) Sources() []WorkDigestSource {
+	out := make([]WorkDigestSource, 0, 1+len(d.Completed)+len(d.Open)+len(d.Lists)+len(d.Notes)+len(d.Courses))
+	summary := fmt.Sprintf("完成 %d 条 / 还没做完 %d 条（其中逾期 %d 条）/ 记事新增 %d 条 / 涉及清单 %d 个 / 课程 %d 节",
+		d.Stats.Completed, d.Stats.Open, d.Stats.Overdue, d.Stats.Notes, d.Stats.Lists, d.Stats.Courses)
+	out = append(out, WorkDigestSource{
+		Kind: "summary", Title: "统计汇总", Detail: summary,
+		Ref: "digest:" + d.Option, line: "统计：" + summary,
+	})
+	for _, item := range d.Completed {
+		out = append(out, workItemSource("completed", item))
+	}
+	for _, item := range d.Open {
+		out = append(out, workItemSource("open", item))
+	}
+	for _, row := range d.Lists {
+		ref := ""
+		if row.ID > 0 {
+			ref = fmt.Sprintf("list:%d", row.ID)
 		}
-		label := weekdays[course.Weekday] + " " + course.Day[5:]
-		if course.Section != "" {
-			label += " " + course.Section
+		out = append(out, WorkDigestSource{
+			Kind: "list", Title: row.Name,
+			Detail: fmt.Sprintf("清单分布：完成 %d / 未完成 %d", row.Completed, row.Open),
+			Ref:    ref,
+			line:   fmt.Sprintf("%s：完成 %d / 未完成 %d", row.Name, row.Completed, row.Open),
+		})
+	}
+	for _, item := range d.Notes {
+		out = append(out, workItemSource("note", item))
+	}
+	for _, course := range d.Courses {
+		out = append(out, workCourseSource(course))
+	}
+	for i := range out {
+		out[i].ID = i + 1
+	}
+	return out
+}
+
+// workItemSource 把一条完成 / 未完成 / 记事变成可引用的出处。
+func workItemSource(kind string, item WorkDigestItem) WorkDigestSource {
+	src := WorkDigestSource{
+		Kind: kind, Title: item.Title, Day: item.Day, Clock: item.Clock, ListName: item.ListName,
+	}
+	stamp := ""
+	if item.Day != "" {
+		stamp = item.Day
+		if item.Clock != "" && item.Clock != "00:00" {
+			stamp += " " + item.Clock
 		}
-		if label != lastDay {
-			fmt.Fprintf(b, "  %s：", label)
-			lastDay = label
-		} else {
-			b.WriteString("；")
+		stamp += " "
+	}
+	line := stamp + item.Title
+	if item.ListName != "" {
+		line += "（" + item.ListName + "）"
+	}
+	switch kind {
+	case "completed":
+		src.Detail = "完成记录"
+		// 统一回查到提醒 id：历史行与「提醒仍在」的完成行都有 ReminderID，
+		// 用户拿这个 id 能直接找到那条记录（completions 行 id 只对历史行有意义）。
+		if item.ReminderID > 0 {
+			src.Ref = fmt.Sprintf("reminder:%d", item.ReminderID)
+		} else if item.ID > 0 {
+			src.Ref = fmt.Sprintf("completion:%d", item.ID)
 		}
-		kind := ""
-		if course.Kind == "activity" {
-			kind = "（活动）"
+	case "open":
+		src.Detail = "未完成事项"
+		switch {
+		case item.Overdue && item.OverdueDays > 0:
+			src.Detail += fmt.Sprintf("（已逾期 %d 天）", item.OverdueDays)
+			line += fmt.Sprintf("［已逾期 %d 天］", item.OverdueDays)
+		case item.Overdue:
+			src.Detail += "（今天到期未完成）"
+			line += "［今天到期未完成］"
+		case item.NoDue:
+			src.Detail += "（没设截止时间）"
+			line += "［没设截止时间］"
 		}
-		fmt.Fprintf(b, "%s-%s %s%s", course.Start, course.End, course.Title, kind)
-		meta := []string{}
-		if course.Location != "" {
-			meta = append(meta, course.Location)
+		if item.ID > 0 {
+			src.Ref = fmt.Sprintf("reminder:%d", item.ID)
 		}
-		if course.Teacher != "" {
-			meta = append(meta, course.Teacher)
-		}
-		if course.Note != "" {
-			meta = append(meta, "备注："+course.Note)
-		}
-		if len(meta) > 0 {
-			fmt.Fprintf(b, "（%s）", strings.Join(meta, "·"))
-		}
-		if lastDay != "" {
-			b.WriteString("")
+	case "note":
+		src.Detail = "记事"
+		if item.ID > 0 {
+			src.Ref = fmt.Sprintf("reminder:%d", item.ID)
 		}
 	}
-	b.WriteString("\n")
+	src.line = line
+	return src
+}
+
+// workCourseSource 把一节课程变成可引用的出处。格式保持与旧的 Markdown 一致：
+// 「周三 10-14 下午：08:00-08:45 数学（地点·老师）」，便于模型直接复述。
+func workCourseSource(course WorkDigestCourse) WorkDigestSource {
+	weekdays := []string{"", "周一", "周二", "周三", "周四", "周五", "周六", "周日"}
+	weekday := ""
+	if course.Weekday >= 1 && course.Weekday < len(weekdays) {
+		weekday = weekdays[course.Weekday]
+	}
+	day := course.Day
+	if len(day) >= 10 {
+		day = day[5:]
+	}
+	label := strings.TrimSpace(weekday + " " + day)
+	if course.Section != "" {
+		label += " " + course.Section
+	}
+	kind := ""
+	if course.Kind == "activity" {
+		kind = "（活动）"
+	}
+	meta := []string{}
+	if course.Location != "" {
+		meta = append(meta, course.Location)
+	}
+	if course.Teacher != "" {
+		meta = append(meta, course.Teacher)
+	}
+	if course.Note != "" {
+		meta = append(meta, "备注："+course.Note)
+	}
+	line := fmt.Sprintf("%s：%s-%s %s%s", label, course.Start, course.End, course.Title, kind)
+	if table := strings.TrimSpace(course.Table); table != "" {
+		line = table + " · " + line
+	}
+	if len(meta) > 0 {
+		line += "（" + strings.Join(meta, "·") + "）"
+	}
+	ref := ""
+	if course.ID > 0 {
+		ref = fmt.Sprintf("timetable_entry:%d", course.ID)
+	}
+	return WorkDigestSource{
+		Kind: "course", Title: course.Title, Day: course.Day, ListName: course.Table,
+		Detail: "课程", Ref: ref, line: line,
+	}
 }
 
 func (d WorkDigest) Markdown() string {
@@ -658,70 +796,55 @@ func (d WorkDigest) Markdown() string {
 		fmt.Fprintf(&b, "；只看清单：%s（用户用 @%s 点名了这一栏，别把别的清单的数据算进来）", d.ListName, d.ListName)
 	}
 	b.WriteString("\n")
-	fmt.Fprintf(&b, "统计：完成 %d 条 / 还没做完 %d 条（其中逾期 %d 条）/ 记事新增 %d 条 / 涉及清单 %d 个\n",
-		d.Stats.Completed, d.Stats.Open, d.Stats.Overdue, d.Stats.Notes, d.Stats.Lists)
+	b.WriteString("引用编号：回答里引用下面哪条数据，就在句末标注它前面的方括号编号（如 [2]）；汇总数字用 [1]。\n")
 
-	if len(d.Completed) > 0 {
-		fmt.Fprintf(&b, "\n一、这段时间完成的（%d 条）\n", len(d.Completed))
-		writeWorkItems(&b, d.Completed)
+	sources := d.Sources()
+	byKind := map[string][]WorkDigestSource{}
+	for _, src := range sources[1:] {
+		byKind[src.Kind] = append(byKind[src.Kind], src)
+	}
+	fmt.Fprintf(&b, "\n[%d] %s\n", sources[0].ID, sources[0].line)
+
+	if rows := byKind["completed"]; len(rows) > 0 {
+		fmt.Fprintf(&b, "\n一、这段时间完成的（共 %d 条）\n", d.Stats.Completed)
+		writeSourceLines(&b, rows)
 	} else {
 		b.WriteString("\n一、这段时间完成的：没有记录\n")
 	}
 
-	if len(d.Open) > 0 {
-		fmt.Fprintf(&b, "\n二、还没做完的（%d 条）\n", len(d.Open))
-		writeWorkItems(&b, d.Open)
+	if rows := byKind["open"]; len(rows) > 0 {
+		fmt.Fprintf(&b, "\n二、还没做完的（共 %d 条）\n", d.Stats.Open)
+		writeSourceLines(&b, rows)
 	} else {
 		b.WriteString("\n二、还没做完的：没有\n")
 	}
 
-	if len(d.Lists) > 0 {
+	if rows := byKind["list"]; len(rows) > 0 {
 		b.WriteString("\n三、清单分布\n")
-		for _, row := range d.Lists {
-			fmt.Fprintf(&b, "- %s：完成 %d / 未完成 %d\n", row.Name, row.Completed, row.Open)
-		}
+		writeSourceLines(&b, rows)
 	}
 
-	if len(d.Notes) > 0 {
+	if rows := byKind["note"]; len(rows) > 0 {
 		fmt.Fprintf(&b, "\n四、这段时间新记的记事（共 %d 条）\n", d.Stats.Notes)
-		writeWorkItems(&b, d.Notes)
+		writeSourceLines(&b, rows)
 	}
 
-	if len(d.Courses) > 0 {
-		fmt.Fprintf(&b, "\n五、课程表（%d 节）\n", len(d.Courses))
-		writeCourseItems(&b, d.Courses)
+	if rows := byKind["course"]; len(rows) > 0 {
+		fmt.Fprintf(&b, "\n五、课程表（%d 节）\n", len(rows))
+		writeSourceLines(&b, rows)
 	}
 
 	if d.Truncated {
-		fmt.Fprintf(&b, "\n（提示：数据量较大，完成记录最多列出 %d 条、未完成最多 %d 条、记事最多 %d 条。）\n",
+		fmt.Fprintf(&b, "\n（提示：数据量较大，完成记录最多列出 %d 条、未完成最多 %d 条、记事最多 %d 条；清单分布按列出的条目统计，汇总数字是总数。）\n",
 			workDigestMaxCompleted, workDigestMaxOpen, workDigestMaxNotes)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func writeWorkItems(b *strings.Builder, items []WorkDigestItem) {
-	for i, item := range items {
-		stamp := ""
-		if item.Day != "" {
-			stamp = item.Day
-			if item.Clock != "" && item.Clock != "00:00" {
-				stamp += " " + item.Clock
-			}
-			stamp += " "
-		}
-		line := fmt.Sprintf("%d. %s%s", i+1, stamp, item.Title)
-		if item.ListName != "" {
-			line += "（" + item.ListName + "）"
-		}
-		switch {
-		case item.Overdue && item.OverdueDays > 0:
-			line += fmt.Sprintf("［已逾期 %d 天］", item.OverdueDays)
-		case item.Overdue:
-			line += "［今天到期未完成］"
-		case item.NoDue:
-			line += "［没设截止时间］"
-		}
-		b.WriteString(line + "\n")
+// writeSourceLines 按 [编号] 逐条输出；编号与 Sources() 完全一致。
+func writeSourceLines(b *strings.Builder, sources []WorkDigestSource) {
+	for _, src := range sources {
+		fmt.Fprintf(b, "[%d] %s\n", src.ID, src.line)
 	}
 }
 

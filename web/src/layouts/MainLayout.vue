@@ -2363,7 +2363,7 @@ onBeforeUnmount(() => {
 .page-enter-from { opacity: 0; transform: translateY(5px); }
 .page-leave-to { opacity: 0; transform: translateY(-3px); }
 @media (min-width: 1024px) { .mobile-only { display: none !important; } }
-@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+@media (max-width: 767px), (hover: none) and (pointer: coarse) and (max-width: 1023px) {
   .ambient-orb { display: none; }
   .sidebar, .topbar, .mobile-tabbar {
     backdrop-filter: none;

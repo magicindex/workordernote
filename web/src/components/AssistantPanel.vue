@@ -187,6 +187,42 @@
                   msg.digest.list_name ? ` · 只看清单「${msg.digest.list_name}」` : ''
                 }}
               </p>
+              <!-- 空数据：先提醒用户这段时间没有记录，回答里任何具体数字都不可信。 -->
+              <p
+                v-if="msg.digest?.empty"
+                class="assistant-meta assistant-digest-empty"
+                data-assistant-digest-empty
+              >这个时间段没有记录；回答里不应出现任何具体事项或数字。</p>
+              <!-- 数据来源：回答里的 [n] 在这里逐条对应到清单、日期与记录。 -->
+              <details
+                v-if="msg.sources?.length"
+                class="assistant-sources"
+                data-assistant-sources
+              >
+                <summary class="assistant-sources-summary">
+                  数据来源（{{ msg.sources.length }} 条，点开核对回答里的 [编号]）
+                </summary>
+                <ul class="assistant-sources-list">
+                  <li
+                    v-for="source in msg.sources"
+                    :key="source.id"
+                    :data-assistant-source-id="source.id"
+                  >
+                    <span class="assistant-source-id">[{{ source.id }}]</span>
+                    <span>{{ sourceLine(source) }}</span>
+                  </li>
+                </ul>
+              </details>
+              <p
+                v-if="msg.grounding?.fallback"
+                class="assistant-meta assistant-grounding-note"
+                data-assistant-grounding-fallback
+              >模型回答未通过数据校验，已改为{{ msg.digest ? '按真实记录直接列出' : '安全说明' }}。</p>
+              <p
+                v-else-if="msg.grounding?.repaired"
+                class="assistant-meta"
+                data-assistant-grounding-repaired
+              >这条回答在展示前按数据校验校正过一次。</p>
               <p v-if="msg.draft" class="assistant-meta" data-assistant-draft-note>
                 这是按你的记录直接生成的草稿（模型接入后同样的问题会由模型润色改写）。
               </p>
@@ -415,7 +451,9 @@ import {
   THINKING_MODES,
   type AssistantDigestInput,
   type AssistantDigestView,
+  type AssistantGrounding,
   type AssistantMessage,
+  type AssistantSource,
   type AssistantStatus,
   type AssistantThinkingMode,
 } from '../api/assistant'
@@ -438,6 +476,10 @@ interface Bubble extends AssistantMessage {
   failed?: boolean
   digest?: AssistantDigestView | null
   draft?: boolean
+  /** 这一轮回答引用的数据出处（[n] 与回答里的编号对应），点开可逐条核对。 */
+  sources?: AssistantSource[]
+  /** 数据校验结果：重答过、或退回草稿时给用户一句说明。 */
+  grounding?: AssistantGrounding
   /** 这一轮的思维链与当时的档位：档位跟着消息存，之后换档不会改写旧回复的展示。 */
   thinking?: string
   thinkingTruncated?: boolean
@@ -804,6 +846,30 @@ function placeholderReply(raw: string): string {
   ].join('\n')
 }
 
+/** 把一条数据来源拼成一行可核对的中文：类型 · 日期/时间 · 标题（清单）。 */
+function sourceLine(source: AssistantSource): string {
+  if (source.kind === 'summary') {
+    return source.detail || source.title || '统计汇总'
+  }
+  if (source.kind === 'list') {
+    return `${source.title}${source.detail ? `（${source.detail}）` : ''}`
+  }
+  const labels: Record<string, string> = {
+    completed: '完成记录',
+    open: '未完成事项',
+    note: '记事',
+    course: '课程',
+  }
+  // detail 里已经带了类型与逾期等补充（如「未完成事项（已逾期 1 天）」），优先用它。
+  const parts: string[] = [source.detail || labels[source.kind] || '来源']
+  if (source.day) {
+    parts.push(source.day + (source.clock && source.clock !== '00:00' ? ` ${source.clock}` : ''))
+  }
+  if (source.title) parts.push(source.title)
+  if (source.list_name) parts.push(`（${source.list_name}）`)
+  return parts.join(' · ')
+}
+
 /** 把当前选择翻译成请求里的数据口径；什么都没选就返回 null（后端按话里的时间词认）。 */
 function currentDigest(): AssistantDigestInput | null {
   const option = scope.value.option
@@ -851,6 +917,8 @@ async function send(text?: string, option?: string) {
       content: answer.reply,
       digest: answer.digest,
       draft: answer.mode === 'draft',
+      sources: answer.sources,
+      grounding: answer.grounding,
       thinking: answer.thinking,
       thinkingTruncated: answer.thinking_truncated,
       thinkingMode: answer.thinking_mode,
@@ -1179,6 +1247,27 @@ onBeforeUnmount(() => {
 }
 .assistant-meta {
   @apply -mt-1.5 px-1 text-[11px] leading-relaxed text-muted-foreground;
+}
+/* 空数据提醒：琥珀色，提醒用户这时任何具体数字都不可信 */
+.assistant-digest-empty {
+  @apply text-amber-600 dark:text-amber-300;
+}
+/* 数据来源：默认折叠，展开后逐条核对 [编号]；不抢回答的位置 */
+.assistant-sources {
+  @apply -mt-1 mx-1 rounded-lg border border-border/70 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground;
+}
+.assistant-sources-summary {
+  @apply cursor-pointer select-none font-semibold text-muted-foreground;
+}
+.assistant-sources-list {
+  @apply mt-1 max-h-56 list-none space-y-0.5 overflow-y-auto pl-1;
+}
+.assistant-source-id {
+  @apply mr-1 font-mono font-bold text-brand-600 dark:text-brand-300;
+}
+/* 校验兜底说明：颜色比普通脚注重一点，用户要知道这不是模型原文 */
+.assistant-grounding-note {
+  @apply text-amber-600 dark:text-amber-300;
 }
 /* 选中的档位：比普通 chip 实一点，一眼看出「现在是哪种」 */
 .assistant-chip-on {

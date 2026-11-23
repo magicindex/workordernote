@@ -110,6 +110,9 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 				"usage":       gin.H{"prompt_tokens": 0, "completion_tokens": 0},
 				"duration_ms": time.Since(started).Milliseconds(),
 				"digest":      viewOfDigest(digest),
+				// 草稿直接由真实数据拼成，天然可核对。
+				"sources":   digest.Sources,
+				"grounding": GroundingReport{Checked: true, OK: true},
 				// 草稿不是模型写的，没有思维链可给。
 				"thinking":      "",
 				"thinking_mode": thinkingMode,
@@ -128,6 +131,8 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 		case chatSem <- struct{}{}:
 			defer func() { <-chatSem }()
 		default:
+			// 带上 Retry-After：前端/网关知道等几秒再来，比立刻重试更有效。
+			c.Header("Retry-After", "3")
 			response.Error(c, http.StatusTooManyRequests, 429, "同时在聊的人有点多，请稍等一下再发")
 			return
 		}
@@ -139,7 +144,20 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 		case systemPrompt != "":
 			payload = append([]Message{{Role: "system", Content: systemPrompt}}, messages...)
 		}
-		result, err := newClient(settings).Chat(c.Request.Context(), payload)
+
+		// 整个请求（含一次可能的「按数据重答」）共用一个总时限：重答不会把
+		// 一次 60 秒的等待变成 120 秒。
+		timeout := time.Duration(settings.TimeoutSeconds) * time.Second
+		if timeout <= 0 {
+			timeout = defaultTimeoutSeconds * time.Second
+		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
+		defer cancel()
+
+		// 没附数据、但这句话明显是在问自己的记录时（例如「上周做了什么」没被
+		// 时间词识别出来），也要防模型凭记忆编：先让它承认看不到，而不是猜。
+		wantsWorkData := !found && looksLikeWorkDataQuestion(lastUserText(messages))
+		result, grounding, err := runGroundedChat(ctx, newClient(settings), payload, digest, found, wantsWorkData)
 		if err != nil {
 			// 日志里**不写密钥**：apiError 的文案里本来就没有密钥，上游原文可能
 			// 带请求 id，留着便于对账。
@@ -147,8 +165,10 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 			response.Error(c, http.StatusBadGateway, 502, err.Error())
 			return
 		}
-		logger.Info("assistant: 对话完成（model=%s，耗时 %dms，提示 %d / 回复 %d tokens）",
-			result.Model, time.Since(started).Milliseconds(), result.PromptTokens, result.CompletionTokens)
+		logger.Info("assistant: 对话完成（model=%s，耗时 %dms，提示 %d / 回复 %d tokens，数据校验=%t 重答=%t 兜底=%t）",
+			result.Model, time.Since(started).Milliseconds(), result.PromptTokens, result.CompletionTokens,
+			grounding.Checked && grounding.OK, grounding.Repaired, grounding.Fallback)
+
 		var digestPayload *digestView
 		if found {
 			digestPayload = viewOfDigest(digest)
@@ -158,6 +178,11 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 			// 明确记一笔：面板看不到，但排查「怎么慢」时要能分辨是模型在想、
 			// 还是上游在排队。
 			logger.Info("assistant: 本轮思维链 %d 字（思考过程显示：只有对话，不返回给面板）", len([]rune(result.Reasoning)))
+		}
+		// 没有附数据时 sources 给空数组而不是 null：前端不用额外判空。
+		sources := digest.Sources
+		if !found {
+			sources = []WorkSource{}
 		}
 		response.Success(c, gin.H{
 			"reply": result.Reply,
@@ -169,11 +194,95 @@ func handleChat(db *gorm.DB) gin.HandlerFunc {
 			},
 			"duration_ms":        time.Since(started).Milliseconds(),
 			"digest":             digestPayload,
+			"sources":            sources,
+			"grounding":          grounding,
 			"thinking":           thinking,
 			"thinking_truncated": thinkingTruncated,
 			"thinking_mode":      thinkingMode,
 		})
 	}
+}
+
+// runGroundedChat 发一轮对话，并用「有没有真实数据」核对回答：
+//
+//  1. 正常回答一次即通过时，绝不额外发请求（不影响响应速度）；
+//  2. 统计数字冲突、引用不存在、空数据却编内容、没数据却报出具体条数时，
+//     带违规原因让模型重答一次；
+//  3. 重答仍不合格（或重答请求失败）就退回安全文案，宁少说不编造。
+//
+// 只有第一次请求失败才返回 error；重答失败属于「数据校验兜底」，不算调用失败。
+func runGroundedChat(ctx context.Context, api *client, payload []Message, digest WorkDigestResult, found, wantsWorkData bool) (ChatResult, GroundingReport, error) {
+	result, err := api.Chat(ctx, payload)
+	if err != nil {
+		return ChatResult{}, GroundingReport{}, err
+	}
+	if !found {
+		if !wantsWorkData {
+			return result, GroundingReport{}, nil
+		}
+		// 这一问明显要工作记录，但服务端没取到/没附上数据：模型只能承认看不到。
+		report := validateNoDataAnswer(result.Reply)
+		if report.OK {
+			return result, report, nil
+		}
+		logger.Warn("assistant: 没有附数据，回答却给出了具体记录（%s），让模型改口", strings.Join(report.Violations, "；"))
+		repaired, repairErr := chatAgain(ctx, api, payload, result, noDataRepairPrompt())
+		if repairErr != nil {
+			logger.Warn("assistant: 无数据改口失败，改用安全文案：%v", repairErr)
+			result.Reply = noDataFallbackReply()
+			report.Fallback = true
+			return result, report, nil
+		}
+		second := validateNoDataAnswer(repaired.Reply)
+		second.Repaired = true
+		if !second.OK {
+			logger.Warn("assistant: 无数据改口仍未通过（%s），改用安全文案", strings.Join(second.Violations, "；"))
+			repaired.Reply = noDataFallbackReply()
+			second.Fallback = true
+		}
+		return repaired, second, nil
+	}
+
+	report := validateGrounding(result.Reply, digest)
+	if report.OK {
+		return result, report, nil
+	}
+	logger.Warn("assistant: 回答未通过数据校验（%s），让模型按数据重答一次", strings.Join(report.Violations, "；"))
+
+	repaired, repairErr := chatAgain(ctx, api, payload, result, groundingRepairPrompt(report.Violations))
+	if repairErr != nil {
+		// 重答没发出去（超时/断网）：保留第一次的用量，回答退回数据草稿。
+		logger.Warn("assistant: 数据重答失败，退回数据草稿：%v", repairErr)
+		result.Reply = groundingFallback(digest)
+		report.Fallback = true
+		return result, report, nil
+	}
+	second := validateGrounding(repaired.Reply, digest)
+	second.Repaired = true
+	if !second.OK {
+		logger.Warn("assistant: 重答仍未通过数据校验（%s），退回数据草稿", strings.Join(second.Violations, "；"))
+		repaired.Reply = groundingFallback(digest)
+		second.Fallback = true
+	}
+	return repaired, second, nil
+}
+
+// chatAgain 把「上一轮回答 + 纠正指令」追加到原对话后再问一次。
+// 用量按两次请求合计，面板上看到的 token 就是真实花费。
+func chatAgain(ctx context.Context, api *client, payload []Message, first ChatResult, instruction string) (ChatResult, error) {
+	next := make([]Message, 0, len(payload)+2)
+	next = append(next, payload...)
+	next = append(next,
+		Message{Role: "assistant", Content: first.Reply},
+		Message{Role: "user", Content: instruction},
+	)
+	repaired, err := api.Chat(ctx, next)
+	if err != nil {
+		return ChatResult{}, err
+	}
+	repaired.PromptTokens += first.PromptTokens
+	repaired.CompletionTokens += first.CompletionTokens
+	return repaired, nil
 }
 
 // handleGetPromptPrefs 返回「我」的系统提示词与默认值。

@@ -155,7 +155,7 @@ watch(() => props.refreshKey, () => { void load() }, { immediate: true })
   @apply w-[7.6rem] shrink-0 rounded-xl px-2.5 py-2 shadow-md;
   user-select: none;
 }
-@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+@media (max-width: 767px), (hover: none) and (pointer: coarse) and (max-width: 1023px) {
   .billing-mini-card { box-shadow: none; }
 }
 </style>

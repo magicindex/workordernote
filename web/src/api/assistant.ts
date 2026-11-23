@@ -87,6 +87,35 @@ export interface AssistantDigestView {
   lists: number
   courses?: number
   truncated: boolean
+  /** 这个时间段一条记录都没有：面板据此提示「没有记录」，任何具体数字都不可信。 */
+  empty?: boolean
+}
+
+/**
+ * 一条数据出处，编号与回答里的 [n] 对应。
+ * `ref` 是内部记录标识（reminder:12 / completion:34 …），用于排查，不展示。
+ */
+export interface AssistantSource {
+  id: number
+  kind: 'summary' | 'completed' | 'open' | 'list' | 'note' | 'course' | string
+  title: string
+  day?: string
+  clock?: string
+  list_name?: string
+  detail?: string
+  ref?: string
+}
+
+/** 回答的数据校验结果：不合格时会自动重答一次，仍不合格则退回数据草稿。 */
+export interface AssistantGrounding {
+  checked: boolean
+  ok: boolean
+  violations?: string[]
+  citations?: number[]
+  /** 第一次回答不合格，已按数据重答过一次。 */
+  repaired?: boolean
+  /** 重答仍不合格，展示的是服务端的安全兜底文案（有数据时是数据草稿）。 */
+  fallback?: boolean
 }
 
 /** 存进记事本后回给面板的东西：新记事的 id 与服务端自动生成的标题、标签。 */
@@ -136,6 +165,10 @@ export interface AssistantReply {
   model: string
   reason: string
   digest: AssistantDigestView | null
+  /** 这一轮的数据出处，编号对应回答里的 [n]；没有附数据时是空数组。 */
+  sources: AssistantSource[]
+  /** 数据校验结果；没附数据时 `checked=false`。 */
+  grounding: AssistantGrounding
   /** 这一轮的思维链（`thinking_mode='off'` 或上游没给时是空串）。 */
   thinking: string
   /** 思维链被后端截断过（简洁思考的口径），面板据此加省略号。 */
@@ -186,6 +219,8 @@ export async function chatWithAssistant(
     model: String(data.model || ''),
     reason: String(data.reason || ''),
     digest: (data.digest as AssistantDigestView | null) ?? null,
+    sources: Array.isArray(data.sources) ? (data.sources as AssistantSource[]) : [],
+    grounding: (data.grounding as AssistantGrounding) ?? { checked: false, ok: false },
     thinking: String(data.thinking || '').trim(),
     thinking_truncated: data.thinking_truncated === true,
     thinking_mode: normalizeThinkingMode(data.thinking_mode),

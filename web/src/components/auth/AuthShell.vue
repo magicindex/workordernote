@@ -195,7 +195,7 @@ const siteInitial = computed(() => (authStore.siteTitle || 'S').charAt(0).toUppe
 /* Embedded mobile WebViews repaint fixed blur layers while the keyboard
    animates the visual viewport. Keep the desktop treatment, but use a stable
    static composition on touch devices so focusing an input stays responsive. */
-@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+@media (max-width: 767px), (hover: none) and (pointer: coarse) and (max-width: 1023px) {
   .auth-content {
     min-height: 100dvh;
     justify-content: flex-start;

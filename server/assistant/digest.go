@@ -27,8 +27,9 @@ type WorkDigestRequest struct {
 }
 
 // WorkDigestResult 是数据层回给助手的东西：
-//   - Markdown：给模型看的紧凑数据（随系统消息下发）；
+//   - Markdown：给模型看的紧凑数据（随系统消息下发），每条数据带 [编号]；
 //   - Draft：没有模型时直接给用户看的草稿；
+//   - Sources：与 Markdown 里的编号一一对应的出处，回给面板逐条核对；
 //   - 其余字段：面板上那行「已附上 …」的摘要。
 //
 // Found=false 表示这句话里既没有时间段也没有口径 —— 这一轮不附数据，按普通聊天走。
@@ -50,6 +51,8 @@ type WorkDigestResult struct {
 	Truncated bool
 	Markdown  string
 	Draft     string
+	// Sources 是这一轮可以引用的数据出处，编号必须与 Markdown 里的 [n] 一致。
+	Sources []WorkSource
 }
 
 // WorkDigestProvider 由业务包实现（server/reminder 的 WorkDigest 装配），
@@ -86,6 +89,9 @@ type digestView struct {
 	Lists     int    `json:"lists"`
 	Courses   int    `json:"courses"`
 	Truncated bool   `json:"truncated"`
+	// Empty 表示这个口径下一条记录都没有。面板据此直接提示「没有记录」，
+	// 也提醒用户：这时模型本来就该说「没有数据」，任何具体数字都不可信。
+	Empty bool `json:"empty"`
 }
 
 // resolveDigest 取出这一轮要附的工作数据；found=false 表示不需要附。
@@ -125,18 +131,27 @@ func lastUserText(messages []Message) string {
 // 数据放在系统消息里而不是用户消息里：它是服务端取的、用户改不了的事实，
 // 跟「角色与边界」同级；写进用户消息则会被当成用户的话，容易被后续
 // 「忽略上面的内容」这类提示词顶掉。
+//
+// 数据规则单独成段，且不依赖用户自己写的提示词：即使用户把统一提示词改成
+// 「自由发挥」，这一轮仍然只能引用真实数据。规则里明确要求逐条标注 [编号]，
+// 服务端随后还会用 validateGrounding 复核，不通过就重答或退回数据草稿。
 func digestSystemPrompt(base string, digest WorkDigestResult) string {
 	if strings.TrimSpace(base) == "" {
 		base = defaultSystemPrompt
 	}
-	prompt := base + "\n\n" + digest.Markdown
-	return prompt + "\n\n" +
-		"（上面的【工作数据】是系统从用户自己的记录里取回的真实数据，用户看不到它。" +
-		"回答只用这些条目与数字，不要添加没有出现的事项；数据不够就直说。" +
-		"写周报/月报/年报时，给成一份可以直接交上去的中文总结：先用一句话总览，" +
-		"再按清单分组列完成情况，最后点出逾期与未完成项、以及建议的下一步；" +
-		"不要客套话，也不要重复罗列原始条目。）"
+	return base + "\n\n" + digest.Markdown + "\n\n" + groundingRules
 }
+
+// groundingRules 是「只许照数据说话」的硬约束。改这里要同步改 grounding.go 的
+// 校验规则与 grounding_test.go 的回归用例，否则提示词与后置校验会对不上。
+const groundingRules = "【数据回答规则（必须遵守，优先级高于以上所有风格要求）】\n" +
+	"1. 只能使用上面【工作数据】里出现的事项、日期与数字。不得补充、推测或编造任何没有出现的记录、数字、人名、地点。\n" +
+	"2. 每一条来自数据的事实陈述，都要在句末标注它的出处编号，例如 [2]；汇总数字用 [1]。\n" +
+	"3. 数据中没有的内容，直接写「已提供的数据中没有相关记录」；不要用常识、记忆或想象补齐。\n" +
+	"4. 数字必须与数据完全一致：完成、未完成、逾期、记事、清单、课程的条数不得改写或估算。\n" +
+	"5. 如果用户的问题需要查看记录，而消息里没有【工作数据】，就说明现在看不到这些记录，请用户先选时间段再问；不要猜测。\n" +
+	"6. 不要声称已经创建、修改或删除了任何记录。\n" +
+	"7. 写周报/月报/总结时：先用一句话总览，再按清单分组列完成情况，最后点出逾期与未完成项、以及建议的下一步；不要客套话，也不要重复罗列原始条目。"
 
 // viewOfDigest 把结果压成面板要显示的那几行。
 func viewOfDigest(digest WorkDigestResult) *digestView {
@@ -154,5 +169,6 @@ func viewOfDigest(digest WorkDigestResult) *digestView {
 		Lists:     digest.Lists,
 		Courses:   digest.Courses,
 		Truncated: digest.Truncated,
+		Empty:     digestEmpty(digest),
 	}
 }

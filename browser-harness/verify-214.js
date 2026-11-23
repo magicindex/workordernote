@@ -6,9 +6,11 @@
  *
  * 钉住这几条：
  *   1. 卡片透明度调到 40% 时，手机端顶栏 / 抽屉菜单 / 底部标签栏的不透明度
- *      仍 ≥ 90%（桌面端照旧跟随卡片透明度，不被这条下限影响）；
+ *      仍 ≥ 90%（桌面端、电视/大屏触屏、窄窗口桌面都照旧跟随卡片透明度，
+ *      不被这条下限影响——2026-11-22 用户报「电视电脑页面也跟着变了」）；
  *   2. 手机端冷启动打开 /admin，第一帧就是首页看板：不会再先渲染一遍「待办」；
- *   3. 底栏点「待办」仍能正常进待办（不会被默认首页守卫弹回首页）。
+ *   3. 底栏点「待办」仍能正常进待办（不会被默认首页守卫弹回首页）；
+ *   4. 电视/大屏触屏、窄窗口桌面不被手机不透明度下限影响（2026-11-22 回归）。
  *
  * 用法：APP_URL=http://127.0.0.1:8918 node verify-214.js
  */
@@ -44,6 +46,13 @@ const bgAlpha = (page, sel) => page.evaluate((s) => {
   const parts = m[1].split(/[,/]/).map((v) => v.trim()).filter(Boolean);
   const alpha = parts.length >= 4 ? parseFloat(parts[3]) : 1;
   return { bg, alpha };
+}, sel);
+
+const blurOf = (page, sel) => page.evaluate((s) => {
+  const el = document.querySelector(s);
+  if (!el) return null;
+  const cs = getComputedStyle(el);
+  return cs.backdropFilter || cs.webkitBackdropFilter || 'none';
 }, sel);
 
 async function sampleFrames(page, totalMs = 1800, stepMs = 40) {
@@ -110,6 +119,8 @@ async function sampleFrames(page, totalMs = 1800, stepMs = 40) {
       await sleep(600);
       const sidebar = await bgAlpha(page, '.sidebar');
       check('抽屉菜单不透明度 ≥ 90%', opened && sidebar && sidebar.alpha >= 0.9, JSON.stringify(sidebar));
+      const mobileBlur = await blurOf(page, '.sidebar');
+      check('手机抽屉菜单关闭毛玻璃（滚动性能）', mobileBlur === 'none', String(mobileBlur));
       const navVar = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--nav-bg-opacity').trim());
       check('移动端 --nav-bg-opacity 已生效', Number(navVar) >= 0.9, navVar);
       await page.screenshot({ path: __dirname + '/shots/verify-214-mobile-drawer.png' });
@@ -123,14 +134,46 @@ async function sampleFrames(page, totalMs = 1800, stepMs = 40) {
       check('底栏「待办」能正常进入、不被弹回首页', today.path === '/admin' && today.list, JSON.stringify(today));
 
       // ---------------- 3. 桌面端不受影响：仍跟随卡片透明度 ----------------
-      await page.setViewport({ width: 1440, height: 900 });
+      await page.setViewport({ width: 1440, height: 900, isMobile: false, hasTouch: false });
       await sleep(500);
       await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
       await sleep(1500);
       const deskTop = await bgAlpha(page, '.topbar');
+      const deskSidebar = await bgAlpha(page, '.sidebar');
       const deskVar = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--nav-bg-opacity').trim());
       check('桌面端导航栏仍跟随卡片透明度（40%）', deskTop && Math.abs(deskTop.alpha - 0.4) < 0.02, JSON.stringify(deskTop));
+      check('桌面端侧栏仍跟随卡片透明度（40%）', deskSidebar && Math.abs(deskSidebar.alpha - 0.4) < 0.02, JSON.stringify(deskSidebar));
       check('桌面端没有套用移动端下限', deskVar === '', `--nav-bg-opacity=${deskVar}`);
+      const deskBlur = await blurOf(page, '.sidebar');
+      check('桌面侧栏保留毛玻璃', deskBlur && deskBlur !== 'none', String(deskBlur));
+
+      // ---------------- 4. 电视 / 大屏触屏：不能命中「触屏」这一支 ----------------
+      // 上一版媒体查询写成「≤1023px 或 触屏」，1920 的电视/触屏电脑也会被钉 96%。
+      await page.setViewport({ width: 1920, height: 1080, isMobile: false, hasTouch: true });
+      await sleep(500);
+      await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      await sleep(1500);
+      const tvTop = await bgAlpha(page, '.topbar');
+      const tvSidebar = await bgAlpha(page, '.sidebar');
+      const tvVar = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--nav-bg-opacity').trim());
+      check('电视/大屏触屏导航栏不被钉成 96%', tvVar === '', `--nav-bg-opacity=${tvVar}`);
+      check('电视/大屏触屏导航栏跟随卡片透明度（40%）', tvTop && Math.abs(tvTop.alpha - 0.4) < 0.02, JSON.stringify(tvTop));
+      check('电视/大屏触屏侧栏跟随卡片透明度（40%）', tvSidebar && Math.abs(tvSidebar.alpha - 0.4) < 0.02, JSON.stringify(tvSidebar));
+      const tvBlur = await blurOf(page, '.sidebar');
+      check('电视/大屏触屏侧栏保留毛玻璃', tvBlur && tvBlur !== 'none', String(tvBlur));
+
+      // ---------------- 5. 窄窗口桌面：鼠标设备也不能命中「窄屏」这一支 ----------------
+      // 上一版媒体查询的 max-width 分支会让 900px 的桌面窗口也变成 96%。
+      await page.setViewport({ width: 900, height: 800, isMobile: false, hasTouch: false });
+      await sleep(500);
+      await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      await sleep(1500);
+      const narrowTop = await bgAlpha(page, '.topbar');
+      const narrowVar = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--nav-bg-opacity').trim());
+      check('窄窗口桌面导航栏不被手机下限影响', narrowVar === '', `--nav-bg-opacity=${narrowVar}`);
+      check('窄窗口桌面导航栏跟随卡片透明度（40%）', narrowTop && Math.abs(narrowTop.alpha - 0.4) < 0.02, JSON.stringify(narrowTop));
+      const narrowBlur = await blurOf(page, '.sidebar');
+      check('窄窗口桌面侧栏保留毛玻璃', narrowBlur && narrowBlur !== 'none', String(narrowBlur));
     } finally {
       for (const [k, v] of Object.entries(original)) {
         if (v !== undefined && v !== null) await api(page, '/api/configs', 'PUT', { key: k, value: String(v) });

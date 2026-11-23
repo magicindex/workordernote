@@ -2477,7 +2477,7 @@ function onShortcut(e: KeyboardEvent) {
 /* 手机端渲染开销：滚动时最贵的是「每行一个模糊阴影 + 每行 backdrop-blur + hover 位移」。
    模糊与位移在触屏上没有意义（还会被 hover 卡住留下残影），阴影改由细边框表达，
    transition 从 all 收窄成颜色/边框，避免滚动中触发布局与大范围重绘。 */
-@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+@media (max-width: 767px), (hover: none) and (pointer: coarse) and (max-width: 1023px) {
   .reminder-row {
     box-shadow: none;
     transition: background-color .15s ease, border-color .15s ease;

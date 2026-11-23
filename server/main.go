@@ -89,6 +89,20 @@ func workDigestProvider(db *gorm.DB, userID uint, req assistant.WorkDigestReques
 	if err != nil {
 		return assistant.WorkDigestResult{}, err
 	}
+	sources := digest.Sources()
+	workSources := make([]assistant.WorkSource, 0, len(sources))
+	for _, src := range sources {
+		workSources = append(workSources, assistant.WorkSource{
+			ID:       src.ID,
+			Kind:     src.Kind,
+			Title:    src.Title,
+			Day:      src.Day,
+			Clock:    src.Clock,
+			ListName: src.ListName,
+			Detail:   src.Detail,
+			Ref:      src.Ref,
+		})
+	}
 	return assistant.WorkDigestResult{
 		Found:     true,
 		Option:    digest.Option,
@@ -107,5 +121,6 @@ func workDigestProvider(db *gorm.DB, userID uint, req assistant.WorkDigestReques
 		Truncated: digest.Truncated,
 		Markdown:  digest.Markdown(),
 		Draft:     digest.DraftReport(),
+		Sources:   workSources,
 	}, nil
 }

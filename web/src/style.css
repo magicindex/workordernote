@@ -238,8 +238,14 @@ select optgroup {
    现状：卡片透明度偏好最低能调到 20%，而手机/平板上 backdrop-filter 为了滚动性能
    被整体关掉（见本文件下方的媒体查询），40% 的半透明导航栏叠在滚动正文上，
    菜单文字几乎读不出来。桌面端有毛玻璃托底，不受影响，因此只在这里钉下限：
-   96% 仍留一点通透感，但任何页面背景上文字都清楚。 */
-@media (max-width: 1023px), (hover: none) and (pointer: coarse) {
+   96% 仍留一点通透感，但任何页面背景上文字都清楚。
+
+   注意这里必须是「窄屏 **且** 触屏」：早先写成「窄屏 或 触屏」，结果电视、
+   触屏电脑这类大屏无鼠标设备也会命中，侧栏/顶栏被钉成 96% 不透明，调主题的
+   卡片透明度时它们纹丝不动（用户 2026-11-22：「电视电脑页面也跟着变了」）。
+   加上宽度上限后：手机/平板（<1024px 触屏）保持可读，桌面与电视恢复跟随
+   --card-bg-opacity 的半透明玻璃感。 */
+@media (max-width: 1023px) and (hover: none) and (pointer: coarse) {
   :root {
     --nav-bg-opacity: 0.96;
   }
@@ -369,13 +375,13 @@ textarea {
     radial-gradient(at 100% 0%, rgb(var(--color-accent) / 0.1) 0px, transparent 50%);
 }
 
-@media (hover: none) and (pointer: coarse) {
+@media (hover: none) and (pointer: coarse) and (max-width: 1023px) {
   body {
     background-attachment: scroll;
   }
 }
 
-@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+@media (max-width: 767px), (hover: none) and (pointer: coarse) and (max-width: 1023px) {
   .backdrop-blur,
   .backdrop-blur-sm,
   .backdrop-blur-md,
@@ -684,7 +690,7 @@ textarea {
 /* ---------------- 手机端渲染开销（全局卡片与点击反馈） ----------------
    .surface 用的大半径柔和阴影在滚动时每帧都要重绘，小屏上换成一层极浅的投影；
    可点元素的 tap 高亮块与 300ms 双击缩放等待也一并去掉，点起来更跟手。 */
-@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+@media (max-width: 767px), (hover: none) and (pointer: coarse) and (max-width: 1023px) {
   .surface {
     box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
   }

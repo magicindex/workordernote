@@ -18,6 +18,21 @@ import (
 // 异常的上游把内存吃掉。
 const maxResponseBytes = 1 << 20
 
+// sharedTransport 是整个进程共用的一份连接池。以前每次对话都 new 一个
+// http.Client（等于每次重新建 TCP + TLS），连着问几句就要多花几个来回；
+// 复用同一个 Transport 后，第二次起的请求直接走已建立的连接，首字延迟明显
+// 更低。超时仍由每个 client 自己的 Timeout + 请求 ctx 控制。
+var sharedTransport = &http.Transport{
+	Proxy:                 http.ProxyFromEnvironment,
+	DialContext:           (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+	ForceAttemptHTTP2:     true,
+	MaxIdleConns:          32,
+	MaxIdleConnsPerHost:   8,
+	IdleConnTimeout:       90 * time.Second,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
+}
+
 // Message 与 OpenAI 兼容接口一致（role: system/user/assistant）。
 type Message struct {
 	Role    string `json:"role"`
@@ -78,7 +93,7 @@ func newClient(s Settings) *client {
 		model:          s.Model,
 		provider:       s.Provider,
 		timeoutSeconds: int(timeout / time.Second),
-		http:           &http.Client{Timeout: timeout},
+		http:           &http.Client{Timeout: timeout, Transport: sharedTransport},
 	}
 }
 
@@ -125,6 +140,9 @@ func (c *client) Chat(ctx context.Context, messages []Message) (ChatResult, erro
 	}
 	if c.model == "" {
 		return ChatResult{}, &apiError{Message: "还没有配置模型名称"}
+	}
+	if len(messages) == 0 {
+		return ChatResult{}, &apiError{Message: "对话内容为空，没有可发送的消息"}
 	}
 	payload := chatRequest{Model: c.model, Messages: messages, Stream: false}
 	if c.provider == "ollama" {
@@ -215,6 +233,9 @@ func (c *client) ListModels(ctx context.Context) ([]string, error) {
 
 // do 是唯一的出口：拼头、发请求、判状态码、解 JSON，错误统一成 apiError。
 func (c *client) do(ctx context.Context, method, endpoint string, payload interface{}, out interface{}) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var body io.Reader
 	if payload != nil {
 		raw, err := json.Marshal(payload)
@@ -228,6 +249,7 @@ func (c *client) do(ctx context.Context, method, endpoint string, payload interf
 		return &apiError{Message: "接口地址无效：" + err.Error()}
 	}
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "workordernote-assistant/1")
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -238,18 +260,40 @@ func (c *client) do(ctx context.Context, method, endpoint string, payload interf
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
+		// 页面关掉、服务重启、上一轮被替换都会以 context.Canceled 收场。它不是
+		// 「模型慢」，说清原因才不会让人去调超时时间。
+		if errors.Is(err, context.Canceled) {
+			return &apiError{Message: "请求已取消（页面可能已关闭，或上一轮对话被替换）"}
+		}
 		return &apiError{Message: connectionErrorText(c.baseURL, c.timeoutSeconds, err)}
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	// 多读 1 字节：正好读到上限就说明上游还在说，据此给出「响应过大」而不是
+	// 把截断的 JSON 当成格式错误。
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return &apiError{Status: resp.StatusCode, Message: "请求已取消（页面可能已关闭）"}
+		}
 		return &apiError{Status: resp.StatusCode, Message: "读取上游响应失败：" + err.Error()}
+	}
+	if len(raw) > maxResponseBytes {
+		return &apiError{
+			Status:  resp.StatusCode,
+			Message: fmt.Sprintf("上游响应超过 %d KB，已停止读取（检查模型是否被要求输出异常长的内容）", maxResponseBytes/1024),
+		}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &apiError{Status: resp.StatusCode, Message: upstreamErrorText(resp.StatusCode, raw, endpoint)}
 	}
 	if out == nil {
 		return nil
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return &apiError{
+			Status:  resp.StatusCode,
+			Message: fmt.Sprintf("上游返回了空响应（HTTP %d）：服务可能限流或网关异常，请稍后重试", resp.StatusCode),
+		}
 	}
 	if err := json.Unmarshal(raw, out); err != nil {
 		return &apiError{
@@ -265,12 +309,18 @@ func statusHint(status int) string {
 	switch status {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return "API Key 无效或被拒绝"
+	case http.StatusPaymentRequired:
+		return "账户余额不足或未开通该模型"
 	case http.StatusNotFound:
 		return "接口地址不对（OpenAI 兼容地址通常以 /v1 结尾）"
+	case http.StatusRequestTimeout:
+		return "上游等待请求超时"
+	case http.StatusRequestEntityTooLarge:
+		return "请求内容过长"
 	case http.StatusTooManyRequests:
 		return "请求过于频繁或额度不足"
-	case http.StatusBadRequest:
-		return "上游认为请求不合法（常见原因：模型名不存在）"
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		return "上游认为请求不合法（常见原因：模型名不存在或模型不支持该参数）"
 	case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 		return "上游服务暂时不可用"
 	default:
