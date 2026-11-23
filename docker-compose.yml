@@ -3,7 +3,7 @@ services:
     # 公开镜像走 GitHub Container Registry（用户 2026-11-16：「改为 github 路径」）：
     # GHCR 匿名可拉，外面的人 `docker compose up` 就能起。内网私服只用于自建部署，
     # 不写进随包发布的 compose。
-    image: ghcr.io/magicindex/workordernote:0.49.0
+    image: ghcr.io/magicindex/workordernote:0.48.4
     container_name: workordernote
     # 数据目录属主是 1000:1001 时必须对齐，否则容器写不进 SQLite 且不报错
     user: "1000:1001"
