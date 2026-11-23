@@ -154,6 +154,36 @@ async function dismissAlert(page) {
         }),
         JSON.stringify({ 弹层: sheetLists.map((r) => `${r.key}=${r.name}`), 侧栏: sidebar.map((r) => `${r.key}=${r.text}`) }));
       check('每一行都真的显示出来了', !!sheet && sheet.rows.every((r) => r.visible), JSON.stringify(sheet?.rows));
+
+      // 用户 2026-11-23：手机托盘的清单列表里，自建清单图标要和同弹层的课程表/
+      // 系统清单/垃圾箱同一套尺寸（20px 容器、18px 描边、10px 圆角）。
+      const iconStyle = await page.evaluate(() => {
+        const sheetEl = document.querySelector('[data-lists-sheet]');
+        if (!sheetEl) return null;
+        const custom = Array.from(sheetEl.querySelectorAll('[data-lists-sheet-row]'))
+          .map((row) => row.querySelector('[data-list-icon]'))
+          .find(Boolean);
+        const reference = sheetEl.querySelector('[data-lists-sheet-row="trash"] .nav-symbol');
+        if (!custom || !reference) return { custom: null, reference: null };
+        const box = (el) => {
+          const cs = getComputedStyle(el);
+          const svg = el.querySelector('svg');
+          return {
+            w: cs.width, h: cs.height, r: cs.borderRadius,
+            svgW: svg ? getComputedStyle(svg).width : null,
+            svgH: svg ? getComputedStyle(svg).height : null,
+          };
+        };
+        return { custom: box(custom), reference: box(reference) };
+      });
+      check('托盘自建清单图标与其它栏目同一套容器/图标尺寸',
+        !!iconStyle?.custom && !!iconStyle?.reference
+          && iconStyle.custom.w === iconStyle.reference.w
+          && iconStyle.custom.h === iconStyle.reference.h
+          && iconStyle.custom.r === iconStyle.reference.r
+          && iconStyle.custom.svgW === iconStyle.reference.svgW
+          && iconStyle.custom.svgH === iconStyle.reference.svgH,
+        JSON.stringify(iconStyle));
       check('弹层里不再有单独的「全部」行（已并入智能清单）',
         !!sheet && !sheet.rows.some((r) => r.key === 'all'),
         JSON.stringify(sheet?.rows?.map((r) => `${r.key}=${r.name}`)));

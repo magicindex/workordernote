@@ -619,12 +619,16 @@
               <span v-else-if="row.list.template === 'ceremony'" class="nav-symbol h-5 w-5 bg-rose-500/12 text-rose-500">
                 <ListIcon name="ceremony" :size="20" />
               </span>
+              <!-- 托盘里的自建清单与课程表/系统清单/垃圾箱同一套图标尺寸：
+                   20px 容器、18px 描边图标（.nav-symbol 会统一 svg 尺寸），
+                   只保留清单自己的颜色。 -->
               <span
                 v-else
-                class="nav-list-icon"
+                class="nav-symbol h-5 w-5"
                 :style="{ color: listColor(row.list.color), background: listColor(row.list.color) + '1f' }"
+                :data-list-icon="row.list.icon || 'list'"
               >
-                <ListIcon :name="row.list.icon" :size="14" />
+                <ListIcon :name="row.list.icon" :size="18" />
               </span>
               <span class="min-w-0 flex-1 truncate">{{ myRowLabel(row) }}</span>
               <span v-if="myRowCount(row)" class="nav-count">{{ myRowCount(row) }}</span>
