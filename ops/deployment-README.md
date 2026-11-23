@@ -269,7 +269,8 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   （数据仍为 `staging-data-local`，升级前备份
   `tmp/staging-data.bak-pre0490-20261123-1542.tgz`，22M），healthy。
 - 验证：镜像级临时容器（8919）`verify-214` **20/20**、`verify-197` 4/4、`verify-094` 17/17；
-  201 `verify-214` **20/20**、`verify-197` 4/4；200 `verify-214` **20/20**、`verify-197` 4/4。
+  201 `verify-214` **20/20**、`verify-197` 4/4；200 `verify-214` **20/20**、`verify-197` 4/4；
+  沙箱 `verify-216` **9/9**（编辑抽屉/弹窗只剩六项、旧值原样保留、新建走默认值）。
   三台 `/api/health` = ok；AI 状态接口 201/200 均返回 active（`qwen3:8b-64k`，180s）。
 - 数据：201 `integrity_check = ok`（users=10 / system_configs=85 / lists=709 / reminders=2291）；
   200 `integrity_check = ok`（users=2 / system_configs=92 / lists=201 / reminders=833）；
