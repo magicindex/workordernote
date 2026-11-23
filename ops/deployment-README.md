@@ -221,7 +221,8 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
   **部署状态（2026-11-23 15:42）**：**201 生产 8906 / 200 生产 / 沙箱 8908 均已升级到 0.49.0**
   （源码提交 `88d1904`，镜像 `workordernote:0.49.0` / `ghcr.io/magicindex/workordernote:0.49.0` =
   `sha256:59e8e1cf561f2c3a3ce5e238edf4068af5bb5d01176c27a1fa80e78c0fb99a9a`；
-  三台 `/api/version` 均为 `0.49.0 / 88d1904`；本次未推 Gitea/GHCR）。
+  三台 `/api/version` 均为 `0.49.0 / 88d1904`；已推 GHCR `0.49.0` + `latest`
+  （manifest `sha256:0f1e7be4b7c71b1fe91c7a0ed954ce978a3b757b29a225abb4b45fe4217cf410`）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
   **公开设置 9 项三台一致**；**个人偏好 201 与 200 一致，沙箱单独一套**（开始提醒时间 `00:00`、
@@ -241,7 +242,8 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 > `ghcr.io/magicindex/workordernote:0.49.0` =
 > `sha256:59e8e1cf561f2c3a3ce5e238edf4068af5bb5d01176c27a1fa80e78c0fb99a9a`（176 MB；
 > 基于 0.48.4 运行时镜像替换二进制与前端，构建时间 2026-11-23T07:39:21Z）。
-> `/api/version` = `0.49.0 / 88d1904`。
+> `/api/version` = `0.49.0 / 88d1904`；GHCR `0.49.0` + `latest` manifest
+> `sha256:0f1e7be4b7c71b1fe91c7a0ed954ce978a3b757b29a225abb4b45fe4217cf410`。
 
 - 改动：
   · **AI 小秘**：工作数据逐条编号（`[1]` 汇总、`[n]` 明细）；`WorkDigest.Sources()` 回出处，
@@ -275,8 +277,12 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 回滚：201 用 `workordernote:0.48.4-keep-20261123`；200 旧镜像
   `127.0.0.1:3000/cyberzero/workordernote:0.48.4` 仍在；沙箱旧镜像 `workordernote:0.48.4` 仍在。
   回滚时把 compose 镜像 tag 改回并 `docker compose up -d`，数据备份见上。
-- 未做：离线包、fnOS fpk、GitHub/Gitea Release 资产、registry 推送、生产全量回归
-  （本轮按用户要求只做「更新所有容器」）。
+- 发行：GitHub Release `v0.49.0`（id `455190498`）与 Gitea Release `v0.49.0`（id `226`）各上传 5 个资产
+  （`SHA256SUMS` / `docker-compose.yml` / `screenshots-0.49.0.zip` /
+  `workordernote-0.49.0-linux-amd64.tar.gz` / `workordernote_0.49.0_amd64.fpk`）；
+  `release/0.49.0/` 六件与 `SHA256SUMS` 已生成。
+- 未做：离线一键安装包（`ops/build-offline-package.sh` 产物）、生产全量回归
+  （本轮按用户要求完成「更新所有容器 + 镜像推送 + Git tag + Release 资产」）。
 
 ### 2026-11-19：0.48.4 发版（201 / 200 / 沙箱）——偏好设置「手机栏目」
 
