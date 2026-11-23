@@ -1,4 +1,4 @@
-# 工作序记 (WorkOrderNote) 0.48.4
+# 工作序记 (WorkOrderNote) 0.49.0
 
 任务、记事与日历一体的提醒应用。飞牛 NAS 上以 Docker 部署。
 
@@ -8,7 +8,7 @@
 ## 访问
 
 - <http://192.168.3.201:8906/>
-- 容器 `workordernote`，镜像 `workordernote:0.48.4`（Gitea / GHCR 同源）
+- 容器 `workordernote`，镜像 `workordernote:0.49.0`（本次本地构建，Gitea/GHCR 尚未推送）
 - 对比实例：<http://192.168.3.201:8907/> 官方原版 v0.3.0；<http://192.168.3.201:8908/> 沙盒
 
 ## 仓库与镜像地址（2026-10-22 起）
@@ -217,11 +217,11 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 版本与迭代
 
-- 软件版本见根目录 `VERSION`，当前 `0.48.4`，规则为 `主版本号.小版本号.修正号`。
-  **部署状态（2026-11-19 19:32）**：**201 生产 8906 / 200 生产 / 沙箱 8908 均已升级到 0.48.4**
-  （源码提交 `85b4ad4`，镜像 `workordernote:0.48.4` / `:latest` =
-  `sha256:734ce07a1257af7e5414d6174f2355a9dee44c7b2d210760574530be8ab8000d`；
-  Gitea/GHCR manifest `sha256:60b796c0eb3a7809b12584ef9f7442e846c97277edd5c1064e8ccb2ca46fda1d`）。
+- 软件版本见根目录 `VERSION`，当前 `0.49.0`，规则为 `主版本号.小版本号.修正号`。
+  **部署状态（2026-11-23 15:42）**：**201 生产 8906 / 200 生产 / 沙箱 8908 均已升级到 0.49.0**
+  （源码提交 `88d1904`，镜像 `workordernote:0.49.0` / `ghcr.io/magicindex/workordernote:0.49.0` =
+  `sha256:59e8e1cf561f2c3a3ce5e238edf4068af5bb5d01176c27a1fa80e78c0fb99a9a`；
+  三台 `/api/version` 均为 `0.49.0 / 88d1904`；本次未推 Gitea/GHCR）。
   线上只保留 **201 生产 8906 + 201 沙箱 8908 + 200 生产**；迭代用的临时容器（8918）每次发版后删掉，
   下次迭代再按「挂本地 dist 的临时容器」重新拉起。
   **公开设置 9 项三台一致**；**个人偏好 201 与 200 一致，沙箱单独一套**（开始提醒时间 `00:00`、
@@ -234,6 +234,49 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 应用内「侧栏 → 关于 → 版本信息」可查看迭代说明与原项目信息。
 
 ## 变更记录
+
+### 2026-11-23：0.49.0 更新所有容器（201 / 200 / 沙箱）——AI 数据校验与引用来源 + 导航栏透明度按设备分开
+
+> **0.49.0**：源码提交 `88d1904`；镜像 `workordernote:0.49.0` /
+> `ghcr.io/magicindex/workordernote:0.49.0` =
+> `sha256:59e8e1cf561f2c3a3ce5e238edf4068af5bb5d01176c27a1fa80e78c0fb99a9a`（176 MB；
+> 基于 0.48.4 运行时镜像替换二进制与前端，构建时间 2026-11-23T07:39:21Z）。
+> `/api/version` = `0.49.0 / 88d1904`。
+
+- 改动：
+  · **AI 小秘**：工作数据逐条编号（`[1]` 汇总、`[n]` 明细）；`WorkDigest.Sources()` 回出处，
+    接口新增 `sources` / `grounding`，面板新增可折叠「数据来源」；系统提示词加数据硬约束；
+    服务端校验引用编号与完成/未完成/逾期/记事/清单/课程数量（含中文数字），不合格带原因重答一次，
+    仍不合格退回真实数据草稿；空数据/没附数据时要求明确说「没有相关记录」；
+    共享 `http.Transport` 复用连接，正常回答只发一次请求，整个请求（含重答）共用总超时；
+    取消/空响应/响应过大/超时/402/408/413/422 等错误文案完善。
+  · **导航栏透明度**：手机/平板窄屏触屏仍 ≥96% 不透明；桌面、电视、触屏电脑、窄窗口鼠标设备
+    恢复跟随 `--card-bg-opacity` 并保留毛玻璃；手机性能降级媒体查询同步收紧到窄屏触屏。
+  · **随包顺带生效**：提交 `c4a7600`「提醒编辑页精简」（只留标题/备注/日期时间/类型/清单/重复；
+    颜色/优先级/农历/过期频率/渠道值原样保留），属于本批已提交但当时未发版的改动。
+- 201（15:41）：备份 `docker-compose.yml.bak-pre0490-20261123-153927` /
+  `data.bak-pre0490-20261123-153927.tgz`（20M）；旧镜像留 `workordernote:0.48.4-keep-20261123`；
+  compose 改 `ghcr.io/magicindex/workordernote:0.49.0` 后 `docker compose up -d` 重建，
+  healthy，`/api/version` = `0.49.0 / 88d1904`。
+- 200（15:42）：备份 `docker-compose.yml.bak-pre0490-20261123-1542` /
+  `data.bak-pre0490-20261123-1542.tgz`（8.7M）；`docker save` → gzip（85M，md5
+  `3c8ca630b302ee4ac9ef2566c182feaf`）→ scp → `docker load`，tag 成
+  `127.0.0.1:3000/cyberzero/workordernote:0.49.0`，compose 改 tag 后重建，
+  healthy，`/api/version` = `0.49.0 / 88d1904`。
+- 沙箱 8908（15:41）：`workordernote-sandbox` 换 `workordernote:0.49.0` 重建
+  （数据仍为 `staging-data-local`，升级前备份
+  `tmp/staging-data.bak-pre0490-20261123-1542.tgz`，22M），healthy。
+- 验证：镜像级临时容器（8919）`verify-214` **20/20**、`verify-197` 4/4、`verify-094` 17/17；
+  201 `verify-214` **20/20**、`verify-197` 4/4；200 `verify-214` **20/20**、`verify-197` 4/4。
+  三台 `/api/health` = ok；AI 状态接口 201/200 均返回 active（`qwen3:8b-64k`，180s）。
+- 数据：201 `integrity_check = ok`（users=10 / system_configs=85 / lists=709 / reminders=2291）；
+  200 `integrity_check = ok`（users=2 / system_configs=92 / lists=201 / reminders=833）；
+  沙箱 `integrity_check = ok`。本次只换镜像，未改数据目录。
+- 回滚：201 用 `workordernote:0.48.4-keep-20261123`；200 旧镜像
+  `127.0.0.1:3000/cyberzero/workordernote:0.48.4` 仍在；沙箱旧镜像 `workordernote:0.48.4` 仍在。
+  回滚时把 compose 镜像 tag 改回并 `docker compose up -d`，数据备份见上。
+- 未做：离线包、fnOS fpk、GitHub/Gitea Release 资产、registry 推送、生产全量回归
+  （本轮按用户要求只做「更新所有容器」）。
 
 ### 2026-11-19：0.48.4 发版（201 / 200 / 沙箱）——偏好设置「手机栏目」
 
