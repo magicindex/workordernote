@@ -236,6 +236,45 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-27：0.50.0 发版（201 主实例 / 沙箱；200 待执行）——打赏页面 + 鎏金咖啡杯入口
+
+> **0.50.0**：源码提交 `beacc8c`（tag `v0.50.0`）；镜像
+> `ghcr.io/magicindex/workordernote:0.50.0` /
+> `192.168.3.200:3000/cyberzero/workordernote:0.50.0` =
+> `sha256:5e72ac647ea7761da71d9d566d69f90d1c37c843d5bf0f5dd8f0c18d8985e09b`（93 MB；
+> registry manifest `sha256:9edb8017a24527d9120c8954bfab17334ecad36c3b8e47da1a0070a7702792a7`）。
+> `/api/version` = `0.50.0 / beacc8c`。
+
+- 改动：
+  · **打赏页面**：顶栏铃铛右侧新增全站唯一的鎏金咖啡杯入口，点开是 `/admin/donate` 独立页面；
+    微信 / 支付宝真实赞赏码（CyberZero / TOPZERO.W）；手机端隐藏「+」悬浮按钮，<360px 收紧顶栏间距。
+  · **鎏金图标**：沿用仪式感色板 `gold`（`#f9e79f → #b8860b`）做金属渐变 + 杯口高光；顶栏与首屏共用。
+  · **手机清单托盘**：自建清单图标统一为与课程表 / 系统清单 / 垃圾箱同一套容器与图标尺寸（第 202 条）。
+- 201（12:14）：备份 `tmp/pre-0500-20261127-121402/`（SQLite 在线备份 `workordernote.db` 8.8M、
+  旧 compose、旧容器/镜像 inspect；`integrity_check = ok`，reminders=2302）；通过临时 root 容器
+  把 `/vol1/1000/Docker/workordernote/docker-compose.yml` 改到 `ghcr.io/magicindex/workordernote:0.50.0`
+  （原文件 root 所有，本用户无写权限），`docker compose up -d --force-recreate --pull never`，
+  healthy，`/api/version` = `0.50.0 / beacc8c`。
+- 沙箱 8908（12:15）：备份 `tmp/pre-0500-sandbox-20261127-121402/`（`integrity_check = ok`，
+  reminders=3144）；`workordernote-sandbox` 换 `workordernote:0.50.0` 重建（仍用
+  `staging-data-local`，端口 8908，`--restart no`），healthy。
+- 200（未执行）：当前会话没有 `王耀辉@192.168.3.200:9527` 的 SSH 私钥/密码
+  （publickey、password 均被拒），无法远程重建。镜像已推 Gitea registry，200 上执行：
+  `docker pull 127.0.0.1:3000/cyberzero/workordernote:0.50.0` → compose 改 tag →
+  `docker compose up -d`；回滚镜像 `127.0.0.1:3000/cyberzero/workordernote:0.49.0` 仍在。
+- 发布包 `release/0.50.0/`（五件）：`workordernote-0.50.0-linux-amd64.tar.gz`（21,785,246 B，
+  sha256 `6b5293282d36c3f0b9de92dc2b74665f8b23e89e50c28c716687786b37698678`）、
+  `workordernote_0.50.0_amd64.fpk`（22,054,808 B，sha256 `5e46c48887b963caa5179795c259e0daf9adb24e0f907d1c7da7cbb6a1d8f3e4`）、
+  `screenshots-0.50.0.zip`（1,523,403 B）、`docker-compose.yml`、`SHA256SUMS`。
+- 仓库与 Release：Gitea / GitHub `main` 均推到 `beacc8c`，tag `v0.50.0` 同日推送；
+  Gitea Release `v0.50.0`（id `257`）、GitHub Release `v0.50.0`（id `460160686`）
+  各上传 5 个资产（SHA256SUMS / compose / 截图 / Linux tar / fpk）。
+- 验证：201 与沙箱浏览器冒烟：版本号 `0.50.0`、顶栏入口 1 个、鎏金渐变 3 组，
+  `/admin/donate` 正常、两张真实收款码加载、1440 / 390 无横向溢出；`/api/health` ok。
+- 回滚：201 把 compose 改回 `ghcr.io/magicindex/workordernote:0.49.0-keep-20261127`
+  （或 200 的 `0.49.0`）后 `docker compose up -d --force-recreate`；沙箱用同一镜像重建；
+  数据备份见上。
+
 ### 2026-11-27：打赏页面（201 主实例）——顶栏唯一咖啡杯入口
 
 > **预览更新，未发版**：后端二进制仍是 0.49.0（`88d1904`），只替换前端静态文件；
