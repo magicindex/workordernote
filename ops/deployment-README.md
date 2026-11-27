@@ -236,7 +236,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
-### 2026-11-27：0.50.0 发版（201 主实例 / 沙箱；200 待执行）——打赏页面 + 鎏金咖啡杯入口
+### 2026-11-27：0.50.0 发版（201 / 200 / 沙箱）——打赏页面 + 鎏金咖啡杯入口
 
 > **0.50.0**：源码提交 `beacc8c`（tag `v0.50.0`）；镜像
 > `ghcr.io/magicindex/workordernote:0.50.0` /
@@ -258,10 +258,10 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 沙箱 8908（12:15）：备份 `tmp/pre-0500-sandbox-20261127-121402/`（`integrity_check = ok`，
   reminders=3144）；`workordernote-sandbox` 换 `workordernote:0.50.0` 重建（仍用
   `staging-data-local`，端口 8908，`--restart no`），healthy。
-- 200（未执行）：当前会话没有 `王耀辉@192.168.3.200:9527` 的 SSH 私钥/密码
-  （publickey、password 均被拒），无法远程重建。镜像已推 Gitea registry，200 上执行：
-  `docker pull 127.0.0.1:3000/cyberzero/workordernote:0.50.0` → compose 改 tag →
-  `docker compose up -d`；回滚镜像 `127.0.0.1:3000/cyberzero/workordernote:0.49.0` 仍在。
+- 200（12:25）：备份 `data.bak-pre0500-20261127.tgz`（8.2M）/ `docker-compose.yml.bak-pre0500-20261127`；
+  `docker pull 127.0.0.1:3000/cyberzero/workordernote:0.50.0`（manifest `9edb8017…`）→ compose 改 tag →
+  `docker compose up -d --force-recreate --pull never`，12:25:51 起 healthy，`/api/version` = `0.50.0 / beacc8c`；
+  旧镜像 `ghcr.io/magicindex/workordernote:0.49.0` 保留（回滚时先 tag 成 `127.0.0.1:3000/cyberzero/workordernote:0.49.0`）。
 - 发布包 `release/0.50.0/`（五件）：`workordernote-0.50.0-linux-amd64.tar.gz`（21,785,246 B，
   sha256 `6b5293282d36c3f0b9de92dc2b74665f8b23e89e50c28c716687786b37698678`）、
   `workordernote_0.50.0_amd64.fpk`（22,054,808 B，sha256 `5e46c48887b963caa5179795c259e0daf9adb24e0f907d1c7da7cbb6a1d8f3e4`）、
@@ -269,7 +269,7 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 - 仓库与 Release：Gitea / GitHub `main` 均推到 `beacc8c`，tag `v0.50.0` 同日推送；
   Gitea Release `v0.50.0`（id `257`）、GitHub Release `v0.50.0`（id `460160686`）
   各上传 5 个资产（SHA256SUMS / compose / 截图 / Linux tar / fpk）。
-- 验证：201 与沙箱浏览器冒烟：版本号 `0.50.0`、顶栏入口 1 个、鎏金渐变 3 组，
+- 验证：201 / 200 / 沙箱浏览器冒烟：版本号 `0.50.0`、顶栏入口 1 个、鎏金渐变 3 组，
   `/admin/donate` 正常、两张真实收款码加载、1440 / 390 无横向溢出；`/api/health` ok。
 - 回滚：201 把 compose 改回 `ghcr.io/magicindex/workordernote:0.49.0-keep-20261127`
   （或 200 的 `0.49.0`）后 `docker compose up -d --force-recreate`；沙箱用同一镜像重建；
