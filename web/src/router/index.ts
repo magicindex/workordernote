@@ -42,6 +42,9 @@ const router = createRouter({
         { path: 'all', name: 'AllReminders', component: () => import('../views/HomeView.vue'), meta: { reminderView: 'all', title: '全部' } },
         { path: 'completed', name: 'Completed', component: () => import('../views/HomeView.vue'), meta: { reminderView: 'completed', title: '已完成' } },
         { path: 'trash', name: 'Trash', component: () => import('../views/TrashView.vue'), meta: { title: '垃圾箱' } },
+        // 打赏页面（用户 2026-11-27）：顶栏咖啡杯入口打开的独立页面；
+        // 全站只有这一个入口，不占侧栏、不再另开悬浮按钮。
+        { path: 'donate', name: 'Donate', component: () => import('../views/DonateView.vue'), meta: { title: '请作者喝杯咖啡' } },
         // 日历是与列表并列的另一种看法，顶栏的「列表 / 日历」开关在这里切换。
         { path: 'calendar', name: 'Calendar', component: () => import('../views/CalendarView.vue'), meta: { title: '日历' } },
         { path: 'list/:id', name: 'ReminderList', component: () => import('../views/HomeView.vue'), meta: { reminderView: 'all', title: '我的清单' } },

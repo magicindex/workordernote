@@ -407,7 +407,7 @@
           <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{{ dayLabel }}</p>
           <h2 class="truncate text-base font-bold">{{ greeting }}，{{ authStore.user?.username }}</h2>
         </div>
-        <div class="ml-auto flex items-center gap-1 sm:gap-2">
+        <div class="topbar-actions ml-auto flex items-center gap-1 sm:gap-2">
           <!-- 列表 / 日历切换（用户 2026-11-16）：放到全局右上角铃铛左边，和通知/免打扰同一组图标。 -->
           <div
             v-if="showViewSwitch && !isNarrow"
@@ -462,6 +462,19 @@
             <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor"><path d="m12 3.6 1.9 4.4 4.4 1.9-4.4 1.9L12 16.2l-1.9-4.4-4.4-1.9 4.4-1.9L12 3.6Z" stroke-width="1.7" stroke-linejoin="round"/><path d="M18.6 15.4l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8.8-1.9Z" stroke-width="1.5" stroke-linejoin="round"/></svg>
             <span class="sr-only">呼叫{{ assistantName }}</span>
           </button>
+          <!-- 打赏入口（用户 2026-11-27）：全站只留这一个咖啡杯入口，
+               点开是 /admin/donate 打赏页面；不占侧栏、不再另开悬浮按钮。
+               图标用「鎏金」色板（同仪式感卡片的 gold 档）。 -->
+          <RouterLink
+            to="/admin/donate"
+            class="icon-button"
+            :class="route.name === 'Donate' ? 'bg-amber-500/10' : ''"
+            aria-label="请作者喝杯咖啡"
+            title="请作者喝杯咖啡"
+            data-nav-donate
+          >
+            <CoffeeCupGold :size="20" />
+          </RouterLink>
           <!-- 免打扰（用户 2026-10-16）：「首行消息（铃铛图标）旁边放一个喇叭标志，点击进入静音标志，
                退出显示喇叭，点击进入免打扰模式。后台增加免打扰时间段。权责级别优先在 所有通知以上。」
                喇叭 = 正常；静音 = 免打扰中。后台时间段生效时按钮也变成静音，右上角再加一个小黄点
@@ -820,6 +833,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Toast from '../components/Toast.vue'
 import VersionDialog from '../components/VersionDialog.vue'
+import CoffeeCupGold from '../components/CoffeeCupGold.vue'
 import AssistantPanel from '../components/AssistantPanel.vue'
 import AssistantLauncher from '../components/AssistantLauncher.vue'
 import UserAvatar from '../components/UserAvatar.vue'
@@ -1311,7 +1325,7 @@ const listColor = listColorHex
 const QUICK_ADD_HOSTS = ['Home', 'Planned', 'AllReminders', 'Completed', 'ReminderList']
 /** 这些页面上没有「新建提醒」的落点，悬浮 + 只会挡住内容，直接不显示。
  *  Dashboard（首页看板）用户 2026-11-14 要求「只是用来展示」，所以也藏掉。 */
-const FAB_HIDE_ROUTES = ['Dashboard', 'Trash', 'AdminUsers', 'AdminConfigs', 'AdminAudit', 'Channels', 'Profile', 'Settings', 'Notifications']
+const FAB_HIDE_ROUTES = ['Dashboard', 'Trash', 'Donate', 'AdminUsers', 'AdminConfigs', 'AdminAudit', 'Channels', 'Profile', 'Settings', 'Notifications']
 /** 手机悬浮按钮按频道决定动作：提醒@他/信用卡/仪式感打开各自的“新建”，其余进待办新建卡。 */
 type FabAction = 'nudge' | 'credit' | 'ceremony' | 'reminder'
 const fabAction = computed<FabAction>(() => {
@@ -2377,5 +2391,10 @@ onBeforeUnmount(() => {
      导航栏不透明度的下限统一在 style.css 的 --nav-bg-opacity 里给出
      （96%，用户 2026-11-17 报「菜单栏透明度太高导致看不清」），
      这里不再单写一遍背景色，免得两处各说一套。 */
+}
+/* 320px 极窄屏：顶栏图标本来就挤，再加一颗咖啡杯会把右侧头像顶出屏幕。
+   只在 <360px 收掉图标间距（图标本身的 36px 触控区不变），全站仍只有一个入口。 */
+@media (max-width: 359.98px) {
+  .topbar-actions { gap: 0; }
 }
 </style>

@@ -236,6 +236,39 @@ sha256 一致、`install.sh --force-load` 真的走 `docker load`（输出 `Load
 
 ## 变更记录
 
+### 2026-11-27：打赏页面（201 主实例）——顶栏唯一咖啡杯入口
+
+> **预览更新，未发版**：后端二进制仍是 0.49.0（`88d1904`），只替换前端静态文件；
+> `/api/version` 仍为 `0.49.0 / 88d1904`。源码工作区含未提交改动（基于 `19d5fba`）。
+
+- 改动：新增 `/admin/donate` 打赏页面（从 `打赏页面/` 模板搬入，微信/支付宝为 CyberZero 的真实赞赏码）；
+  顶栏铃铛右侧新增全站唯一咖啡杯入口；咖啡杯用**鎏金**图标（取仪式感色板 `gold`：
+  `#f9e79f → #b8860b` 金属渐变 + 杯口高光），顶栏与打赏页首屏共用；手机打赏页隐藏「+」悬浮按钮；
+  <360px 顶栏图标间距收紧。
+- 201（11:29）：备份 `tmp/pre-donate-update-20261127-112849/`（SQLite 在线备份
+  `workordernote.db` 9.2M + 旧 compose + 旧镜像/容器 inspect）；旧镜像留
+  `ghcr.io/magicindex/workordernote:0.49.0-keep-20261127` / `workordernote:0.49.0-keep-20261127`。
+  首批预览镜像 `sha256:08c23f07…`（178 MB，基于 0.49.0 运行时镜像只替换 `/app/static/dist`），
+  打 `ghcr.io/magicindex/workordernote:0.49.0`、`:0.49.0-donate-20261127`、
+  `workordernote:0.49.0-donate-20261127`；先在 8919 临时容器验证，再在
+  `/vol1/1000/Docker/workordernote` 执行 `docker compose up -d --force-recreate --pull never`，healthy。
+  compose 文件未改（仍指向 `ghcr.io/magicindex/workordernote:0.49.0`，只是本地该标签换成了预览镜像）。
+- 201（11:36）：换成鎏金图标版 `sha256:0e482b60…`（同 178 MB，仅前端再替换），
+  打 `ghcr.io/magicindex/workordernote:0.49.0`、`:0.49.0-gold-20261127`、
+  `workordernote:0.49.0-gold-20261127`；再次 `docker compose up -d --force-recreate --pull never`，healthy。
+  首批预览镜像仍保留 `:0.49.0-donate-20261127`，可单独回退到没有鎏金图标的版本。
+- 201（11:41）：收款码换成用户提供的真实微信/支付宝赞赏码，图片存
+  `web/src/assets/donate/qr-wechat.jpg`（1315×1790）/ `qr-alipay.jpg`（1080×1620），
+  `loading="eager"` 保证一进页面就加载；镜像 `sha256:95d5c3b4…`（179 MB），
+  打 `ghcr.io/magicindex/workordernote:0.49.0`、`:0.49.0-qr-20261127`，
+  再次 `docker compose up -d --force-recreate --pull never`，healthy。
+- 验证：8919 与 8906 手动回归：顶栏入口 1 个、`/admin/donate` 页面存在、真实收款码
+  1315×1790 / 1080×1620 均加载、顶栏与首屏咖啡杯各有 3 个金属渐变、390px 无横向溢出、
+  手机 FAB 隐藏；移动端滚动到微信/支付宝两张码都能正常显示；`/api/health` ok。
+- 回滚：`docker tag ghcr.io/magicindex/workordernote:0.49.0-keep-20261127 ghcr.io/magicindex/workordernote:0.49.0`
+  后 `docker compose up -d --force-recreate`；数据备份见上。
+- 未做：沙箱 8908 仍为旧前端；未推 GHCR / 未发版 / 未改 VERSION。
+
 ### 2026-11-23：0.49.0 发版（201 / 200 / 沙箱）——AI 数据校验与引用来源 + 导航栏透明度按设备分开
 
 > **0.49.0**：源码提交 `88d1904`；镜像 `workordernote:0.49.0` /
